@@ -1,0 +1,420 @@
+/*
+ * Copyright 2015 Electronic Chart Centre
+ * Copyright 2025 Multiversio LLC. All rights reserved.
+ *
+ * Modifications: Modernized and integrated into Tileverse PMTiles project.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *          http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.tileverse.vectortile.v2_1;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.LineString;
+import org.locationtech.jts.geom.LinearRing;
+import org.locationtech.jts.geom.Point;
+import org.locationtech.jts.geom.Polygon;
+
+class VectorTileDecoderTest {
+
+    private GeometryFactory gf = new GeometryFactory();
+
+    @Test
+    void testZigZagDecode() {
+        assertEquals(0, VectorTileDecoder.zigZagDecode(0));
+        assertEquals(-1, VectorTileDecoder.zigZagDecode(1));
+        assertEquals(1, VectorTileDecoder.zigZagDecode(2));
+        assertEquals(-2, VectorTileDecoder.zigZagDecode(3));
+    }
+
+    @Test
+    void testWithoutScaling() throws IOException {
+        Coordinate c = new Coordinate(2, 3);
+        Geometry geometry = gf.createPoint(c);
+
+        Coordinate c2 = new Coordinate(4, 6);
+        Geometry geometry2 = gf.createPoint(c2);
+
+        VectorTileEncoder e = new VectorTileEncoder(512);
+        e.addFeature("layer", Collections.emptyMap(), geometry);
+        byte[] encoded = e.encode();
+
+        VectorTileDecoder d = new VectorTileDecoder();
+        d.setAutoScale(false);
+
+        assertEquals(geometry2, d.decode(encoded, "layer").iterator().next().getGeometry());
+    }
+
+    @Test
+    void testPoint() throws IOException {
+        Coordinate c = new Coordinate(2, 3);
+        Geometry geometry = gf.createPoint(c);
+        Map<String, Object> attributes = new HashMap<String, Object>();
+        attributes.put("hello", 123);
+        String layerName = "layer";
+
+        VectorTileEncoder e = new VectorTileEncoder(512);
+        e.addFeature(layerName, attributes, geometry);
+        byte[] encoded = e.encode();
+
+        VectorTileDecoder d = new VectorTileDecoder();
+        assertEquals(1, d.decode(encoded).getLayerNames().size());
+        assertEquals(layerName, d.decode(encoded).getLayerNames().iterator().next());
+
+        assertPropsEquals(
+                attributes, d.decode(encoded, layerName).iterator().next().getAttributes());
+        assertEquals(geometry, d.decode(encoded, layerName).iterator().next().getGeometry());
+    }
+
+    @Test
+    void testMultiPoint() throws IOException {
+        Coordinate c1 = new Coordinate(2, 3);
+        Coordinate c2 = new Coordinate(3, 4);
+        Geometry geometry = gf.createMultiPointFromCoords(new Coordinate[] {c1, c2});
+        Map<String, Object> attributes = new HashMap<String, Object>();
+        attributes.put("hello", 123);
+        String layerName = "layer";
+
+        VectorTileEncoder e = new VectorTileEncoder(512);
+        e.addFeature(layerName, attributes, geometry);
+        byte[] encoded = e.encode();
+
+        VectorTileDecoder d = new VectorTileDecoder();
+        assertEquals(1, d.decode(encoded).getLayerNames().size());
+        assertEquals(layerName, d.decode(encoded).getLayerNames().iterator().next());
+
+        assertPropsEquals(
+                attributes, d.decode(encoded, layerName).asList().get(0).getAttributes());
+        assertEquals(geometry, d.decode(encoded, layerName).asList().get(0).getGeometry());
+    }
+
+    @Test
+    void testLineString() throws IOException {
+        Coordinate c1 = new Coordinate(1, 2);
+        Coordinate c2 = new Coordinate(10, 20);
+        Coordinate c3 = new Coordinate(100, 200);
+        Geometry geometry = gf.createLineString(new Coordinate[] {c1, c2, c3});
+
+        Map<String, Object> attributes = new HashMap<String, Object>();
+        attributes.put("aa", "bb");
+        attributes.put("cc", "bb");
+
+        String layerName = "layer";
+
+        VectorTileEncoder e = new VectorTileEncoder(512);
+        e.addFeature(layerName, attributes, geometry);
+        byte[] encoded = e.encode();
+
+        VectorTileDecoder d = new VectorTileDecoder();
+        assertEquals(1, d.decode(encoded).getLayerNames().size());
+        assertEquals(layerName, d.decode(encoded).getLayerNames().iterator().next());
+
+        assertPropsEquals(
+                attributes, d.decode(encoded, layerName).asList().get(0).getAttributes());
+        assertEquals(geometry, d.decode(encoded, layerName).asList().get(0).getGeometry());
+    }
+
+    @Test
+    void testMultiLineString() throws IOException {
+        Coordinate c1 = new Coordinate(1, 2);
+        Coordinate c2 = new Coordinate(5, 6);
+        Coordinate c3 = new Coordinate(7, 8);
+        Coordinate c4 = new Coordinate(8, 10);
+        Coordinate c5 = new Coordinate(11, 12);
+        LineString ls1 = gf.createLineString(new Coordinate[] {c1, c2, c3});
+        LineString ls2 = gf.createLineString(new Coordinate[] {c4, c5});
+        Geometry geometry = gf.createMultiLineString(new LineString[] {ls1, ls2});
+
+        Map<String, Object> attributes = new HashMap<String, Object>();
+
+        String layerName = "layer";
+
+        VectorTileEncoder e = new VectorTileEncoder(512);
+        e.addFeature(layerName, attributes, geometry);
+        byte[] encoded = e.encode();
+
+        VectorTileDecoder d = new VectorTileDecoder();
+        assertEquals(1, d.decode(encoded).getLayerNames().size());
+        assertEquals(layerName, d.decode(encoded).getLayerNames().iterator().next());
+
+        assertPropsEquals(
+                attributes, d.decode(encoded, layerName).asList().get(0).getAttributes());
+        assertEquals(geometry, d.decode(encoded, layerName).asList().get(0).getGeometry());
+    }
+
+    @Test
+    void testPolygon() throws IOException {
+        // Exterior ring in counter-clockwise order.
+        LinearRing shell = gf.createLinearRing(new Coordinate[] {
+            new Coordinate(10, 10),
+            new Coordinate(20, 10),
+            new Coordinate(20, 20),
+            new Coordinate(10, 20),
+            new Coordinate(10, 10)
+        });
+        assertTrue(shell.isClosed());
+        assertTrue(shell.isValid());
+
+        Geometry geometry = gf.createPolygon(shell, new LinearRing[] {});
+        assertTrue(geometry.isValid());
+
+        Map<String, Object> attributes = new HashMap<String, Object>();
+
+        String layerName = "layer";
+
+        VectorTileEncoder e = new VectorTileEncoder(512);
+        e.addFeature(layerName, attributes, geometry);
+        byte[] encoded = e.encode();
+
+        VectorTileDecoder d = new VectorTileDecoder();
+        assertEquals(1, d.decode(encoded).getLayerNames().size());
+        assertEquals(layerName, d.decode(encoded).getLayerNames().iterator().next());
+
+        assertPropsEquals(
+                attributes, d.decode(encoded, layerName).asList().get(0).getAttributes());
+
+        Geometry decodedGeometry = d.decode(encoded, layerName).asList().get(0).getGeometry();
+        assertEquals(geometry, decodedGeometry);
+
+        LinearRing decodedShell = ((Polygon) decodedGeometry).getExteriorRing();
+        // Shell is closed with different point instances
+        assertTrue(
+                decodedShell.getCoordinateN(0).equals2D(decodedShell.getCoordinateN(decodedShell.getNumPoints() - 1)));
+        assertFalse(decodedShell.getCoordinateN(0) == decodedShell.getCoordinateN(decodedShell.getNumPoints() - 1));
+    }
+
+    @Test
+    void testPolygonWithHole() throws IOException {
+        // Exterior ring in counter-clockwise order.
+        LinearRing shell = gf.createLinearRing(new Coordinate[] {
+            new Coordinate(10, 10),
+            new Coordinate(20, 10),
+            new Coordinate(20, 20),
+            new Coordinate(10, 20),
+            new Coordinate(10, 10)
+        });
+        assertTrue(shell.isClosed());
+        assertTrue(shell.isValid());
+
+        Geometry geometry = gf.createPolygon(shell, new LinearRing[] {});
+        assertTrue(geometry.isValid());
+
+        // Interior ring in clockwise order.
+        LinearRing hole = gf.createLinearRing(new Coordinate[] {
+            new Coordinate(11, 11),
+            new Coordinate(11, 19),
+            new Coordinate(19, 19),
+            new Coordinate(19, 11),
+            new Coordinate(11, 11)
+        });
+        assertTrue(hole.isClosed());
+        assertTrue(hole.isValid());
+
+        assertTrue(geometry.contains(hole));
+
+        geometry = gf.createPolygon(shell, new LinearRing[] {hole});
+        assertTrue(geometry.isValid());
+
+        Map<String, Object> attributes = new HashMap<String, Object>();
+
+        String layerName = "layer";
+
+        VectorTileEncoder e = new VectorTileEncoder(512);
+        e.addFeature(layerName, attributes, geometry);
+        byte[] encoded = e.encode();
+
+        VectorTileDecoder d = new VectorTileDecoder();
+        assertEquals(1, d.decode(encoded).getLayerNames().size());
+        assertEquals(layerName, d.decode(encoded).getLayerNames().iterator().next());
+
+        assertPropsEquals(
+                attributes, d.decode(encoded, layerName).asList().get(0).getAttributes());
+        assertEquals(
+                geometry.toText(),
+                d.decode(encoded, layerName).asList().get(0).getGeometry().toText());
+        assertEquals(geometry, d.decode(encoded, layerName).asList().get(0).getGeometry());
+    }
+
+    @Test
+    void testExternal() throws IOException {
+        // from
+        // https://github.com/mapbox/vector-tile-js/tree/master/test/fixtures
+        InputStream is = getClass().getResourceAsStream("/14-8801-5371.vector.pbf");
+        assertNotNull(is);
+        byte[] encoded = toBytes(is);
+
+        VectorTileDecoder d = new VectorTileDecoder();
+
+        d.decode(encoded)
+                .getLayerNames()
+                .equals(new HashSet<String>(Arrays.asList(
+                        "landuse",
+                        "waterway",
+                        "water",
+                        "barrier_line",
+                        "building",
+                        "landuse_overlay",
+                        "tunnel",
+                        "road",
+                        "bridge",
+                        "place_label",
+                        "water_label",
+                        "poi_label",
+                        "road_label",
+                        "waterway_label")));
+
+        assertEquals(558, d.decode(encoded, "poi_label").asList().size());
+
+        io.tileverse.vectortile.v2_1.VectorTileDecoder.Feature park =
+                d.decode(encoded, "poi_label").asList().get(11);
+        assertEquals("Mauerpark", park.getAttributes().get("name"));
+        assertEquals("Park", park.getAttributes().get("type"));
+
+        Geometry parkGeometry = park.getGeometry();
+        assertTrue(parkGeometry instanceof Point);
+        assertEquals(1, parkGeometry.getCoordinates().length);
+
+        assertCoordEquals(
+                new Coordinate(3898.0, 1731.0), park.getExtent(), parkGeometry.getCoordinates()[0]);
+
+        io.tileverse.vectortile.v2_1.VectorTileDecoder.Feature building =
+                d.decode(encoded, "building").asList().get(0);
+        Geometry buildingGeometry =
+                d.decode(encoded, "building").asList().get(0).getGeometry();
+        assertNotNull(building);
+
+        assertEquals(5, buildingGeometry.getCoordinates().length);
+        assertCoordEquals(
+                new Coordinate(2039, -32),
+                building.getExtent(),
+                buildingGeometry.getCoordinates()[0]);
+        assertCoordEquals(
+                new Coordinate(2035, -31),
+                building.getExtent(),
+                buildingGeometry.getCoordinates()[1]);
+        assertCoordEquals(
+                new Coordinate(2032, -31),
+                building.getExtent(),
+                buildingGeometry.getCoordinates()[2]);
+        assertCoordEquals(
+                new Coordinate(2032, -32),
+                building.getExtent(),
+                buildingGeometry.getCoordinates()[3]);
+        assertCoordEquals(
+                new Coordinate(2039, -32),
+                building.getExtent(),
+                buildingGeometry.getCoordinates()[4]);
+    }
+
+    @Test
+    void testBigTile() throws IOException {
+        for (int i = 0; i < 10; i++) {
+            System.gc();
+            long memoryStart = Runtime.getRuntime().totalMemory();
+            InputStream is = getClass().getResourceAsStream("/bigtile.vector.pbf");
+            assertNotNull(is);
+            VectorTileDecoder d = new VectorTileDecoder();
+            for (Iterator<VectorTileDecoder.Feature> it = d.decode(toBytes(is)).iterator(); it.hasNext(); ) {
+                it.next();
+                if (!it.hasNext()) {
+                    long memoryDiff = Runtime.getRuntime().totalMemory() - memoryStart;
+                    System.out.println(memoryDiff / (1024 * 1024));
+                }
+            }
+        }
+    }
+
+    @Test
+    void testLineWithOnePoint() throws IOException {
+        InputStream is = getClass().getResourceAsStream("/cells-11-1065-567.mvt");
+        assertNotNull(is);
+
+        VectorTileDecoder d = new VectorTileDecoder();
+        int numberOfFeatures = 0;
+        for (Iterator<VectorTileDecoder.Feature> it = d.decode(toBytes(is)).iterator(); it.hasNext(); ) {
+            io.tileverse.vectortile.v2_1.VectorTileDecoder.Feature f = it.next();
+            assertNotNull(f.getGeometry());
+            numberOfFeatures++;
+        }
+        assertEquals(306, numberOfFeatures);
+    }
+
+    @Test
+    void testPolygonWithThreePointHole() throws IOException {
+        InputStream is = getClass().getResourceAsStream("/cells-11-1058-568.mvt");
+        assertNotNull(is);
+
+        VectorTileDecoder d = new VectorTileDecoder();
+        int numberOfFeatures = 0;
+        for (Iterator<VectorTileDecoder.Feature> it = d.decode(toBytes(is)).iterator(); it.hasNext(); ) {
+            io.tileverse.vectortile.v2_1.VectorTileDecoder.Feature f = it.next();
+            assertNotNull(f.getGeometry());
+            numberOfFeatures++;
+        }
+        assertEquals(699, numberOfFeatures);
+    }
+
+    private void assertCoordEquals(Coordinate expected, int extent, Coordinate actual) {
+        double scale = extent / 256.0;
+        assertEquals(expected.x / scale, actual.x, 1e-7);
+        assertEquals(expected.y / scale, actual.y, 1e-7);
+    }
+
+    private void assertPropsEquals(Map<String, Object> expected, Map<String, Object> real) {
+        assertEquals(expected.size(), real.size());
+        for (Map.Entry<String, Object> e : expected.entrySet()) {
+            String key = e.getKey();
+            assertTrue(real.containsKey(key));
+            Object expectedValue = e.getValue();
+            Object realValue = real.get(key);
+
+            if (expectedValue instanceof Number) {
+                assertTrue(realValue instanceof Number);
+                Number exp = (Number) expectedValue;
+                Number rea = (Number) realValue;
+                assertEquals(exp.intValue(), rea.intValue());
+                assertEquals(exp.floatValue(), rea.floatValue(), 0.003);
+                assertEquals(exp.doubleValue(), rea.doubleValue(), 0.003);
+            } else {
+                assertEquals(expectedValue.getClass(), realValue.getClass());
+                assertEquals(expectedValue, realValue);
+            }
+        }
+    }
+
+    private static byte[] toBytes(InputStream in) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int bytesRead = 0;
+        while ((bytesRead = in.read(buf)) != -1) {
+            baos.write(buf, 0, bytesRead);
+        }
+        return baos.toByteArray();
+    }
+}

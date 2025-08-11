@@ -8,6 +8,7 @@
     <version>${revision}</version>
   </parent>
 
+  <groupId>io.tileverse.vectortiles</groupId>
   <artifactId>tileverse-vectortiles</artifactId>
   <name>Tileverse - Vector Tiles</name>
   <description>Vector tile encoding/decoding for Tileverse</description>
@@ -22,34 +23,66 @@
     <!-- Protocol Buffers -->
     <dependency>
       <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
+      <artifactId>protobuf-javalite</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>com.carrotsearch</groupId>
+      <artifactId>hppc</artifactId>
     </dependency>
   </dependencies>
 
   <build>
     <plugins>
       <plugin>
-        <groupId>org.xolstice.maven.plugins</groupId>
-        <artifactId>protobuf-maven-plugin</artifactId>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
         <configuration>
-          <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
+          <excludes>
+            <!-- Exclude protobuf generated classes -->
+            <exclude>**/VectorTileProto*</exclude>
+          </excludes>
         </configuration>
-        <executions>
-          <execution>
-            <goals>
-              <goal>compile</goal>
-              <goal>test-compile</goal>
-            </goals>
-          </execution>
-        </executions>
+      </plugin>
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <configuration>
+          <java>
+            <includes>
+              <include>src/**/*.java</include>
+            </includes>
+          </java>
+        </configuration>
       </plugin>
     </plugins>
-    <extensions>
-      <extension>
-        <groupId>kr.motd.maven</groupId>
-        <artifactId>os-maven-plugin</artifactId>
-        <version>1.7.1</version>
-      </extension>
-    </extensions>
   </build>
+  <profiles>
+    <profile>
+      <id>protobuf</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>io.github.ascopes</groupId>
+            <artifactId>protobuf-maven-plugin</artifactId>
+            <version>3.7.0</version>
+            <configuration>
+              <liteOnly>true</liteOnly>
+              <protocVersion>${protobuf-java.version}</protocVersion>
+            </configuration>
+            <executions>
+              <execution>
+                <goals>
+                  <goal>generate</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

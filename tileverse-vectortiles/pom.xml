@@ -8,6 +8,7 @@
     <version>${revision}</version>
   </parent>
 
+  <groupId>io.tileverse.vectortiles</groupId>
   <artifactId>tileverse-vectortiles</artifactId>
   <name>Tileverse - Vector Tiles</name>
   <description>Vector tile encoding/decoding for Tileverse</description>
@@ -22,23 +23,66 @@
     <!-- Protocol Buffers -->
     <dependency>
       <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
+      <artifactId>protobuf-javalite</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>com.carrotsearch</groupId>
+      <artifactId>hppc</artifactId>
     </dependency>
   </dependencies>
 
   <build>
     <plugins>
       <plugin>
-        <groupId>org.xolstice.maven.plugins</groupId>
-        <artifactId>protobuf-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <goals>
-              <goal>compile</goal>
-            </goals>
-          </execution>
-        </executions>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <!-- Exclude protobuf generated classes -->
+            <exclude>**/VectorTileProto*</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <configuration>
+          <java>
+            <includes>
+              <include>src/**/*.java</include>
+            </includes>
+          </java>
+        </configuration>
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>protobuf</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>io.github.ascopes</groupId>
+            <artifactId>protobuf-maven-plugin</artifactId>
+            <version>3.7.0</version>
+            <configuration>
+              <liteOnly>true</liteOnly>
+              <protocVersion>${protobuf-java.version}</protocVersion>
+            </configuration>
+            <executions>
+              <execution>
+                <goals>
+                  <goal>generate</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

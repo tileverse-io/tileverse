@@ -1,0 +1,65 @@
+/*
+ * (c) Copyright 2025 Multiversio LLC. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *          http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.tileverse.vectortile.model;
+
+import java.util.Map;
+import org.locationtech.jts.geom.Geometry;
+
+/**
+ * A vector tile feature with geometry and attributes.
+ * <p>
+ * Features represent individual geographic objects within a tile layer.
+ * Each feature has a geometry, optional attributes, and an identifier.
+ * Coordinates are in tile extent space [0, extent-1].
+ */
+public interface Feature {
+
+    /**
+     * Returns the layer containing this feature.
+     */
+    Layer getLayer();
+
+    /**
+     * Returns the feature identifier.
+     * <p>
+     * Features may have explicit IDs or default to 0.
+     */
+    long getId();
+
+    /**
+     * Returns the feature's geometry in tile extent coordinates.
+     * <p>
+     * Coordinates are preserved exactly as stored in the MVT data,
+     * typically in the range [0, extent-1] where extent is the layer's extent value.
+     */
+    Geometry getGeometry();
+
+    /**
+     * Returns a single attribute value by name.
+     *
+     * @param attributeName the attribute name
+     * @return the attribute value, or null if the attribute doesn't exist
+     */
+    Object getAttribute(String attributeName);
+
+    /**
+     * Returns all feature attributes as a map.
+     * <p>
+     * The returned map reflects the feature's current attribute state.
+     * Missing attributes return null when accessed individually.
+     */
+    Map<String, Object> getAttributes();
+}

@@ -8,28 +8,41 @@
     <version>${revision}</version>
   </parent>
 
-  <groupId>io.tileverse.tilepyramid</groupId>
-  <artifactId>tileverse-tilepyramid</artifactId>
-  <name>Tileverse Tile Pyramid Model</name>
-  <description>Generic object model for defining tile pyramids and tiling schemes</description>
+  <artifactId>tileverse-pmtiles</artifactId>
+  <name>Tileverse - PMTiles</name>
+  <description>PMTiles format implementation</description>
 
   <dependencies>
-    <!-- JTS for geometric operations -->
     <dependency>
-      <groupId>org.locationtech.jts</groupId>
-      <artifactId>jts-core</artifactId>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-all</artifactId>
     </dependency>
 
-    <!-- Jackson for JSON serialization -->
+    <!-- Compression -->
     <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-annotations</artifactId>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-compress</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-databind</artifactId>
+      <groupId>com.github.luben</groupId>
+      <artifactId>zstd-jni</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.vectortiles</groupId>
+      <artifactId>tileverse-vectortiles</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.tilepyramid</groupId>
+      <artifactId>tileverse-tilepyramid</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>io.tileverse.pmtiles</groupId>
+      <artifactId>tileverse-pmtiles-test-data</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
+
   <build>
     <plugins>
       <plugin>

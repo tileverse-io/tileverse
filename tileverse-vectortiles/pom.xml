@@ -4,7 +4,7 @@
 
   <parent>
     <groupId>io.tileverse.pmtiles</groupId>
-    <artifactId>tileverse-pmtiles</artifactId>
+    <artifactId>tileverse-pmtiles-modules</artifactId>
     <version>${revision}</version>
   </parent>
 

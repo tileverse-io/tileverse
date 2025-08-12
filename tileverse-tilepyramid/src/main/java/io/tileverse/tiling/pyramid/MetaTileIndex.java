@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.tiling.model;
+package io.tileverse.tiling.pyramid;
 
 /**
  * Represents a meta-tile coordinate - a tile that represents a rectangular group of individual tiles.

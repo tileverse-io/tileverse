@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.tiling.grid;
+package io.tileverse.tiling.matrix;
 
-import io.tileverse.tiling.model.AxisOrigin;
-import io.tileverse.tiling.model.TilePyramid;
-import io.tileverse.tiling.model.TileRange;
+import io.tileverse.tiling.pyramid.AxisOrigin;
+import io.tileverse.tiling.pyramid.TilePyramid;
+import io.tileverse.tiling.pyramid.TileRange;
 
 /**
  * Standard tile matrix sets commonly used in web mapping applications.

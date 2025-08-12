@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.tileverse.tiling.grid.TileMatrixSet;
+import io.tileverse.tiling.matrix.TileMatrixSet;
 import org.junit.jupiter.api.Test;
 
 class PMTilesTileMatrixSetTest {
@@ -53,7 +53,7 @@ class PMTilesTileMatrixSetTest {
 
         // Verify that tile ranges are smaller than full world (due to NYC bounds)
         // At zoom level 5, full world would be 32x32 tiles, but NYC should be much smaller
-        io.tileverse.tiling.model.TileRange level5Range = tms.tilePyramid().tileRange(5);
+        io.tileverse.tiling.pyramid.TileRange level5Range = tms.tilePyramid().tileRange(5);
         assertTrue(level5Range.count() < 32 * 32, "NYC bounds should result in fewer tiles than full world");
         assertTrue(level5Range.count() > 0, "Should have some tiles in the bounded area");
     }

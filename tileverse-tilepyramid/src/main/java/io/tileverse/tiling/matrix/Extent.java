@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.tiling.grid;
+package io.tileverse.tiling.matrix;
 
 /**
  * Represents a 2D bounding box extent in map space (CRS coordinates).

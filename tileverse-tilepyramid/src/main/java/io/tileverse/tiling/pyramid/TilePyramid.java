@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.tiling.model;
+package io.tileverse.tiling.pyramid;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.ArrayList;

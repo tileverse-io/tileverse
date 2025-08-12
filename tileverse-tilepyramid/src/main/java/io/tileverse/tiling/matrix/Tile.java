@@ -13,9 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.tiling.grid;
+package io.tileverse.tiling.matrix;
 
-import io.tileverse.tiling.model.TileIndex;
+import io.tileverse.tiling.pyramid.TileIndex;
 
 /**
  * A tile represents a rectangular region of map data with specific dimensions and spatial extent.

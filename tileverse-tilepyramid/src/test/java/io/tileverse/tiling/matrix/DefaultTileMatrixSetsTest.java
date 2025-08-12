@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.tiling.grid;
+package io.tileverse.tiling.matrix;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -22,9 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.tileverse.tiling.model.AxisOrigin;
-import io.tileverse.tiling.model.TileIndex;
-import io.tileverse.tiling.model.TileRange;
+import io.tileverse.tiling.pyramid.AxisOrigin;
+import io.tileverse.tiling.pyramid.TileIndex;
+import io.tileverse.tiling.pyramid.TileRange;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 

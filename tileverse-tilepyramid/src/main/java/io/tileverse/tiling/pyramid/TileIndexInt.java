@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.tiling.model;
+package io.tileverse.tiling.pyramid;
 
 /**
  * Memory-optimized TileIndex implementation using 32-bit integers for coordinates.

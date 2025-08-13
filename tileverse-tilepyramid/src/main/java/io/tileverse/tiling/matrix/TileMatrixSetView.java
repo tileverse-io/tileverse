@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.tiling.grid;
+package io.tileverse.tiling.matrix;
 
 import static java.util.Objects.requireNonNull;
 
-import io.tileverse.tiling.model.TilePyramid;
+import io.tileverse.tiling.pyramid.TilePyramid;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -247,13 +247,13 @@ class TileMatrixSetView implements TileMatrixSet {
     // Delegate abstract methods from TileMatrixSet
 
     @Override
-    public io.tileverse.tiling.model.TileIndex coordinateToTile(Coordinate coordinate, int zoomLevel) {
+    public io.tileverse.tiling.pyramid.TileIndex coordinateToTile(Coordinate coordinate, int zoomLevel) {
         validateZoomLevel(zoomLevel);
         return delegate.coordinateToTile(coordinate, zoomLevel);
     }
 
     @Override
-    public io.tileverse.tiling.model.TileRange extentToRange(Extent extent, int zoomLevel) {
+    public io.tileverse.tiling.pyramid.TileRange extentToRange(Extent extent, int zoomLevel) {
         validateZoomLevel(zoomLevel);
         return delegate.extentToRange(extent, zoomLevel);
     }

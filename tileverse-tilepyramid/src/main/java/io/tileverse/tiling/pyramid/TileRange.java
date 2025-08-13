@@ -13,12 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.tiling.model;
+package io.tileverse.tiling.pyramid;
 
 import static java.util.Objects.requireNonNull;
 
-import io.tileverse.tiling.grid.Coordinate;
-import io.tileverse.tiling.grid.Extent;
+import io.tileverse.tiling.matrix.Coordinate;
+import io.tileverse.tiling.matrix.Extent;
 import java.util.Comparator;
 import java.util.Optional;
 

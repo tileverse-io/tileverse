@@ -15,9 +15,9 @@
  */
 package io.tileverse.pmtiles;
 
-import io.tileverse.tiling.grid.DefaultTileMatrixSets;
-import io.tileverse.tiling.grid.Extent;
-import io.tileverse.tiling.grid.TileMatrixSet;
+import io.tileverse.tiling.matrix.DefaultTileMatrixSets;
+import io.tileverse.tiling.matrix.Extent;
+import io.tileverse.tiling.matrix.TileMatrixSet;
 
 /**
  * Factory methods for creating TileMatrixSet instances from PMTiles data.

@@ -15,45 +15,42 @@
  */
 package io.tileverse.vectortile.mvt;
 
-import io.tileverse.vectortile.model.Feature;
-import io.tileverse.vectortile.model.Layer;
+import static java.util.Objects.requireNonNull;
+
+import io.tileverse.vectortile.model.GeometryReader;
+import io.tileverse.vectortile.model.VectorTile;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
-import org.locationtech.jts.geom.GeometryFactory;
 
-class MvtLayer implements Layer {
+record MvtLayer(MvtTile tile, VectorTileProto.Tile.Layer layerProto) implements VectorTile.Layer {
 
-    private final MvtTile tile;
-    private final VectorTileProto.Tile.Layer layer;
-    private GeometryDecoder decoder;
-
-    MvtLayer(MvtTile tile, VectorTileProto.Tile.Layer layer) {
-        this.tile = tile;
-        this.layer = layer;
-    }
-
-    VectorTileProto.Tile.Layer layer() {
-        return layer;
+    @Override
+    public VectorTile getTile() {
+        return tile;
     }
 
     @Override
     public String getName() {
-        return layer.getName();
+        return layerProto.getName();
     }
 
     @Override
     public int getExtent() {
-        return layer.getExtent();
+        if (!layerProto.hasExtent()) {
+            return 4096;
+        }
+        return layerProto.getExtent();
     }
 
     @Override
     public Set<String> getAttributeNames() {
-        return Set.copyOf(layer.getKeysList());
+        return Set.copyOf(layerProto.getKeysList());
     }
 
     @Override
     public int count() {
-        return layer.getFeaturesCount();
+        return layerProto.getFeaturesCount();
     }
 
     /**
@@ -66,21 +63,30 @@ class MvtLayer implements Layer {
      */
     @Override
     public Stream<Feature> getFeatures() {
-        return layer.getFeaturesList().stream().map(this::createFeature);
+        return getFeatures(f -> true);
     }
 
-    private MvtFeature createFeature(VectorTileProto.Tile.Feature feature) {
-        return new MvtFeature(this, feature);
+    @Override
+    public Stream<Feature> getFeatures(Predicate<Feature> filter) {
+        return getFeatures(filter, new GeometryDecoder());
     }
 
-    GeometryDecoder decoder() {
-        if (this.decoder == null) {
-            this.decoder = new GeometryDecoder(getGeometryFactory());
-        }
-        return decoder;
+    @Override
+    public Stream<Feature> getFeatures(Predicate<Feature> filter, GeometryReader decoder) {
+        requireNonNull(filter, "filter");
+        requireNonNull(decoder, "decoder");
+        return layerProto.getFeaturesList().stream()
+                .map(f -> createFeature(f, decoder))
+                .filter(filter);
     }
 
-    GeometryFactory getGeometryFactory() {
-        return tile.getGeometryFactory();
+    private Feature createFeature(VectorTileProto.Tile.Feature feature, GeometryReader decoder) {
+        return new MvtFeature(this, feature, decoder);
+    }
+
+    @Override
+    public String toString() {
+        return "%s[name=%s, extent=%d, features=%d]"
+                .formatted(getClass().getSimpleName(), getName(), getExtent(), count());
     }
 }

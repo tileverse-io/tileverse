@@ -18,7 +18,7 @@
  */
 package io.tileverse.vectortile.mvt;
 
-import io.tileverse.vectortile.model.Tile;
+import io.tileverse.vectortile.model.VectorTile;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Geometry;
@@ -216,11 +216,11 @@ public class VectorTileBuilder {
 
     private final BuildParams state = new BuildParams();
 
-    public VectorTileBuilder init(Tile tile) {
+    public VectorTileBuilder init(VectorTile tile) {
         throw new UnsupportedOperationException("implement");
     }
 
-    public VectorTileBuilder merge(Tile tile) {
+    public VectorTileBuilder merge(VectorTile tile) {
         throw new UnsupportedOperationException("implement");
     }
 
@@ -237,7 +237,7 @@ public class VectorTileBuilder {
      * Internal method to build the protobuf tile structure. Layers are added
      * directly via LayerBuilder.build(), so this just finalizes.
      */
-    public Tile build() {
+    public VectorTile build() {
         io.tileverse.vectortile.mvt.VectorTileProto.Tile proto = buildProto();
         MvtTile tile = new MvtTile(proto);
         protoTileBuilder.clear();

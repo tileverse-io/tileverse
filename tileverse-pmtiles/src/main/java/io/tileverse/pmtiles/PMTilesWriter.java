@@ -15,6 +15,7 @@
  */
 package io.tileverse.pmtiles;
 
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -26,27 +27,16 @@ import java.nio.file.Path;
  * then finalizing the file with the complete() method.
  */
 public interface PMTilesWriter extends Closeable {
-    /**
-     * Adds a tile with the specified coordinates and data.
-     *
-     * @param z the zoom level
-     * @param x the X coordinate
-     * @param y the Y coordinate
-     * @param data the tile data
-     * @throws IOException if an I/O error occurs
-     * @throws IllegalStateException if the writer has been completed
-     */
-    void addTile(byte z, int x, int y, byte[] data) throws IOException;
 
     /**
      * Adds a tile with the specified coordinates and data.
      *
-     * @param zxy the tile coordinates
+     * @param tileIndex the tile coordinates
      * @param data the tile data
      * @throws IOException if an I/O error occurs
      * @throws IllegalStateException if the writer has been completed
      */
-    void addTile(ZXY zxy, byte[] data) throws IOException;
+    void addTile(TileIndex tileIndex, byte[] data) throws IOException;
 
     /**
      * Sets the metadata for the PMTiles file.
@@ -100,7 +90,7 @@ public interface PMTilesWriter extends Closeable {
          * @param minZoom the minimum zoom level
          * @return this builder
          */
-        Builder minZoom(byte minZoom);
+        Builder minZoom(int minZoom);
 
         /**
          * Sets the maximum zoom level for the PMTiles file.
@@ -108,7 +98,7 @@ public interface PMTilesWriter extends Closeable {
          * @param maxZoom the maximum zoom level
          * @return this builder
          */
-        Builder maxZoom(byte maxZoom);
+        Builder maxZoom(int maxZoom);
 
         /**
          * Sets the compression type for tile data.

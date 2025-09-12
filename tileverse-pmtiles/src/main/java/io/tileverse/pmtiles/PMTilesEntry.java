@@ -15,6 +15,8 @@
  */
 package io.tileverse.pmtiles;
 
+import java.nio.ByteBuffer;
+
 /**
  * Represents a directory entry in a PMTiles file.
  * <p>
@@ -61,6 +63,43 @@ public record PMTilesEntry(
          */
         int runLength)
         implements Comparable<PMTilesEntry> {
+
+    /**
+     * Size of {@code tileId + offset + length + runLength}
+     */
+    static final int SERIALIZED_SIZE = Long.BYTES + Long.BYTES + Integer.BYTES + Integer.BYTES;
+
+    static void setId(ByteBuffer entry, long tileId) {
+        entry.putLong(0, tileId);
+    }
+
+    static long getId(ByteBuffer entry) {
+        return entry.getLong(0);
+    }
+
+    static void setOffset(ByteBuffer entry, long tileId) {
+        entry.putLong(8, tileId);
+    }
+
+    static long getOffset(ByteBuffer entry) {
+        return entry.getLong(8);
+    }
+
+    static void setLength(ByteBuffer entry, int length) {
+        entry.putInt(16, length);
+    }
+
+    static int getLength(ByteBuffer entry) {
+        return entry.getInt(16);
+    }
+
+    static void setRunLength(ByteBuffer entry, int runLength) {
+        entry.putInt(20, runLength);
+    }
+
+    static int getRunLength(ByteBuffer entry) {
+        return entry.getInt(20);
+    }
 
     /**
      * Creates a new PMTilesEntry with a runLength of 1.
@@ -120,16 +159,6 @@ public record PMTilesEntry(
     }
 
     /**
-     * Creates a new empty entry.
-     * Empty entries are used to represent missing tiles.
-     *
-     * @return a new empty PMTilesEntry
-     */
-    public static PMTilesEntry empty() {
-        return new PMTilesEntry(0, 0, 0, 0);
-    }
-
-    /**
      * Compares this entry with another entry based on tile ID.
      *
      * @param other the entry to compare with
@@ -139,96 +168,5 @@ public record PMTilesEntry(
     @Override
     public int compareTo(PMTilesEntry other) {
         return Long.compare(this.tileId, other.tileId);
-    }
-
-    /**
-     * Creates a new builder for constructing PMTilesEntry instances.
-     *
-     * @return a new builder instance
-     */
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    /**
-     * Builder for constructing PMTilesEntry instances incrementally.
-     * This is particularly useful for deserialization where fields are read in separate passes.
-     */
-    public static class Builder {
-        private long tileId = 0;
-        private long offset = 0;
-        private int length = 0;
-        private int runLength = 0;
-
-        /**
-         * Sets the tile ID.
-         *
-         * @param tileId the tile ID
-         * @return this builder for method chaining
-         */
-        public Builder tileId(long tileId) {
-            this.tileId = tileId;
-            return this;
-        }
-
-        /**
-         * Sets the offset.
-         *
-         * @param offset the offset of the tile data or leaf directory
-         * @return this builder for method chaining
-         */
-        public Builder offset(long offset) {
-            this.offset = offset;
-            return this;
-        }
-
-        /**
-         * Sets the length.
-         *
-         * @param length the length of the tile data or leaf directory
-         * @return this builder for method chaining
-         */
-        public Builder length(int length) {
-            this.length = length;
-            return this;
-        }
-
-        /**
-         * Sets the run length.
-         *
-         * @param runLength the number of consecutive tiles with the same content
-         * @return this builder for method chaining
-         */
-        public Builder runLength(int runLength) {
-            this.runLength = runLength;
-            return this;
-        }
-
-        /**
-         * Gets the current offset value.
-         *
-         * @return the current offset
-         */
-        public long getOffset() {
-            return offset;
-        }
-
-        /**
-         * Gets the current length value.
-         *
-         * @return the current length
-         */
-        public int getLength() {
-            return length;
-        }
-
-        /**
-         * Builds the final PMTilesEntry instance.
-         *
-         * @return a new PMTilesEntry with the configured values
-         */
-        public PMTilesEntry build() {
-            return new PMTilesEntry(tileId, offset, length, runLength);
-        }
     }
 }

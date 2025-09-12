@@ -15,6 +15,8 @@
  */
 package io.tileverse.pmtiles;
 
+import static io.tileverse.tiling.pyramid.TileIndex.zxy;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -51,21 +53,21 @@ public class PMTilesWriterExample {
 
             // Add some tiles
             // Root tile
-            writer.addTile((byte) 0, 0, 0, emptyTile);
+            writer.addTile(zxy(0, 0, 0), emptyTile);
 
             // Zoom level 1
-            writer.addTile((byte) 1, 0, 0, oceanTile);
-            writer.addTile((byte) 1, 0, 1, oceanTile); // Duplicate content for RLE
-            writer.addTile((byte) 1, 1, 0, landTile);
-            writer.addTile((byte) 1, 1, 1, landTile); // Duplicate content for RLE
+            writer.addTile(zxy(1, 0, 0), oceanTile);
+            writer.addTile(zxy(1, 0, 1), oceanTile); // Duplicate content for RLE
+            writer.addTile(zxy(1, 1, 0), landTile);
+            writer.addTile(zxy(1, 1, 1), landTile); // Duplicate content for RLE
 
             // Zoom level 2 (just a few sample tiles)
-            writer.addTile((byte) 2, 0, 0, oceanTile);
-            writer.addTile((byte) 2, 0, 1, oceanTile);
-            writer.addTile((byte) 2, 1, 0, landTile);
-            writer.addTile((byte) 2, 1, 1, landTile);
-            writer.addTile((byte) 2, 2, 2, landTile);
-            writer.addTile((byte) 2, 3, 3, emptyTile);
+            writer.addTile(zxy(2, 0, 0), oceanTile);
+            writer.addTile(zxy(2, 0, 1), oceanTile);
+            writer.addTile(zxy(2, 1, 0), landTile);
+            writer.addTile(zxy(2, 1, 1), landTile);
+            writer.addTile(zxy(2, 2, 2), landTile);
+            writer.addTile(zxy(2, 3, 3), emptyTile);
 
             // Set metadata
             writer.setMetadata(
@@ -111,7 +113,8 @@ public class PMTilesWriterExample {
         System.out.println("PMTiles file created successfully at: " + outputPath);
 
         // Read back and show some information
-        try (PMTilesReader reader = new PMTilesReader(outputPath)) {
+        try {
+            PMTilesReader reader = new PMTilesReader(outputPath);
             PMTilesHeader header = reader.getHeader();
             System.out.println("\nPMTiles file information:");
             System.out.println("Tile count: " + header.addressedTilesCount());
@@ -129,7 +132,7 @@ public class PMTilesWriterExample {
             // Read a specific tile
             Optional<ByteBuffer> tileData = reader.getTile(0, 0, 0);
             if (tileData.isPresent()) {
-                String stringData = reader.toString(tileData.get());
+                String stringData = PMTilesReader.toString(tileData.get());
                 System.out.println("\nRoot tile data: " + stringData);
             }
         } catch (InvalidHeaderException | UnsupportedCompressionException e) {

@@ -15,6 +15,8 @@
  */
 package io.tileverse.tiling.matrix;
 
+import io.tileverse.tiling.common.BoundingBox2D;
+import io.tileverse.tiling.common.Coordinate;
 import io.tileverse.tiling.pyramid.TileIndex;
 
 /**
@@ -48,7 +50,7 @@ import io.tileverse.tiling.pyramid.TileIndex;
  *
  * @since 1.0
  */
-public record Tile(TileIndex tileIndex, Extent extent, int width, int height, double resolution, String crsId) {
+public record Tile(TileIndex tileIndex, BoundingBox2D extent, int width, int height, double resolution, String crsId) {
 
     /**
      * Compact constructor with validation.
@@ -114,7 +116,7 @@ public record Tile(TileIndex tileIndex, Extent extent, int width, int height, do
      * @param otherExtent the extent to test for intersection
      * @return true if this tile intersects with the extent
      */
-    public boolean intersects(Extent otherExtent) {
+    public boolean intersects(BoundingBox2D otherExtent) {
         return extent.intersects(otherExtent);
     }
 
@@ -196,63 +198,11 @@ public record Tile(TileIndex tileIndex, Extent extent, int width, int height, do
     }
 
     /**
-     * Builder for creating Tile instances.
-     */
-    public static class Builder {
-        private TileIndex tileIndex;
-        private Extent extent;
-        private int width = 256;
-        private int height = 256;
-        private double resolution;
-        private String crsId;
-
-        public Builder tileIndex(TileIndex tileIndex) {
-            this.tileIndex = tileIndex;
-            return this;
-        }
-
-        public Builder tileIndex(long x, long y, int z) {
-            this.tileIndex = TileIndex.of(x, y, z);
-            return this;
-        }
-
-        public Builder extent(Extent extent) {
-            this.extent = extent;
-            return this;
-        }
-
-        public Builder extent(double minX, double minY, double maxX, double maxY) {
-            this.extent = Extent.of(minX, minY, maxX, maxY);
-            return this;
-        }
-
-        public Builder size(int width, int height) {
-            this.width = width;
-            this.height = height;
-            return this;
-        }
-
-        public Builder resolution(double resolution) {
-            this.resolution = resolution;
-            return this;
-        }
-
-        public Builder crs(String crsId) {
-            this.crsId = crsId;
-            return this;
-        }
-
-        public Tile build() {
-            return new Tile(tileIndex, extent, width, height, resolution, crsId);
-        }
-    }
-
-    /**
      * Creates a new builder for Tile.
      *
      * @return a new builder instance
      */
-    public static Builder builder() {
-        return new Builder();
+    public static TileBuilder builder() {
+        return new TileBuilder();
     }
 }

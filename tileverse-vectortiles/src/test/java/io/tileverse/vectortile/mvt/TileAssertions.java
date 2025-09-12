@@ -15,8 +15,8 @@
  */
 package io.tileverse.vectortile.mvt;
 
-import io.tileverse.vectortile.model.Layer;
-import io.tileverse.vectortile.model.Tile;
+import io.tileverse.vectortile.model.VectorTile;
+import io.tileverse.vectortile.model.VectorTile.Layer;
 import java.util.Arrays;
 import org.assertj.core.api.AbstractAssert;
 import org.assertj.core.api.Assertions;
@@ -33,16 +33,16 @@ import org.assertj.core.api.Assertions;
  *     .hasLayer("buildings");
  * }</pre>
  */
-class TileAssertions extends AbstractAssert<TileAssertions, Tile> {
+class TileAssertions extends AbstractAssert<TileAssertions, VectorTile> {
 
-    public TileAssertions(Tile actual) {
+    public TileAssertions(VectorTile actual) {
         super(actual, TileAssertions.class);
     }
 
     /**
      * Entry point for fluent assertions on MVT tiles.
      */
-    public static TileAssertions assertThat(Tile actual) {
+    public static TileAssertions assertThat(VectorTile actual) {
         return new TileAssertions(actual);
     }
 

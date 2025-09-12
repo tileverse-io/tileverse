@@ -16,32 +16,53 @@
 package io.tileverse.pmtiles;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
+import io.tileverse.io.ByteBufferPool;
+import io.tileverse.io.ByteRange;
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
-import io.tileverse.rangereader.ByteRange;
 import io.tileverse.rangereader.RangeReader;
-import io.tileverse.rangereader.file.FileRangeReader;
-import io.tileverse.rangereader.nio.ByteBufferPool;
-import java.io.Closeable;
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import org.apache.commons.io.IOUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reader for PMTiles files that provides access to tiles and metadata.
  * <p>
  * This class implements the PMTiles format specification, providing a clean API
- * for accessing tile data, metadata, and directory structures within a PMTiles file.
+ * for accessing tile data, metadata, and directory structures within a PMTiles
+ * file.
  * <p>
- * It relies on the {@link RangeReader} interface for random access to the underlying
- * data source, allowing for efficient reading from local files, HTTP servers, or cloud storage.
+ * It relies on a {@code Supplier<SeekableByteChannel>}, from which it
+ * will <strong>acquire and close</strong> a {@link SeekableByteChannel} upon
+ * each I/O operation.
+ * <p>
+ * Therefore this reader does not own the underlying input source and won't close it
+ * explicitly unless it provides a new instance on each supplied byte channel.
+ * <p>
+ * It is recommended to use the {@link RangeReader} library for random access to the
+ * underlying data source, allowing for efficient reading from local files, HTTP
+ * servers, or cloud storage; though it's not mandatory.
  * <p>
  * Example usage:
+ *
  * <pre>{@code
  * // Create a RangeReader for the desired source
  * RangeReader reader = new FileRangeReader(Path.of("/path/to/tiles.pmtiles"));
@@ -49,37 +70,56 @@ import org.apache.commons.io.IOUtils;
  * // For cloud storage or HTTP, create the appropriate RangeReader
  * // RangeReader reader = RangeReaderFactory.create(URI.create("s3://bucket/tiles.pmtiles"));
  *
- * // For performance optimization with cloud storage, use block alignment and caching
- * // RangeReader reader = RangeReaderFactory.createBlockAlignedCaching(
- * //     RangeReaderFactory.create(URI.create("s3://bucket/tiles.pmtiles")));
- *
  * // Create the PMTilesReader with the RangeReader
  * try (PMTilesReader pmtiles = new PMTilesReader(reader)) {
- *     // Access tiles, metadata, etc.
- *     Optional<byte[]> tile = pmtiles.getTile(10, 885, 412);
+ * 	// Access tiles, metadata, etc.
+ * 	Optional<byte[]> tile = pmtiles.getTile(10, 885, 412);
  * }
  * }</pre>
  */
-public class PMTilesReader implements Closeable {
+public class PMTilesReader {
 
-    private final RangeReader rangeReader;
+    private static final Logger log = LoggerFactory.getLogger(PMTilesReader.class);
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    private final Supplier<SeekableByteChannel> channelSupplier;
+
+    private static final Duration expireAfterAccess = Duration.ofSeconds(30);
+
+    /**
+     * Short-lived (expireAfterAccess) cache of directory entries to account for multiple/concurrent requests
+     */
+    private final LoadingCache<ByteRange, PMTilesDirectory> directoryCache;
+
     private final PMTilesHeader header;
-    private final ObjectMapper objectMapper;
+
+    /**
+     * @see #getMetadata()
+     */
+    private PMTilesMetadata parsedMetadata;
 
     /**
      * Creates a new PMTilesReader for the specified file.
+     * <p>
+     * This constructor creates a {@link SeekableByteChannelSupplier} that will open and close the file upon each I/O operation.
      *
      * @param path the path to the PMTiles file
      * @throws IOException if an I/O error occurs
      * @throws InvalidHeaderException if the file has an invalid header
      */
     public PMTilesReader(Path path) throws IOException, InvalidHeaderException {
-        this(FileRangeReader.of(path));
+        this(fileChannelSupplier(path));
     }
 
-    @Override
-    public void close() throws IOException {
-        rangeReader.close();
+    private static Supplier<SeekableByteChannel> fileChannelSupplier(Path path) {
+        return () -> {
+            try {
+                return FileChannel.open(path, StandardOpenOption.READ);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        };
     }
 
     /**
@@ -88,25 +128,26 @@ public class PMTilesReader implements Closeable {
      * This constructor allows reading PMTiles from any source that implements the
      * RangeReader interface, such as local files, HTTP servers, or cloud storage.
      *
-     * @param rangeReader the range reader to use
+     * @param rangeReaderSupplier the range reader to use
      * @throws IOException if an I/O error occurs
      * @throws InvalidHeaderException if the file has an invalid header
      */
-    public PMTilesReader(RangeReader rangeReader) throws IOException, InvalidHeaderException {
-        this.rangeReader = Objects.requireNonNull(rangeReader, "RangeReader cannot be null");
-        this.objectMapper = new ObjectMapper();
+    public PMTilesReader(Supplier<SeekableByteChannel> rangeReaderSupplier) throws IOException, InvalidHeaderException {
+        this.channelSupplier = Objects.requireNonNull(rangeReaderSupplier, "rangeReaderSupplier cannot be null");
+        try (SeekableByteChannel channel = channel()) {
+            this.header = PMTilesHeader.readHeader(channel);
+        }
+        this.directoryCache = Caffeine.newBuilder()
+                .softValues()
+                .expireAfterAccess(expireAfterAccess)
+                .build(this::readDirectory);
+    }
 
-        // Read the header
-        ByteBuffer headerBuffer = ByteBufferPool.getDefault().borrowHeap(127);
+    private SeekableByteChannel channel() throws IOException {
         try {
-            if (rangeReader.readRange(0, 127, headerBuffer) != 127) {
-                throw new InvalidHeaderException("Failed to read complete header");
-            }
-
-            // Deserialize the header directly from the ByteBuffer
-            this.header = PMTilesHeader.deserialize(headerBuffer);
-        } finally {
-            ByteBufferPool.getDefault().returnBuffer(headerBuffer);
+            return channelSupplier.get();
+        } catch (UncheckedIOException e) {
+            throw e.getCause();
         }
     }
 
@@ -130,12 +171,62 @@ public class PMTilesReader implements Closeable {
      * @throws UnsupportedCompressionException if the compression type is not supported
      */
     public Optional<ByteBuffer> getTile(int z, int x, int y) throws IOException {
+        return getTile(TileIndex.xyz((long) x, (long) y, z));
+    }
 
-        ZXY zxy = ZXY.of(z, x, y);
-        long tileId = zxy.toTileId();
+    public Optional<ByteBuffer> getTile(TileIndex tileIndex) throws IOException {
+        return getTile(tileIndex, Function.identity());
+    }
+
+    public <D> Optional<D> getTile(TileIndex tileIndex, Function<ByteBuffer, D> mapper) throws IOException {
+        if (tileIndex.z() < 0) throw new IllegalArgumentException("z can't be < 0");
+        if (tileIndex.x() < 0) throw new IllegalArgumentException("x can't be < 0");
+        if (tileIndex.y() < 0) throw new IllegalArgumentException("y can't be < 0");
+
+        long tileId = HilbertCurve.tileIndexToTileId(tileIndex);
 
         // Find the tile in the directory structure
-        return findTileLocation(tileId).map(this::getTile);
+        Optional<ByteRange> tileLocation = findTileLocation(tileId);
+        if (log.isDebugEnabled()) {
+            log.debug(
+                    "PMTilesReader.getTile({}): tileId={}, location: {}", tileIndex, tileId, tileLocation.orElse(null));
+        }
+        return tileLocation.map(this::readTile).map(mapper);
+    }
+
+    public Stream<TileIndex> getTileIndices() {
+        IntStream zooms = IntStream.rangeClosed(header.minZoom(), header.maxZoom());
+        return zooms.mapToObj(Integer::valueOf).flatMap(this::getTileIndicesByZoomLevel);
+    }
+
+    /**
+     * Returns a stream of all tile indices present in the PMTiles file at the specified zoom level.
+     * <p>
+     * This method traverses the sparse directory structure of the PMTiles file and collects
+     * all tiles that exist at the given zoom level. Unlike a continuous TileMatrix grid,
+     * PMTiles files contain only the tiles that were actually written to the file.
+     * <p>
+     * The returned stream provides an efficient way to iterate over all tiles at a zoom level
+     * without having to test each possible tile coordinate for existence.
+     *
+     * @param zoomLevel the zoom level to query (0-based)
+     * @return a stream of TileIndex objects representing all tiles present at the zoom level
+     * @throws IOException if an I/O error occurs while reading the directory structure
+     * @throws UnsupportedCompressionException if the compression type is not supported
+     */
+    public Stream<TileIndex> getTileIndicesByZoomLevel(int zoomLevel) {
+        if (zoomLevel < 0 || zoomLevel > 31) {
+            throw new IllegalArgumentException("Zoom level must be between 0 and 31, got: " + zoomLevel);
+        }
+
+        List<TileIndex> tileIndices = new java.util.ArrayList<>();
+        try {
+            collectTileIndicesForZoomLevel(
+                    ByteRange.of(header.rootDirOffset(), (int) header.rootDirBytes()), zoomLevel, tileIndices, false);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return tileIndices.stream();
     }
 
     /**
@@ -144,7 +235,7 @@ public class PMTilesReader implements Closeable {
      * @throws UncheckedIOException
      * @return the tile contents
      */
-    private ByteBuffer getTile(ByteRange absolutePosition) {
+    private ByteBuffer readTile(ByteRange absolutePosition) {
         return readData(absolutePosition, header.tileCompression());
     }
     /**
@@ -155,7 +246,6 @@ public class PMTilesReader implements Closeable {
      * @throws UnsupportedCompressionException if the compression type is not supported
      */
     public ByteBuffer getRawMetadata() throws IOException, UnsupportedCompressionException {
-
         final long offset = header.jsonMetadataOffset();
         final int length = (int) header.jsonMetadataBytes();
         return readData(ByteRange.of(offset, length), header.internalCompression());
@@ -182,16 +272,22 @@ public class PMTilesReader implements Closeable {
      * @throws UnsupportedCompressionException if the compression type is not supported
      */
     public PMTilesMetadata getMetadata() throws IOException, UnsupportedCompressionException {
-        ByteBuffer metadataBytes = getRawMetadata();
-        if (metadataBytes.remaining() == 0) {
+        if (parsedMetadata == null) {
+            parsedMetadata = parseMetadata(getMetadataAsString());
+        }
+        return parsedMetadata;
+    }
+
+    static PMTilesMetadata parseMetadata(String jsonMetadata) throws IOException {
+        if (jsonMetadata == null || jsonMetadata.isBlank()) {
             // Return empty metadata if no metadata is present
             return PMTilesMetadata.of(null);
         }
 
-        try (ByteBufferInputStream in = new ByteBufferInputStream(metadataBytes)) {
-            return objectMapper.readValue(in, PMTilesMetadata.class);
+        try {
+            return objectMapper.readValue(jsonMetadata, PMTilesMetadata.class);
         } catch (Exception e) {
-            throw new IOException("Failed to parse PMTiles metadata JSON", e);
+            throw new IOException("Failed to parse PMTiles metadata JSON: " + e.getMessage() + "\n" + jsonMetadata, e);
         }
     }
 
@@ -206,8 +302,7 @@ public class PMTilesReader implements Closeable {
     private Optional<ByteRange> findTileLocation(long tileId) throws IOException, UnsupportedCompressionException {
         final long rootDirOffset = header.rootDirOffset();
         final int rootDirLength = (int) header.rootDirBytes();
-        final boolean isLeafDir = false;
-        return searchDirectory(ByteRange.of(rootDirOffset, rootDirLength), tileId, isLeafDir);
+        return searchDirectory(ByteRange.of(rootDirOffset, rootDirLength), tileId);
     }
 
     /**
@@ -216,17 +311,14 @@ public class PMTilesReader implements Closeable {
      * @param dirOffset the offset of the directory to search
      * @param dirLength the length of the directory data
      * @param tileId the tile ID to find
-     * @param isLeafDir whether this is a leaf directory (determines offset calculation)
      * @return the absolute tile location if found, or empty if not found
      * @throws IOException if an I/O error occurs
      * @throws UnsupportedCompressionException if the compression type is not supported
      */
-    private Optional<ByteRange> searchDirectory(ByteRange entryRange, final long tileId, final boolean isLeafDir)
+    private Optional<ByteRange> searchDirectory(ByteRange entryRange, final long tileId)
             throws IOException, UnsupportedCompressionException {
 
-        // Read and deserialize directory
-        ByteBuffer dirBytes = readDirectoryBytes(entryRange);
-        List<PMTilesEntry> entries = DirectoryUtil.deserializeDirectory(dirBytes);
+        PMTilesDirectory entries = getDirectory(entryRange);
 
         // Find entry that might contain our tileId
         Optional<PMTilesEntry> entry = findEntryForTileId(entries, tileId);
@@ -239,10 +331,47 @@ public class PMTilesReader implements Closeable {
 
         if (found.isLeaf()) {
             // Recursively search the leaf directory
-            return searchDirectory(header.leafDirDataRange(found), tileId, true);
+            return searchDirectory(header.leafDirDataRange(found), tileId);
         } else {
-            // This is a tile entry - filter out empty tiles
-            return Optional.of(found).filter(e -> !e.isEmpty()).map(header::tileDataRange);
+            // This is a tile entry
+            return Optional.of(found).map(header::tileDataRange);
+        }
+    }
+
+    private PMTilesDirectory getDirectory(ByteRange directoryRange)
+            throws IOException, UnsupportedCompressionException {
+        try {
+            return directoryCache.get(directoryRange);
+        } catch (UncheckedIOException e) {
+            throw e.getCause();
+        }
+    }
+
+    /**
+     * {@link #directoryCache} loading function
+     */
+    private PMTilesDirectory readDirectory(ByteRange directoryRange) {
+        // Read and deserialize directory
+        try {
+            long start = System.nanoTime();
+            ByteBuffer dirBytes = readDirectoryBytes(directoryRange);
+            long read = System.nanoTime() - start;
+
+            PMTilesDirectory directory = DirectoryUtil.deserializeDirectory(dirBytes);
+
+            long decode = System.nanoTime() - read - start;
+            if (log.isDebugEnabled()) {
+                log.debug("--> PMTilesDirectory lookup: [%,d +%,d], read: %,dms, decode: %,dms: %s"
+                        .formatted(
+                                directoryRange.offset(),
+                                directoryRange.length(),
+                                Duration.ofNanos(read).toMillis(),
+                                Duration.ofNanos(decode).toMillis(),
+                                directory));
+            }
+            return directory;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
@@ -250,11 +379,11 @@ public class PMTilesReader implements Closeable {
      * Searches for a directory entry that contains the specified tile ID using binary search.
      * This method handles both regular tile entries (with run lengths) and leaf directory entries.
      *
-     * @param entries the list of directory entries to search (must be sorted by tileId)
+     * @param entries the directory entries to search (must be sorted by tileId)
      * @param tileId the tile ID to search for
      * @return the directory entry that contains the tile, or empty if no suitable entry found
      */
-    private Optional<PMTilesEntry> findEntryForTileId(List<PMTilesEntry> entries, long tileId) {
+    private Optional<PMTilesEntry> findEntryForTileId(PMTilesDirectory entries, long tileId) {
         int low = 0;
         int high = entries.size() - 1;
 
@@ -305,12 +434,12 @@ public class PMTilesReader implements Closeable {
      *     leaf entry as a heuristic - it might contain our target in its subdirectory.</li>
      * </ul>
      *
-     * @param entries the list of directory entries that was searched
+     * @param entries the directory entries that was searched
      * @param insertionPoint the index where the target would be inserted (from binary search)
      * @param tileId the tile ID we're searching for
      * @return the containing entry if found, or empty if no suitable entry exists
      */
-    private Optional<PMTilesEntry> findContainingEntry(List<PMTilesEntry> entries, int insertionPoint, long tileId) {
+    private Optional<PMTilesEntry> findContainingEntry(PMTilesDirectory entries, int insertionPoint, long tileId) {
         if (insertionPoint < 0) {
             return Optional.empty();
         }
@@ -344,10 +473,48 @@ public class PMTilesReader implements Closeable {
         return readData(byteRange, header.internalCompression());
     }
 
+    /**
+     * Recursively collects all tile indices at the specified zoom level from the directory structure.
+     *
+     * @param entryRange the directory entry range to search
+     * @param targetZoomLevel the zoom level to collect tiles for
+     * @param tileIndices the list to collect tile indices into
+     * @param isLeafDir whether this is a leaf directory
+     * @throws IOException if an I/O error occurs
+     * @throws UnsupportedCompressionException if the compression type is not supported
+     */
+    private void collectTileIndicesForZoomLevel(
+            ByteRange entryRange, int targetZoomLevel, List<TileIndex> tileIndices, boolean isLeafDir)
+            throws IOException, UnsupportedCompressionException {
+
+        PMTilesDirectory entries = getDirectory(entryRange);
+
+        for (PMTilesEntry entry : entries) {
+            if (entry.isLeaf()) {
+                // Recursively search the leaf directory
+                collectTileIndicesForZoomLevel(header.leafDirDataRange(entry), targetZoomLevel, tileIndices, true);
+            } else {
+                // This is a tile entry - check if it's at our target zoom level
+                TileIndex tileCoord = HilbertCurve.tileIdToTileIndex(entry.tileId());
+                if (tileCoord.z() == targetZoomLevel) {
+                    // Add the tile and any tiles in its run
+                    for (int i = 0; i < entry.runLength(); i++) {
+                        TileIndex currentTile = HilbertCurve.tileIdToTileIndex(entry.tileId() + i);
+                        if (currentTile.z() == targetZoomLevel) {
+                            tileIndices.add(currentTile);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private ByteBuffer readData(ByteRange range, byte compression) {
         ByteBuffer buffer = ByteBufferPool.getDefault().borrowHeap(range.length());
-        try {
-            rangeReader.readRange(range, buffer);
+        try (SeekableByteChannel channel = channelSupplier.get()) {
+            channel.position(range.offset());
+            channel.read(buffer);
+            buffer.flip();
             return CompressionUtil.decompress(buffer, compression);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -356,17 +523,7 @@ public class PMTilesReader implements Closeable {
         }
     }
 
-    /**
-     * Represents a tile with its coordinates and data.
-     *
-     * @param z the zoom level
-     * @param x the X coordinate
-     * @param y the Y coordinate
-     * @param data the tile data
-     */
-    public record Tile(byte z, int x, int y, byte[] data) {}
-
-    String toString(ByteBuffer byteBuffer) {
+    static String toString(ByteBuffer byteBuffer) {
         try {
             return IOUtils.toString(new ByteBufferInputStream(byteBuffer), StandardCharsets.UTF_8);
         } catch (IOException e) {

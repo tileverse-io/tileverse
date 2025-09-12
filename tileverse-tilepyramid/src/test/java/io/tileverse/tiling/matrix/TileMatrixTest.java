@@ -15,7 +15,9 @@
  */
 package io.tileverse.tiling.matrix;
 
-import static org.assertj.core.api.Assertions.*;
+import static io.tileverse.tiling.common.BoundingBox2D.extent;
+import static io.tileverse.tiling.common.CornerOfOrigin.TOP_LEFT;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -23,7 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.tileverse.tiling.pyramid.AxisOrigin;
+import io.tileverse.tiling.common.BoundingBox2D;
+import io.tileverse.tiling.common.Coordinate;
 import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.pyramid.TileRange;
 import java.util.Optional;
@@ -33,12 +36,11 @@ class TileMatrixTest {
 
     @Test
     void testTileMatrixCreation() {
-        TileRange range = TileRange.of(0, 0, 3, 3, 5, AxisOrigin.UPPER_LEFT);
+        TileRange range = TileRange.of(0, 0, 3, 3, 5, TOP_LEFT);
         TileMatrix matrix = TileMatrix.builder()
                 .tileRange(range)
                 .resolution(156.543)
-                .origin(Coordinate.of(-20037508.34, 20037508.34))
-                .extent(Extent.of(-20037508.34, -20037508.34, 20037508.34, 20037508.34))
+                .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
                 .crs("EPSG:3857")
                 .tileSize(256, 256)
                 .build();
@@ -56,37 +58,12 @@ class TileMatrixTest {
     }
 
     @Test
-    void testTileExtent() {
-        TileRange range = TileRange.of(0, 0, 1, 1, 0, AxisOrigin.UPPER_LEFT);
-        TileMatrix matrix = TileMatrix.builder()
-                .tileRange(range)
-                .resolution(156543.03)
-                .origin(Coordinate.of(-20037508.34, 20037508.34))
-                .extent(Extent.of(-20037508.34, -20037508.34, 20037508.34, 20037508.34))
-                .crs("EPSG:3857")
-                .tileSize(256, 256)
-                .build();
-
-        Tile tile = matrix.tile(TileIndex.of(0, 0, 0)).orElseThrow();
-        Extent tileExtent = tile.extent();
-
-        assertNotNull(tileExtent);
-        // For UPPER_LEFT origin at zoom 0, tile (0,0) should cover the full world extent
-        // At zoom 0, there's only 1 tile covering the entire world
-        assertEquals(-20037508.34, tileExtent.minX(), 1.0);
-        assertEquals(-20037508.34, tileExtent.minY(), 1.0);
-        assertEquals(20037508.34, tileExtent.maxX(), 1.0);
-        assertEquals(20037508.34, tileExtent.maxY(), 1.0);
-    }
-
-    @Test
     void testCoordinateToTile() {
-        TileRange range = TileRange.of(0, 0, 1, 1, 0, AxisOrigin.UPPER_LEFT);
+        TileRange range = TileRange.of(0, 0, 1, 1, 0, TOP_LEFT);
         TileMatrix matrix = TileMatrix.builder()
                 .tileRange(range)
                 .resolution(156543.03)
-                .origin(Coordinate.of(-20037508.34, 20037508.34))
-                .extent(Extent.of(-20037508.34, -20037508.34, 20037508.34, 20037508.34))
+                .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
                 .crs("EPSG:3857")
                 .tileSize(256, 256)
                 .build();
@@ -104,18 +81,17 @@ class TileMatrixTest {
 
     @Test
     void testExtentToRange() {
-        TileRange range = TileRange.of(0, 0, 3, 3, 2, AxisOrigin.UPPER_LEFT);
+        TileRange range = TileRange.of(0, 0, 3, 3, 2, TOP_LEFT);
         TileMatrix matrix = TileMatrix.builder()
                 .tileRange(range)
                 .resolution(39135.76)
-                .origin(Coordinate.of(-20037508.34, 20037508.34))
-                .extent(Extent.of(-20037508.34, -20037508.34, 20037508.34, 20037508.34))
+                .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
                 .crs("EPSG:3857")
                 .tileSize(256, 256)
                 .build();
 
         // Test extent that covers part of the matrix
-        Extent testExtent = Extent.of(-10000000, -10000000, 10000000, 10000000);
+        BoundingBox2D testExtent = extent(-10000000, -10000000, 10000000, 10000000);
         TileRange resultRange = matrix.extentToRange(testExtent).orElseThrow();
 
         assertNotNull(resultRange);
@@ -125,62 +101,74 @@ class TileMatrixTest {
     }
 
     @Test
-    void testContains() {
-        TileRange range = TileRange.of(5, 5, 10, 10, 8, AxisOrigin.UPPER_LEFT);
+    void testTiles() {
+        TileRange range = TileRange.of(0, 0, 3, 3, 2, TOP_LEFT);
         TileMatrix matrix = TileMatrix.builder()
                 .tileRange(range)
-                .resolution(156.543)
-                .origin(Coordinate.of(-20037508.34, 20037508.34))
-                .extent(Extent.of(-20037508.34, -20037508.34, 20037508.34, 20037508.34))
+                .resolution(1)
+                .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
                 .crs("EPSG:3857")
                 .tileSize(256, 256)
                 .build();
 
-        assertTrue(matrix.contains(TileIndex.of(5, 5, 8)));
-        assertTrue(matrix.contains(TileIndex.of(10, 10, 8)));
-        assertTrue(matrix.contains(TileIndex.of(7, 7, 8)));
+        assertThat(matrix.tileCount()).isEqualTo(16);
+        assertThat(matrix.tiles()).hasSize(16);
+    }
 
-        assertFalse(matrix.contains(TileIndex.of(4, 5, 8))); // Outside X range
-        assertFalse(matrix.contains(TileIndex.of(5, 4, 8))); // Outside Y range
-        assertFalse(matrix.contains(TileIndex.of(5, 5, 9))); // Wrong zoom level
+    @Test
+    void testContains() {
+        TileRange range = TileRange.of(5, 5, 10, 10, 8, TOP_LEFT);
+        TileMatrix matrix = TileMatrix.builder()
+                .tileRange(range)
+                .resolution(156.543)
+                .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
+                .crs("EPSG:3857")
+                .tileSize(256, 256)
+                .build();
+
+        assertTrue(matrix.contains(TileIndex.xyz(5, 5, 8)));
+        assertTrue(matrix.contains(TileIndex.xyz(10, 10, 8)));
+        assertTrue(matrix.contains(TileIndex.xyz(7, 7, 8)));
+
+        assertFalse(matrix.contains(TileIndex.xyz(4, 5, 8))); // Outside X range
+        assertFalse(matrix.contains(TileIndex.xyz(5, 4, 8))); // Outside Y range
+        assertFalse(matrix.contains(TileIndex.xyz(5, 5, 9))); // Wrong zoom level
     }
 
     @Test
     void testWithTileRange() {
-        TileRange originalRange = TileRange.of(0, 0, 10, 10, 5, AxisOrigin.UPPER_LEFT);
+        TileRange originalRange = TileRange.of(0, 0, 10, 10, 5, TOP_LEFT);
         TileMatrix original = TileMatrix.builder()
                 .tileRange(originalRange)
                 .resolution(156.543)
-                .origin(Coordinate.of(-20037508.34, 20037508.34))
-                .extent(Extent.of(-20037508.34, -20037508.34, 20037508.34, 20037508.34))
+                .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
                 .crs("EPSG:3857")
                 .tileSize(256, 256)
                 .build();
 
-        TileRange newRange = TileRange.of(2, 2, 8, 8, 5, AxisOrigin.UPPER_LEFT);
+        TileRange newRange = TileRange.of(2, 2, 8, 8, 5, TOP_LEFT);
         TileMatrix modified = original.withTileRange(newRange);
 
         assertEquals(newRange, modified.tileRange());
         assertEquals(original.resolution(), modified.resolution());
-        assertEquals(original.origin(), modified.origin());
+        assertEquals(original.pointOfOrigin(), modified.pointOfOrigin());
         assertEquals(original.crsId(), modified.crsId());
-        assertNotEquals(original.extent(), modified.extent()); // Extent should be recalculated
+        assertNotEquals(original.boundingBox(), modified.boundingBox()); // Extent should be recalculated
     }
 
     @Test
     void testIntersection() {
-        TileRange range = TileRange.of(0, 0, 7, 7, 3, AxisOrigin.UPPER_LEFT);
+        TileRange range = TileRange.of(0, 0, 7, 7, 3, TOP_LEFT);
         TileMatrix matrix = TileMatrix.builder()
                 .tileRange(range)
                 .resolution(9783.94) // Zoom level 3
-                .origin(Coordinate.of(-20037508.34, 20037508.34))
-                .extent(Extent.of(-20037508.34, -20037508.34, 20037508.34, 20037508.34))
+                .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
                 .crs("EPSG:3857")
                 .tileSize(256, 256)
                 .build();
 
         // Test intersection with a smaller extent
-        Extent smallExtent = Extent.of(-10000000, -10000000, 10000000, 10000000);
+        BoundingBox2D smallExtent = extent(-10000000, -10000000, 10000000, 10000000);
         TileMatrix intersected = matrix.intersection(smallExtent).orElseThrow();
 
         assertNotNull(intersected);
@@ -189,12 +177,12 @@ class TileMatrixTest {
         assertTrue(intersected.tileRange().count() < matrix.tileRange().count());
 
         // Test intersection with non-intersecting extent
-        Extent noIntersection = Extent.of(30000000, 30000000, 40000000, 40000000);
+        BoundingBox2D noIntersection = extent(30000000, 30000000, 40000000, 40000000);
         Optional<TileMatrix> empty = matrix.intersection(noIntersection);
         assertThat(empty).isEmpty();
 
         // Test full intersection
-        Extent fullExtent = Extent.of(-25000000, -25000000, 25000000, 25000000);
+        BoundingBox2D fullExtent = extent(-25000000, -25000000, 25000000, 25000000);
         TileMatrix full = matrix.intersection(fullExtent).orElseThrow();
         assertEquals(matrix.tileRange().count(), full.tileRange().count());
     }
@@ -205,8 +193,7 @@ class TileMatrixTest {
             TileMatrix.builder()
                     .tileRange(null) // Null range
                     .resolution(156.543)
-                    .origin(Coordinate.of(0, 0))
-                    .extent(Extent.of(0, 0, 1, 1))
+                    .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
                     .crs("EPSG:3857")
                     .build();
         });
@@ -215,8 +202,7 @@ class TileMatrixTest {
             TileMatrix.builder()
                     .tileRange(TileRange.of(0, 0, 1, 1, 0))
                     .resolution(0) // Invalid resolution
-                    .origin(Coordinate.of(0, 0))
-                    .extent(Extent.of(0, 0, 1, 1))
+                    .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
                     .crs("EPSG:3857")
                     .build();
         });
@@ -225,8 +211,7 @@ class TileMatrixTest {
             TileMatrix.builder()
                     .tileRange(TileRange.of(0, 0, 1, 1, 0))
                     .resolution(156.543)
-                    .origin(Coordinate.of(0, 0))
-                    .extent(Extent.of(0, 0, 1, 1))
+                    .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
                     .crs("") // Empty CRS
                     .build();
         });

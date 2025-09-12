@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.tiling.matrix;
+package io.tileverse.tiling.common;
 
 /**
  * Represents a 2D bounding box extent in map space (CRS coordinates).
@@ -29,12 +29,12 @@ package io.tileverse.tiling.matrix;
  * @param maxY the maximum Y coordinate (top edge)
  * @since 1.0
  */
-public record Extent(double minX, double minY, double maxX, double maxY) {
+public record BoundingBox2D(double minX, double minY, double maxX, double maxY) {
 
-    public Extent {
+    public BoundingBox2D {
         if (minX > maxX || minY > maxY) {
             throw new IllegalArgumentException(
-                    String.format("Invalid extent: min(%.6f,%.6f) must be <= max(%.6f,%.6f)", minX, minY, maxX, maxY));
+                    String.format("Invalid extent: min(%f,%f) must be <= max(%f,%f)", minX, minY, maxX, maxY));
         }
     }
 
@@ -48,8 +48,8 @@ public record Extent(double minX, double minY, double maxX, double maxY) {
      * @return a new Extent instance
      * @throws IllegalArgumentException if min > max for any dimension
      */
-    public static Extent of(double minX, double minY, double maxX, double maxY) {
-        return new Extent(minX, minY, maxX, maxY);
+    public static BoundingBox2D extent(double minX, double minY, double maxX, double maxY) {
+        return new BoundingBox2D(minX, minY, maxX, maxY);
     }
 
     /**
@@ -61,8 +61,8 @@ public record Extent(double minX, double minY, double maxX, double maxY) {
      * @param corner2 the second corner coordinate
      * @return a new Extent instance
      */
-    public static Extent of(Coordinate corner1, Coordinate corner2) {
-        return new Extent(
+    public static BoundingBox2D of(Coordinate corner1, Coordinate corner2) {
+        return new BoundingBox2D(
                 Math.min(corner1.x(), corner2.x()),
                 Math.min(corner1.y(), corner2.y()),
                 Math.max(corner1.x(), corner2.x()),
@@ -78,13 +78,13 @@ public record Extent(double minX, double minY, double maxX, double maxY) {
      * @return a new Extent instance
      * @throws IllegalArgumentException if width or height is negative
      */
-    public static Extent centered(Coordinate center, double width, double height) {
+    public static BoundingBox2D centered(Coordinate center, double width, double height) {
         if (width < 0 || height < 0) {
             throw new IllegalArgumentException("Width and height must be non-negative");
         }
         double halfWidth = width / 2.0;
         double halfHeight = height / 2.0;
-        return new Extent(
+        return new BoundingBox2D(
                 center.x() - halfWidth, center.y() - halfHeight, center.x() + halfWidth, center.y() + halfHeight);
     }
 
@@ -129,8 +129,15 @@ public record Extent(double minX, double minY, double maxX, double maxY) {
      *
      * @return the minimum coordinate
      */
-    public Coordinate min() {
+    public Coordinate lowerLeft() {
         return new Coordinate(minX, minY);
+    }
+
+    /**
+     * @return the top left coordinate
+     */
+    public Coordinate upperLeft() {
+        return new Coordinate(minX, maxY);
     }
 
     /**
@@ -138,8 +145,15 @@ public record Extent(double minX, double minY, double maxX, double maxY) {
      *
      * @return the maximum coordinate
      */
-    public Coordinate max() {
+    public Coordinate upperRight() {
         return new Coordinate(maxX, maxY);
+    }
+
+    /**
+     * @return the bottom right coordinate
+     */
+    public Coordinate lowerRight() {
+        return new Coordinate(maxX, minY);
     }
 
     /**
@@ -153,12 +167,22 @@ public record Extent(double minX, double minY, double maxX, double maxY) {
     }
 
     /**
+     * Tests whether this extent completely contains another extent.
+     *
+     * @param other the other extent to test
+     * @return true if the other extent is completely within this extent
+     */
+    public boolean contains(BoundingBox2D other) {
+        return other.minX >= minX && other.maxX <= maxX && other.minY >= minY && other.maxY <= maxY;
+    }
+
+    /**
      * Tests whether this extent intersects with another extent.
      *
      * @param other the other extent
      * @return true if the extents intersect
      */
-    public boolean intersects(Extent other) {
+    public boolean intersects(BoundingBox2D other) {
         return !(other.maxX < minX || other.minX > maxX || other.maxY < minY || other.minY > maxY);
     }
 
@@ -168,11 +192,11 @@ public record Extent(double minX, double minY, double maxX, double maxY) {
      * @param other the other extent
      * @return the intersection extent, or null if they don't intersect
      */
-    public Extent intersection(Extent other) {
+    public BoundingBox2D intersection(BoundingBox2D other) {
         if (!intersects(other)) {
             return null;
         }
-        return new Extent(
+        return new BoundingBox2D(
                 Math.max(minX, other.minX),
                 Math.max(minY, other.minY),
                 Math.min(maxX, other.maxX),
@@ -185,8 +209,8 @@ public record Extent(double minX, double minY, double maxX, double maxY) {
      * @param other the other extent
      * @return the union extent containing both extents
      */
-    public Extent union(Extent other) {
-        return new Extent(
+    public BoundingBox2D union(BoundingBox2D other) {
+        return new BoundingBox2D(
                 Math.min(minX, other.minX),
                 Math.min(minY, other.minY),
                 Math.max(maxX, other.maxX),
@@ -199,12 +223,18 @@ public record Extent(double minX, double minY, double maxX, double maxY) {
      * @param amount the amount to expand (can be negative to shrink)
      * @return the expanded extent
      */
-    public Extent expand(double amount) {
-        return new Extent(minX - amount, minY - amount, maxX + amount, maxY + amount);
+    public BoundingBox2D expand(double amount) {
+        return new BoundingBox2D(minX - amount, minY - amount, maxX + amount, maxY + amount);
     }
 
     @Override
     public String toString() {
-        return String.format("Extent(%.6f, %.6f, %.6f, %.6f)", minX, minY, maxX, maxY);
+        return String.format("BoundingBox2D(%f, %f, %f, %f)", minX, minY, maxX, maxY);
+    }
+
+    public String toWKT() {
+        return String.format(
+                "POLYGON((%f %f, %f %f, %f %f, %f %f, %f %f))",
+                minX, minY, minX, maxY, maxX, maxY, maxX, minY, minX, minY);
     }
 }

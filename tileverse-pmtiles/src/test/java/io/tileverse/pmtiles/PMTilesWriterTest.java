@@ -15,6 +15,7 @@
  */
 package io.tileverse.pmtiles;
 
+import static io.tileverse.tiling.pyramid.TileIndex.zxy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -68,12 +69,12 @@ public class PMTilesWriterTest {
         // Create writer and add a tile
         try (PMTilesWriter writer = PMTilesWriter.builder()
                 .outputPath(outputPath)
-                .minZoom((byte) 0)
-                .maxZoom((byte) 0)
+                .minZoom(0)
+                .maxZoom(0)
                 .tileCompression(PMTilesHeader.COMPRESSION_NONE) // No compression for easy testing
                 .build()) {
 
-            writer.addTile((byte) 0, 0, 0, tileData);
+            writer.addTile(zxy(0, 0, 0), tileData);
             writer.complete();
         }
 
@@ -82,21 +83,20 @@ public class PMTilesWriterTest {
         assertTrue(Files.size(outputPath) > 0);
 
         // Read the file back and verify the content
-        try (PMTilesReader reader = new PMTilesReader(outputPath)) {
-            PMTilesHeader header = reader.getHeader();
+        PMTilesReader reader = new PMTilesReader(outputPath);
+        PMTilesHeader header = reader.getHeader();
 
-            // Check header values
-            assertEquals(0, header.minZoom());
-            assertEquals(0, header.maxZoom());
-            assertEquals(PMTilesHeader.COMPRESSION_NONE, header.tileCompression());
-            assertEquals(PMTilesHeader.TILETYPE_MVT, header.tileType());
-            assertEquals(1, header.addressedTilesCount());
+        // Check header values
+        assertEquals(0, header.minZoom());
+        assertEquals(0, header.maxZoom());
+        assertEquals(PMTilesHeader.COMPRESSION_NONE, header.tileCompression());
+        assertEquals(PMTilesHeader.TILETYPE_MVT, header.tileType());
+        assertEquals(1, header.addressedTilesCount());
 
-            // Read the tile
-            Optional<ByteBuffer> readTileData = reader.getTile(0, 0, 0);
-            assertTrue(readTileData.isPresent());
-            assertArrayEquals(tileData, readTileData.get());
-        }
+        // Read the tile
+        Optional<ByteBuffer> readTileData = reader.getTile(0, 0, 0);
+        assertTrue(readTileData.isPresent());
+        assertArrayEquals(tileData, readTileData.get());
     }
 
     @Test
@@ -109,44 +109,43 @@ public class PMTilesWriterTest {
         // Create writer and add tiles
         try (PMTilesWriter writer = PMTilesWriter.builder()
                 .outputPath(outputPath)
-                .minZoom((byte) 0)
-                .maxZoom((byte) 1)
+                .minZoom(0)
+                .maxZoom(1)
                 .tileCompression(PMTilesHeader.COMPRESSION_NONE) // No compression for easy testing
                 .build()) {
 
-            writer.addTile((byte) 0, 0, 0, tileData1);
-            writer.addTile((byte) 1, 0, 0, tileData2);
-            writer.addTile((byte) 1, 0, 1, tileData3); // Same data as tile 1
+            writer.addTile(zxy(0, 0, 0), tileData1);
+            writer.addTile(zxy(1, 0, 0), tileData2);
+            writer.addTile(zxy(1, 0, 1), tileData3); // Same data as tile 1
             writer.complete();
         }
 
         // Read the file back and verify
-        try (PMTilesReader reader = new PMTilesReader(outputPath)) {
-            PMTilesHeader header = reader.getHeader();
+        PMTilesReader reader = new PMTilesReader(outputPath);
+        PMTilesHeader header = reader.getHeader();
 
-            // Check header values
-            assertEquals(0, header.minZoom());
-            assertEquals(1, header.maxZoom());
-            assertEquals(3, header.addressedTilesCount());
-            // Should only have 2 unique tile contents due to deduplication
-            assertEquals(2, header.tileContentsCount());
+        // Check header values
+        assertEquals(0, header.minZoom());
+        assertEquals(1, header.maxZoom());
+        assertEquals(3, header.addressedTilesCount());
+        // Should only have 2 unique tile contents due to deduplication
+        assertEquals(2, header.tileContentsCount());
 
-            // Read the tiles
-            Optional<ByteBuffer> readTileData1 = reader.getTile(0, 0, 0);
-            Optional<ByteBuffer> readTileData2 = reader.getTile(1, 0, 0);
-            Optional<ByteBuffer> readTileData3 = reader.getTile(1, 0, 1);
+        // Read the tiles
+        Optional<ByteBuffer> readTileData1 = reader.getTile(0, 0, 0);
+        Optional<ByteBuffer> readTileData2 = reader.getTile(1, 0, 0);
+        Optional<ByteBuffer> readTileData3 = reader.getTile(1, 0, 1);
 
-            assertTrue(readTileData1.isPresent());
-            assertTrue(readTileData2.isPresent());
-            assertTrue(readTileData3.isPresent());
+        assertTrue(readTileData1.isPresent());
+        assertTrue(readTileData2.isPresent());
+        assertTrue(readTileData3.isPresent());
 
-            assertArrayEquals(tileData1, readTileData1.get());
-            assertArrayEquals(tileData2, readTileData2.get());
-            assertArrayEquals(tileData3, readTileData3.get());
+        assertArrayEquals(tileData1, readTileData1.get());
+        assertArrayEquals(tileData2, readTileData2.get());
+        assertArrayEquals(tileData3, readTileData3.get());
 
-            // Verify tile 1 and 3 have the same content in the file
-            assertArrayEquals(readTileData1.get(), readTileData3.get());
-        }
+        // Verify tile 1 and 3 have the same content in the file
+        assertArrayEquals(readTileData1.get(), readTileData3.get());
     }
 
     @Test
@@ -158,24 +157,23 @@ public class PMTilesWriterTest {
         // Create writer and add a tile with metadata
         try (PMTilesWriter writer = PMTilesWriter.builder()
                 .outputPath(outputPath)
-                .minZoom((byte) 0)
-                .maxZoom((byte) 0)
+                .minZoom(0)
+                .maxZoom(0)
                 .tileCompression(PMTilesHeader.COMPRESSION_NONE)
                 .internalCompression(PMTilesHeader.COMPRESSION_NONE) // No compression for easy testing
                 .build()) {
 
-            writer.addTile((byte) 0, 0, 0, tileData);
+            writer.addTile(zxy(0, 0, 0), tileData);
             writer.setMetadata(metadata);
             writer.complete();
         }
 
         // Read the file back and verify the metadata
-        try (PMTilesReader reader = new PMTilesReader(outputPath)) {
-            String metadataString = reader.getMetadataAsString();
+        PMTilesReader reader = new PMTilesReader(outputPath);
+        String metadataString = reader.getMetadataAsString();
 
-            // Verify metadata content
-            assertEquals(metadata, metadataString);
-        }
+        // Verify metadata content
+        assertEquals(metadata, metadataString);
     }
 
     @Test
@@ -204,7 +202,7 @@ public class PMTilesWriterTest {
                 }
             });
 
-            writer.addTile((byte) 0, 0, 0, tileData);
+            writer.addTile(zxy(0, 0, 0), tileData);
             writer.complete();
         }
 

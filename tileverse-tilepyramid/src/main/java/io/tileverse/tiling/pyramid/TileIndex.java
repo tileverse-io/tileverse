@@ -30,7 +30,7 @@ import java.util.function.LongUnaryOperator;
  *
  * @since 1.0
  */
-public sealed interface TileIndex extends Comparable<TileIndex> permits TileIndexInt, TileIndexLong, MetaTileIndex {
+public sealed interface TileIndex extends Comparable<TileIndex> permits TileIndexInt, TileIndexLong {
 
     public static final Comparator<TileIndex> COMPARATOR =
             Comparator.comparingInt(TileIndex::z).thenComparing(TileIndex::x).thenComparing(TileIndex::y);
@@ -45,11 +45,15 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
      * @return a new TileIndex instance
      */
     @JsonCreator
-    static TileIndex of(@JsonProperty("x") long x, @JsonProperty("y") long y, @JsonProperty("z") int z) {
+    static TileIndex xyz(@JsonProperty("x") long x, @JsonProperty("y") long y, @JsonProperty("z") int z) {
         if (x >= Integer.MIN_VALUE && x <= Integer.MAX_VALUE && y >= Integer.MIN_VALUE && y <= Integer.MAX_VALUE) {
             return new TileIndexInt((int) x, (int) y, z);
         }
         return new TileIndexLong(x, y, z);
+    }
+
+    static TileIndex zxy(@JsonProperty("z") int z, @JsonProperty("x") long x, @JsonProperty("y") long y) {
+        return TileIndex.xyz(x, y, z);
     }
 
     /**
@@ -80,7 +84,7 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
      * @return a new TileIndex with the shifted X coordinate
      */
     default TileIndex shiftX(long deltaX) {
-        return deltaX == 0 ? this : TileIndex.of(x() + deltaX, y(), z());
+        return deltaX == 0 ? this : TileIndex.xyz(x() + deltaX, y(), z());
     }
 
     /**
@@ -90,7 +94,7 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
      * @return a new TileIndex with the shifted Y coordinate
      */
     default TileIndex shiftY(long deltaY) {
-        return deltaY == 0 ? this : TileIndex.of(x(), y() + deltaY, z());
+        return deltaY == 0 ? this : TileIndex.xyz(x(), y() + deltaY, z());
     }
 
     /**
@@ -100,7 +104,7 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
      * @return a new TileIndex with the specified X coordinate
      */
     default TileIndex withX(long newX) {
-        return newX == x() ? this : TileIndex.of(newX, y(), z());
+        return newX == x() ? this : TileIndex.xyz(newX, y(), z());
     }
 
     /**
@@ -110,7 +114,7 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
      * @return a new TileIndex with the specified Y coordinate
      */
     default TileIndex withY(long newY) {
-        return newY == y() ? this : TileIndex.of(x(), newY, z());
+        return newY == y() ? this : TileIndex.xyz(x(), newY, z());
     }
 
     /**
@@ -121,7 +125,7 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
      * @return a new TileIndex with the shifted coordinates
      */
     default TileIndex shiftBy(long deltaX, long deltaY) {
-        return TileIndex.of(x() + deltaX, y() + deltaY, z());
+        return TileIndex.xyz(x() + deltaX, y() + deltaY, z());
     }
 
     /**
@@ -132,7 +136,7 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
      * @return a new TileIndex with the transformed coordinates
      */
     default TileIndex shiftBy(LongUnaryOperator xfunction, LongUnaryOperator yfunction) {
-        return TileIndex.of(xfunction.applyAsLong(x()), yfunction.applyAsLong(y()), z());
+        return TileIndex.xyz(xfunction.applyAsLong(x()), yfunction.applyAsLong(y()), z());
     }
 
     /**
@@ -142,18 +146,7 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
      * @return a new TileIndex with the specified zoom level
      */
     default TileIndex atZoom(int newZ) {
-        return newZ == z() ? this : TileIndex.of(x(), y(), newZ);
-    }
-
-    /**
-     * Returns the TileRange that represents the area covered by this tile.
-     * For regular tiles, this returns a single-tile range.
-     * For meta-tiles, this returns the range of all constituent individual tiles.
-     *
-     * @return a TileRange covering the area represented by this tile
-     */
-    default TileRange asTileRange() {
-        return TileRange.of(x(), y(), x(), y(), z());
+        return newZ == z() ? this : TileIndex.xyz(x(), y(), newZ);
     }
 
     /**

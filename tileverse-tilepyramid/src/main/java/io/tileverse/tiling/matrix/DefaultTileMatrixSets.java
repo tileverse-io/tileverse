@@ -15,7 +15,10 @@
  */
 package io.tileverse.tiling.matrix;
 
-import io.tileverse.tiling.pyramid.AxisOrigin;
+import static io.tileverse.tiling.common.CornerOfOrigin.TOP_LEFT;
+
+import io.tileverse.tiling.common.BoundingBox2D;
+import io.tileverse.tiling.common.Coordinate;
 import io.tileverse.tiling.pyramid.TilePyramid;
 import io.tileverse.tiling.pyramid.TileRange;
 
@@ -36,45 +39,42 @@ import io.tileverse.tiling.pyramid.TileRange;
  */
 public class DefaultTileMatrixSets {
 
-    // Standard extents from GeoWebCache
-    public static final Extent WORLD4326 = Extent.of(-180.0, -90.0, 180.0, 90.0);
-    public static final Extent WORLD3857 = Extent.of(-20037508.34, -20037508.34, 20037508.34, 20037508.34);
-    public static final Extent WORLD3857_TMS =
-            Extent.of(-20037508.3427892, -20037508.3427892, 20037508.3427892, 20037508.3427892);
+    private static final Coordinate WEBMERCATOR_BOTTOM_LEFT = new Coordinate(-20037508.3427892, -20037508.3427892);
+    private static final Coordinate WEBMERCATOR_TOP_RIGHT = new Coordinate(20037508.3427892, 20037508.3427892);
 
-    // Standard WebMercator resolutions (matching GeoWebCache commonPractice900913Resolutions)
+    // Standard extents from GeoWebCache
+    public static final BoundingBox2D WORLD4326 = BoundingBox2D.extent(-180.0, -90.0, 180.0, 90.0);
+    public static final BoundingBox2D WebMercatorBounds =
+            BoundingBox2D.of(WEBMERCATOR_BOTTOM_LEFT, WEBMERCATOR_TOP_RIGHT);
+
+    // Official OGC TileMatrixSet specification values for WebMercator (GoogleMapsCompatible WKSS)
+    // Source: http://www.opengis.net/def/wkss/OGC/1.0/GoogleMapsCompatible
     private static final double[] WEBMERCATOR_RESOLUTIONS = {
-        156543.03390625,
-        78271.516953125,
-        39135.7584765625,
-        19567.87923828125,
-        9783.939619140625,
-        4891.9698095703125,
-        2445.9849047851562,
-        1222.9924523925781,
-        611.4962261962891,
-        305.74811309814453,
-        152.87405654907226,
-        76.43702827453613,
-        38.218514137268066,
-        19.109257068634033,
-        9.554628534317017,
-        4.777314267158508,
-        2.388657133579254,
-        1.194328566789627,
-        0.5971642833948135,
-        0.29858214169740677,
-        0.14929107084870338,
-        0.07464553542435169,
-        0.037322767712175846,
-        0.018661383856087923,
-        0.009330691928043961,
-        0.004665345964021981,
-        0.0023326729820109904,
-        0.0011663364910054952,
-        5.831682455027476E-4,
-        2.915841227513738E-4,
-        1.457920613756869E-4
+        156543.0339280410,
+        78271.51696402048,
+        39135.75848201023,
+        19567.87924100512,
+        9783.939620502561,
+        4891.969810251280,
+        2445.984905125640,
+        1222.992452562820,
+        611.4962262814100,
+        305.7481131407048,
+        152.8740565703525,
+        76.43702828517624,
+        38.21851414258813,
+        19.10925707129406,
+        9.554628535647032,
+        4.777314267823516,
+        2.388657133911758,
+        1.194328566955879,
+        0.5971642834779395,
+        0.2985821417389697,
+        0.1492910708694849,
+        0.07464553543474244,
+        0.03732276771737122,
+        0.01866138385868561,
+        0.009330691929342805
     };
 
     // OGC TMS WebMercatorQuad scale denominators
@@ -187,27 +187,24 @@ public class DefaultTileMatrixSets {
     private static TileMatrixSet createEPSG4326(int tileSize) {
         // EPSG:4326 starts with 2 tiles horizontally, 1 vertically at zoom 0
         TilePyramid.Builder pyramidBuilder =
-                TilePyramid.builder().axisOrigin(AxisOrigin.UPPER_LEFT); // Geographic typically uses upper-left
+                TilePyramid.builder().cornerOfOrigin(TOP_LEFT); // Geographic typically uses upper-left
 
         int maxZoom = 21; // Standard max for EPSG:4326
         for (int z = 0; z <= maxZoom; z++) {
             long tilesWide = 2L << z; // 2 * 2^z
             long tilesHigh = 1L << z; // 1 * 2^z
-            TileRange range = TileRange.of(0, 0, tilesWide - 1, tilesHigh - 1, z, AxisOrigin.UPPER_LEFT);
+            TileRange range = TileRange.of(0, 0, tilesWide - 1, tilesHigh - 1, z, TOP_LEFT);
             pyramidBuilder.level(range);
         }
 
         TilePyramid pyramid = pyramidBuilder.build();
 
-        // Calculate resolutions and origins
+        // Calculate resolutions
         double[] resolutions = new double[maxZoom + 1];
-        Coordinate[] origins = new Coordinate[maxZoom + 1];
 
         for (int z = 0; z <= maxZoom; z++) {
             // Geographic resolution: 360 degrees / (tileSize * 2 * 2^z)
             resolutions[z] = 360.0 / (tileSize * 2 * (1L << z));
-            // Origin is always top-left of world bounds
-            origins[z] = Coordinate.of(-180.0, 90.0);
         }
 
         return TileMatrixSet.builder()
@@ -216,18 +213,16 @@ public class DefaultTileMatrixSets {
                 .tileSize(tileSize, tileSize)
                 .extent(WORLD4326)
                 .resolutions(resolutions)
-                .origins(origins)
                 .build();
     }
 
     private static TileMatrixSet createEPSG3857(int tileSize) {
-        TilePyramid.Builder pyramidBuilder =
-                TilePyramid.builder().axisOrigin(AxisOrigin.UPPER_LEFT); // Match PMTiles indexing
+        TilePyramid.Builder pyramidBuilder = TilePyramid.builder().cornerOfOrigin(TOP_LEFT); // Match PMTiles indexing
 
         int maxZoom = WEBMERCATOR_RESOLUTIONS.length - 1;
         for (int z = 0; z <= maxZoom; z++) {
             long tilesAtZoom = 1L << z; // 2^z tiles per dimension
-            TileRange range = TileRange.of(0, 0, tilesAtZoom - 1, tilesAtZoom - 1, z, AxisOrigin.UPPER_LEFT);
+            TileRange range = TileRange.of(0, 0, tilesAtZoom - 1, tilesAtZoom - 1, z, TOP_LEFT);
             pyramidBuilder.level(range);
         }
 
@@ -235,33 +230,29 @@ public class DefaultTileMatrixSets {
 
         // Use GeoWebCache resolutions, scale for tile size
         double[] resolutions = new double[WEBMERCATOR_RESOLUTIONS.length];
-        Coordinate[] origins = new Coordinate[WEBMERCATOR_RESOLUTIONS.length];
 
         double scaleFactor = tileSize / 256.0; // Scale resolutions for different tile sizes
 
         for (int i = 0; i < WEBMERCATOR_RESOLUTIONS.length; i++) {
             resolutions[i] = WEBMERCATOR_RESOLUTIONS[i] * scaleFactor;
-            // WebMercator origin is top-left corner
-            origins[i] = Coordinate.of(-20037508.342789244, 20037508.342789244);
         }
 
         return TileMatrixSet.builder()
                 .tilePyramid(pyramid)
                 .crs("EPSG:3857")
                 .tileSize(tileSize, tileSize)
-                .extent(WORLD3857)
+                .extent(WebMercatorBounds)
                 .resolutions(resolutions)
-                .origins(origins)
                 .build();
     }
 
     private static TileMatrixSet createWebMercatorQuad(int tileSize) {
-        TilePyramid.Builder pyramidBuilder = TilePyramid.builder().axisOrigin(AxisOrigin.UPPER_LEFT);
+        TilePyramid.Builder pyramidBuilder = TilePyramid.builder().cornerOfOrigin(TOP_LEFT);
 
         int maxZoom = WEBMERCATOR_QUAD_SCALES.length - 1;
         for (int z = 0; z <= maxZoom; z++) {
             long tilesAtZoom = 1L << z;
-            TileRange range = TileRange.of(0, 0, tilesAtZoom - 1, tilesAtZoom - 1, z, AxisOrigin.UPPER_LEFT);
+            TileRange range = TileRange.of(0, 0, tilesAtZoom - 1, tilesAtZoom - 1, z, TOP_LEFT);
             pyramidBuilder.level(range);
         }
 
@@ -269,7 +260,6 @@ public class DefaultTileMatrixSets {
 
         // Convert scale denominators to resolutions
         double[] resolutions = new double[WEBMERCATOR_QUAD_SCALES.length];
-        Coordinate[] origins = new Coordinate[WEBMERCATOR_QUAD_SCALES.length];
 
         double pixelSizeMeters = 0.00028; // Standard pixel size in meters
         double scaleFactor = tileSize / 256.0;
@@ -277,27 +267,26 @@ public class DefaultTileMatrixSets {
         for (int i = 0; i < WEBMERCATOR_QUAD_SCALES.length; i++) {
             // Resolution = scale_denominator * pixel_size_in_meters
             resolutions[i] = WEBMERCATOR_QUAD_SCALES[i] * pixelSizeMeters * scaleFactor;
-            origins[i] = Coordinate.of(-20037508.3427892, 20037508.3427892);
         }
 
+        BoundingBox2D world38572 = WebMercatorBounds;
         return TileMatrixSet.builder()
                 .tilePyramid(pyramid)
                 .crs("EPSG:3857")
                 .tileSize(tileSize, tileSize)
-                .extent(WORLD3857_TMS)
+                .extent(world38572)
                 .resolutions(resolutions)
-                .origins(origins)
                 .build();
     }
 
     private static TileMatrixSet createWorldCRS84Quad(int tileSize) {
-        TilePyramid.Builder pyramidBuilder = TilePyramid.builder().axisOrigin(AxisOrigin.UPPER_LEFT);
+        TilePyramid.Builder pyramidBuilder = TilePyramid.builder().cornerOfOrigin(TOP_LEFT);
 
         int maxZoom = CRS84_QUAD_SCALES.length - 1;
         for (int z = 0; z <= maxZoom; z++) {
             long tilesWide = 2L << z; // 2 * 2^z for CRS84
             long tilesHigh = 1L << z; // 1 * 2^z for CRS84
-            TileRange range = TileRange.of(0, 0, tilesWide - 1, tilesHigh - 1, z, AxisOrigin.UPPER_LEFT);
+            TileRange range = TileRange.of(0, 0, tilesWide - 1, tilesHigh - 1, z, TOP_LEFT);
             pyramidBuilder.level(range);
         }
 
@@ -305,14 +294,12 @@ public class DefaultTileMatrixSets {
 
         // Convert scale denominators to resolutions
         double[] resolutions = new double[CRS84_QUAD_SCALES.length];
-        Coordinate[] origins = new Coordinate[CRS84_QUAD_SCALES.length];
 
         double pixelSizeMeters = 0.00028;
         double scaleFactor = tileSize / 256.0;
 
         for (int i = 0; i < CRS84_QUAD_SCALES.length; i++) {
             resolutions[i] = CRS84_QUAD_SCALES[i] * pixelSizeMeters * scaleFactor;
-            origins[i] = Coordinate.of(-180.0, 90.0);
         }
 
         return TileMatrixSet.builder()
@@ -321,7 +308,6 @@ public class DefaultTileMatrixSets {
                 .tileSize(tileSize, tileSize)
                 .extent(WORLD4326)
                 .resolutions(resolutions)
-                .origins(origins)
                 .build();
     }
 }

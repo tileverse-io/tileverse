@@ -17,9 +17,14 @@ package io.tileverse.tiling.matrix;
 
 import static java.util.Objects.requireNonNull;
 
+import io.tileverse.tiling.common.BoundingBox2D;
+import io.tileverse.tiling.common.Coordinate;
+import io.tileverse.tiling.common.CornerOfOrigin;
 import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.pyramid.TileRange;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 /**
  * A tile matrix represents a collection of tiles with the same size and properties
@@ -40,10 +45,9 @@ import java.util.Optional;
  * <li><b>Tile Size</b>: Pixel dimensions of each tile</li>
  * </ul>
  *
- * @param tileRange the discrete tile grid for this matrix
+ * @param tileRange the discrete tile grid for this matrix, enabled operations on {@link TileIndex} and provides  {@link #matrixWidth()}, {@link #matrixHeight()}, {@link #cornerOfOrigin()}, and more grid related info and operations
  * @param resolution map units per pixel
- * @param origin map space coordinate for tile (0,0)
- * @param extent map space bounding box covered by this matrix
+ * @param pointOfOrigin in CRS units for the 0,0 tile corner
  * @param crsId coordinate reference system identifier
  * @param tileWidth tile width in pixels
  * @param tileHeight tile height in pixels
@@ -51,13 +55,7 @@ import java.util.Optional;
  * @since 1.0
  */
 public record TileMatrix(
-        TileRange tileRange,
-        double resolution,
-        Coordinate origin,
-        Extent extent,
-        String crsId,
-        int tileWidth,
-        int tileHeight) {
+        TileRange tileRange, double resolution, Coordinate pointOfOrigin, String crsId, int tileWidth, int tileHeight) {
 
     /**
      * Compact constructor with validation.
@@ -66,11 +64,8 @@ public record TileMatrix(
         if (tileRange == null) {
             throw new IllegalArgumentException("tileRange cannot be null");
         }
-        if (origin == null) {
-            throw new IllegalArgumentException("origin cannot be null");
-        }
-        if (extent == null) {
-            throw new IllegalArgumentException("extent cannot be null");
+        if (pointOfOrigin == null) {
+            throw new IllegalArgumentException("pointOfOrigin cannot be null");
         }
         if (crsId == null || crsId.trim().isEmpty()) {
             throw new IllegalArgumentException("crsId cannot be null or empty");
@@ -84,237 +79,33 @@ public record TileMatrix(
     }
 
     /**
+     * Corner of the tile matrix used as the origin for numbering tile rows and
+     * columns.
+     */
+    public CornerOfOrigin cornerOfOrigin() {
+        return tileRange.cornerOfOrigin();
+    }
+
+    /**
+     * Position in CRS coordinates of the {@link #cornerOfOrigin() corner of origin} for a tile matrix.
+     *
+     * @return the origin coordinate of the {@link #first()} tile in map space
+     */
+    public Coordinate pointOfOrigin() {
+        return pointOfOrigin;
+    }
+
+    public BoundingBox2D boundingBox() {
+        return calculateExtent(tileRange, pointOfOrigin(), resolution(), tileWidth(), tileHeight());
+    }
+
+    /**
      * Returns the zoom level for this tile matrix.
      *
      * @return the zoom level
      */
     public int zoomLevel() {
         return tileRange.zoomLevel();
-    }
-
-    /**
-     * Returns the tile at the specified index, or empty if not within this matrix.
-     *
-     * @param tileIndex the tile index
-     * @return the tile at the specified index, or empty if not within bounds
-     */
-    public Optional<Tile> tile(TileIndex tileIndex) {
-        return Optional.of(requireNonNull(tileIndex, "tileIndex"))
-                .filter(tileRange::contains)
-                .map(this::buildTile);
-    }
-
-    private Tile buildTile(TileIndex index) {
-        Extent tileExtent = tileExtent(index);
-        return Tile.builder()
-                .tileIndex(index)
-                .extent(tileExtent)
-                .size(tileWidth, tileHeight)
-                .resolution(resolution)
-                .crs(crsId)
-                .build();
-    }
-
-    /**
-     * Returns the tile at the specified coordinates.
-     *
-     * @param x the tile X coordinate
-     * @param y the tile Y coordinate
-     * @return the tile at the specified coordinates, or empty if not within bounds
-     */
-    public Optional<Tile> tile(long x, long y) {
-        return tile(TileIndex.of(x, y, zoomLevel()));
-    }
-
-    /**
-     * Returns the map space extent covered by a specific tile index.
-     *
-     * @param tileIndex the tile index
-     * @return the map space extent of the tile
-     * @throws IllegalArgumentException if the tile is not within this matrix
-     */
-    private Extent tileExtent(TileIndex tileIndex) {
-        if (!tileRange.contains(tileIndex)) {
-            throw new IllegalArgumentException("Tile " + tileIndex + " is not within matrix bounds");
-        }
-
-        // Calculate tile extent based on axis origin
-        double tileMapWidth = tileWidth * resolution;
-        double tileMapHeight = tileHeight * resolution;
-
-        double minX, minY, maxX, maxY;
-
-        // Transform tile coordinates to map coordinates based on axis origin
-        switch (tileRange.axisOrigin()) {
-            case LOWER_LEFT -> {
-                minX = origin.x() + tileIndex.x() * tileMapWidth;
-                minY = origin.y() + tileIndex.y() * tileMapHeight;
-                maxX = minX + tileMapWidth;
-                maxY = minY + tileMapHeight;
-            }
-            case UPPER_LEFT -> {
-                minX = origin.x() + tileIndex.x() * tileMapWidth;
-                maxY = origin.y() - tileIndex.y() * tileMapHeight;
-                maxX = minX + tileMapWidth;
-                minY = maxY - tileMapHeight;
-            }
-            case LOWER_RIGHT -> {
-                maxX = origin.x() - tileIndex.x() * tileMapWidth;
-                minY = origin.y() + tileIndex.y() * tileMapHeight;
-                minX = maxX - tileMapWidth;
-                maxY = minY + tileMapHeight;
-            }
-            case UPPER_RIGHT -> {
-                maxX = origin.x() - tileIndex.x() * tileMapWidth;
-                maxY = origin.y() - tileIndex.y() * tileMapHeight;
-                minX = maxX - tileMapWidth;
-                minY = maxY - tileMapHeight;
-            }
-            default -> throw new IllegalStateException("Unsupported axis origin: " + tileRange.axisOrigin());
-        }
-
-        return Extent.of(minX, minY, maxX, maxY);
-    }
-
-    /**
-     * Converts a map space coordinate to the corresponding tile.
-     * If the coordinate falls outside the matrix extent, returns empty.
-     *
-     * @param coordinate the map space coordinate
-     * @return the tile containing the coordinate, or empty if outside matrix bounds
-     */
-    public Optional<Tile> coordinateToTile(Coordinate coordinate) {
-        // Calculate tile size in map units
-        double tileMapWidth = tileWidth * resolution;
-        double tileMapHeight = tileHeight * resolution;
-
-        long tileX, tileY;
-
-        // Transform map coordinates to tile coordinates based on axis origin
-        switch (tileRange.axisOrigin()) {
-            case LOWER_LEFT -> {
-                tileX = (long) Math.floor((coordinate.x() - origin.x()) / tileMapWidth);
-                tileY = (long) Math.floor((coordinate.y() - origin.y()) / tileMapHeight);
-            }
-            case UPPER_LEFT -> {
-                tileX = (long) Math.floor((coordinate.x() - origin.x()) / tileMapWidth);
-                tileY = (long) Math.floor((origin.y() - coordinate.y()) / tileMapHeight);
-            }
-            case LOWER_RIGHT -> {
-                tileX = (long) Math.floor((origin.x() - coordinate.x()) / tileMapWidth);
-                tileY = (long) Math.floor((coordinate.y() - origin.y()) / tileMapHeight);
-            }
-            case UPPER_RIGHT -> {
-                tileX = (long) Math.floor((origin.x() - coordinate.x()) / tileMapWidth);
-                tileY = (long) Math.floor((origin.y() - coordinate.y()) / tileMapHeight);
-            }
-            default -> throw new IllegalStateException("Unsupported axis origin: " + tileRange.axisOrigin());
-        }
-
-        return tile(TileIndex.of(tileX, tileY, zoomLevel()));
-    }
-
-    /**
-     * Converts a map space extent to the corresponding tile range within this matrix.
-     * The returned range covers all tiles that intersect with the given extent.
-     *
-     * @param mapExtent the map space extent
-     * @return the tile range covering the extent, intersected with matrix bounds
-     */
-    public Optional<TileRange> extentToRange(Extent mapExtent) {
-        // Calculate tile coordinates for corner points without bounds checking
-        double tileMapWidth = tileWidth * resolution;
-        double tileMapHeight = tileHeight * resolution;
-
-        long minTileX, minTileY, maxTileX, maxTileY;
-
-        // Transform map coordinates to tile coordinates based on axis origin
-        Coordinate minCoord = mapExtent.min();
-        Coordinate maxCoord = mapExtent.max();
-
-        switch (tileRange.axisOrigin()) {
-            case LOWER_LEFT -> {
-                minTileX = (long) Math.floor((minCoord.x() - origin.x()) / tileMapWidth);
-                minTileY = (long) Math.floor((minCoord.y() - origin.y()) / tileMapHeight);
-                maxTileX = (long) Math.floor((maxCoord.x() - origin.x()) / tileMapWidth);
-                maxTileY = (long) Math.floor((maxCoord.y() - origin.y()) / tileMapHeight);
-            }
-            case UPPER_LEFT -> {
-                minTileX = (long) Math.floor((minCoord.x() - origin.x()) / tileMapWidth);
-                minTileY = (long) Math.floor((origin.y() - maxCoord.y()) / tileMapHeight); // Note: swapped for Y
-                maxTileX = (long) Math.floor((maxCoord.x() - origin.x()) / tileMapWidth);
-                maxTileY = (long) Math.floor((origin.y() - minCoord.y()) / tileMapHeight); // Note: swapped for Y
-            }
-            case LOWER_RIGHT -> {
-                minTileX = (long) Math.floor((origin.x() - maxCoord.x()) / tileMapWidth); // Note: swapped for X
-                minTileY = (long) Math.floor((minCoord.y() - origin.y()) / tileMapHeight);
-                maxTileX = (long) Math.floor((origin.x() - minCoord.x()) / tileMapWidth); // Note: swapped for X
-                maxTileY = (long) Math.floor((maxCoord.y() - origin.y()) / tileMapHeight);
-            }
-            case UPPER_RIGHT -> {
-                minTileX = (long) Math.floor((origin.x() - maxCoord.x()) / tileMapWidth); // Note: swapped for X
-                minTileY = (long) Math.floor((origin.y() - maxCoord.y()) / tileMapHeight); // Note: swapped for Y
-                maxTileX = (long) Math.floor((origin.x() - minCoord.x()) / tileMapWidth); // Note: swapped for X
-                maxTileY = (long) Math.floor((origin.y() - minCoord.y()) / tileMapHeight); // Note: swapped for Y
-            }
-            default -> throw new IllegalStateException("Unsupported axis origin: " + tileRange.axisOrigin());
-        }
-
-        // Ensure min/max are in correct order
-        long actualMinX = Math.min(minTileX, maxTileX);
-        long actualMinY = Math.min(minTileY, maxTileY);
-        long actualMaxX = Math.max(minTileX, maxTileX);
-        long actualMaxY = Math.max(minTileY, maxTileY);
-
-        TileRange extentRange =
-                TileRange.of(actualMinX, actualMinY, actualMaxX, actualMaxY, zoomLevel(), tileRange.axisOrigin());
-
-        // Intersect with matrix bounds to ensure validity
-        return tileRange.intersection(extentRange);
-    }
-
-    /**
-     * Returns true if this tile matrix contains the specified tile index.
-     *
-     * @param tileIndex the tile index to check
-     * @return true if the matrix contains the tile index
-     * @throws IllegalArgumentException if tileIndex is null
-     */
-    public boolean contains(TileIndex tileIndex) {
-        if (tileIndex == null) {
-            throw new IllegalArgumentException("tileIndex cannot be null");
-        }
-        return tileRange.contains(tileIndex);
-    }
-
-    /**
-     * Returns true if this tile matrix contains the specified tile.
-     *
-     * @param tile the tile to check
-     * @return true if the matrix contains the tile
-     * @throws IllegalArgumentException if tile is null
-     */
-    public boolean contains(Tile tile) {
-        if (tile == null) {
-            throw new IllegalArgumentException("tile cannot be null");
-        }
-        return contains(tile.tileIndex());
-    }
-
-    /**
-     * Returns all tiles in this matrix as a stream.
-     * This provides efficient iteration over all tiles without materializing them all at once.
-     *
-     * @return a stream of all tiles in this matrix
-     */
-    public java.util.stream.Stream<Tile> tiles() {
-        // Create a stream that iterates through all tiles in the range
-        return java.util.stream.Stream.iterate(
-                        tileRange.first(),
-                        tileIndex -> tileRange.next(tileIndex).isPresent(),
-                        tileIndex -> tileRange.next(tileIndex).orElse(null))
-                .map(tileIndex ->
-                        tile(tileIndex).orElseThrow()); // Should never be empty since we're iterating valid indices
     }
 
     /**
@@ -331,7 +122,7 @@ public record TileMatrix(
      *
      * @return the number of tiles in the X direction
      */
-    public long spanX() {
+    public long matrixWidth() {
         return tileRange.spanX();
     }
 
@@ -340,12 +131,196 @@ public record TileMatrix(
      *
      * @return the number of tiles in the Y direction
      */
-    public long spanY() {
+    public long matrixHeight() {
         return tileRange.spanY();
     }
 
     /**
-     * Returns the first tile in natural traversal order for this axis origin.
+     * Returns the tile at the specified coordinates.
+     *
+     * @param x the tile X coordinate
+     * @param y the tile Y coordinate
+     * @return the tile at the specified coordinates, or empty if not within bounds
+     */
+    public Optional<Tile> tile(long x, long y) {
+        return tile(TileIndex.xyz(x, y, zoomLevel()));
+    }
+
+    /**
+     * Returns the tile at the specified index, or empty if not within this matrix.
+     *
+     * @param tileIndex the tile index
+     * @return the tile at the specified index, or empty if not within bounds
+     */
+    public Optional<Tile> tile(TileIndex tileIndex) {
+        requireNonNull(tileIndex, "tileIndex");
+        if (tileRange.contains(tileIndex)) {
+            return Optional.of(buildTile(tileIndex));
+        }
+        return Optional.empty();
+    }
+
+    private Tile buildTile(TileIndex index) {
+        BoundingBox2D tileExtent = tileExtent(index);
+        return new Tile(index, tileExtent, tileWidth, tileHeight, resolution, crsId);
+    }
+
+    /**
+     * Returns the map space extent covered by a specific tile index.
+     *
+     * @param tileIndex the tile index
+     * @return the map space extent of the tile
+     * @throws IllegalArgumentException if the tile is not within this matrix
+     */
+    private BoundingBox2D tileExtent(TileIndex tileIndex) {
+        if (!tileRange.contains(tileIndex)) {
+            throw new IllegalArgumentException("Tile " + tileIndex + " is not within matrix bounds");
+        }
+        // coordinate of the 0,0 tile, regardless of whether this is a matrix subset
+        final Coordinate origin = pointOfOrigin();
+
+        // Calculate tile extent based on corner of origin
+        final double tileMapWidth = tileWidth * resolution;
+        final double tileMapHeight = tileHeight * resolution;
+
+        double minX, minY, maxX, maxY;
+        // Transform tile coordinates to map coordinates based on corner of origin
+        switch (this.cornerOfOrigin()) {
+            case BOTTOM_LEFT -> {
+                minX = origin.x() + tileIndex.x() * tileMapWidth;
+                minY = origin.y() + tileIndex.y() * tileMapHeight;
+                maxX = minX + tileMapWidth;
+                maxY = minY + tileMapHeight;
+            }
+            case TOP_LEFT -> {
+                minX = origin.x() + tileIndex.x() * tileMapWidth;
+                maxY = origin.y() - tileIndex.y() * tileMapHeight;
+                maxX = minX + tileMapWidth;
+                minY = maxY - tileMapHeight;
+            }
+            default -> throw new IllegalStateException("Unsupported corner of origin: " + tileRange.cornerOfOrigin());
+        }
+
+        return BoundingBox2D.extent(minX, minY, maxX, maxY);
+    }
+
+    /**
+     * Converts a map space coordinate to the corresponding tile.
+     * If the coordinate falls outside the matrix extent, returns empty.
+     *
+     * @param coordinate the map space coordinate
+     * @return the tile containing the coordinate, or empty if outside matrix bounds
+     */
+    public Optional<Tile> coordinateToTile(Coordinate coordinate) {
+        // Calculate tile size in map units
+        final double tileMapWidth = tileWidth * resolution;
+        final double tileMapHeight = tileHeight * resolution;
+        final Coordinate origin = pointOfOrigin();
+
+        long tileX, tileY;
+
+        // Transform map coordinates to tile coordinates based on corner of origin
+        // Uses epsilon adjustment per OGC TileMatrixSet spec to handle floating-point precision
+        switch (tileRange.cornerOfOrigin()) {
+            case BOTTOM_LEFT -> {
+                tileX = floorWithEpsilon((coordinate.x() - origin.x()) / tileMapWidth);
+                tileY = floorWithEpsilon((coordinate.y() - origin.y()) / tileMapHeight);
+            }
+            case TOP_LEFT -> {
+                tileX = floorWithEpsilon((coordinate.x() - origin.x()) / tileMapWidth);
+                tileY = floorWithEpsilon((origin.y() - coordinate.y()) / tileMapHeight);
+            }
+            default -> throw new IllegalStateException("Unsupported corner of origin: " + tileRange.cornerOfOrigin());
+        }
+
+        return tile(TileIndex.xyz(tileX, tileY, zoomLevel()));
+    }
+
+    /**
+     * Converts a map space extent to the corresponding tile range within this matrix.
+     * The returned range covers all tiles that intersect with the given extent.
+     *
+     * <p>Implements OGC TileMatrixSet specification algorithm with epsilon adjustments
+     * to handle floating-point precision issues per Annex I.
+     *
+     * @param mapExtent the map space extent
+     * @return the tile range covering the extent, intersected with matrix bounds
+     */
+    public Optional<TileRange> extentToRange(BoundingBox2D mapExtent) {
+        // Calculate tile coordinates for corner points without bounds checking
+        final double tileMapWidth = tileWidth * resolution;
+        final double tileMapHeight = tileHeight * resolution;
+        final Coordinate origin = pointOfOrigin();
+
+        long minTileX, minTileY, maxTileX, maxTileY;
+
+        // Transform map coordinates to tile coordinates based on corner of origin
+        // Uses epsilon adjustments per OGC spec: add epsilon for min, subtract for max
+        Coordinate minCoord = mapExtent.lowerLeft();
+        Coordinate maxCoord = mapExtent.upperRight();
+
+        switch (tileRange.cornerOfOrigin()) {
+            case BOTTOM_LEFT -> {
+                minTileX = floorWithEpsilon((minCoord.x() - origin.x()) / tileMapWidth, true);
+                minTileY = floorWithEpsilon((minCoord.y() - origin.y()) / tileMapHeight, true);
+                maxTileX = floorWithEpsilon((maxCoord.x() - origin.x()) / tileMapWidth, false);
+                maxTileY = floorWithEpsilon((maxCoord.y() - origin.y()) / tileMapHeight, false);
+            }
+            case TOP_LEFT -> {
+                minTileX = floorWithEpsilon((minCoord.x() - origin.x()) / tileMapWidth, true);
+                minTileY = floorWithEpsilon((origin.y() - maxCoord.y()) / tileMapHeight, true); // Note: swapped for Y
+                maxTileX = floorWithEpsilon((maxCoord.x() - origin.x()) / tileMapWidth, false);
+                maxTileY = floorWithEpsilon((origin.y() - minCoord.y()) / tileMapHeight, false); // Note: swapped for Y
+            }
+            default -> throw new IllegalStateException("Unsupported corner of origin: " + tileRange.cornerOfOrigin());
+        }
+
+        // Ensure min/max are in correct order
+        long actualMinX = Math.min(minTileX, maxTileX);
+        long actualMinY = Math.min(minTileY, maxTileY);
+        long actualMaxX = Math.max(minTileX, maxTileX);
+        long actualMaxY = Math.max(minTileY, maxTileY);
+
+        TileRange extentRange =
+                TileRange.of(actualMinX, actualMinY, actualMaxX, actualMaxY, zoomLevel(), tileRange.cornerOfOrigin());
+
+        // Intersect with matrix bounds to ensure validity
+        return tileRange.intersection(extentRange);
+    }
+
+    /**
+     * Returns true if this tile matrix contains the specified tile index.
+     *
+     * @param tileIndex the tile index to check
+     * @return true if the matrix contains the tile index
+     */
+    public boolean contains(TileIndex tileIndex) {
+        requireNonNull(tileIndex, "tileIndex cannot be null");
+        return tileRange.contains(tileIndex);
+    }
+
+    /**
+     * Returns true if this tile matrix contains the specified tile.
+     *
+     * @param tile the tile to check
+     * @return true if the matrix contains the tile
+     */
+    public boolean contains(Tile tile) {
+        requireNonNull("tile cannot be null");
+        return contains(tile.tileIndex());
+    }
+
+    /**
+     * Returns all tiles in this matrix as a stream.
+     * This provides efficient iteration over all tiles without materializing them all at once.
+     *
+     * @return a stream of all tiles in this matrix
+     */
+    public Stream<Tile> tiles() {
+        return tileRange().all().map(this::tile).map(Optional::orElseThrow);
+    }
+    /**
+     * Returns the first tile in natural traversal order for this corner of origin.
      *
      * @return the first tile in traversal order
      */
@@ -354,7 +329,7 @@ public record TileMatrix(
     }
 
     /**
-     * Returns the last tile in natural traversal order for this axis origin.
+     * Returns the last tile in natural traversal order for this corner of origin.
      *
      * @return the last tile in traversal order
      */
@@ -367,13 +342,10 @@ public record TileMatrix(
      *
      * @param current the current tile
      * @return the next tile in traversal order, or empty if current is the last tile
-     * @throws IllegalArgumentException if current is null
      */
     public Optional<Tile> next(Tile current) {
-        if (current == null) {
-            throw new IllegalArgumentException("current tile cannot be null");
-        }
-        return tileRange.next(current.tileIndex()).flatMap(this::tile);
+        requireNonNull(current, "current tile cannot be null");
+        return tileRange.next(current.tileIndex()).map(this::buildTile);
     }
 
     /**
@@ -381,13 +353,10 @@ public record TileMatrix(
      *
      * @param current the current tile
      * @return the previous tile in traversal order, or empty if current is the first tile
-     * @throws IllegalArgumentException if current is null
      */
     public Optional<Tile> prev(Tile current) {
-        if (current == null) {
-            throw new IllegalArgumentException("current tile cannot be null");
-        }
-        return tileRange.prev(current.tileIndex()).flatMap(this::tile);
+        requireNonNull(current, "current tile cannot be null");
+        return tileRange.prev(current.tileIndex()).map(this::buildTile);
     }
 
     /**
@@ -397,12 +366,10 @@ public record TileMatrix(
      *
      * @param other the other tile matrix to check
      * @return true if this matrix contains all tiles in the other matrix
-     * @throws IllegalArgumentException if other is null or if the matrices have different zoom levels
+     * @throws IllegalArgumentException if the matrices have different zoom levels
      */
     public boolean contains(TileMatrix other) {
-        if (other == null) {
-            throw new IllegalArgumentException("other matrix cannot be null");
-        }
+        requireNonNull(other, "other matrix cannot be null");
         if (other.zoomLevel() != zoomLevel()) {
             throw new IllegalArgumentException(
                     "Cannot compare matrices with different zoom levels: " + zoomLevel() + " vs " + other.zoomLevel());
@@ -421,8 +388,8 @@ public record TileMatrix(
      * @param mapExtent the map space extent to check
      * @return true if the matrix intersects with the extent
      */
-    public boolean intersects(Extent mapExtent) {
-        return extent.intersects(mapExtent);
+    public boolean intersects(BoundingBox2D mapExtent) {
+        return boundingBox().intersects(mapExtent);
     }
 
     /**
@@ -432,8 +399,23 @@ public record TileMatrix(
      * @param mapExtent the map space extent to intersect with
      * @return a new TileMatrix containing only intersecting tiles, or empty matrix if no intersection
      */
-    public Optional<TileMatrix> intersection(Extent mapExtent) {
+    public Optional<TileMatrix> intersection(BoundingBox2D mapExtent) {
         return extentToRange(mapExtent).flatMap(tileRange::intersection).map(this::withTileRange);
+    }
+
+    /**
+     * Returns a (potentially sparse) tile matrix whose {@link #tileRange()
+     * TileRange} is the union of this one's with {@code other}'s.
+     * <p>
+     * The two matrices must have the same {@link #zoomLevel()}
+     * <p>
+     * If the {@code other} matrix has a different {@link #cornerOfOrigin()}, the resulting
+     * matrix will have this matrix's corner of origin.
+     */
+    public TileMatrix union(TileMatrix other) {
+        requireNonNull(other);
+        TileRange union = this.tileRange().union(other.tileRange);
+        return this.withTileRange(union);
     }
 
     /**
@@ -453,57 +435,67 @@ public record TileMatrix(
             throw new IllegalArgumentException("New range zoom level " + newRange.zoomLevel()
                     + " does not match current zoom level " + zoomLevel());
         }
-        // Calculate new extent based on the new tile range
-        Extent newExtent = newRange.extent(origin, resolution, tileWidth, tileHeight);
-        return new TileMatrix(newRange, resolution, origin, newExtent, crsId, tileWidth, tileHeight);
+
+        Coordinate origin = pointOfOrigin();
+        return new TileMatrix(newRange, resolution, origin, crsId, tileWidth, tileHeight);
     }
 
     /**
-     * Builder for creating TileMatrix instances.
+     * Calculates the map space extent covered by a tile range.
+     * This bridges abstract tile coordinates to real-world spatial coordinates.
      */
-    public static class Builder {
-        private TileRange tileRange;
-        private double resolution;
-        private Coordinate origin;
-        private Extent extent;
-        private String crsId;
-        private int tileWidth = 256;
-        private int tileHeight = 256;
+    private static BoundingBox2D calculateExtent(
+            TileRange tileRange, Coordinate origin, double resolution, int tileWidth, int tileHeight) {
+        // Calculate tile size in map units
+        final double tileMapWidth = tileWidth * resolution;
+        final double tileMapHeight = tileHeight * resolution;
 
-        public Builder tileRange(TileRange tileRange) {
-            this.tileRange = tileRange;
-            return this;
+        double minX, minY, maxX, maxY;
+
+        // Transform tile coordinates to map coordinates based on corner of origin
+        switch (tileRange.cornerOfOrigin()) {
+            case BOTTOM_LEFT -> {
+                minX = origin.x() + tileRange.minx() * tileMapWidth;
+                minY = origin.y() + tileRange.miny() * tileMapHeight;
+                maxX = origin.x() + (tileRange.maxx() + 1) * tileMapWidth;
+                maxY = origin.y() + (tileRange.maxy() + 1) * tileMapHeight;
+            }
+            case TOP_LEFT -> {
+                minX = origin.x() + tileRange.minx() * tileMapWidth;
+                maxY = origin.y() - tileRange.miny() * tileMapHeight;
+                maxX = origin.x() + (tileRange.maxx() + 1) * tileMapWidth;
+                minY = origin.y() - (tileRange.maxy() + 1) * tileMapHeight;
+            }
+            default -> throw new IllegalStateException("Unsupported corner of origin: " + tileRange.cornerOfOrigin());
         }
 
-        public Builder resolution(double resolution) {
-            this.resolution = resolution;
-            return this;
-        }
+        return BoundingBox2D.extent(minX, minY, maxX, maxY);
+    }
 
-        public Builder origin(Coordinate origin) {
-            this.origin = origin;
-            return this;
-        }
+    /**
+     * Applies floor function with epsilon adjustment to handle floating-point precision issues.
+     * Follows OGC TileMatrixSet specification Annex I recommendations.
+     *
+     * @param value the floating-point value to floor
+     * @return the floor value with epsilon compensation for precision
+     */
+    private static long floorWithEpsilon(double value) {
+        // For coordinate-to-tile transformations, add small epsilon to avoid precision issues
+        return (long) Math.floor(value + 1e-6);
+    }
 
-        public Builder extent(Extent extent) {
-            this.extent = extent;
-            return this;
-        }
-
-        public Builder crs(String crsId) {
-            this.crsId = crsId;
-            return this;
-        }
-
-        public Builder tileSize(int width, int height) {
-            this.tileWidth = width;
-            this.tileHeight = height;
-            return this;
-        }
-
-        public TileMatrix build() {
-            return new TileMatrix(tileRange, resolution, origin, extent, crsId, tileWidth, tileHeight);
-        }
+    /**
+     * Applies floor function with epsilon adjustment for extent-to-range transformations.
+     * Follows OGC TileMatrixSet specification Annex I recommendations.
+     *
+     * @param value the floating-point value to floor
+     * @param addEpsilon true to add epsilon (for min values), false to subtract (for max values)
+     * @return the floor value with appropriate epsilon adjustment
+     */
+    private static long floorWithEpsilon(double value, boolean addEpsilon) {
+        double epsilon = 1e-6;
+        double adjusted = addEpsilon ? value + epsilon : value - epsilon;
+        return (long) Math.floor(adjusted);
     }
 
     /**
@@ -511,7 +503,21 @@ public record TileMatrix(
      *
      * @return a new builder instance
      */
-    public static Builder builder() {
-        return new Builder();
+    public static TileMatrixBuilder builder() {
+        return new TileMatrixBuilder();
+    }
+
+    public static TileMatrix union(List<TileMatrix> matrices) {
+        if (matrices.isEmpty()) {
+            throw new IllegalArgumentException("matrices is empty");
+        }
+
+        TileMatrix first = requireNonNull(matrices.get(0));
+        TileMatrix union = first;
+        for (int i = 1; i < matrices.size(); i++) {
+            TileMatrix next = requireNonNull(matrices.get(i));
+            union = union.union(next);
+        }
+        return union;
     }
 }

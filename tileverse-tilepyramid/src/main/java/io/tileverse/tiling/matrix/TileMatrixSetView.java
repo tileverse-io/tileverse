@@ -17,6 +17,8 @@ package io.tileverse.tiling.matrix;
 
 import static java.util.Objects.requireNonNull;
 
+import io.tileverse.tiling.common.BoundingBox2D;
+import io.tileverse.tiling.common.Coordinate;
 import io.tileverse.tiling.pyramid.TilePyramid;
 import java.util.List;
 import java.util.Objects;
@@ -42,7 +44,7 @@ class TileMatrixSetView implements TileMatrixSet {
     private final TileMatrixSet delegate;
     private final int minZoomLevel;
     private final int maxZoomLevel;
-    private final Extent filterExtent;
+    private final BoundingBox2D filterExtent;
 
     // Lazy cached values
     private volatile List<TileMatrix> cachedMatrices;
@@ -51,7 +53,7 @@ class TileMatrixSetView implements TileMatrixSet {
     /**
      * Creates a view with zoom level filtering.
      */
-    private TileMatrixSetView(TileMatrixSet delegate, int minZoomLevel, int maxZoomLevel, Extent filterExtent) {
+    private TileMatrixSetView(TileMatrixSet delegate, int minZoomLevel, int maxZoomLevel, BoundingBox2D filterExtent) {
         this.delegate = requireNonNull(delegate);
         this.minZoomLevel = minZoomLevel;
         this.maxZoomLevel = maxZoomLevel;
@@ -81,13 +83,13 @@ class TileMatrixSetView implements TileMatrixSet {
             return new TileMatrixSetView(view.delegate, combinedMinZoom, combinedMaxZoom, view.filterExtent);
         }
 
-        return new TileMatrixSetView(delegate, minZoomLevel, maxZoomLevel, delegate.extent());
+        return new TileMatrixSetView(delegate, minZoomLevel, maxZoomLevel, delegate.boundingBox());
     }
 
     /**
      * Creates a spatially-filtered view of the given tile matrix set.
      */
-    static Optional<TileMatrixSet> intersection(TileMatrixSet delegate, Extent mapExtent) {
+    static Optional<TileMatrixSet> intersection(TileMatrixSet delegate, BoundingBox2D mapExtent) {
         TileMatrixSet ret = null;
         int minZoom, maxZoom;
 
@@ -102,7 +104,7 @@ class TileMatrixSetView implements TileMatrixSet {
             maxZoom = delegate.maxZoomLevel();
         }
 
-        if (delegate.extent().intersects(mapExtent)) {
+        if (delegate.boundingBox().intersects(mapExtent)) {
             ret = new TileMatrixSetView(delegate, minZoom, maxZoom, mapExtent);
         }
 
@@ -129,15 +131,15 @@ class TileMatrixSetView implements TileMatrixSet {
                         } else {
                             // Empty pyramid
                             basePyramid = TilePyramid.builder()
-                                    .axisOrigin(basePyramid.axisOrigin())
+                                    .cornerOfOrigin(basePyramid.cornerOfOrigin())
                                     .build();
                         }
                     }
 
                     // Apply spatial filtering if different from delegate's extent
-                    if (!filterExtent.equals(delegate.extent())) {
+                    if (!filterExtent.equals(delegate.boundingBox())) {
                         TilePyramid.Builder pyramidBuilder =
-                                TilePyramid.builder().axisOrigin(basePyramid.axisOrigin());
+                                TilePyramid.builder().cornerOfOrigin(basePyramid.cornerOfOrigin());
 
                         for (var range : basePyramid.levels()) {
                             // Get the tile matrix for this zoom level and apply spatial filter
@@ -177,20 +179,19 @@ class TileMatrixSetView implements TileMatrixSet {
     }
 
     @Override
-    public Extent extent() {
-        return delegate.extent();
+    public BoundingBox2D boundingBox() {
+        return tileMatrix(minZoomLevel).map(TileMatrix::boundingBox).orElseThrow();
+    }
+
+    @Override
+    public Coordinate origin() {
+        return tileMatrix(minZoomLevel).map(TileMatrix::pointOfOrigin).orElseThrow();
     }
 
     @Override
     public double resolution(int zoomLevel) {
         validateZoomLevel(zoomLevel);
         return delegate.resolution(zoomLevel);
-    }
-
-    @Override
-    public Coordinate origin(int zoomLevel) {
-        validateZoomLevel(zoomLevel);
-        return delegate.origin(zoomLevel);
     }
 
     @Override
@@ -204,7 +205,7 @@ class TileMatrixSetView implements TileMatrixSet {
                                 if (matrix.isPresent()) {
                                     TileMatrix result = matrix.get();
                                     // Apply spatial filter if different from delegate's extent
-                                    if (!filterExtent.equals(delegate.extent())) {
+                                    if (!filterExtent.equals(delegate.boundingBox())) {
                                         result = result.intersection(filterExtent)
                                                 .orElse(null);
                                     }
@@ -228,14 +229,14 @@ class TileMatrixSetView implements TileMatrixSet {
         }
 
         Optional<TileMatrix> matrix = delegate.tileMatrix(zoomLevel);
-        if (matrix.isPresent() && !filterExtent.equals(delegate.extent())) {
+        if (matrix.isPresent() && !filterExtent.equals(delegate.boundingBox())) {
             return matrix.get().intersection(filterExtent);
         }
         return matrix;
     }
 
     @Override
-    public Optional<TileMatrixSet> intersection(Extent mapExtent) {
+    public Optional<TileMatrixSet> intersection(BoundingBox2D mapExtent) {
         return TileMatrixSetView.intersection(this, mapExtent);
     }
 
@@ -244,18 +245,10 @@ class TileMatrixSetView implements TileMatrixSet {
         return TileMatrixSetView.subset(this, minZoomLevel, maxZoomLevel);
     }
 
-    // Delegate abstract methods from TileMatrixSet
-
     @Override
     public io.tileverse.tiling.pyramid.TileIndex coordinateToTile(Coordinate coordinate, int zoomLevel) {
         validateZoomLevel(zoomLevel);
         return delegate.coordinateToTile(coordinate, zoomLevel);
-    }
-
-    @Override
-    public io.tileverse.tiling.pyramid.TileRange extentToRange(Extent extent, int zoomLevel) {
-        validateZoomLevel(zoomLevel);
-        return delegate.extentToRange(extent, zoomLevel);
     }
 
     private void validateZoomLevel(int zoomLevel) {

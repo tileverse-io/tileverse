@@ -15,6 +15,8 @@
  */
 package io.tileverse.tiling.pyramid;
 
+import io.tileverse.tiling.common.CornerOfOrigin;
+
 /**
  * Standard implementation of TileRange representing a rectangular range of individual tiles.
  *
@@ -23,10 +25,10 @@ package io.tileverse.tiling.pyramid;
  * @param maxx maximum X coordinate (inclusive)
  * @param maxy maximum Y coordinate (inclusive)
  * @param zoomLevel the zoom level
- * @param axisOrigin the axis origin
+ * @param cornerOfOrigin the axis origin
  * @since 1.0
  */
-record TileRangeImpl(long minx, long miny, long maxx, long maxy, int zoomLevel, AxisOrigin axisOrigin)
+record TileRangeImpl(long minx, long miny, long maxx, long maxy, int zoomLevel, CornerOfOrigin cornerOfOrigin)
         implements TileRange {
 
     TileRangeImpl {
@@ -34,45 +36,14 @@ record TileRangeImpl(long minx, long miny, long maxx, long maxy, int zoomLevel, 
             throw new IllegalArgumentException(
                     String.format("Invalid range: min(%d,%d) must be <= max(%d,%d)", minx, miny, maxx, maxy));
         }
-        if (axisOrigin == null) {
-            throw new IllegalArgumentException("axisOrigin cannot be null");
+        if (cornerOfOrigin == null) {
+            throw new IllegalArgumentException("cornerOfOrigin cannot be null");
         }
-    }
-
-    @Override
-    public long spanX() {
-        return maxx - minx + 1;
-    }
-
-    @Override
-    public long spanY() {
-        return maxy - miny + 1;
-    }
-
-    @Override
-    public long count() {
-        return Math.multiplyExact(spanX(), spanY());
-    }
-
-    @Override
-    public long countMetaTiles(int width, int height) {
-        if (width <= 0) throw new IllegalArgumentException("width must be > 0");
-        if (height <= 0) throw new IllegalArgumentException("height must be > 0");
-
-        long metaX = countMetatiles(spanX(), width);
-        long metaY = countMetatiles(spanY(), height);
-        return Math.multiplyExact(metaX, metaY);
     }
 
     @Override
     public int zoomLevel() {
         return zoomLevel;
-    }
-
-    private long countMetatiles(long ntiles, int metaSize) {
-        long rem = ntiles % metaSize;
-        long metas = ntiles / metaSize;
-        return (rem > 0 ? 1 : 0) + metas;
     }
 
     @Override
@@ -83,5 +54,10 @@ record TileRangeImpl(long minx, long miny, long maxx, long maxy, int zoomLevel, 
     @Override
     public int hashCode() {
         return TileRange.hashCode(this);
+    }
+
+    @Override
+    public String toString() {
+        return "%s[%d,%d - %d,%d]".formatted(cornerOfOrigin, minx, miny, maxx, maxy);
     }
 }

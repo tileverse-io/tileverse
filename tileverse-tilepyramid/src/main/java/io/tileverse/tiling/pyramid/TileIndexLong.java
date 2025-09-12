@@ -50,4 +50,9 @@ record TileIndexLong(long xCoord, long yCoord, int zCoord) implements TileIndex 
     public int hashCode() {
         return TileIndex.tilesHashCode(this);
     }
+
+    @Override
+    public String toString() {
+        return "TileIndex[z=%d, x=%d, y=%d]".formatted(z(), x(), y());
+    }
 }

@@ -15,6 +15,8 @@
  */
 package io.tileverse.tiling.matrix;
 
+import io.tileverse.tiling.common.BoundingBox2D;
+import io.tileverse.tiling.common.Coordinate;
 import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.pyramid.TilePyramid;
 import io.tileverse.tiling.pyramid.TileRange;
@@ -41,196 +43,6 @@ import java.util.Optional;
  * @since 1.0
  */
 public interface TileMatrixSet {
-
-    /**
-     * Builder for creating StandardTileMatrixSet instances.
-     */
-    class Builder {
-        private TilePyramid tilePyramid;
-        private String crsId;
-        private int tileWidth = 256;
-        private int tileHeight = 256;
-        private Extent extent;
-        private double[] resolutions;
-        private Coordinate[] origins;
-
-        /**
-         * Sets the tile pyramid that defines the discrete grid structure.
-         *
-         * @param tilePyramid the tile pyramid
-         * @return this builder
-         */
-        public Builder tilePyramid(TilePyramid tilePyramid) {
-            this.tilePyramid = tilePyramid;
-            return this;
-        }
-
-        /**
-         * Sets the coordinate reference system identifier.
-         *
-         * @param crsId the CRS identifier (e.g., "EPSG:4326", "EPSG:3857")
-         * @return this builder
-         */
-        public Builder crs(String crsId) {
-            this.crsId = crsId;
-            return this;
-        }
-
-        /**
-         * Sets the tile dimensions in pixels.
-         *
-         * @param width  the tile width in pixels
-         * @param height the tile height in pixels
-         * @return this builder
-         */
-        public Builder tileSize(int width, int height) {
-            this.tileWidth = width;
-            this.tileHeight = height;
-            return this;
-        }
-
-        /**
-         * Sets the map space extent covered by this tile matrix set.
-         *
-         * @param extent the map space extent
-         * @return this builder
-         */
-        public Builder extent(Extent extent) {
-            this.extent = extent;
-            return this;
-        }
-
-        /**
-         * Sets the resolutions for each zoom level. The array length must match the
-         * number of zoom levels in the tile pyramid.
-         *
-         * @param resolutions the resolution array (map units per pixel)
-         * @return this builder
-         */
-        public Builder resolutions(double... resolutions) {
-            this.resolutions = resolutions.clone();
-            return this;
-        }
-
-        /**
-         * Sets the origin coordinates for each zoom level. The array length must match
-         * the number of zoom levels in the tile pyramid.
-         *
-         * @param origins the origin coordinate array
-         * @return this builder
-         */
-        public Builder origins(Coordinate... origins) {
-            this.origins = origins.clone();
-            return this;
-        }
-
-        /**
-         * Sets the zoom level range by subsetting the tile pyramid and adjusting
-         * resolutions/origins. This is a convenience method for creating tile matrix
-         * sets with limited zoom ranges.
-         *
-         * @param minZoom the minimum zoom level (inclusive)
-         * @param maxZoom the maximum zoom level (inclusive)
-         * @return this builder
-         * @throws IllegalStateException if tilePyramid, resolutions, or origins are not
-         *                               set
-         */
-        public Builder zoomRange(int minZoom, int maxZoom) {
-            if (tilePyramid == null) {
-                throw new IllegalStateException("tilePyramid must be set before calling zoomRange()");
-            }
-            if (resolutions == null) {
-                throw new IllegalStateException("resolutions must be set before calling zoomRange()");
-            }
-            if (origins == null) {
-                throw new IllegalStateException("origins must be set before calling zoomRange()");
-            }
-
-            // Validate zoom range is within current arrays
-            if (minZoom < 0 || maxZoom >= resolutions.length || maxZoom >= origins.length) {
-                throw new IllegalArgumentException(
-                        "Zoom range [" + minZoom + ", " + maxZoom + "] is outside available array bounds [0, "
-                                + Math.min(resolutions.length - 1, origins.length - 1) + "]");
-            }
-
-            // Validate all zoom levels in range have valid values
-            for (int z = minZoom; z <= maxZoom; z++) {
-                if (resolutions[z] <= 0) {
-                    throw new IllegalArgumentException("Invalid resolution at zoom level " + z + ": " + resolutions[z]);
-                }
-                if (origins[z] == null) {
-                    throw new IllegalArgumentException("Missing origin at zoom level " + z);
-                }
-            }
-
-            // Create new arrays that maintain direct indexing but sized to the max zoom needed
-            double[] subsetResolutions = new double[maxZoom + 1];
-            Coordinate[] subsetOrigins = new Coordinate[maxZoom + 1];
-
-            // Copy relevant values maintaining direct indexing
-            for (int z = minZoom; z <= maxZoom; z++) {
-                subsetResolutions[z] = resolutions[z];
-                subsetOrigins[z] = origins[z];
-            }
-
-            this.resolutions = subsetResolutions;
-            this.origins = subsetOrigins;
-
-            // Now subset the tile pyramid
-            this.tilePyramid = tilePyramid.subset(minZoom, maxZoom);
-
-            return this;
-        }
-
-        /**
-         * Builds the StandardTileMatrixSet instance.
-         *
-         * @return the configured tile matrix set
-         * @throws IllegalStateException if required properties are not set
-         */
-        public TileMatrixSet build() {
-            if (tilePyramid == null) {
-                throw new IllegalStateException("tilePyramid is required");
-            }
-            if (crsId == null) {
-                throw new IllegalStateException("crsId is required");
-            }
-            if (extent == null) {
-                throw new IllegalStateException("extent is required");
-            }
-            if (resolutions == null) {
-                throw new IllegalStateException("resolutions are required");
-            }
-            if (origins == null) {
-                throw new IllegalStateException("origins are required");
-            }
-
-            // Arrays must be large enough to directly index by zoom level
-            int maxZoom = tilePyramid.maxZoomLevel();
-            int minZoom = tilePyramid.minZoomLevel();
-
-            if (resolutions.length <= maxZoom) {
-                throw new IllegalStateException("resolutions array length (" + resolutions.length
-                        + ") must be greater than max zoom level (" + maxZoom + ")");
-            }
-            if (origins.length <= maxZoom) {
-                throw new IllegalStateException("origins array length (" + origins.length
-                        + ") must be greater than max zoom level (" + maxZoom + ")");
-            }
-
-            // Validate that all required zoom levels have values
-            for (int z = minZoom; z <= maxZoom; z++) {
-                if (resolutions[z] <= 0) {
-                    throw new IllegalStateException("Invalid resolution at zoom level " + z + ": " + resolutions[z]);
-                }
-                if (origins[z] == null) {
-                    throw new IllegalStateException("Missing origin at zoom level " + z);
-                }
-            }
-
-            return new StandardTileMatrixSet(tilePyramid, crsId, tileWidth, tileHeight, extent, resolutions, origins);
-        }
-    }
 
     /**
      * Returns the underlying tile pyramid that defines the discrete grid structure.
@@ -265,15 +77,6 @@ public interface TileMatrixSet {
     int tileHeight();
 
     /**
-     * Returns the map space extent covered by this tile matrix set.
-     * This defines the bounding box in CRS coordinates that encompasses
-     * all tiles at all zoom levels.
-     *
-     * @return the map space extent
-     */
-    Extent extent();
-
-    /**
      * Returns the map space resolution (map units per pixel) at the specified zoom level.
      * Higher zoom levels typically have smaller (more detailed) resolutions.
      *
@@ -284,15 +87,47 @@ public interface TileMatrixSet {
     double resolution(int zoomLevel);
 
     /**
-     * Returns the map space origin coordinate for the specified zoom level.
-     * This is the map space coordinate that corresponds to tile (0,0) at that zoom level.
+     * Returns the map space extent covered by this tile matrix set.
+     * This defines the bounding box in CRS coordinates that encompasses
+     * all tiles at all zoom levels.
+     *
+     * @return the map space extent
+     */
+    BoundingBox2D boundingBox();
+
+    default BoundingBox2D extent(TileIndex tileIndex) {
+        return extent(tileIndex.x(), tileIndex.y(), 1, 1);
+    }
+
+    default BoundingBox2D extent(TileRange range) {
+        return extent(range.first().x(), range.first().y(), range.spanX(), range.spanY());
+    }
+
+    default BoundingBox2D extent(long tileCol, long tileRow, long tileSpanX, long tileSpanY) {
+        BoundingBox2D extent = boundingBox();
+
+        double tileMatrixMinX = extent.minX();
+        double tileMatrixMaxY = extent.maxY();
+
+        // upper-left corner
+        double leftX = tileCol * tileSpanX + tileMatrixMinX;
+        double upperY = tileMatrixMaxY - tileRow * tileSpanY;
+
+        // lower-right corner (rightX, lowerY) of the tile:
+        double rightX = (tileCol + 1) * tileSpanX + tileMatrixMinX;
+        double lowerY = tileMatrixMaxY - (tileRow + 1) * tileSpanY;
+
+        return new BoundingBox2D(leftX, lowerY, rightX, upperY);
+    }
+
+    /**
+     * Returns the map space origin coordinate for the all zoom levels.
+     *
      * The origin depends on the tile pyramid's axis origin configuration.
      *
-     * @param zoomLevel the zoom level
      * @return the origin coordinate in map space
-     * @throws IllegalArgumentException if the zoom level is not supported
      */
-    Coordinate origin(int zoomLevel);
+    Coordinate origin();
 
     /**
      * Converts a map space coordinate to the corresponding tile index at the specified zoom level.
@@ -304,19 +139,6 @@ public interface TileMatrixSet {
      * @throws IllegalArgumentException if the zoom level is not supported
      */
     TileIndex coordinateToTile(Coordinate coordinate, int zoomLevel);
-
-    /**
-     * Converts a map space extent to the corresponding tile range at the specified zoom level.
-     * The returned range covers all tiles that intersect with the given extent.
-     *
-     * @param extent the map space extent
-     * @param zoomLevel the target zoom level
-     * @return the tile range covering the extent
-     * @throws IllegalArgumentException if the zoom level is not supported
-     */
-    TileRange extentToRange(Extent extent, int zoomLevel);
-
-    // New TileMatrix-based API
 
     /**
      * Returns all tile matrices in this set, ordered by zoom level.
@@ -345,6 +167,10 @@ public interface TileMatrixSet {
     default TileMatrix getTileMatrix(int zoomLevel) {
         return tileMatrix(zoomLevel)
                 .orElseThrow(() -> new IllegalArgumentException("Zoom level " + zoomLevel + " not found"));
+    }
+
+    default Optional<Tile> tile(TileIndex tileIndex) {
+        return tileMatrix(tileIndex.z()).flatMap(m -> m.tile(tileIndex));
     }
 
     /**
@@ -383,7 +209,7 @@ public interface TileMatrixSet {
      * @param mapExtent the map space extent to intersect with
      * @return a new TileMatrixSet containing only intersecting tiles, or empty if no tiles intersect at any zoom level
      */
-    Optional<TileMatrixSet> intersection(Extent mapExtent);
+    Optional<TileMatrixSet> intersection(BoundingBox2D mapExtent);
 
     /**
      * Returns a TileMatrix for the specified zoom level containing only tiles that intersect
@@ -394,7 +220,7 @@ public interface TileMatrixSet {
      * @param zoomLevel the zoom level for the tile matrix
      * @return a TileMatrix containing only intersecting tiles at the specified zoom level, or empty if no tiles intersect
      */
-    default Optional<TileMatrix> intersection(Extent mapExtent, int zoomLevel) {
+    default Optional<TileMatrix> intersection(BoundingBox2D mapExtent, int zoomLevel) {
         return getTileMatrix(zoomLevel).intersection(mapExtent);
     }
 
@@ -419,7 +245,7 @@ public interface TileMatrixSet {
      * @return a new TileMatrixSet containing only intersecting tiles in the zoom range
      * @throws IllegalArgumentException if the zoom range is invalid or not supported
      */
-    default Optional<TileMatrixSet> intersection(Extent mapExtent, int minZoomLevel, int maxZoomLevel) {
+    default Optional<TileMatrixSet> intersection(BoundingBox2D mapExtent, int minZoomLevel, int maxZoomLevel) {
         return subset(minZoomLevel, maxZoomLevel).intersection(mapExtent);
     }
 
@@ -428,8 +254,8 @@ public interface TileMatrixSet {
      *
      * @return a new builder instance
      */
-    static Builder builder() {
-        return new Builder();
+    static TileMatrixSetBuilder builder() {
+        return new TileMatrixSetBuilder();
     }
 
     /**
@@ -438,7 +264,7 @@ public interface TileMatrixSet {
      *
      * @return a builder initialized with this tile matrix set's values
      */
-    default TileMatrixSet.Builder toBuilder() {
+    default TileMatrixSetBuilder toBuilder() {
         return StandardTileMatrixSet.toBuilder(this);
     }
 }

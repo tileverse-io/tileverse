@@ -16,6 +16,7 @@
 package io.tileverse.tiling.pyramid;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import io.tileverse.tiling.common.CornerOfOrigin;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -29,23 +30,23 @@ import java.util.Optional;
  */
 public abstract class TilePyramid {
 
-    private final AxisOrigin axisOrigin;
+    private final CornerOfOrigin cornerOfOrigin;
 
     /**
      * Default constructor for backward compatibility.
      * Uses LOWER_LEFT axis origin.
      */
     protected TilePyramid() {
-        this(AxisOrigin.LOWER_LEFT);
+        this(CornerOfOrigin.BOTTOM_LEFT);
     }
 
     /**
      * Constructor with explicit axis origin.
      *
-     * @param axisOrigin the axis origin for this pyramid
+     * @param cornerOfOrigin the axis origin for this pyramid
      */
-    protected TilePyramid(AxisOrigin axisOrigin) {
-        this.axisOrigin = axisOrigin != null ? axisOrigin : AxisOrigin.LOWER_LEFT;
+    protected TilePyramid(CornerOfOrigin cornerOfOrigin) {
+        this.cornerOfOrigin = cornerOfOrigin != null ? cornerOfOrigin : CornerOfOrigin.BOTTOM_LEFT;
     }
 
     /**
@@ -61,8 +62,8 @@ public abstract class TilePyramid {
      *
      * @return the axis origin
      */
-    public AxisOrigin axisOrigin() {
-        return axisOrigin;
+    public CornerOfOrigin cornerOfOrigin() {
+        return cornerOfOrigin;
     }
 
     /**
@@ -71,17 +72,17 @@ public abstract class TilePyramid {
      * @return an empty TilePyramid instance with LOWER_LEFT axis origin
      */
     public static TilePyramid empty() {
-        return new TilePyramidImpl(List.of(), AxisOrigin.LOWER_LEFT);
+        return new TilePyramidImpl(List.of(), CornerOfOrigin.BOTTOM_LEFT);
     }
 
     /**
      * Factory method to create an empty TilePyramid with axis origin.
      *
-     * @param axisOrigin the axis origin
+     * @param cornerOfOrigin the axis origin
      * @return an empty TilePyramid instance
      */
-    public static TilePyramid empty(AxisOrigin axisOrigin) {
-        return new TilePyramidImpl(List.of(), axisOrigin);
+    public static TilePyramid empty(CornerOfOrigin cornerOfOrigin) {
+        return new TilePyramidImpl(List.of(), cornerOfOrigin);
     }
 
     /**
@@ -91,18 +92,18 @@ public abstract class TilePyramid {
      * @return a new TilePyramid containing the specified range with LOWER_LEFT axis origin
      */
     public static TilePyramid of(TileRange range) {
-        return new TilePyramidImpl(List.of(range), AxisOrigin.LOWER_LEFT);
+        return new TilePyramidImpl(List.of(range), CornerOfOrigin.BOTTOM_LEFT);
     }
 
     /**
      * Factory method to create a TilePyramid from a single TileRange with axis origin.
      *
      * @param range the tile range to create a pyramid from
-     * @param axisOrigin the axis origin
+     * @param cornerOfOrigin the axis origin
      * @return a new TilePyramid containing the specified range
      */
-    public static TilePyramid of(TileRange range, AxisOrigin axisOrigin) {
-        return new TilePyramidImpl(List.of(range), axisOrigin);
+    public static TilePyramid of(TileRange range, CornerOfOrigin cornerOfOrigin) {
+        return new TilePyramidImpl(List.of(range), cornerOfOrigin);
     }
 
     /**
@@ -112,18 +113,18 @@ public abstract class TilePyramid {
      * @return a new TilePyramid containing the specified ranges with LOWER_LEFT axis origin
      */
     public static TilePyramid of(Collection<TileRange> ranges) {
-        return new TilePyramidImpl(ranges, AxisOrigin.LOWER_LEFT);
+        return new TilePyramidImpl(ranges, CornerOfOrigin.BOTTOM_LEFT);
     }
 
     /**
      * Factory method to create a TilePyramid from a collection of ranges with axis origin.
      *
      * @param ranges the tile ranges to include in the pyramid
-     * @param axisOrigin the axis origin
+     * @param cornerOfOrigin the axis origin
      * @return a new TilePyramid containing the specified ranges
      */
-    public static TilePyramid of(Collection<TileRange> ranges, AxisOrigin axisOrigin) {
-        return new TilePyramidImpl(ranges, axisOrigin);
+    public static TilePyramid of(Collection<TileRange> ranges, CornerOfOrigin cornerOfOrigin) {
+        return new TilePyramidImpl(ranges, cornerOfOrigin);
     }
 
     /**
@@ -144,18 +145,6 @@ public abstract class TilePyramid {
      */
     public long count() {
         return levels().stream().mapToLong(TileRange::count).reduce(0L, Math::addExact);
-    }
-
-    /**
-     * Returns the total number of meta-tiles across all zoom levels.
-     *
-     * @param width width of each meta-tile in tiles
-     * @param height height of each meta-tile in tiles
-     * @return the total number of meta-tiles in the pyramid
-     * @throws ArithmeticException if the total count would overflow Long.MAX_VALUE
-     */
-    public long countMetaTiles(int width, int height) {
-        return levels().stream().mapToLong(r -> r.countMetaTiles(width, height)).reduce(0L, Math::addExact);
     }
 
     /**
@@ -250,30 +239,6 @@ public abstract class TilePyramid {
     }
 
     /**
-     * Returns a meta-tile view of this pyramid where each tile represents a meta-tile.
-     * This is a view operation that projects the same data at a different granularity.
-     *
-     * @param tilesWide width of each meta-tile in tiles
-     * @param tilesHigh height of each meta-tile in tiles
-     * @return a TilePyramid view where each range represents meta-tiles
-     */
-    public TilePyramid asMetaTiles(final int tilesWide, final int tilesHigh) {
-        checkArgument(tilesWide > 0, "width must be > 0");
-        checkArgument(tilesHigh > 0, "height must be > 0");
-
-        return new MetaTileView(this, tilesWide, tilesHigh);
-    }
-
-    /**
-     * Returns an individual tile view of this pyramid where each range represents individual tiles.
-     * This is a view operation that converts meta-tile ranges to individual tile ranges.
-     * For pyramids already containing individual tile ranges, returns the same pyramid.
-     *
-     * @return a TilePyramid view where each range represents individual tiles
-     */
-    public abstract TilePyramid asTiles();
-
-    /**
      * Creates a subset of the pyramid starting from the specified minimum zoom level.
      *
      * @param minZLevel the minimum zoom level (inclusive) for the subset
@@ -323,10 +288,6 @@ public abstract class TilePyramid {
         return getClass().getSimpleName() + "{levels=" + levels() + "}";
     }
 
-    private static void checkArgument(boolean condition, String message) {
-        if (!condition) throw new IllegalArgumentException(message);
-    }
-
     /**
      * Returns a new builder for constructing TilePyramid instances.
      *
@@ -341,7 +302,7 @@ public abstract class TilePyramid {
      */
     public static class Builder {
         private final List<TileRange> ranges = new ArrayList<>();
-        private AxisOrigin axisOrigin = AxisOrigin.LOWER_LEFT;
+        private CornerOfOrigin cornerOfOrigin = CornerOfOrigin.BOTTOM_LEFT;
 
         /**
          * Adds a tile range to the pyramid.
@@ -386,11 +347,11 @@ public abstract class TilePyramid {
          * Sets the axis origin for the pyramid.
          * All tile ranges will be converted to this axis origin if needed.
          *
-         * @param axisOrigin the axis origin
+         * @param cornerOfOrigin the axis origin
          * @return this builder
          */
-        public Builder axisOrigin(AxisOrigin axisOrigin) {
-            this.axisOrigin = axisOrigin != null ? axisOrigin : AxisOrigin.LOWER_LEFT;
+        public Builder cornerOfOrigin(CornerOfOrigin cornerOfOrigin) {
+            this.cornerOfOrigin = cornerOfOrigin != null ? cornerOfOrigin : CornerOfOrigin.BOTTOM_LEFT;
             return this;
         }
 
@@ -404,10 +365,10 @@ public abstract class TilePyramid {
         public TilePyramid build() {
             // Convert all ranges to the pyramid's axis origin
             List<TileRange> convertedRanges = ranges.stream()
-                    .map(range -> range.withAxisOrigin(axisOrigin))
+                    .map(range -> range.withCornerOfOrigin(cornerOfOrigin))
                     .toList();
 
-            TilePyramid pyramid = new TilePyramidImpl(convertedRanges, axisOrigin);
+            TilePyramid pyramid = new TilePyramidImpl(convertedRanges, cornerOfOrigin);
             // Trigger overflow check by calling count()
             pyramid.count();
             return pyramid;
@@ -420,8 +381,8 @@ public abstract class TilePyramid {
     private static class TilePyramidImpl extends TilePyramid {
         private final List<TileRange> levels;
 
-        public TilePyramidImpl(Collection<TileRange> ranges, AxisOrigin axisOrigin) {
-            super(axisOrigin);
+        public TilePyramidImpl(Collection<TileRange> ranges, CornerOfOrigin cornerOfOrigin) {
+            super(cornerOfOrigin);
             if (ranges == null) {
                 throw new IllegalArgumentException("ranges cannot be null");
             }
@@ -432,53 +393,6 @@ public abstract class TilePyramid {
         @Override
         public List<TileRange> levels() {
             return levels;
-        }
-
-        @Override
-        public TilePyramid asTiles() {
-            return this; // TilePyramidImpl already contains individual tiles
-        }
-    }
-
-    /**
-     * A view of the pyramid where each tile represents a meta-tile.
-     * This class lazily converts individual tile ranges to meta-tile ranges.
-     */
-    private static class MetaTileView extends TilePyramid {
-        private final TilePyramid source;
-        private final int tilesWidth;
-        private final int tilesHigh;
-        private List<TileRange> metaLevels; // Lazy initialization
-
-        public MetaTileView(TilePyramid source, int tilesWidth, int tilesHigh) {
-            super(source.axisOrigin());
-            this.source = source;
-            this.tilesWidth = tilesWidth;
-            this.tilesHigh = tilesHigh;
-        }
-
-        @Override
-        public List<TileRange> levels() {
-            if (metaLevels == null) {
-                metaLevels = source.levels().stream()
-                        .map(this::convertToMetaTileRange)
-                        .toList();
-            }
-            return metaLevels;
-        }
-
-        private TileRange convertToMetaTileRange(TileRange tileRange) {
-            return TileRangeTransforms.toMetaTileRange(tileRange, tilesWidth, tilesHigh);
-        }
-
-        @Override
-        public TilePyramid asTiles() {
-            return source.asTiles(); // Recursively unwrap to individual tiles
-        }
-
-        @Override
-        public String toString() {
-            return "MetaTileView{" + tilesWidth + "x" + tilesHigh + ", source=" + source + "}";
         }
     }
 
@@ -494,7 +408,7 @@ public abstract class TilePyramid {
         private final int maxZLevel;
 
         public SubsetView(TilePyramid source, int minZLevel, int maxZLevel) {
-            super(source.axisOrigin());
+            super(source.cornerOfOrigin());
             this.source = source;
             this.minZLevel = minZLevel;
             this.maxZLevel = maxZLevel;
@@ -520,12 +434,6 @@ public abstract class TilePyramid {
         @Override
         public List<TileRange> levels() {
             return source.levels().subList(startIndex, endIndex);
-        }
-
-        @Override
-        public TilePyramid asTiles() {
-            // Convert source to individual tiles, then re-apply the same subset bounds
-            return source.asTiles().subset(minZLevel, maxZLevel);
         }
 
         @Override

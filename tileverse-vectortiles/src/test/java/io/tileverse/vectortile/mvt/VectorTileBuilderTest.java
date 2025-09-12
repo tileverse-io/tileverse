@@ -20,7 +20,7 @@ package io.tileverse.vectortile.mvt;
 
 import static io.tileverse.vectortile.mvt.TileAssertions.assertThat;
 
-import io.tileverse.vectortile.model.Tile;
+import io.tileverse.vectortile.model.VectorTile;
 import java.util.Map;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -41,7 +41,7 @@ class VectorTileBuilderTest {
         }
     }
 
-    private Tile build(String name, int extent, Geometry... geometries) {
+    private VectorTile build(String name, int extent, Geometry... geometries) {
         VectorTileBuilder builder = new VectorTileBuilder().setExtent(extent);
         LayerBuilder layer = builder.layer().name(name);
         Map<String, Object> attributes = Map.of();
@@ -56,7 +56,7 @@ class VectorTileBuilderTest {
         Geometry geometry = geom("LINESTRING(3 6, 8 12, 20 34)");
         Geometry geometry2 = geom("LINESTRING(3 6, 8 12, 20 34, 33 72)");
 
-        Tile tile = build("DEPCNT", 256, geometry, geometry2);
+        VectorTile tile = build("DEPCNT", 256, geometry, geometry2);
 
         // Test with the new hierarchical assertion API
         assertThat(tile)
@@ -85,7 +85,7 @@ class VectorTileBuilderTest {
         Geometry point = geom("POINT(5 7)");
         Geometry multiPoint = geom("MULTIPOINT((1 2), (3 4))");
 
-        Tile tile = build("POINTS", 256, point, multiPoint);
+        VectorTile tile = build("POINTS", 256, point, multiPoint);
 
         assertThat(tile)
                 .layer("POINTS")
@@ -109,7 +109,7 @@ class VectorTileBuilderTest {
         // Create a tile with multiple layers and features
         VectorTileBuilder vtm = new VectorTileBuilder().setExtent(4096);
 
-        Tile tile = vtm.layer()
+        VectorTile tile = vtm.layer()
                 .name("roads")
                 .feature(Map.of("highway", "primary", "name", "Main St"), geom("LINESTRING(0 0, 1600 1600)"))
                 .feature(Map.of("highway", "secondary"), geom("LINESTRING(50 0, 150 50)"))
@@ -161,7 +161,7 @@ class VectorTileBuilderTest {
         // Test the specific LINESTRING from the MVT spec example
         Geometry geometry = geom("LINESTRING(3 6, 8 12, 20 34)");
 
-        Tile tile = build("COMMANDS", 256, geometry);
+        VectorTile tile = build("COMMANDS", 256, geometry);
 
         assertThat(tile)
                 .layer("COMMANDS")
@@ -179,7 +179,7 @@ class VectorTileBuilderTest {
         // Test MULTIPOINT encoding as single MoveTo with count=2
         Geometry multiPoint = geom("MULTIPOINT((5 7), (3 2))");
 
-        Tile tile = build("MULTIPOINT", 256, multiPoint);
+        VectorTile tile = build("MULTIPOINT", 256, multiPoint);
 
         // According to MVT spec: MULTIPOINT uses single MoveTo with count > 1
         assertThat(tile)
@@ -210,7 +210,7 @@ class VectorTileBuilderTest {
                 .attribute("key3", "value3")
                 .geometry(geometry)
                 .build();
-        Tile tile = layer.build().build();
+        VectorTile tile = layer.build().build();
 
         assertThat(tile)
                 .layer("ATTRS")
@@ -247,7 +247,7 @@ class VectorTileBuilderTest {
                 .attribute("bool_false", false)
                 .build();
 
-        Tile tile = layer.build().build();
+        VectorTile tile = layer.build().build();
 
         assertThat(tile)
                 .layer("TYPES")
@@ -275,7 +275,7 @@ class VectorTileBuilderTest {
         VectorTileBuilder vtb = new VectorTileBuilder().setExtent(512);
         LayerBuilder layer = vtb.layer().name("SCALING");
         layer.feature(Map.of(), geometry);
-        Tile tile = layer.build().build();
+        VectorTile tile = layer.build().build();
 
         assertThat(tile)
                 .layer("SCALING")
@@ -292,7 +292,7 @@ class VectorTileBuilderTest {
         // Test that duplicate consecutive points are filtered during encoding
         Geometry geometry = geom("LINESTRING(3 6, 8 12, 8 12, 20 34)");
 
-        Tile tile = build("FILTER", 256, geometry);
+        VectorTile tile = build("FILTER", 256, geometry);
 
         assertThat(tile)
                 .layer("FILTER")
@@ -311,7 +311,7 @@ class VectorTileBuilderTest {
         // Test polygon with clockwise exterior ring
         Geometry polygon = geom("POLYGON((3 6, 20 34, 8 12, 3 6))");
 
-        Tile tile = build("CW_POLYGON", 256, polygon);
+        VectorTile tile = build("CW_POLYGON", 256, polygon);
 
         assertThat(tile)
                 .layer("CW_POLYGON")
@@ -331,7 +331,7 @@ class VectorTileBuilderTest {
         // Test polygon with counter-clockwise exterior ring
         Geometry polygon = geom("POLYGON((3 6, 8 12, 20 34, 3 6))");
 
-        Tile tile = build("CCW_POLYGON", 256, polygon);
+        VectorTile tile = build("CCW_POLYGON", 256, polygon);
 
         assertThat(tile)
                 .layer("CCW_POLYGON")
@@ -358,7 +358,7 @@ class VectorTileBuilderTest {
                 )
                 """);
 
-        Tile tile = build("CCW_POLYGON", 256, polygon);
+        VectorTile tile = build("CCW_POLYGON", 256, polygon);
 
         assertThat(tile)
                 .layer("CCW_POLYGON")
@@ -413,7 +413,7 @@ class VectorTileBuilderTest {
                 Boolean.FALSE);
 
         layer.feature(attributes, geometry);
-        Tile tile = layer.build().build();
+        VectorTile tile = layer.build().build();
 
         assertThat(tile)
                 .layer("ATTR_TYPES")
@@ -443,7 +443,7 @@ class VectorTileBuilderTest {
         Map<String, Object> attributes = Map.of("key1", "value1");
         layer.feature(attributes, geometry, 50); // Provide specific ID
 
-        Tile tile = layer.build().build();
+        VectorTile tile = layer.build().build();
 
         assertThat(tile)
                 .layer("PROVIDED_IDS")
@@ -472,7 +472,7 @@ class VectorTileBuilderTest {
         layer.feature(attributes2, geom("POINT(6 9)")); // Default ID (0)
         layer.feature(attributes3, geom("POINT(9 12)"), 27); // Another provided ID
 
-        Tile tile = layer.build().build();
+        VectorTile tile = layer.build().build();
 
         assertThat(tile)
                 .layer("MIXED_IDS")
@@ -499,7 +499,7 @@ class VectorTileBuilderTest {
         Map<String, Object> attributes = Map.of("key1", "value1");
         layer.feature(attributes, geom("POINT(3 6)")); // No ID provided
 
-        Tile tile = layer.build().build();
+        VectorTile tile = layer.build().build();
 
         assertThat(tile)
                 .layer("DEFAULT_IDS")
@@ -524,7 +524,7 @@ class VectorTileBuilderTest {
         VectorTileBuilder builder = new VectorTileBuilder().setExtent(256);
         Map<String, Object> attributes = Map.of("source", "collection", "type", "mixed");
 
-        Tile tile = builder.layer()
+        VectorTile tile = builder.layer()
                 .name("MIXED")
                 .feature(attributes, geomCollection)
                 .build()
@@ -578,7 +578,7 @@ class VectorTileBuilderTest {
         Geometry point = geom("POINT(4095.7 2048.3)");
         Geometry lineString = geom("LINESTRING(100.2 200.8, 300.6 400.4, 500.9 600.1)");
 
-        Tile tile = builder.layer()
+        VectorTile tile = builder.layer()
                 .name("PRECISION_TEST")
                 .feature(Map.of("type", "snapped"), point)
                 .feature(Map.of("type", "snapped"), lineString)
@@ -627,7 +627,7 @@ class VectorTileBuilderTest {
         // LineString completely outside - should be excluded
         Geometry lineStringOutside = geom("LINESTRING(5000 5000, 6000 6000)");
 
-        Tile tile = builder.layer()
+        VectorTile tile = builder.layer()
                 .name("CLIPPING_TEST")
                 .feature(Map.of("type", "in_buffer"), pointInBuffer)
                 .feature(Map.of("type", "outside_buffer"), pointOutsideBuffer)
@@ -666,7 +666,7 @@ class VectorTileBuilderTest {
     void testFourEqualPoints() {
         // Test that four identical points in a MULTIPOINT are encoded as MoveTo with count=4
         Geometry geom = geom("MULTIPOINT((3 6), (3 6), (3 6), (3 6))");
-        Tile tile = build("MP_DUPS", 256, geom);
+        VectorTile tile = build("MP_DUPS", 256, geom);
 
         // According to MVT spec: MULTIPOINT uses single MoveTo with count > 1
         assertThat(tile)

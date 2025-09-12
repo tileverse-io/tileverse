@@ -15,33 +15,38 @@
  */
 package io.tileverse.vectortile.mvt;
 
-import io.tileverse.vectortile.model.Feature;
-import io.tileverse.vectortile.model.Layer;
+import static java.util.Objects.requireNonNull;
+
+import io.tileverse.vectortile.model.GeometryReader;
+import io.tileverse.vectortile.model.VectorTile;
+import io.tileverse.vectortile.model.VectorTile.Layer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import org.locationtech.jts.geom.Geometry;
-import org.locationtech.jts.geom.GeometryFactory;
 
-final class MvtFeature implements Feature {
-
-    private static final Geometry UNSET = new GeometryFactory().createEmpty(0);
+final class MvtFeature implements VectorTile.Layer.Feature {
 
     final MvtLayer layer;
-    final VectorTileProto.Tile.Feature feature;
+    final VectorTileProto.Tile.Feature featureProto;
+    final GeometryReader decoder;
 
-    private Geometry geometry = UNSET;
+    /**
+     * Attribute name to value map, lazily created by {@link #buildValues()}
+     */
     private Map<String, Object> valueIndex;
 
-    public MvtFeature(MvtLayer layer, VectorTileProto.Tile.Feature feature) {
-        this.layer = Objects.requireNonNull(layer, "layer");
-        this.feature = Objects.requireNonNull(feature, "feature");
+    private Geometry geometry;
+
+    MvtFeature(MvtLayer layer, VectorTileProto.Tile.Feature feature, GeometryReader decoder) {
+        this.layer = requireNonNull(layer, "layer");
+        this.featureProto = requireNonNull(feature, "feature");
+        this.decoder = requireNonNull(decoder);
     }
 
     @Override
     public long getId() {
-        return feature.getId();
+        return featureProto.getId();
     }
 
     @Override
@@ -51,8 +56,8 @@ final class MvtFeature implements Feature {
 
     @Override
     public Geometry getGeometry() {
-        if (geometry == UNSET) {
-            geometry = layer.decoder().decode(feature);
+        if (geometry == null) {
+            geometry = decoder.decode(this);
         }
         return geometry;
     }
@@ -72,14 +77,14 @@ final class MvtFeature implements Feature {
 
     @Override
     public String toString() {
-        return feature.getType().toString() + GeometryDecoder.toString(this.feature.getGeometryList()) + " (id: "
-                + getId() + ")";
+        return featureProto.getType().toString() + GeometryDecoder.toString(this.featureProto.getGeometryList())
+                + " (id: " + getId() + ")";
     }
 
     private Map<String, Object> buildValues() {
         Map<String, Object> values = new HashMap<>();
-        VectorTileProto.Tile.Layer tileLayer = this.layer.layer();
-        List<Integer> tags = feature.getTagsList();
+        VectorTileProto.Tile.Layer tileLayer = this.layer.layerProto();
+        List<Integer> tags = featureProto.getTagsList();
         for (int i = 0; i < tags.size(); i += 2) {
             int keyTag = tags.get(i);
             int valueTag = tags.get(i + 1);

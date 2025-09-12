@@ -15,8 +15,8 @@
  */
 package io.tileverse.vectortile.mvt;
 
-import io.tileverse.vectortile.model.Feature;
-import io.tileverse.vectortile.model.Layer;
+import io.tileverse.vectortile.model.VectorTile.Layer;
+import io.tileverse.vectortile.model.VectorTile.Layer.Feature;
 import java.util.Arrays;
 import java.util.List;
 import org.assertj.core.api.AbstractAssert;

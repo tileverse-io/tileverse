@@ -24,14 +24,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.tileverse.vectortile.model.Feature;
-import io.tileverse.vectortile.model.Tile;
+import io.tileverse.vectortile.model.GeometryReader;
+import io.tileverse.vectortile.model.VectorTile;
+import io.tileverse.vectortile.model.VectorTile.Layer.Feature;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Predicate;
 import org.junit.jupiter.api.Test;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
@@ -91,7 +93,7 @@ class VectorTileCodecTest {
         Geometry line = geom("LINESTRING(0 0, 50 50, 100 0)");
 
         VectorTileBuilder builder = new VectorTileBuilder().setExtent(4096);
-        Tile tile = builder.layer()
+        VectorTile tile = builder.layer()
                 .name("test_layer")
                 .feature(Map.of("type", "point"), point)
                 .feature(Map.of("type", "line"), line)
@@ -101,23 +103,24 @@ class VectorTileCodecTest {
         byte[] encoded = codec.encode(tile);
 
         // Test 1: Default codec uses PackedCoordinateSequenceFactory
-        VectorTileCodec defaultCodec = new VectorTileCodec();
-        Tile decodedDefault = defaultCodec.decode(encoded);
+        VectorTileCodec codec = new VectorTileCodec();
+        VectorTile decoded = codec.decode(encoded);
 
         Feature defaultPointFeature =
-                decodedDefault.getFeatures("test_layer").findFirst().orElseThrow();
+                decoded.getFeatures("test_layer").findFirst().orElseThrow();
         Geometry defaultGeometry = defaultPointFeature.getGeometry();
 
         // Verify default uses PackedCoordinateSequenceFactory
-        assertThat(defaultGeometry.getFactory()).isSameAs(MvtTile.DEFAULT_GEOMETRY_FACTORY);
+        assertThat(defaultGeometry.getFactory()).isSameAs(GeometryDecoder.DEFAULT_GEOMETRY_FACTORY);
 
-        // Test 2: Custom codec with CoordinateArraySequenceFactory
+        // Test 2: Custom GeometryReader with CoordinateArraySequenceFactory
         GeometryFactory customFactory = new GeometryFactory(CoordinateArraySequenceFactory.instance());
-        VectorTileCodec customCodec = new VectorTileCodec(customFactory);
-        Tile decodedCustom = customCodec.decode(encoded);
+        GeometryReader geometryReader = VectorTileCodec.newGeometryReader().withGeometryFactory(customFactory);
 
-        Feature customPointFeature =
-                decodedCustom.getFeatures("test_layer").findFirst().orElseThrow();
+        Predicate<Feature> filter = f -> true;
+        Feature customPointFeature = decoded.getFeatures("test_layer", filter, geometryReader)
+                .findFirst()
+                .orElseThrow();
         Geometry customGeometry = customPointFeature.getGeometry();
 
         // Verify custom uses CoordinateArraySequenceFactory
@@ -130,8 +133,10 @@ class VectorTileCodecTest {
         assertThat(customGeometry.getCoordinate()).isEqualTo(defaultGeometry.getCoordinate());
 
         // Test LineString as well to verify factory is used for all geometry types
-        Feature customLineFeature =
-                decodedCustom.getFeatures("test_layer").skip(1).findFirst().orElseThrow();
+        Feature customLineFeature = decoded.getFeatures("test_layer", filter, geometryReader)
+                .skip(1)
+                .findFirst()
+                .orElseThrow();
         Geometry customLine = customLineFeature.getGeometry();
         assertThat(customLine.getFactory()).isSameAs(customFactory);
     }
@@ -201,7 +206,7 @@ class VectorTileCodecTest {
     @Test
     void testExternal() throws IOException {
         // from https://github.com/mapbox/vector-tile-js/tree/master/test/fixtures
-        Tile decoded = decodeClasspathResource("/14-8801-5371.vector.pbf");
+        VectorTile decoded = decodeClasspathResource("/14-8801-5371.vector.pbf");
 
         assertThat(decoded.getLayerNames())
                 .containsExactlyInAnyOrder(
@@ -258,7 +263,7 @@ class VectorTileCodecTest {
     private void testBigTile(int iterations) throws IOException {
         System.gc();
         long memoryStart = Runtime.getRuntime().totalMemory();
-        Tile tile = decodeClasspathResource("/bigtile.vector.pbf");
+        VectorTile tile = decodeClasspathResource("/bigtile.vector.pbf");
         Stopwatch sw = new Stopwatch();
         for (int i = 0; i < iterations; i++) {
             assertThat(tile.getFeatures().peek(f -> {
@@ -276,7 +281,7 @@ class VectorTileCodecTest {
 
     @Test
     void testLineWithOnePoint() throws IOException {
-        Tile tile = decodeClasspathResource("/cells-11-1065-567.mvt");
+        VectorTile tile = decodeClasspathResource("/cells-11-1065-567.mvt");
         assertThat(tile.getFeatures()).hasSize(306);
         List<Feature> list = tile.getFeatures().toList();
         for (int i = 0; i < list.size(); i++) {
@@ -289,7 +294,7 @@ class VectorTileCodecTest {
 
     @Test
     void testPolygonWithThreePointHole() throws IOException {
-        Tile tile = decodeClasspathResource("/cells-11-1058-568.mvt");
+        VectorTile tile = decodeClasspathResource("/cells-11-1058-568.mvt");
         assertThat(tile.getFeatures()).hasSize(699);
         List<Feature> features = tile.getFeatures().toList();
         for (Feature f : features) {
@@ -305,7 +310,7 @@ class VectorTileCodecTest {
         VectorTileBuilder builder = new VectorTileBuilder().setExtent(extent);
 
         // Add a degenerate polygon (zero area - should be discarded)
-        Tile built = builder.layer()
+        VectorTile built = builder.layer()
                 .name(layerName)
                 .feature(Map.of(), geom("POLYGON((5 5, 5 5, 5 5, 5 5))"))
                 // Add a valid polygon
@@ -322,7 +327,7 @@ class VectorTileCodecTest {
                 .build();
 
         byte[] data = codec.encode(built);
-        Tile tile = codec.decode(data);
+        VectorTile tile = codec.decode(data);
 
         List<Feature> features = tile.getFeatures().toList();
 
@@ -364,7 +369,7 @@ class VectorTileCodecTest {
         }
     }
 
-    private Tile decodeClasspathResource(String resource) throws IOException {
+    private VectorTile decodeClasspathResource(String resource) throws IOException {
         try (InputStream is = Objects.requireNonNull(getClass().getResourceAsStream(resource))) {
             return codec.decode(is);
         }
@@ -387,7 +392,7 @@ class VectorTileCodecTest {
         String layerName = "layer";
         byte[] encoded = encode(geometry, attributes, layerName);
 
-        Tile decoded = decode(encoded);
+        VectorTile decoded = decode(encoded);
 
         assertEquals(Set.of(layerName), decoded.getLayerNames());
 
@@ -404,13 +409,13 @@ class VectorTileCodecTest {
         return f;
     }
 
-    private Tile decode(byte[] encoded) throws IOException {
+    private VectorTile decode(byte[] encoded) throws IOException {
         return codec.decode(encoded);
     }
 
     private byte[] encode(Geometry geometry, Map<String, Object> attributes, String layerName) {
         VectorTileBuilder builder = new VectorTileBuilder().setExtent(extent);
-        Tile tile = builder.layer()
+        VectorTile tile = builder.layer()
                 .name(layerName)
                 .feature()
                 .geometry(geometry)

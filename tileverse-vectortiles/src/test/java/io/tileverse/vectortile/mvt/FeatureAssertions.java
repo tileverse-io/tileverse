@@ -17,8 +17,8 @@ package io.tileverse.vectortile.mvt;
 
 import static com.google.protobuf.CodedInputStream.decodeZigZag32;
 
-import io.tileverse.vectortile.model.Feature;
-import io.tileverse.vectortile.model.Layer;
+import io.tileverse.vectortile.model.VectorTile.Layer;
+import io.tileverse.vectortile.model.VectorTile.Layer.Feature;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -620,7 +620,7 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
 
         private VectorTileProto.Tile.Feature getProtoFeature() {
             if (feature instanceof io.tileverse.vectortile.mvt.MvtFeature mvtFeature) {
-                return (VectorTileProto.Tile.Feature) mvtFeature.feature;
+                return (VectorTileProto.Tile.Feature) mvtFeature.featureProto;
             }
             throw new UnsupportedOperationException("Geometry assertion only supports MvtFeature instances");
         }

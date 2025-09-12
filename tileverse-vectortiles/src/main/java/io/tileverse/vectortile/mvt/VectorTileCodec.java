@@ -16,17 +16,19 @@
 package io.tileverse.vectortile.mvt;
 
 import com.google.protobuf.CodedOutputStream;
-import io.tileverse.vectortile.model.Tile;
+import io.tileverse.vectortile.model.GeometryReader;
+import io.tileverse.vectortile.model.VectorTile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.function.UnaryOperator;
 import org.locationtech.jts.geom.GeometryFactory;
 
 /**
  * Codec for serializing and deserializing vector tiles between model objects and byte representations.
  * <p>
- * This class handles the conversion between the abstract {@link Tile} model and the MVT protobuf format,
+ * This class handles the conversion between the abstract {@link VectorTile} model and the MVT protobuf format,
  * without any coordinate transformations or scaling logic. The codec simply reads and writes data as-is.
  *
  * <h2>Design Philosophy</h2>
@@ -35,20 +37,35 @@ import org.locationtech.jts.geom.GeometryFactory;
  * the model and protobuf representations. Coordinates are always preserved in their natural extent space
  * as stored in the protobuf data.
  *
+ * <h2>Geometry Reading Customization</h2>
+ * <p>
+ * For advanced geometry reading with custom factories or transformations, use {@link #newGeometryReader()}
+ * to create a configurable {@link GeometryReader}:
+ * <pre>{@code
+ * // Create custom geometry reader with specific factory and transformations
+ * GeometryFactory customFactory = new GeometryFactory(new CoordinateArraySequenceFactory());
+ * GeometryReader geometryReader = VectorTileCodec.newGeometryReader()
+ *     .withGeometryFactory(customFactory)
+ *     .withGeometryTransformation(geometry -> transform(geometry));
+ *
+ * // Use with decoded tile to get features with custom geometry handling
+ * VectorTile decoded = codec.decode(data);
+ * Stream<Feature> features = decoded.getFeatures("layer_name", filter, geometryReader);
+ * }</pre>
+ *
  * <h2>Usage</h2>
  * <pre>{@code
- * // Default codec with PackedCoordinateSequenceFactory
+ * // Create codec instance
  * VectorTileCodec codec = new VectorTileCodec();
- *
- * // Codec with custom GeometryFactory
- * GeometryFactory customFactory = new GeometryFactory(new CoordinateArraySequenceFactory());
- * VectorTileCodec customCodec = new VectorTileCodec(customFactory);
  *
  * // Encode model to bytes
  * byte[] encoded = codec.encode(tile);
  *
- * // Decode bytes to model (coordinates in extent space using specified GeometryFactory)
- * Tile decoded = codec.decode(encoded);
+ * // Decode bytes to model (coordinates in extent space)
+ * VectorTile decoded = codec.decode(encoded);
+ *
+ * // Get features with default geometry reading
+ * Stream<Feature> features = decoded.getFeatures("layer_name", feature -> true);
  * }</pre>
  *
  * <h2>Thread Safety</h2>
@@ -56,41 +73,21 @@ import org.locationtech.jts.geom.GeometryFactory;
  * This class is thread-safe and can be shared across multiple threads.
  *
  * @see VectorTileBuilder for creating tile models
+ * @see GeometryReader for custom geometry reading configuration
  */
 public class VectorTileCodec {
-
-    private final GeometryFactory geometryFactory;
-
-    /**
-     * Create a new VectorTileCodec instance with default GeometryFactory.
-     */
-    public VectorTileCodec() {
-        this(null);
-    }
-
-    /**
-     * Create a new VectorTileCodec instance with a specific GeometryFactory.
-     * <p>
-     * The GeometryFactory will be used when decoding MVT data to create geometries.
-     * If null, a default GeometryFactory will be used.
-     *
-     * @param geometryFactory the GeometryFactory to use for decoding geometries, or null for default
-     */
-    public VectorTileCodec(GeometryFactory geometryFactory) {
-        this.geometryFactory = geometryFactory;
-    }
 
     // ========== Encoding Methods ==========
 
     /**
      * Encodes a tile model to a byte array.
      * <p>
-     * Use {@link #encode(Tile, OutputStream)} or {@link #encode(Tile, ByteBuffer)} for better performance.
+     * Use {@link #encode(VectorTile, OutputStream)} or {@link #encode(VectorTile, ByteBuffer)} for better performance.
      *
      * @param tile the tile model to encode
      * @return the encoded vector tile as a byte array
      */
-    public byte[] encode(Tile tile) {
+    public byte[] encode(VectorTile tile) {
         VectorTileProto.Tile proto = getProto(tile);
         return proto.toByteArray();
     }
@@ -103,7 +100,7 @@ public class VectorTileCodec {
      * @param outputStream the stream to write the encoded tile to
      * @throws IOException if writing to the stream fails
      */
-    public void encode(Tile tile, OutputStream outputStream) throws IOException {
+    public void encode(VectorTile tile, OutputStream outputStream) throws IOException {
         VectorTileProto.Tile proto = getProto(tile);
         proto.writeTo(outputStream);
     }
@@ -119,7 +116,7 @@ public class VectorTileCodec {
      *         containing the {@link InsufficientBufferException#getSerializedSize() required size} for proper buffer allocation
      * @throws IOException if encoding fails for other reasons
      */
-    public void encode(Tile tile, ByteBuffer buffer) throws InsufficientBufferException, IOException {
+    public void encode(VectorTile tile, ByteBuffer buffer) throws InsufficientBufferException, IOException {
         VectorTileProto.Tile proto = getProto(tile);
         int serializedSize = proto.getSerializedSize();
 
@@ -142,7 +139,7 @@ public class VectorTileCodec {
      * @param tile the tile model to calculate size for
      * @return the size in bytes that the encoded tile will occupy
      */
-    public int getSerializedSize(Tile tile) {
+    public int getSerializedSize(VectorTile tile) {
         VectorTileProto.Tile proto = getProto(tile);
         return proto.getSerializedSize();
     }
@@ -158,7 +155,7 @@ public class VectorTileCodec {
      * @return the decoded tile model
      * @throws IOException if decoding fails
      */
-    public Tile decode(byte[] data) throws IOException {
+    public VectorTile decode(byte[] data) throws IOException {
         return decode(ByteBuffer.wrap(data));
     }
     /**
@@ -170,9 +167,9 @@ public class VectorTileCodec {
      * @return the decoded tile model
      * @throws IOException if decoding fails
      */
-    public Tile decode(ByteBuffer data) throws IOException {
+    public VectorTile decode(ByteBuffer data) throws IOException {
         VectorTileProto.Tile tile = VectorTileProto.Tile.parseFrom(data);
-        return new MvtTile(tile, geometryFactory);
+        return new MvtTile(tile);
     }
 
     /**
@@ -186,9 +183,9 @@ public class VectorTileCodec {
      * @return the decoded tile model
      * @throws IOException if decoding fails
      */
-    public Tile decode(InputStream data) throws IOException {
+    public VectorTile decode(InputStream data) throws IOException {
         VectorTileProto.Tile tile = VectorTileProto.Tile.parseFrom(data);
-        return new MvtTile(tile, geometryFactory);
+        return new MvtTile(tile);
     }
 
     // ========== Private Helper Methods ==========
@@ -199,11 +196,58 @@ public class VectorTileCodec {
      * @param tile the model tile
      * @return the protobuf tile
      */
-    private VectorTileProto.Tile getProto(Tile tile) {
+    private VectorTileProto.Tile getProto(VectorTile tile) {
         if (tile instanceof MvtTile mvt) {
-            return mvt.tile;
+            return mvt.tileProto();
         }
         // TODO: build an MvtTile from a generic Tile
         throw new UnsupportedOperationException("Generic Tile to MVT conversion not yet implemented");
+    }
+
+    /**
+     * Creates a new configurable geometry reader for advanced geometry processing.
+     * <p>
+     * The returned {@link GeometryReader} can be customized with:
+     * <ul>
+     * <li>{@link GeometryReader#withGeometryFactory(GeometryFactory)} - specify a custom JTS GeometryFactory</li>
+     * <li>{@link GeometryReader#withGeometryTransformation(UnaryOperator)} - apply coordinate transformations</li>
+     * </ul>
+     *
+     * <h3>Usage Examples</h3>
+     * <pre>{@code
+     * // Custom GeometryFactory with specific coordinate sequence implementation
+     * GeometryFactory customFactory = new GeometryFactory(new CoordinateArraySequenceFactory());
+     * GeometryReader reader = VectorTileCodec.newGeometryReader()
+     *     .withGeometryFactory(customFactory);
+     *
+     * // Apply coordinate transformation (e.g., scale from tile extent to world coordinates)
+     * GeometryReader transformingReader = VectorTileCodec.newGeometryReader()
+     *     .withGeometryTransformation(geometry -> {
+     *         // Transform coordinates from tile extent (0-4095) to world coordinates
+     *         AffineTransformation transform = new AffineTransformation();
+     *         transform.scale(worldBounds.getWidth() / 4096.0, worldBounds.getHeight() / 4096.0);
+     *         transform.translate(worldBounds.getMinX(), worldBounds.getMinY());
+     *         return transform.transform(geometry);
+     *         // or rather, apply the transformation directly to the geometry's CoordinateSequences:
+     *         // geometry.apply(transform);
+     *         // return geometry;
+     *     });
+     *
+     * // Chain multiple transformations
+     * GeometryReader chainedReader = VectorTileCodec.newGeometryReader()
+     *     .withGeometryFactory(customFactory)
+     *     .withGeometryTransformation(GeometryReader.concat(
+     *         scaleTransform,
+     *         translateTransform,
+     *         customTransform
+     *     ));
+     * }</pre>
+     *
+     * @return a new configurable GeometryReader instance
+     * @see GeometryReader#withGeometryFactory(GeometryFactory)
+     * @see GeometryReader#withGeometryTransformation(UnaryOperator)
+     */
+    public static GeometryReader newGeometryReader() {
+        return new GeometryDecoder();
     }
 }

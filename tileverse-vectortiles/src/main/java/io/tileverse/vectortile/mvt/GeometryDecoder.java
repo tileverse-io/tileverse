@@ -18,9 +18,12 @@ package io.tileverse.vectortile.mvt;
 import static com.google.protobuf.CodedInputStream.decodeZigZag32;
 
 import com.google.protobuf.Internal.IntList;
+import io.tileverse.vectortile.model.GeometryReader;
+import io.tileverse.vectortile.model.VectorTile;
 import io.tileverse.vectortile.mvt.VectorTileProto.Tile.GeomType;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.UnaryOperator;
 import org.locationtech.jts.algorithm.Area;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.CoordinateSequence;
@@ -29,6 +32,8 @@ import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.LinearRing;
 import org.locationtech.jts.geom.Polygon;
+import org.locationtech.jts.geom.impl.PackedCoordinateSequenceFactory;
+import org.locationtech.jts.geom.util.AffineTransformation;
 
 /**
  * Optimized MVT geometry decoder that minimizes memory allocations and coordinate access.
@@ -38,7 +43,14 @@ import org.locationtech.jts.geom.Polygon;
  *
  * @param gf the JTS GeometryFactory used to create geometries and coordinate sequences
  */
-public record GeometryDecoder(GeometryFactory gf) {
+record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) implements GeometryReader {
+
+    public static final GeometryFactory DEFAULT_GEOMETRY_FACTORY =
+            new GeometryFactory(new PackedCoordinateSequenceFactory());
+
+    public GeometryDecoder() {
+        this(DEFAULT_GEOMETRY_FACTORY, UnaryOperator.identity());
+    }
 
     /**
      * Ring orientation for polygon construction.
@@ -61,22 +73,67 @@ public record GeometryDecoder(GeometryFactory gf) {
     private static record Part(int start, int length, Orientation orientation) {}
 
     /**
+     * Returns an instance with the same geometry factory and an in-place coordinate
+     * transformation that converts coordinates from one extent to the other.
+     * <p>
+     * For example, to convert geometries in a tile's internal coordinate extent of {@code 4096x4096}
+     * to a standard tile size of {@code 256x256}, use
+     * {@code withExtentScaling(4096, 256)}
+     *
+     * @param fromExtent the original coordinate space extent (e.g. {@code 4096})
+     * @param toExtent   the target coordinate space extent (e.g. {@code 256})
+     * @return a scaling geometry decoder using an affine transformation to scale from the source extent to the target extent
+     * @see #withAffineTransformation
+     */
+    public GeometryReader withExtentScaling(int fromExtent, int toExtent) {
+        double scaleFactor = (double) toExtent / fromExtent;
+        AffineTransformation scaleInstance = AffineTransformation.scaleInstance(scaleFactor, scaleFactor);
+        return withAffineTransformation(scaleInstance);
+    }
+
+    @Override
+    public GeometryReader withGeometryFactory(GeometryFactory geometryFactory) {
+        return new GeometryDecoder(geometryFactory, transform());
+    }
+
+    @Override
+    public GeometryReader withGeometryTransformation(UnaryOperator<Geometry> transform) {
+        return new GeometryDecoder(gf(), transform);
+    }
+
+    public GeometryReader withAffineTransformation(AffineTransformation transform) {
+        return withGeometryTransformation(GeometryReader.toFunction(transform));
+    }
+
+    @Override
+    public Geometry decode(VectorTile.Layer.Feature feature) {
+        return decode(((MvtFeature) feature).featureProto);
+    }
+
+    public Geometry decode(VectorTileProto.Tile.Feature feature) {
+        return decode(feature, gf());
+    }
+
+    /**
      * Decodes the MVT feature into a JTS Geometry.
      * @return the decoded geometry
      */
-    public Geometry decode(VectorTileProto.Tile.Feature feature) {
+    public Geometry decode(VectorTileProto.Tile.Feature feature, GeometryFactory gf) {
 
         // empyric sizing with profiler's aid
         List<Part> parts = new ArrayList<>(feature.getGeometryCount() / 3);
-        CoordinateSequence allCoords = extractAllCoordinates(feature, parts);
+        CoordinateSequence allCoords = extractAllCoordinates(feature, parts, gf);
 
         final GeomType type = feature.getType();
-        return switch (type) {
-            case POINT -> decodePoint(allCoords);
-            case LINESTRING -> decodeLineString(parts, allCoords);
-            case POLYGON -> decodePolygon(parts, allCoords);
-            default -> gf.createGeometryCollection();
-        };
+        final Geometry decoded =
+                switch (type) {
+                    case POINT -> decodePoint(allCoords, gf);
+                    case LINESTRING -> decodeLineString(parts, allCoords, gf);
+                    case POLYGON -> decodePolygon(parts, allCoords, gf);
+                    default -> gf.createGeometryCollection();
+                };
+
+        return transform.apply(decoded);
     }
 
     /**
@@ -86,9 +143,11 @@ public record GeometryDecoder(GeometryFactory gf) {
      * For other geometries, creates separate parts for each ring/line.
      * @param feature
      * @param parts output list to store geometry parts with pre-computed orientations
+     * @param gf
      * @return coordinate sequence containing all decoded coordinates
      */
-    private CoordinateSequence extractAllCoordinates(VectorTileProto.Tile.Feature feature, List<Part> parts) {
+    private CoordinateSequence extractAllCoordinates(
+            VectorTileProto.Tile.Feature feature, List<Part> parts, GeometryFactory gf) {
         final GeomType geomType = feature.getType();
         final IntList commands = (IntList) feature.getGeometryList();
         final int cmdCount = commands.size();
@@ -198,7 +257,7 @@ public record GeometryDecoder(GeometryFactory gf) {
      * @param coords the coordinate sequence
      * @return Point for single coordinate, MultiPoint for multiple coordinates
      */
-    private Geometry decodePoint(CoordinateSequence coords) {
+    private Geometry decodePoint(CoordinateSequence coords, GeometryFactory gf) {
         return switch (coords.size()) {
             case 0 -> gf.createPoint();
             case 1 -> gf.createPoint(coords);
@@ -212,11 +271,11 @@ public record GeometryDecoder(GeometryFactory gf) {
      * @param allCoords coordinate sequence containing all coordinates
      * @return LineString, MultiLineString, or empty LineString
      */
-    private Geometry decodeLineString(List<Part> parts, CoordinateSequence allCoords) {
+    private Geometry decodeLineString(List<Part> parts, CoordinateSequence allCoords, GeometryFactory gf) {
         return switch (parts.size()) {
             case 0 -> gf.createLineString();
             case 1 -> gf.createLineString(allCoords);
-            default -> createMultiLineString(parts, allCoords);
+            default -> createMultiLineString(parts, allCoords, gf);
         };
     }
 
@@ -226,11 +285,11 @@ public record GeometryDecoder(GeometryFactory gf) {
      * @param allCoords coordinate sequence containing all coordinates
      * @return Polygon, MultiPolygon, or empty Polygon
      */
-    private Geometry decodePolygon(List<Part> parts, CoordinateSequence allCoords) {
+    private Geometry decodePolygon(List<Part> parts, CoordinateSequence allCoords, GeometryFactory gf) {
         return switch (parts.size()) {
             case 0 -> gf.createPolygon();
             case 1 -> gf.createPolygon(allCoords); // simple case, single outer shell
-            default -> buildComplexPolygon(parts, allCoords);
+            default -> buildComplexPolygon(parts, allCoords, gf);
         };
     }
 
@@ -240,9 +299,9 @@ public record GeometryDecoder(GeometryFactory gf) {
      * @param allCoords coordinate sequence containing all coordinates
      * @return MultiLineString or simplified geometry if possible
      */
-    private Geometry createMultiLineString(List<Part> parts, CoordinateSequence allCoords) {
+    private Geometry createMultiLineString(List<Part> parts, CoordinateSequence allCoords, GeometryFactory gf) {
         LineString[] lines = parts.stream()
-                .map(p -> createSubSequence(p, allCoords))
+                .map(p -> createSubSequence(p, allCoords, gf))
                 .map(gf::createLineString)
                 .toArray(LineString[]::new);
         return gf.createMultiLineString(lines);
@@ -257,7 +316,7 @@ public record GeometryDecoder(GeometryFactory gf) {
      * @param allCoords coordinate sequence containing all coordinates
      * @return MultiPolygon or single Polygon
      */
-    private Geometry buildComplexPolygon(List<Part> parts, CoordinateSequence allCoords) {
+    private Geometry buildComplexPolygon(List<Part> parts, CoordinateSequence allCoords, GeometryFactory gf) {
         final int partCount = parts.size();
 
         // Create all rings - all parts are valid
@@ -265,7 +324,7 @@ public record GeometryDecoder(GeometryFactory gf) {
         Orientation firstRingOrientation = parts.get(0).orientation();
 
         for (int partIndex = 0; partIndex < partCount; partIndex++) {
-            final CoordinateSequence ringSeq = createSubSequence(parts.get(partIndex), allCoords);
+            final CoordinateSequence ringSeq = createSubSequence(parts.get(partIndex), allCoords, gf);
             allRings[partIndex] = gf.createLinearRing(ringSeq);
         }
 
@@ -350,7 +409,7 @@ public record GeometryDecoder(GeometryFactory gf) {
      * @param allCoords full coordinate sequence
      * @return coordinate subsequence for the specified part
      */
-    private CoordinateSequence createSubSequence(Part part, CoordinateSequence allCoords) {
+    private CoordinateSequence createSubSequence(Part part, CoordinateSequence allCoords, GeometryFactory gf) {
         return new SubCoordinateSequence(allCoords, part.start(), part.length(), gf.getCoordinateSequenceFactory());
     }
 

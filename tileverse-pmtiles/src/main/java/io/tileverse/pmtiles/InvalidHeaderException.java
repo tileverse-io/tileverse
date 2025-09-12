@@ -15,11 +15,13 @@
  */
 package io.tileverse.pmtiles;
 
+import java.io.IOException;
+
 /**
  * Exception thrown when a PMTiles header is invalid.
  */
 @SuppressWarnings("serial")
-public class InvalidHeaderException extends Exception {
+public class InvalidHeaderException extends IOException {
 
     /**
      * Constructs a new exception with the specified detail message.

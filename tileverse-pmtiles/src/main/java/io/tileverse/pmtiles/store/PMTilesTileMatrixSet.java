@@ -13,10 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.pmtiles;
+package io.tileverse.pmtiles.store;
 
+import io.tileverse.pmtiles.PMTilesHeader;
+import io.tileverse.pmtiles.PMTilesReader;
+import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.matrix.DefaultTileMatrixSets;
-import io.tileverse.tiling.matrix.Extent;
 import io.tileverse.tiling.matrix.TileMatrixSet;
 
 /**
@@ -28,9 +30,17 @@ import io.tileverse.tiling.matrix.TileMatrixSet;
  */
 public class PMTilesTileMatrixSet {
 
-    // Constants for WebMercator coordinate transformation
-    private static final double EARTH_RADIUS = 6378137.0; // WGS84 semi-major axis
-    private static final double ORIGIN_SHIFT = Math.PI * EARTH_RADIUS;
+    /**
+     * Creates a WebMercator TileMatrixSet from a PMTilesReader.
+     * Convenience method that extracts the header and creates the tile matrix set.
+     *
+     * @param pmtilesReader the PMTiles reader
+     * @return a TileMatrixSet covering the PMTiles zoom range
+     * @throws IllegalArgumentException if the zoom range is invalid
+     */
+    public static TileMatrixSet fromWebMercator(PMTilesReader pmtilesReader) {
+        return fromWebMercator(pmtilesReader.getHeader());
+    }
 
     /**
      * Creates a WebMercator TileMatrixSet that matches both the zoom level range
@@ -46,10 +56,9 @@ public class PMTilesTileMatrixSet {
      * @throws IllegalArgumentException if the zoom range is invalid
      */
     public static TileMatrixSet fromWebMercator(PMTilesHeader pmtilesHeader) {
-        // Convert PMTiles lat/lon bounds to WebMercator extent
-        Extent webMercatorExtent = latLonToWebMercator(
-                pmtilesHeader.minLon(), pmtilesHeader.minLat(),
-                pmtilesHeader.maxLon(), pmtilesHeader.maxLat());
+        // Convert PMTiles lat/lon bounds to WebMercator extent using precise transformation
+        BoundingBox2D webMercatorExtent =
+                WebMercatorTransform.latLonToWebMercator(pmtilesHeader.geographicBoundingBox());
 
         // Get zoom-level subset and spatial intersection in one step
         TileMatrixSet baseTms = DefaultTileMatrixSets.WEB_MERCATOR_QUAD.toBuilder()
@@ -69,10 +78,9 @@ public class PMTilesTileMatrixSet {
      * @throws IllegalArgumentException if the zoom range is invalid
      */
     public static TileMatrixSet fromWebMercator512(PMTilesHeader pmtilesHeader) {
-        // Convert PMTiles lat/lon bounds to WebMercator extent
-        Extent webMercatorExtent = latLonToWebMercator(
-                pmtilesHeader.minLon(), pmtilesHeader.minLat(),
-                pmtilesHeader.maxLon(), pmtilesHeader.maxLat());
+        // Convert PMTiles lat/lon bounds to WebMercator extent using precise transformation
+        BoundingBox2D webMercatorExtent =
+                WebMercatorTransform.latLonToWebMercator(pmtilesHeader.geographicBoundingBox());
 
         // Get zoom-level subset and spatial intersection
         TileMatrixSet baseTms = DefaultTileMatrixSets.WEB_MERCATOR_QUADx2.toBuilder()
@@ -93,9 +101,7 @@ public class PMTilesTileMatrixSet {
      */
     public static TileMatrixSet fromCRS84(PMTilesHeader pmtilesHeader) {
         // PMTiles bounds are already in lat/lon, create extent directly
-        Extent latLonExtent = Extent.of(
-                pmtilesHeader.minLon(), pmtilesHeader.minLat(),
-                pmtilesHeader.maxLon(), pmtilesHeader.maxLat());
+        BoundingBox2D latLonExtent = pmtilesHeader.geographicBoundingBox();
 
         // Get zoom-level subset and spatial intersection
         TileMatrixSet baseTms = DefaultTileMatrixSets.WORLD_CRS84_QUAD.toBuilder()
@@ -103,18 +109,6 @@ public class PMTilesTileMatrixSet {
                 .build();
 
         return baseTms.intersection(latLonExtent).orElse(baseTms);
-    }
-
-    /**
-     * Creates a WebMercator TileMatrixSet from a PMTilesReader.
-     * Convenience method that extracts the header and creates the tile matrix set.
-     *
-     * @param pmtilesReader the PMTiles reader
-     * @return a TileMatrixSet covering the PMTiles zoom range
-     * @throws IllegalArgumentException if the zoom range is invalid
-     */
-    public static TileMatrixSet fromWebMercator(PMTilesReader pmtilesReader) {
-        return fromWebMercator(pmtilesReader.getHeader());
     }
 
     /**
@@ -127,31 +121,5 @@ public class PMTilesTileMatrixSet {
      */
     public static TileMatrixSet fromCRS84(PMTilesReader pmtilesReader) {
         return fromCRS84(pmtilesReader.getHeader());
-    }
-
-    /**
-     * Converts lat/lon coordinates to WebMercator (EPSG:3857) extent.
-     * Uses the spherical Mercator projection formula.
-     *
-     * @param minLon minimum longitude in degrees
-     * @param minLat minimum latitude in degrees
-     * @param maxLon maximum longitude in degrees
-     * @param maxLat maximum latitude in degrees
-     * @return WebMercator extent in meters
-     */
-    private static Extent latLonToWebMercator(double minLon, double minLat, double maxLon, double maxLat) {
-        // Clamp latitude to valid Mercator range
-        minLat = Math.max(-85.0511, Math.min(85.0511, minLat));
-        maxLat = Math.max(-85.0511, Math.min(85.0511, maxLat));
-
-        // Convert longitude to WebMercator X
-        double minX = minLon * ORIGIN_SHIFT / 180.0;
-        double maxX = maxLon * ORIGIN_SHIFT / 180.0;
-
-        // Convert latitude to WebMercator Y using spherical Mercator formula
-        double minY = Math.log(Math.tan((90.0 + minLat) * Math.PI / 360.0)) * EARTH_RADIUS;
-        double maxY = Math.log(Math.tan((90.0 + maxLat) * Math.PI / 360.0)) * EARTH_RADIUS;
-
-        return Extent.of(minX, minY, maxX, maxY);
     }
 }

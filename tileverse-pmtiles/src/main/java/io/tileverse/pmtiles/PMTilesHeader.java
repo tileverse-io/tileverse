@@ -15,11 +15,14 @@
  */
 package io.tileverse.pmtiles;
 
-import io.tileverse.rangereader.ByteRange;
+import io.tileverse.io.ByteBufferPool;
+import io.tileverse.io.ByteRange;
+import io.tileverse.tiling.common.BoundingBox2D;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
@@ -151,6 +154,12 @@ public record PMTilesHeader(
      */
     public double centerLat() {
         return centerLatE7 / 10_000_000.0;
+    }
+
+    public BoundingBox2D geographicBoundingBox() {
+        return BoundingBox2D.extent(
+                minLon(), minLat(),
+                maxLon(), maxLat());
     }
 
     /**
@@ -526,5 +535,21 @@ public record PMTilesHeader(
         final long offset = tileDataOffset() + tileEntry.offset();
         final int length = tileEntry.length();
         return ByteRange.of(offset, length);
+    }
+
+    static PMTilesHeader readHeader(ReadableByteChannel channel) throws IOException, InvalidHeaderException {
+        // Read the header
+        ByteBuffer headerBuffer = ByteBufferPool.getDefault().borrowHeap(127);
+        try {
+            int bytesRead = channel.read(headerBuffer);
+            if (bytesRead != 127) {
+                throw new InvalidHeaderException("Failed to read complete header. Read " + bytesRead + " bytes");
+            }
+            headerBuffer.flip();
+            // Deserialize the header directly from the ByteBuffer
+            return deserialize(headerBuffer);
+        } finally {
+            ByteBufferPool.getDefault().returnBuffer(headerBuffer);
+        }
     }
 }

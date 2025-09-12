@@ -15,11 +15,11 @@
  */
 package io.tileverse.pmtiles;
 
+import io.tileverse.pmtiles.PMTilesDirectory.Builder;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -97,35 +97,30 @@ final class DirectoryUtil {
      * @return the list of directory entries
      * @throws IOException if an I/O error occurs or the data is malformed
      */
-    public static List<PMTilesEntry> deserializeDirectory(ByteBuffer buffer) throws IOException {
+    public static PMTilesDirectory deserializeDirectory(ByteBuffer buffer) throws IOException {
 
         // Read number of entries
-        long numEntries = readVarint(buffer);
-
-        // Create array of builders for incremental construction
-        PMTilesEntry.Builder[] builders = new PMTilesEntry.Builder[(int) numEntries];
-        for (int i = 0; i < numEntries; i++) {
-            builders[i] = PMTilesEntry.builder();
-        }
+        final int numEntries = (int) readVarint(buffer);
+        Builder builder = PMTilesDirectory.builder(numEntries);
 
         // Read tile IDs (delta encoded)
         long lastId = 0;
         for (int i = 0; i < numEntries; i++) {
             long tileId = lastId + readVarint(buffer);
             lastId = tileId;
-            builders[i].tileId(tileId);
+            builder.tileId(i, tileId);
         }
 
         // Read run lengths
         for (int i = 0; i < numEntries; i++) {
             int runLength = (int) readVarint(buffer);
-            builders[i].runLength(runLength);
+            builder.runLength(i, runLength);
         }
 
         // Read lengths
         for (int i = 0; i < numEntries; i++) {
             int length = (int) readVarint(buffer);
-            builders[i].length(length);
+            builder.length(i, length);
         }
 
         // Read offsets (with optimization for consecutive entries)
@@ -135,24 +130,20 @@ final class DirectoryUtil {
 
             if (i > 0 && tmp == 0) {
                 // Consecutive optimization: offset = previous entry's offset + length
-                PMTilesEntry.Builder previousBuilder = builders[i - 1];
-                offset = previousBuilder.getOffset() + previousBuilder.getLength();
+                long previousOffset = builder.getOffset(i - 1);
+                int previousLength = builder.getLength(i - 1);
+                offset = previousOffset + previousLength;
             } else {
                 offset = tmp - 1;
             }
-            builders[i].offset(offset);
+            builder.offset(i, offset);
         }
-
-        // Build final entries from builders
-        List<PMTilesEntry> entries =
-                Arrays.stream(builders).map(PMTilesEntry.Builder::build).toList();
-
         // Ensure we've consumed the entire buffer
         if (buffer.hasRemaining()) {
             throw new IOException("Malformed PMTiles directory: additional data at end of buffer");
         }
 
-        return entries;
+        return builder.build();
     }
 
     /**

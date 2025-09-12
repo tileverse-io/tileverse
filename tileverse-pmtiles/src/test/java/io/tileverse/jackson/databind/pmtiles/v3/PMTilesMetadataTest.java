@@ -15,7 +15,6 @@
  */
 package io.tileverse.jackson.databind.pmtiles.v3;
 
-import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -25,17 +24,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.tileverse.jackson.databind.tilejson.v3.TilesetType;
 import io.tileverse.jackson.databind.tilejson.v3.VectorLayer;
 import io.tileverse.pmtiles.PMTilesReader;
-import io.tileverse.rangereader.RangeReader;
-import io.tileverse.rangereader.file.FileRangeReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
+import io.tileverse.pmtiles.PMTilesTestData;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -46,15 +40,8 @@ class PMTilesMetadataTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    protected static Path andorraPmTiles;
-
-    @BeforeAll
-    static void copyTestData(@TempDir Path tmpFolder) throws IOException {
-        try (InputStream in = requireNonNull(PMTilesMetadataTest.class.getResourceAsStream("/andorra.pmtiles"))) {
-            andorraPmTiles = tmpFolder.resolve("andorra.pmtiles");
-            Files.copy(in, andorraPmTiles);
-        }
-    }
+    @TempDir
+    static Path tmpFolder;
 
     @Test
     void testSimpleMetadataDeserialization() throws Exception {
@@ -301,46 +288,43 @@ class PMTilesMetadataTest {
     @Test
     void testAndorraMetadata() throws Exception {
         // Use the same test file as PMTilesReaderTest
-        try (RangeReader rangeReader = FileRangeReader.of(andorraPmTiles);
-                PMTilesReader pmtilesReader = new PMTilesReader(rangeReader)) {
+        PMTilesReader pmtilesReader = new PMTilesReader(PMTilesTestData.andorra(tmpFolder));
+        PMTilesMetadata metadata = pmtilesReader.getMetadata();
+        assertNotNull(metadata);
 
-            PMTilesMetadata metadata = pmtilesReader.getMetadata();
-            assertNotNull(metadata);
+        // Verify basic metadata fields that should be present per PMTiles spec
+        assertEquals("Shortbread", metadata.name());
+        assertEquals(
+                "A basic, lean, general-purpose vector tile schema for OpenStreetMap data. See https://shortbread.geofabrik.de/",
+                metadata.description());
+        assertEquals(
+                "<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">&copy; OpenStreetMap contributors</a>",
+                metadata.attribution());
 
-            // Verify basic metadata fields that should be present per PMTiles spec
-            assertEquals("Shortbread", metadata.name());
-            assertEquals(
-                    "A basic, lean, general-purpose vector tile schema for OpenStreetMap data. See https://shortbread.geofabrik.de/",
-                    metadata.description());
-            assertEquals(
-                    "<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">&copy; OpenStreetMap contributors</a>",
-                    metadata.attribution());
+        // Verify type
+        assertEquals(TilesetType.BASELAYER, metadata.type());
 
-            // Verify type
-            assertEquals(TilesetType.BASELAYER, metadata.type());
+        // Verify vector layers (required for MVT tilesets)
+        assertNotNull(metadata.vectorLayers());
+        assertEquals(21, metadata.vectorLayers().size());
 
-            // Verify vector layers (required for MVT tilesets)
-            assertNotNull(metadata.vectorLayers());
-            assertEquals(21, metadata.vectorLayers().size());
+        // Check specific vector layers from the pmtiles show output
+        Map<String, VectorLayer> layerMap =
+                metadata.vectorLayers().stream().collect(Collectors.toMap(VectorLayer::id, Function.identity()));
 
-            // Check specific vector layers from the pmtiles show output
-            Map<String, VectorLayer> layerMap =
-                    metadata.vectorLayers().stream().collect(Collectors.toMap(VectorLayer::id, Function.identity()));
+        // Verify some key layers exist
+        assertTrue(layerMap.containsKey("addresses"), "Should have addresses layer");
+        assertTrue(layerMap.containsKey("boundaries"), "Should have boundaries layer");
+        assertTrue(layerMap.containsKey("buildings"), "Should have buildings layer");
+        assertTrue(layerMap.containsKey("streets"), "Should have streets layer");
 
-            // Verify some key layers exist
-            assertTrue(layerMap.containsKey("addresses"), "Should have addresses layer");
-            assertTrue(layerMap.containsKey("boundaries"), "Should have boundaries layer");
-            assertTrue(layerMap.containsKey("buildings"), "Should have buildings layer");
-            assertTrue(layerMap.containsKey("streets"), "Should have streets layer");
-
-            // Verify a specific layer's structure
-            VectorLayer addresses = layerMap.get("addresses");
-            assertNotNull(addresses, "addresses layer should exist");
-            assertEquals(Integer.valueOf(14), addresses.minZoom());
-            assertEquals(Integer.valueOf(14), addresses.maxZoom());
-            assertNotNull(addresses.fields());
-            assertEquals("String", addresses.fields().get("housename"));
-            assertEquals("String", addresses.fields().get("housenumber"));
-        }
+        // Verify a specific layer's structure
+        VectorLayer addresses = layerMap.get("addresses");
+        assertNotNull(addresses, "addresses layer should exist");
+        assertEquals(Integer.valueOf(14), addresses.minZoom());
+        assertEquals(Integer.valueOf(14), addresses.maxZoom());
+        assertNotNull(addresses.fields());
+        assertEquals("String", addresses.fields().get("housename"));
+        assertEquals("String", addresses.fields().get("housenumber"));
     }
 }

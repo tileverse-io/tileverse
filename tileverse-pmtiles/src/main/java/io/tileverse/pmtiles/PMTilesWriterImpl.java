@@ -15,6 +15,7 @@
  */
 package io.tileverse.pmtiles;
 
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -47,8 +48,8 @@ class PMTilesWriterImpl implements PMTilesWriter {
 
     // Configuration
     private final Path outputPath;
-    private final byte minZoom;
-    private final byte maxZoom;
+    private final int minZoom;
+    private final int maxZoom;
     private final byte tileCompression;
     private final byte internalCompression;
     private final byte tileType;
@@ -125,14 +126,9 @@ class PMTilesWriterImpl implements PMTilesWriter {
     }
 
     @Override
-    public void addTile(byte z, int x, int y, byte[] data) throws IOException {
-        addTile(new ZXY(z, x, y), data);
-    }
-
-    @Override
-    public void addTile(ZXY zxy, byte[] data) throws IOException {
+    public void addTile(TileIndex tileIndex, byte[] data) throws IOException {
         checkNotCompletedOrClosed();
-        Objects.requireNonNull(zxy, "Tile coordinates cannot be null");
+        Objects.requireNonNull(tileIndex, "Tile coordinates cannot be null");
         Objects.requireNonNull(data, "Tile data cannot be null");
 
         // Compress the tile data if needed
@@ -146,7 +142,7 @@ class PMTilesWriterImpl implements PMTilesWriter {
         }
 
         // Add to registry
-        tileRegistry.addTile(zxy, processedData);
+        tileRegistry.addTile(tileIndex, processedData);
     }
 
     @Override
@@ -323,8 +319,8 @@ class PMTilesWriterImpl implements PMTilesWriter {
                 .internalCompression(internalCompression)
                 .tileCompression(tileCompression)
                 .tileType(tileType)
-                .minZoom(minZoom)
-                .maxZoom(maxZoom)
+                .minZoom((byte) minZoom)
+                .maxZoom((byte) maxZoom)
                 .minLonE7(minLonE7)
                 .minLatE7(minLatE7)
                 .maxLonE7(maxLonE7)
@@ -406,8 +402,8 @@ class PMTilesWriterImpl implements PMTilesWriter {
      */
     static class BuilderImpl implements Builder {
         private Path outputPath;
-        private byte minZoom = 0;
-        private byte maxZoom = 0;
+        private int minZoom = 0;
+        private int maxZoom = 0;
         private byte tileCompression = PMTilesHeader.COMPRESSION_GZIP;
         private byte internalCompression = PMTilesHeader.COMPRESSION_GZIP;
         private byte tileType = PMTilesHeader.TILETYPE_MVT;
@@ -426,13 +422,13 @@ class PMTilesWriterImpl implements PMTilesWriter {
         }
 
         @Override
-        public Builder minZoom(byte minZoom) {
+        public Builder minZoom(int minZoom) {
             this.minZoom = minZoom;
             return this;
         }
 
         @Override
-        public Builder maxZoom(byte maxZoom) {
+        public Builder maxZoom(int maxZoom) {
             this.maxZoom = maxZoom;
             return this;
         }
@@ -480,8 +476,8 @@ class PMTilesWriterImpl implements PMTilesWriter {
 
             return new PMTilesWriterImpl(
                     outputPath,
-                    minZoom,
-                    maxZoom,
+                    (byte) minZoom,
+                    (byte) maxZoom,
                     tileCompression,
                     internalCompression,
                     tileType,
@@ -508,11 +504,11 @@ class PMTilesWriterImpl implements PMTilesWriter {
         /**
          * Adds a tile to the registry.
          *
-         * @param zxy the tile coordinates
+         * @param tileIndex the tile coordinates
          * @param data the tile data
          */
-        public void addTile(ZXY zxy, byte[] data) {
-            long tileId = zxy.toTileId();
+        public void addTile(TileIndex tileIndex, byte[] data) {
+            long tileId = HilbertCurve.tileIndexToTileId(tileIndex);
             String hash = computeHash(data);
 
             tileIdToHash.put(tileId, hash);

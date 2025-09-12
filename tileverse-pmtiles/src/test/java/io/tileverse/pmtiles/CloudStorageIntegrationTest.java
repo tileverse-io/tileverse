@@ -101,9 +101,9 @@ public class CloudStorageIntegrationTest {
                                 DefaultCredentialsProvider.builder().build())
                         .build();
                 RangeReader rangeReader =
-                        CachingRangeReader.builder(s3Reader).blockSize(16384).build();
-                PMTilesReader pmTilesReader = new PMTilesReader(rangeReader)) {
+                        CachingRangeReader.builder(s3Reader).blockSize(16384).build()) {
 
+            PMTilesReader pmTilesReader = new PMTilesReader(rangeReader::asByteChannel);
             // Verify we can read the header
             PMTilesHeader header = pmTilesReader.getHeader();
             assertNotNull(header);
@@ -137,13 +137,13 @@ public class CloudStorageIntegrationTest {
         try (AzureBlobRangeReader azureRangeReader = AzureBlobRangeReader.builder()
                         .connectionString(azureConnectionString)
                         .containerName(azureContainer)
-                        .blobPath(azureBlob)
+                        .blobName(azureBlob)
                         .build();
                 RangeReader reader = CachingRangeReader.builder(azureRangeReader)
                         .blockSize(32768)
-                        .build();
-                PMTilesReader pmTilesReader = new PMTilesReader(reader)) {
+                        .build()) {
 
+            PMTilesReader pmTilesReader = new PMTilesReader(reader::asByteChannel);
             // Verify we can read the header
             PMTilesHeader header = pmTilesReader.getHeader();
             assertNotNull(header);
@@ -177,9 +177,9 @@ public class CloudStorageIntegrationTest {
         try (HttpRangeReader httpRangeReader =
                         HttpRangeReader.builder(httpUri).trustAllCertificates().build();
                 RangeReader rangeReader =
-                        CachingRangeReader.builder(httpRangeReader).build();
-                PMTilesReader pmTilesReader = new PMTilesReader(rangeReader)) {
+                        CachingRangeReader.builder(httpRangeReader).build()) {
 
+            PMTilesReader pmTilesReader = new PMTilesReader(rangeReader::asByteChannel);
             // Verify we can read the header
             PMTilesHeader header = pmTilesReader.getHeader();
             assertNotNull(header);

@@ -69,12 +69,14 @@ public final class CompressionUtil {
 
         final int compressedLength = buffer.remaining();
 
-        if (buffer.hasArray()) {
+        if (buffer.hasArray() && compression != PMTilesHeader.COMPRESSION_NONE) {
+            // For compressed data, we can safely use the backing array since decompress will create new data
             final int offset = buffer.position();
             final byte[] compressed = buffer.array();
             return decompress(compressed, offset, compressedLength, compression);
         }
 
+        // For uncompressed data or non-array buffers, create a copy to avoid sharing backing arrays
         byte[] compressed = new byte[compressedLength];
         buffer.get(compressed);
         return decompress(compressed, 0, compressedLength, compression);
@@ -93,7 +95,7 @@ public final class CompressionUtil {
     public static ByteBuffer decompress(byte[] data, int offset, int length, byte compressionType)
             throws IOException, UnsupportedCompressionException {
         if (compressionType == PMTilesHeader.COMPRESSION_NONE) {
-            return ByteBuffer.wrap(data);
+            return ByteBuffer.wrap(data, offset, length);
         }
 
         ByteArrayInputStream inputStream = new ByteArrayInputStream(data, offset, length);
@@ -105,8 +107,7 @@ public final class CompressionUtil {
             throw new IOException("Failed to create decompressor", e);
         }
 
-        ByteBuffer ret = ByteBuffer.wrap(outputStream.bytes()).limit(outputStream.size());
-        return ret;
+        return ByteBuffer.wrap(outputStream.bytes()).limit(outputStream.size());
     }
 
     private static class ByteArrayOutputStreamInternal extends ByteArrayOutputStream {

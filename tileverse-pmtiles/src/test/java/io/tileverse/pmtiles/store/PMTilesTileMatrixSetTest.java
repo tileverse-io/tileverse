@@ -13,13 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.pmtiles;
+package io.tileverse.pmtiles.store;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.tileverse.pmtiles.PMTilesHeader;
 import io.tileverse.tiling.matrix.TileMatrixSet;
 import org.junit.jupiter.api.Test;
 
@@ -117,8 +118,8 @@ class PMTilesTileMatrixSetTest {
         double ratio1 = res0 / res1;
         double ratio2 = res1 / res2;
 
-        assertTrue(Math.abs(ratio1 - 2.0) < 0.1, "Resolution ratio should be close to 2.0, was: " + ratio1);
-        assertTrue(Math.abs(ratio2 - 2.0) < 0.1, "Resolution ratio should be close to 2.0, was: " + ratio2);
+        assertTrue(Math.abs(ratio1 - 2.0) < 0.001, "Resolution ratio should be close to 2.0, was: " + ratio1);
+        assertTrue(Math.abs(ratio2 - 2.0) < 0.001, "Resolution ratio should be close to 2.0, was: " + ratio2);
     }
 
     @Test

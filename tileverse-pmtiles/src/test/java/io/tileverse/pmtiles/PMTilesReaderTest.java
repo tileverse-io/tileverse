@@ -15,38 +15,36 @@
  */
 package io.tileverse.pmtiles;
 
-import static java.util.Objects.*;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
 import io.tileverse.rangereader.RangeReader;
-import io.tileverse.rangereader.file.FileRangeReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class PMTilesReaderTest {
 
-    protected static Path andorraPmTiles;
+    protected Path tmpFolder;
 
-    @BeforeAll
-    static void copyTestData(@TempDir Path tmpFolder) throws IOException {
-        try (InputStream in = requireNonNull(PMTilesReaderTest.class.getResourceAsStream("/andorra.pmtiles"))) {
-            andorraPmTiles = tmpFolder.resolve("andorra.pmtiles");
-            Files.copy(in, andorraPmTiles);
-        }
+    @BeforeEach
+    void setup(@TempDir Path tmpFolder) {
+        this.tmpFolder = tmpFolder;
     }
 
     /**
      * Subclasses would override this method to test against different range readers
      */
     protected RangeReader getAndorraRangeReader() throws IOException {
-        return FileRangeReader.of(andorraPmTiles);
+        return PMTilesTestData.andorraFileRangeReader(tmpFolder);
     }
 
     /**
@@ -81,7 +79,8 @@ class PMTilesReaderTest {
      */
     @Test
     void testPMTilesShowInfo() throws Exception {
-        try (PMTilesReader reader = new PMTilesReader(getAndorraRangeReader())) {
+        try (RangeReader rangeReader = getAndorraRangeReader()) {
+            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
             PMTilesHeader header = reader.getHeader();
 
             // Test header information
@@ -155,7 +154,8 @@ class PMTilesReaderTest {
      */
     @Test
     void testTileFetching() throws Exception {
-        try (PMTilesReader reader = new PMTilesReader(getAndorraRangeReader())) {
+        try (RangeReader rangeReader = getAndorraRangeReader()) {
+            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
             // Test tile 0/0/0 - should exist (root tile)
             var tile000 = reader.getTile(0, 0, 0);
             assertTrue(tile000.isPresent(), "Tile 0/0/0 should exist");
@@ -177,7 +177,8 @@ class PMTilesReaderTest {
      */
     @Test
     void testNonExistentTiles() throws Exception {
-        try (PMTilesReader reader = new PMTilesReader(getAndorraRangeReader())) {
+        try (RangeReader rangeReader = getAndorraRangeReader()) {
+            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
             // Test beyond max zoom level
             var tileBeyondMax = reader.getTile(15, 0, 0);
             assertTrue(tileBeyondMax.isEmpty(), "Tile beyond max zoom should not exist");
@@ -197,7 +198,8 @@ class PMTilesReaderTest {
      */
     @Test
     void testEdgeCases() throws Exception {
-        try (PMTilesReader reader = new PMTilesReader(getAndorraRangeReader())) {
+        try (RangeReader rangeReader = getAndorraRangeReader()) {
+            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
             // Test negative coordinates - should throw IllegalArgumentException
             assertThrows(
                     IllegalArgumentException.class,
@@ -229,7 +231,8 @@ class PMTilesReaderTest {
      */
     @Test
     void testDifferentZoomLevels() throws Exception {
-        try (PMTilesReader reader = new PMTilesReader(getAndorraRangeReader())) {
+        try (RangeReader rangeReader = getAndorraRangeReader()) {
+            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
             PMTilesHeader header = reader.getHeader();
 
             // Test at minimum zoom
@@ -273,7 +276,8 @@ class PMTilesReaderTest {
      */
     @Test
     void testCoordinateUtilityMethods() throws Exception {
-        try (PMTilesReader reader = new PMTilesReader(getAndorraRangeReader())) {
+        try (RangeReader rangeReader = getAndorraRangeReader()) {
+            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
             PMTilesHeader header = reader.getHeader();
 
             // Test that utility methods match manual E7 conversion
@@ -303,7 +307,8 @@ class PMTilesReaderTest {
      */
     @Test
     void testTileDecompression() throws Exception {
-        try (PMTilesReader reader = new PMTilesReader(getAndorraRangeReader())) {
+        try (RangeReader rangeReader = getAndorraRangeReader()) {
+            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
             PMTilesHeader header = reader.getHeader();
 
             // Verify that compression is enabled
@@ -321,5 +326,27 @@ class PMTilesReaderTest {
             assertNotNull(tileData, "Decompressed tile data should not be null");
             assertTrue(tileData.remaining() > 10, "Decompressed tile should be reasonably sized");
         }
+    }
+
+    @Test
+    void testParseMetadataException() throws IOException {
+        final String rawMetadata =
+                """
+                {
+                  "name": "Shortbread",
+                  "description": "A basic, lean, general-purpose vector tile schema for OpenStreetMap data. See https://shortbread.geofabrik.de/",
+                  "attribution": "<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">&copy; OpenStreetMap contributors</a>",
+                  "type": "baselayer",
+                  "format": "pbf",
+                  "bounds": "-34.49296,29.63555,46.75348,81.47299",
+                  "center": "6.13026,55.55427,2"
+                }
+                """;
+
+        IOException e = assertThrows(IOException.class, () -> PMTilesReader.parseMetadata(rawMetadata));
+        assertThat(e.getMessage())
+                .contains("Failed to parse PMTiles metadata JSON:")
+                .contains("Unexpected character ('h' (code 104)): was expecting comma to separate Object entries")
+                .contains(rawMetadata);
     }
 }

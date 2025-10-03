@@ -102,7 +102,7 @@ public class PMTilesReader {
     /**
      * Creates a new PMTilesReader for the specified file.
      * <p>
-     * This constructor creates a {@link SeekableByteChannelSupplier} that will open and close the file upon each I/O operation.
+     * This constructor creates a {@code Supplier<SeekableByteChannel>} that will open and close the file upon each I/O operation.
      *
      * @param path the path to the PMTiles file
      * @throws IOException if an I/O error occurs
@@ -211,8 +211,7 @@ public class PMTilesReader {
      *
      * @param zoomLevel the zoom level to query (0-based)
      * @return a stream of TileIndex objects representing all tiles present at the zoom level
-     * @throws IOException if an I/O error occurs while reading the directory structure
-     * @throws UnsupportedCompressionException if the compression type is not supported
+     * @throws UncheckedIOException if an I/O error occurs while reading the directory structure
      */
     public Stream<TileIndex> getTileIndicesByZoomLevel(int zoomLevel) {
         if (zoomLevel < 0 || zoomLevel > 31) {

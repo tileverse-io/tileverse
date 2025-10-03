@@ -21,7 +21,6 @@ import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.matrix.TileMatrixSet;
 import io.tileverse.tiling.store.TileStore;
 import io.tileverse.tiling.store.TileStore.Strategy;
-import io.tileverse.vectortile.model.VectorTile.Layer;
 import io.tileverse.vectortile.model.VectorTile.Layer.Feature;
 import java.util.Arrays;
 import java.util.List;
@@ -76,9 +75,8 @@ public class VectorTilesQuery {
 
     /**
      * The query resolution. If {@link #zoomLevel} is set, it takes precedence over resolution/strategy
-     * @param determineResolution
-     * @param strategy
-     * @return
+     * @param resolution the resolution for tile selection
+     * @return this query for method chaining
      */
     public VectorTilesQuery resolution(double resolution) {
         this.resolution = resolution;
@@ -139,12 +137,13 @@ public class VectorTilesQuery {
     }
 
     /**
+     * Sets a geometry transformation to apply to features.
      *
-     * @param geometryOperation operation to apply to geometries during {@link Layer#getFeatures(Predicate, GeometryDecoder)}
-     *                          {@link Feature#getGeometry(GeometryFactory)}. If
-     *                          {@code transformToCrs} is {@code true} this operation is
+     * @param geometryOperation operation to apply to geometries during feature reading.
+     *                          If {@code transformToCrs} is {@code true} this operation is
      *                          concatenated to the tile space to
      *                          {@link TileMatrixSet#crsId() CRS} transformation.
+     * @return this query for method chaining
      */
     public VectorTilesQuery geometryTransformation(UnaryOperator<Geometry> geometryOperation) {
         this.geometryOperation = geometryOperation;

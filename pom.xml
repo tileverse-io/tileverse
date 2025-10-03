@@ -33,6 +33,7 @@
     <module>tileverse-vectortiles</module>
     <module>tileverse-tilepyramid</module>
     <module>tileverse-pmtiles</module>
+    <module>coverage-report</module>
   </modules>
 
   <scm>
@@ -90,6 +91,9 @@
     <mockito.version>5.18.0</mockito.version>
     <testcontainers.version>1.21.3</testcontainers.version>
     <wiremock.version>3.13.1</wiremock.version>
+
+    <!-- Plugin versions -->
+    <jacoco.version>0.8.12</jacoco.version>
   </properties>
 
   <dependencyManagement>
@@ -310,7 +314,8 @@
           <version>3.5.3</version>
           <inherited>true</inherited>
           <configuration>
-            <argLine>--add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
+            <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
+            <argLine>@{argLine} --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
           </configuration>
         </plugin>
         <plugin>
@@ -319,7 +324,8 @@
           <version>3.5.3</version>
           <inherited>true</inherited>
           <configuration>
-            <argLine>--add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
+            <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
+            <argLine>@{argLine} --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
           </configuration>
           <executions>
             <execution>
@@ -407,6 +413,40 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-gpg-plugin</artifactId>
           <version>3.2.8</version>
+        </plugin>
+        <plugin>
+          <groupId>org.jacoco</groupId>
+          <artifactId>jacoco-maven-plugin</artifactId>
+          <version>${jacoco.version}</version>
+          <inherited>true</inherited>
+          <executions>
+            <execution>
+              <id>prepare-agent</id>
+              <goals>
+                <goal>prepare-agent</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>prepare-agent-integration</id>
+              <goals>
+                <goal>prepare-agent-integration</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>report</id>
+              <goals>
+                <goal>report</goal>
+              </goals>
+              <phase>test</phase>
+            </execution>
+            <execution>
+              <id>report-integration</id>
+              <goals>
+                <goal>report-integration</goal>
+              </goals>
+              <phase>post-integration-test</phase>
+            </execution>
+          </executions>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -536,6 +576,12 @@
         </executions>
       </plugin>
 
+      <!-- Code Coverage with JaCoCo -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+      </plugin>
+
       <!-- Central Portal Publishing -->
       <plugin>
         <groupId>org.sonatype.central</groupId>
@@ -543,11 +589,12 @@
         <extensions>true</extensions>
         <configuration>
           <publishingServerId>central</publishingServerId>
-          <deploymentName>Tileverse Range Reader</deploymentName>
+          <deploymentName>Tileverse</deploymentName>
           <autoPublish>true</autoPublish>
           <waitUntil>published</waitUntil>
           <excludeArtifacts>
             <excludeArtifact>tileverse-rangereader-benchmarks</excludeArtifact>
+            <excludeArtifact>tileverse-coverage-report</excludeArtifact>
           </excludeArtifacts>
         </configuration>
       </plugin>

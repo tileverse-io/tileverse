@@ -17,4 +17,11 @@ package io.tileverse.tiling.store;
 
 import io.tileverse.tiling.matrix.Tile;
 
+/**
+ * Container for a tile and its associated data.
+ *
+ * @param <T> the type of data associated with the tile
+ * @param tile the tile metadata
+ * @param data the tile data
+ */
 public record TileData<T>(Tile tile, T data) {}

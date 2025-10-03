@@ -26,8 +26,16 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+/**
+ * Interface for tile stores that provide access to tile data.
+ *
+ * @param <T> the type of data associated with tiles
+ */
 public interface TileStore<T> {
 
+    /**
+     * Strategy for selecting zoom levels based on resolution.
+     */
     enum Strategy {
         /**
          * Selects the closest lower quality zoom level based on the provided resolution
@@ -39,19 +47,46 @@ public interface TileStore<T> {
         QUALITY
     }
 
+    /**
+     * Returns the tile matrix set for this store.
+     *
+     * @return the TileMatrixSet
+     */
     TileMatrixSet matrixSet();
 
+    /**
+     * Finds tiles matching the given extents and resolution.
+     *
+     * @param extents list of bounding boxes to query
+     * @param resolution the desired resolution
+     * @param strategy the strategy for selecting zoom level
+     * @return stream of tile data matching the criteria
+     */
     default Stream<TileData<T>> findTiles(List<BoundingBox2D> extents, double resolution, Strategy strategy) {
         int bestZoomLevel = findBestZoomLevel(resolution, strategy);
         return findTiles(extents, bestZoomLevel);
     }
 
+    /**
+     * Finds tiles matching the given extents at a specific zoom level.
+     *
+     * @param extents list of bounding boxes to query
+     * @param zoomLevel the zoom level
+     * @return stream of tile data at the specified zoom level
+     */
     default Stream<TileData<T>> findTiles(List<BoundingBox2D> extents, int zoomLevel) {
         Optional<TileMatrix> filteredTileMatrix = tileMatrix(extents, zoomLevel);
         Stream<Tile> tiles = filteredTileMatrix.map(TileMatrix::tiles).orElseGet(Stream::empty);
         return tiles.map(this::loadTile).filter(Optional::isPresent).map(Optional::orElseThrow);
     }
 
+    /**
+     * Computes the tile matrix for the given extents at a specific zoom level.
+     *
+     * @param extents list of bounding boxes to query
+     * @param zoomLevel the zoom level
+     * @return optional tile matrix covering the extents, empty if no intersection
+     */
     default Optional<TileMatrix> tileMatrix(List<BoundingBox2D> extents, int zoomLevel) {
         requireNonNull(extents, "extents is null");
 
@@ -78,22 +113,31 @@ public interface TileStore<T> {
         return Optional.of(TileMatrix.union(intersecting));
     }
 
+    /**
+     * Finds a single tile by its index.
+     *
+     * @param tileIndex the tile index
+     * @return optional tile data, empty if tile doesn't exist
+     */
     default Optional<TileData<T>> findTile(TileIndex tileIndex) {
         return matrixSet().tile(requireNonNull(tileIndex)).flatMap(this::loadTile);
     }
 
+    /**
+     * Loads tile data for the specified tile.
+     *
+     * @param tile the tile to load
+     * @return optional tile data, empty if tile cannot be loaded
+     */
     Optional<TileData<T>> loadTile(Tile tile);
 
     /**
      * Finds the best zoom level for the provided resolution, based on the strategy chosen
      * and each {@link TileMatrixSet#resolution(int) TileMatrix resolution}.
      *
-     * @param resolution
-     * @param strategy
-     * @return
-     */
-    /**
-     * {@inheritDoc}
+     * @param resolution the target resolution
+     * @param strategy the selection strategy (SPEED or QUALITY)
+     * @return the best matching zoom level
      */
     default int findBestZoomLevel(final double resolution, Strategy strategy) {
         final int minZoomLevel = matrixSet().minZoomLevel();
@@ -104,11 +148,11 @@ public interface TileStore<T> {
 
     /**
      * Finds the best zoom level for the provided resolution between {@code minZoomLevel} and {@code maxZoomLevel}
-     * @param resolution
-     * @param strategy
-     * @param minZoomLevel
-     * @param maxZoomLevel
-     * @return
+     * @param resolution the target resolution
+     * @param strategy the selection strategy (SPEED or QUALITY)
+     * @param minZoomLevel the minimum zoom level to consider
+     * @param maxZoomLevel the maximum zoom level to consider
+     * @return the best matching zoom level within the specified range
      */
     default int findBestZoomLevel(
             final double resolution, Strategy strategy, final int minZoomLevel, final int maxZoomLevel) {

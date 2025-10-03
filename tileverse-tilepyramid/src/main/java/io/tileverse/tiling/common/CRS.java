@@ -15,12 +15,30 @@
  */
 package io.tileverse.tiling.common;
 
+/**
+ * Coordinate Reference System representation supporting both URI and WKT formats.
+ *
+ * @param uri the CRS URI identifier (e.g., "EPSG:4326")
+ * @param wkt the Well-Known Text representation of the CRS
+ */
 public record CRS(String uri, String wkt) {
 
+    /**
+     * Creates a CRS from a URI identifier.
+     *
+     * @param uri the CRS URI identifier
+     * @return a new CRS with the specified URI
+     */
     public static CRS ofURI(String uri) {
         return new CRS(uri, null);
     }
 
+    /**
+     * Creates a CRS from a Well-Known Text representation.
+     *
+     * @param wkt the WKT string
+     * @return a new CRS with the specified WKT
+     */
     public static CRS ofWKT(String wkt) {
         return new CRS(null, wkt);
     }

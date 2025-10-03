@@ -38,6 +38,12 @@ import java.util.Optional;
  * <li>Custom projected coordinate systems</li>
  * </ul>
  *
+ * @param tilePyramid the tile pyramid defining the tiling structure
+ * @param crsId the coordinate reference system identifier
+ * @param tileWidth the width of each tile in pixels
+ * @param tileHeight the height of each tile in pixels
+ * @param extent the bounding box covering all tiles
+ * @param resolutions the map resolution for each zoom level
  * @since 1.0
  */
 public record StandardTileMatrixSet(

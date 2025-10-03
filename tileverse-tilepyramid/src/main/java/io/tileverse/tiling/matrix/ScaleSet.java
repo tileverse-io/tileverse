@@ -47,7 +47,9 @@ import java.util.List;
  * equivalent to the EquatorialPerimeter). E.g for WGS84
  * {@code metersPerUnit(crs)} is {@code 111319.4908} meters/degree
  *
- * @see https://docs.ogc.org/is/17-083r4/17-083r4.pdf
+ * @param metersPerUnit coefficient to convert CRS units into meters
+ * @param scales list of scale denominators and resolutions
+ * @see <a href="https://docs.ogc.org/is/17-083r4/17-083r4.pdf">OGC Two Dimensional Tile Matrix Set and Tile Set Metadata</a>
  */
 public record ScaleSet(double metersPerUnit, List<Scale> scales) {
 
@@ -62,25 +64,58 @@ public record ScaleSet(double metersPerUnit, List<Scale> scales) {
      */
     public static final double DEFAULT_PIXEL_SIZE = 2.8E-4;
 
+    /**
+     * Represents a scale with its denominator and resolution.
+     *
+     * @param denominator the scale denominator (e.g., 25000 for 1:25000 scale)
+     * @param resolution the resolution in CRS units per pixel
+     */
     public static record Scale(double denominator, double resolution) {}
 
+    /**
+     * Compact constructor for ScaleSet that ensures immutability.
+     *
+     * @param metersPerUnit coefficient to convert CRS units into meters
+     * @param scales list of scale denominators and resolutions
+     */
     public ScaleSet(double metersPerUnit, List<Scale> scales) {
         this.metersPerUnit = metersPerUnit;
         this.scales = List.copyOf(scales); // immutable and prevents nulls automatically
     }
 
+    /**
+     * Creates a new builder for constructing a ScaleSet.
+     *
+     * @return a new ScaleSetBuilder instance
+     */
     public static ScaleSetBuilder builder() {
         return new ScaleSetBuilder();
     }
 
+    /**
+     * Creates a builder initialized with this ScaleSet's values.
+     *
+     * @return a new ScaleSetBuilder initialized from this ScaleSet
+     */
     public ScaleSetBuilder toBuilder() {
         return new ScaleSetBuilder(this);
     }
 
+    /**
+     * Builder for constructing ScaleSet instances.
+     */
     public static class ScaleSetBuilder {
 
+        /**
+         * Creates a new empty ScaleSetBuilder.
+         */
         public ScaleSetBuilder() {}
 
+        /**
+         * Creates a ScaleSetBuilder initialized from an existing ScaleSet.
+         *
+         * @param scaleSet the ScaleSet to initialize from
+         */
         public ScaleSetBuilder(ScaleSet scaleSet) {
             // TODO Auto-generated constructor stub
         }
@@ -89,8 +124,8 @@ public record ScaleSet(double metersPerUnit, List<Scale> scales) {
          * Scale denominators for this scale set. If not set, will be computed from
          * {@link #cellSizes(double...)}. If both are set, both arrays must have the same length
          *
-         * @param denominators
-         * @return
+         * @param denominators the scale denominators
+         * @return this builder for method chaining
          */
         public ScaleSetBuilder scaleDenominators(double... denominators) {
             // TODO Auto-generated method stub
@@ -102,32 +137,61 @@ public record ScaleSet(double metersPerUnit, List<Scale> scales) {
          * {@link #scaleDenominators(double...)}. If both are set, both arrays must have the same length
          *
          * @param cellSizes (A.K.A. resolutions), size of a single cell (pixel) in CRS units
-         * @return
+         * @return this builder for method chaining
          */
         public ScaleSetBuilder cellSizes(double... cellSizes) {
             return null;
         }
 
+        /**
+         * Sets the CRS URI for this scale set.
+         *
+         * @param string the CRS URI
+         * @return this builder for method chaining
+         */
         public ScaleSetBuilder crsURI(String string) {
             // TODO Auto-generated method stub
             return this;
         }
 
+        /**
+         * Builds and returns the configured ScaleSet.
+         *
+         * @return the constructed ScaleSet
+         */
         public ScaleSet build() {
             // TODO Auto-generated method stub
             return null;
         }
 
+        /**
+         * Sets the pixel size for this scale set.
+         *
+         * @param d the pixel size in meters
+         * @return this builder for method chaining
+         */
         public ScaleSetBuilder pixelSize(double d) {
             // TODO Auto-generated method stub
             return this;
         }
 
+        /**
+         * Sets the meters per unit conversion factor.
+         *
+         * @param d the meters per unit value
+         * @return this builder for method chaining
+         */
         public ScaleSetBuilder metersPerUnit(double d) {
             // TODO Auto-generated method stub
             return null;
         }
 
+        /**
+         * Sets the URI for this scale set.
+         *
+         * @param string the URI
+         * @return this builder for method chaining
+         */
         public ScaleSetBuilder uri(String string) {
             // TODO Auto-generated method stub
             return null;

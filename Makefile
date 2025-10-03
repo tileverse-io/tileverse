@@ -25,15 +25,6 @@ help:
 	@echo "  test          - Run all tests (unit + integration via verify)"
 	@echo "  test-unit     - Run unit tests only (surefire)"
 	@echo "  test-it       - Run integration tests only (failsafe)"
-	@echo "  test-core     - Run core module tests (unit only)"
-	@echo "  test-s3       - Run S3 module tests (unit only)"
-	@echo "  test-azure    - Run Azure module tests (unit only)"
-	@echo "  test-gcs      - Run GCS module tests (unit only)"
-	@echo "  test-core-it  - Run core integration tests only"
-	@echo "  test-s3-it    - Run S3 integration tests only"
-	@echo "  test-azure-it - Run Azure integration tests only"
-	@echo "  test-gcs-it   - Run GCS integration tests only"
-	@echo "  test-all-it   - Run integration tests in the aggregator module"
 	@echo "  perf-test     - Run performance tests"
 	@echo ""
 	@echo "Benchmark targets:"
@@ -94,68 +85,32 @@ test:
 
 .PHONY: test-unit
 test-unit:
-	./mvnw test -Dtest="!*IT" -ntp -T1C -pl '!benchmarks'
+	./mvnw test -ntp -T1C -pl '!tileverse-rangereader/benchmarks'
 
 .PHONY: test-it
 test-it:
-	./mvnw verify -Dmaven.test.skip=false -Dsurefire.skip=true -ntp -T1C
-
-.PHONY: test-core
-test-core:
-	./mvnw test -pl src/core -ntp
-
-.PHONY: test-s3
-test-s3:
-	./mvnw test -pl src/s3 -ntp
-
-.PHONY: test-azure
-test-azure:
-	./mvnw test -pl src/azure -ntp
-
-.PHONY: test-gcs
-test-gcs:
-	./mvnw test -pl src/gcs -ntp
-
-.PHONY: test-core-it
-test-core-it:
-	./mvnw verify -pl src/core -Dsurefire.skip=true -ntp
-
-.PHONY: test-s3-it
-test-s3-it:
-	./mvnw verify -pl src/s3 -Dsurefire.skip=true -ntp
-
-.PHONY: test-azure-it
-test-azure-it:
-	./mvnw verify -pl src/azure -Dsurefire.skip=true -ntp
-
-.PHONY: test-gcs-it
-test-gcs-it:
-	./mvnw verify -pl src/gcs -Dsurefire.skip=true -ntp
-
-.PHONY: test-all-it
-test-all-it:
-	./mvnw verify -pl src/all -Dsurefire.skip=true -ntp
+	./mvnw verify -Dsurefire.skip=true -ntp -T1C
 
 .PHONY: build-benchmarks
 build-benchmarks:
-	./mvnw package -pl benchmarks -ntp
+	./mvnw package -pl :tileverse-rangereader-benchmarks -ntp
 
 .PHONY: benchmarks
 benchmarks: build-benchmarks
-	java -jar benchmarks/target/benchmarks.jar
+	java -jar tileverse-rangereader/benchmarks/target/benchmarks.jar
 
 .PHONY: benchmarks-file
 benchmarks-file: build-benchmarks
-	java -jar benchmarks/target/benchmarks.jar FileRangeReader
+	java -jar tileverse-rangereader/benchmarks/target/benchmarks.jar FileRangeReader
 
 .PHONY: benchmarks-gc
 benchmarks-gc: build-benchmarks
-	java -jar benchmarks/target/benchmarks.jar -prof gc
+	java -jar tileverse-rangereader/benchmarks/target/benchmarks.jar -prof gc
 
 .PHONY: benchmarks-cloud
 benchmarks-cloud:
-	./mvnw package -pl benchmarks -Pall-benchmarks -ntp
-	java -jar benchmarks/target/benchmarks.jar
+	./mvnw package -pl tileverse-rangereader-benchmarks -Pall-benchmarks -ntp
+	java -jar tileverse-rangereader/benchmarks/target/benchmarks.jar
 
 .PHONY: verify
 verify: lint test
@@ -180,27 +135,6 @@ ci: clean verify
 .PHONY: perf-test
 perf-test:
 	./mvnw verify -Dit.test="*PerformanceTest" -Dsurefire.skip=true -ntp
-
-# Module-specific package targets
-.PHONY: package-core
-package-core:
-	./mvnw package -pl src/core -DskipTests -ntp
-
-.PHONY: package-s3
-package-s3:
-	./mvnw package -pl src/s3 -DskipTests -ntp
-
-.PHONY: package-azure
-package-azure:
-	./mvnw package -pl src/azure -DskipTests -ntp
-
-.PHONY: package-gcs
-package-gcs:
-	./mvnw package -pl src/gcs -DskipTests -ntp
-
-.PHONY: package-all
-package-all:
-	./mvnw package -pl src/all -DskipTests -ntp
 
 # Documentation targets
 .PHONY: javadoc

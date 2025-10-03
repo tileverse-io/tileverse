@@ -91,9 +91,11 @@
     <mockito.version>5.18.0</mockito.version>
     <testcontainers.version>1.21.3</testcontainers.version>
     <wiremock.version>3.13.1</wiremock.version>
+    <surefire.skip>false</surefire.skip>
+    <failsafe.skip>false</failsafe.skip>
 
     <!-- Plugin versions -->
-    <jacoco.version>0.8.12</jacoco.version>
+    <jacoco.version>0.8.13</jacoco.version>
   </properties>
 
   <dependencyManagement>
@@ -314,6 +316,7 @@
           <version>3.5.3</version>
           <inherited>true</inherited>
           <configuration>
+            <skip>${surefire.skip}</skip>
             <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
             <argLine>@{argLine} --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
           </configuration>
@@ -324,6 +327,7 @@
           <version>3.5.3</version>
           <inherited>true</inherited>
           <configuration>
+            <skip>${failsafe.skip}</skip>
             <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
             <argLine>@{argLine} --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
           </configuration>

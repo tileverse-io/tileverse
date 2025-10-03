@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>io.tileverse.rangereader</groupId>
-    <artifactId>tileverse-rangereader-parent</artifactId>
+    <artifactId>tileverse-rangereader</artifactId>
     <version>${revision}</version>
   </parent>
 
@@ -11,24 +11,6 @@
   <name>Tileverse - RangeReader Benchmarks</name>
   <description>Benchmarks for the tileverse-rangereader modules using JMH</description>
 
-  <dependencyManagement>
-    <dependencies>
-      <dependency>
-        <groupId>io.tileverse.rangereader</groupId>
-        <artifactId>tileverse-rangereader-dependencies</artifactId>
-        <version>${project.version}</version>
-        <type>pom</type>
-        <scope>import</scope>
-      </dependency>
-      <dependency>
-        <groupId>io.tileverse.rangereader</groupId>
-        <artifactId>tileverse-rangereader-bom</artifactId>
-        <version>${project.version}</version>
-        <type>pom</type>
-        <scope>import</scope>
-      </dependency>
-    </dependencies>
-  </dependencyManagement>
   <dependencies>
     <!-- All range reader modules -->
     <dependency>

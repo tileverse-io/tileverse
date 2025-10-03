@@ -3,34 +3,37 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>io.tileverse.rangereader</groupId>
-    <artifactId>tileverse-rangereader-parent</artifactId>
+    <groupId>io.tileverse</groupId>
+    <artifactId>tileverse-parent</artifactId>
     <version>${revision}</version>
   </parent>
 
-  <artifactId>modules</artifactId>
+  <groupId>io.tileverse.rangereader</groupId>
+  <artifactId>tileverse-rangereader</artifactId>
   <packaging>pom</packaging>
-  <name>Library modules</name>
+  <name>Tileverse RangeReader</name>
+  <description>A Java 17 library for reading content from multiple sources using range readers</description>
   <modules>
     <module>core</module>
     <module>s3</module>
     <module>azure</module>
     <module>gcs</module>
     <module>all</module>
+    <module>benchmarks</module>
   </modules>
 
   <dependencyManagement>
     <dependencies>
       <dependency>
-        <groupId>io.tileverse.rangereader</groupId>
-        <artifactId>tileverse-rangereader-dependencies</artifactId>
+        <groupId>io.tileverse</groupId>
+        <artifactId>tileverse-dependencies</artifactId>
         <version>${project.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
       <dependency>
-        <groupId>io.tileverse.rangereader</groupId>
-        <artifactId>tileverse-rangereader-bom</artifactId>
+        <groupId>io.tileverse</groupId>
+        <artifactId>tileverse-bom</artifactId>
         <version>${project.version}</version>
         <type>pom</type>
         <scope>import</scope>

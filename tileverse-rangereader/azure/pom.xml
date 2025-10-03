@@ -4,15 +4,15 @@
 
   <parent>
     <groupId>io.tileverse.rangereader</groupId>
-    <artifactId>modules</artifactId>
+    <artifactId>tileverse-rangereader</artifactId>
     <version>${revision}</version>
   </parent>
 
-  <artifactId>tileverse-rangereader-gcs</artifactId>
+  <artifactId>tileverse-rangereader-azure</artifactId>
   <packaging>jar</packaging>
 
-  <name>RangeReader for Google Cloud Storage</name>
-  <description>Google Cloud Storage range reader implementation</description>
+  <name>Tileverse Range Reader Azure</name>
+  <description>Azure Blob Storage range reader implementation</description>
 
   <dependencies>
     <!-- Core module -->
@@ -21,10 +21,19 @@
       <artifactId>tileverse-rangereader-core</artifactId>
     </dependency>
 
-    <!-- Google Cloud Storage -->
+    <!-- Azure Storage -->
     <dependency>
-      <groupId>com.google.cloud</groupId>
-      <artifactId>google-cloud-storage</artifactId>
+      <groupId>com.azure</groupId>
+      <artifactId>azure-storage-blob</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.azure</groupId>
+      <artifactId>azure-identity</artifactId>
+    </dependency>
+    <dependency>
+      <!-- JDK HttpClient -->
+      <groupId>com.azure</groupId>
+      <artifactId>azure-core-http-jdk-httpclient</artifactId>
     </dependency>
 
     <dependency>
@@ -33,8 +42,8 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>io.aiven</groupId>
-      <artifactId>testcontainers-fake-gcs-server</artifactId>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>azure</artifactId>
       <scope>test</scope>
     </dependency>
 
@@ -45,5 +54,6 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+
   </dependencies>
 </project>

@@ -4,7 +4,7 @@
 
   <parent>
     <groupId>io.tileverse.rangereader</groupId>
-    <artifactId>modules</artifactId>
+    <artifactId>tileverse-rangereader</artifactId>
     <version>${revision}</version>
   </parent>
 

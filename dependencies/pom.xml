@@ -2,14 +2,14 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>io.tileverse.rangereader</groupId>
-    <artifactId>tileverse-rangereader-parent</artifactId>
+    <groupId>io.tileverse</groupId>
+    <artifactId>tileverse-parent</artifactId>
     <version>${revision}</version>
   </parent>
-  <artifactId>tileverse-rangereader-dependencies</artifactId>
+  <artifactId>tileverse-dependencies</artifactId>
   <packaging>pom</packaging>
-  <name>Tileverse Range Reader Dependencies BOM</name>
-  <description>Manages versions of third-party libraries used by Tileverse RangeReader</description>
+  <name>Tileverse Dependencies BOM</name>
+  <description>Manages versions of third-party libraries used by Tileverse</description>
 
   <properties>
     <!-- Dependency versions -->

@@ -2,12 +2,11 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>io.tileverse.rangereader</groupId>
-  <artifactId>tileverse-rangereader-parent</artifactId>
+  <groupId>io.tileverse</groupId>
+  <artifactId>tileverse-parent</artifactId>
   <version>${revision}</version>
   <packaging>pom</packaging>
-  <name>Tileverse Range Reader</name>
-  <description>A Java 17 library for reading content from multiple sources using range readers</description>
+  <name>Tileverse</name>
   <url>https://tileverse.io</url>
 
   <licenses>
@@ -30,20 +29,19 @@
   <modules>
     <module>dependencies</module>
     <module>bom</module>
-    <module>src</module>
-    <module>benchmarks</module>
+    <module>tileverse-rangereader</module>
   </modules>
 
   <scm>
-    <connection>scm:git:https://github.com/tileverse-io/tileverse-rangereader.git</connection>
-    <developerConnection>scm:git:https://github.com/tileverse-io/tileverse-rangereader.git</developerConnection>
+    <connection>scm:git:https://github.com/tileverse-io/tileverse.git</connection>
+    <developerConnection>scm:git:https://github.com/tileverse-io/tileverse.git</developerConnection>
     <tag>HEAD</tag>
-    <url>https://github.com/tileverse-io/tileverse-rangereader</url>
+    <url>https://github.com/tileverse-io/tileverse</url>
   </scm>
 
   <issueManagement>
     <system>GitHub Issues</system>
-    <url>https://github.com/tileverse-io/tileverse-rangereader/issues</url>
+    <url>https://github.com/tileverse-io/tileverse/issues</url>
   </issueManagement>
 
   <distributionManagement>

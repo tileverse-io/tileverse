@@ -11,7 +11,7 @@
   <groupId>io.tileverse.rangereader</groupId>
   <artifactId>tileverse-rangereader</artifactId>
   <packaging>pom</packaging>
-  <name>Tileverse RangeReader</name>
+  <name>Tileverse RangeReader parent pom</name>
   <description>A Java 17 library for reading content from multiple sources using range readers</description>
   <modules>
     <module>core</module>
@@ -75,52 +75,6 @@
     <dependency>
       <groupId>commons-io</groupId>
       <artifactId>commons-io</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <!-- Testing -->
-    <dependency>
-      <groupId>org.junit.jupiter</groupId>
-      <artifactId>junit-jupiter-api</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.junit.jupiter</groupId>
-      <artifactId>junit-jupiter-engine</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.junit.jupiter</groupId>
-      <artifactId>junit-jupiter-params</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.mockito</groupId>
-      <artifactId>mockito-core</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.mockito</groupId>
-      <artifactId>mockito-junit-jupiter</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.assertj</groupId>
-      <artifactId>assertj-core</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>ch.qos.logback</groupId>
-      <artifactId>logback-classic</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.wiremock</groupId>
-      <artifactId>wiremock-standalone</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.awaitility</groupId>
-      <artifactId>awaitility</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

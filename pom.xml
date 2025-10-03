@@ -30,6 +30,9 @@
     <module>dependencies</module>
     <module>bom</module>
     <module>tileverse-rangereader</module>
+    <module>tileverse-vectortiles</module>
+    <module>tileverse-tilepyramid</module>
+    <module>tileverse-pmtiles</module>
   </modules>
 
   <scm>
@@ -72,6 +75,7 @@
     <sortpom.action>sort</sortpom.action>
     <spotless.skip>${fmt.skip}</spotless.skip>
     <spotless.action>apply</spotless.action>
+    <palantirJavaFormat.version>2.73.0</palantirJavaFormat.version>
 
     <!-- Dependency versions -->
     <!-- Runtime dependencies are defined in the dependencies/pom.xml BOM -->
@@ -172,6 +176,54 @@
       </dependency>
     </dependencies>
   </dependencyManagement>
+  <dependencies>
+    <!-- Testing -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-params</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.wiremock</groupId>
+      <artifactId>wiremock-standalone</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.awaitility</groupId>
+      <artifactId>awaitility</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
   <repositories>
     <repository>
       <releases>
@@ -406,11 +458,13 @@
           <skip>${spotless.skip}</skip>
           <java>
             <palantirJavaFormat>
-              <version>2.61.0</version>
+              <version>${palantirJavaFormat.version}</version>
             </palantirJavaFormat>
+            <!--
             <licenseHeader>
               <file>${maven.multiModuleProjectDirectory}/license_header.txt</file>
             </licenseHeader>
+            -->
           </java>
           <upToDateChecking>
             <enabled>true</enabled>

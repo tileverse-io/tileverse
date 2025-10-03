@@ -1,4 +1,20 @@
+Multiverse
 Copyright 2025 Multiversio LLC.
 
 This product includes software developed at
 The Apache Software Foundation (http://www.apache.org/).
+
+-----------------------------------------------------------------------
+
+This product includes software from java-vector-tile
+java-vector-tile licensed under the Apache license, Version 2.0
+Copyright 2015 Electronic Chart Centre.
+(https://github.com/ElectronicChartCentre/java-vector-tile)
+
+-----------------------------------------------------------------------
+
+This product contains code from JTS Topology Suite project
+JTS Topology Suite licensed under the EDL 1.0 license (BSD-3)
+http://www.eclipse.org/org/documents/edl-v10.php
+Copyright (c) 2016 Vivid Solutions.
+(https://github.com/locationtech/jts)

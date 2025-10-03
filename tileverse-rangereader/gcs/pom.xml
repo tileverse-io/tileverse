@@ -11,7 +11,7 @@
   <artifactId>tileverse-rangereader-gcs</artifactId>
   <packaging>jar</packaging>
 
-  <name>RangeReader for Google Cloud Storage</name>
+  <name>Tileverse Range Reader Google Cloud Storage</name>
   <description>Google Cloud Storage range reader implementation</description>
 
   <dependencies>

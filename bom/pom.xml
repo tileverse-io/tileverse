@@ -38,6 +38,21 @@
         <artifactId>tileverse-rangereader-all</artifactId>
         <version>${project.version}</version>
       </dependency>
+      <dependency>
+        <groupId>io.tileverse.tilepyramid</groupId>
+        <artifactId>tileverse-tilepyramid</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.tileverse.vectortiles</groupId>
+        <artifactId>tileverse-vectortiles</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.tileverse.pmtiles</groupId>
+        <artifactId>tileverse-pmtiles</artifactId>
+        <version>${project.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
   <build>

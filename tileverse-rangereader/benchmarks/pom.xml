@@ -8,7 +8,7 @@
   </parent>
 
   <artifactId>tileverse-rangereader-benchmarks</artifactId>
-  <name>Tileverse - RangeReader Benchmarks</name>
+  <name>Tileverse Range Reader Benchmarks</name>
   <description>Benchmarks for the tileverse-rangereader modules using JMH</description>
 
   <dependencies>

@@ -1,0 +1,6 @@
+
+PMTiles generated from OSM data for Andorra and the shortbread schema using the following command:
+
+```
+docker run --rm --user=$UID -v $PWD/test-data:/data ghcr.io/onthegomap/planetiler shortbread.yml --download --area=andorra --output=/data/andorra.pmtiles
+```

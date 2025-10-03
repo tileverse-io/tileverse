@@ -27,6 +27,12 @@ import org.locationtech.jts.geom.PrecisionModel;
 import org.locationtech.jts.geom.Puntal;
 import org.locationtech.jts.precision.GeometryPrecisionReducer;
 
+/**
+ * Builder for creating vector tile features with geometry and attributes.
+ * <p>
+ * This builder is reused by LayerBuilder for efficiency, avoiding object creation overhead
+ * when building multiple features.
+ */
 public class FeatureBuilder {
 
     private final LayerBuilder layerBuilder;
@@ -63,6 +69,12 @@ public class FeatureBuilder {
         return this;
     }
 
+    /**
+     * Sets the feature identifier.
+     *
+     * @param id the feature ID
+     * @return this FeatureBuilder for method chaining
+     */
     public FeatureBuilder id(long id) {
         featureBuilder.setId(id);
         return this;
@@ -97,6 +109,12 @@ public class FeatureBuilder {
         return this;
     }
 
+    /**
+     * Adds multiple attributes to this feature from a map.
+     *
+     * @param attributes map of attribute names to values
+     * @return this FeatureBuilder for method chaining
+     */
     public FeatureBuilder attributes(Map<String, Object> attributes) {
         attributes.forEach(this::attribute);
         return this;

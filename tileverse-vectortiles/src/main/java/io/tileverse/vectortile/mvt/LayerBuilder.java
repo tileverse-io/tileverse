@@ -23,6 +23,12 @@ import java.util.List;
 import java.util.Map;
 import org.locationtech.jts.geom.Geometry;
 
+/**
+ * Builder for creating vector tile layers with features.
+ * <p>
+ * Manages feature collection, key/value deduplication for efficient encoding,
+ * and construction of the MVT layer protobuf structure.
+ */
 public class LayerBuilder {
 
     final VectorTileBuilder vectorTileBuilder;
@@ -64,11 +70,26 @@ public class LayerBuilder {
         return reusableFeatureBuilder.reset(params().getNextFeatureId());
     }
 
+    /**
+     * Convenience method to add a feature with properties and geometry.
+     *
+     * @param properties map of attribute names to values
+     * @param geom the feature geometry
+     * @return this LayerBuilder for method chaining
+     */
     public LayerBuilder feature(Map<String, Object> properties, Geometry geom) {
         FeatureBuilder fb = feature();
         return fb.attributes(properties).geometry(geom).build();
     }
 
+    /**
+     * Convenience method to add a feature with properties, geometry, and explicit ID.
+     *
+     * @param properties map of attribute names to values
+     * @param geom the feature geometry
+     * @param id the feature identifier
+     * @return this LayerBuilder for method chaining
+     */
     public LayerBuilder feature(Map<String, Object> properties, Geometry geom, long id) {
         FeatureBuilder fb = feature();
         return fb.id(id).attributes(properties).geometry(geom).build();

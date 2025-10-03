@@ -100,6 +100,13 @@ import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
  */
 public class VectorTileBuilder {
 
+    /**
+     * Constructs a new VectorTileBuilder with default settings.
+     */
+    public VectorTileBuilder() {
+        // Default constructor
+    }
+
     // parameters
     private static final class Params {
         private int extent = 4096;
@@ -216,10 +223,22 @@ public class VectorTileBuilder {
 
     private final BuildParams state = new BuildParams();
 
+    /**
+     * Initializes this builder with settings from an existing tile.
+     *
+     * @param tile the tile to initialize from
+     * @return this VectorTileBuilder for method chaining
+     */
     public VectorTileBuilder init(VectorTile tile) {
         throw new UnsupportedOperationException("implement");
     }
 
+    /**
+     * Merges features from an existing tile into this builder.
+     *
+     * @param tile the tile to merge
+     * @return this VectorTileBuilder for method chaining
+     */
     public VectorTileBuilder merge(VectorTile tile) {
         throw new UnsupportedOperationException("implement");
     }
@@ -236,6 +255,8 @@ public class VectorTileBuilder {
     /**
      * Internal method to build the protobuf tile structure. Layers are added
      * directly via LayerBuilder.build(), so this just finalizes.
+     *
+     * @return the built VectorTile
      */
     public VectorTile build() {
         io.tileverse.vectortile.mvt.VectorTileProto.Tile proto = buildProto();
@@ -262,7 +283,7 @@ public class VectorTileBuilder {
      * both axis. Input geometries will be clipped to this extent plus the {@link #setClipBuffer(int) buffer}.
      *
      * @param extent an int with extent value. 4096 is a good value.
-     * @return
+     * @return this VectorTileBuilder for method chaining
      */
     public VectorTileBuilder setExtent(int extent) {
         state.setExtent(extent);
@@ -276,7 +297,7 @@ public class VectorTileBuilder {
      *
      * @param clipBuffer an int with clip buffer size for geometries. 8 is a good
      *                   value.
-     * @return
+     * @return this VectorTileBuilder for method chaining
      */
     public VectorTileBuilder setClipBuffer(int clipBuffer) {
         state.setClipBuffer(clipBuffer);
@@ -286,8 +307,8 @@ public class VectorTileBuilder {
     /**
      * when true the vector tile feature id is auto incremented
      *
-     * @param autoincrementIds
-     * @return
+     * @param autoincrementIds true to enable auto-incrementing feature IDs
+     * @return this VectorTileBuilder for method chaining
      */
     public VectorTileBuilder setAutoIncrementIds(boolean autoincrementIds) {
         state.setAutoincrementIds(autoincrementIds);
@@ -299,8 +320,8 @@ public class VectorTileBuilder {
      * non-points before (optional) scaling and encoding. A value {@code <=0} will
      * prevent simplifying geometry. A typical value is 0.1 for most use cases.
      *
-     * @param simplificationDistanceTolerance
-     * @return
+     * @param simplificationDistanceTolerance the distance tolerance for geometry simplification
+     * @return this VectorTileBuilder for method chaining
      */
     public VectorTileBuilder setSimplificationDistanceTolerance(double simplificationDistanceTolerance) {
         state.setSimplificationDistanceTolerance(simplificationDistanceTolerance);
@@ -312,8 +333,8 @@ public class VectorTileBuilder {
      * processing to ensure integer coordinates and discard invalid geometries. When
      * false, uses Math.round() during encoding (default behavior).
      *
-     * @param usePrecisionModelSnapping
-     * @return
+     * @param usePrecisionModelSnapping true to enable precision model snapping
+     * @return this VectorTileBuilder for method chaining
      */
     public VectorTileBuilder setUsePrecisionModelSnapping(boolean usePrecisionModelSnapping) {
         state.setUsePrecisionModelSnapping(usePrecisionModelSnapping);

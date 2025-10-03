@@ -127,7 +127,7 @@ public interface GeometryReader {
      * as geometry transformations. The filter is applied to the geometry's coordinate
      * sequences in-place.
      *
-     * <h3>Example</h3>
+     * <h4>Example</h4>
      * <pre>{@code
      * // Create a filter that scales coordinates
      * CoordinateSequenceFilter scaleFilter = new CoordinateSequenceFilter() {
@@ -163,7 +163,7 @@ public interface GeometryReader {
      * applying them in the order specified. This is useful for complex coordinate
      * transformations that require multiple steps.
      *
-     * <h3>Example</h3>
+     * <h4>Example</h4>
      * <pre>{@code
      * // Define individual transformations
      * UnaryOperator<Geometry> scale = geom -> scaleGeometry(geom, 2.0);

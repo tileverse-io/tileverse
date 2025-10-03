@@ -77,6 +77,13 @@ import org.locationtech.jts.geom.GeometryFactory;
  */
 public class VectorTileCodec {
 
+    /**
+     * Constructs a new VectorTileCodec.
+     */
+    public VectorTileCodec() {
+        // Default constructor
+    }
+
     // ========== Encoding Methods ==========
 
     /**
@@ -213,7 +220,7 @@ public class VectorTileCodec {
      * <li>{@link GeometryReader#withGeometryTransformation(UnaryOperator)} - apply coordinate transformations</li>
      * </ul>
      *
-     * <h3>Usage Examples</h3>
+     * <h4>Usage Examples</h4>
      * <pre>{@code
      * // Custom GeometryFactory with specific coordinate sequence implementation
      * GeometryFactory customFactory = new GeometryFactory(new CoordinateArraySequenceFactory());

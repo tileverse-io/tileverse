@@ -34,17 +34,32 @@ import org.locationtech.jts.geom.Geometry;
  */
 public interface VectorTile {
 
+    /**
+     * Returns the bounding box of this tile, if set.
+     *
+     * @return the bounding box, or empty if not set
+     */
     Optional<Envelope> boundingBox();
 
+    /**
+     * Returns a new VectorTile with the specified bounding box.
+     *
+     * @param bounds the bounding box to set
+     * @return a new VectorTile instance with the specified bounding box
+     */
     VectorTile withBoundingBox(Envelope bounds);
 
     /**
      * Returns all layer names in this tile.
+     *
+     * @return set of layer names
      */
     Set<String> getLayerNames();
 
     /**
      * Returns all layers in this tile.
+     *
+     * @return list of layers
      */
     List<Layer> getLayers();
 
@@ -62,12 +77,19 @@ public interface VectorTile {
      * @param layerName the name of the layer to get features from
      * @return a sequential-only stream of features from the specified layer
      * @see Layer#getFeatures()
-     * @see Feature#copy()
      */
     default Stream<Feature> getFeatures(String layerName) {
         return getLayer(layerName).map(Layer::getFeatures).orElseGet(Stream::empty);
     }
 
+    /**
+     * Returns a filtered stream of features from the specified layer.
+     *
+     * @param layerName the name of the layer to get features from
+     * @param filter predicate to filter features
+     * @param decoder custom geometry decoder for reading feature geometries
+     * @return a sequential-only stream of filtered features from the specified layer
+     */
     default Stream<Feature> getFeatures(String layerName, Predicate<Feature> filter, GeometryReader decoder) {
         return getLayer(layerName).map(l -> l.getFeatures(filter, decoder)).orElseGet(Stream::empty);
     }
@@ -91,10 +113,17 @@ public interface VectorTile {
      */
     public static interface Layer {
 
+        /**
+         * Returns the tile containing this layer.
+         *
+         * @return the parent VectorTile
+         */
         VectorTile getTile();
 
         /**
          * Returns the layer name.
+         *
+         * @return the layer name
          */
         String getName();
 
@@ -103,6 +132,8 @@ public interface VectorTile {
          * <p>
          * Defines the valid coordinate range [0, extent-1] and precision.
          * Defaults to 4096 in MVT. Common values are 256, 512, 1024, 2048, or 4096.
+         *
+         * @return the coordinate extent value
          */
         int getExtent();
 
@@ -110,11 +141,15 @@ public interface VectorTile {
          * Returns all attribute names present in this layer.
          * <p>
          * Represents the union of all attribute names across all features.
+         *
+         * @return set of attribute names
          */
         Set<String> getAttributeNames();
 
         /**
          * Returns the number of features in this layer.
+         *
+         * @return the feature count
          */
         int count();
 
@@ -126,12 +161,24 @@ public interface VectorTile {
          * If the features don't have ids, they'll be assigned an id based on their position in the list
          * @return a sequential-only stream that reuses Feature instances for memory
          *         efficiency
-         * @see MvtFeature#copy() for creating independent Feature copies
          */
         Stream<Feature> getFeatures();
 
+        /**
+         * Returns a filtered stream of features in this layer.
+         *
+         * @param filter predicate to filter features
+         * @return a sequential-only stream of filtered features
+         */
         Stream<Feature> getFeatures(Predicate<Feature> filter);
 
+        /**
+         * Returns a filtered stream of features in this layer with custom geometry decoding.
+         *
+         * @param filter predicate to filter features
+         * @param decoder custom geometry decoder for reading feature geometries
+         * @return a sequential-only stream of filtered features
+         */
         Stream<Feature> getFeatures(Predicate<Feature> filter, GeometryReader decoder);
 
         /**
@@ -145,6 +192,8 @@ public interface VectorTile {
 
             /**
              * Returns the layer containing this feature.
+             *
+             * @return the parent Layer
              */
             Layer getLayer();
 
@@ -152,6 +201,8 @@ public interface VectorTile {
              * Returns the feature identifier.
              * <p>
              * Features may have explicit IDs or default to 0.
+             *
+             * @return the feature ID
              */
             long getId();
 
@@ -160,6 +211,8 @@ public interface VectorTile {
              * <p>
              * Coordinates are preserved exactly as stored in the MVT data,
              * typically in the range [0, extent-1] where extent is the layer's extent value.
+             *
+             * @return the feature geometry
              */
             Geometry getGeometry();
 
@@ -176,6 +229,8 @@ public interface VectorTile {
              * <p>
              * The returned map reflects the feature's current attribute state.
              * Missing attributes return null when accessed individually.
+             *
+             * @return map of attribute names to values
              */
             Map<String, Object> getAttributes();
         }

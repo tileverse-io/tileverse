@@ -26,7 +26,9 @@ import java.io.IOException;
 @SuppressWarnings("serial")
 public class InsufficientBufferException extends IOException {
 
+    /** The required buffer size in bytes */
     private final int serializedSize;
+    /** The available buffer space in bytes */
     private final int available;
 
     /**

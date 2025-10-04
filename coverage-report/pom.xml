@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.tileverse</groupId>
+    <artifactId>tileverse-parent</artifactId>
+    <version>${revision}</version>
+  </parent>
+
+  <artifactId>tileverse-coverage-report</artifactId>
+  <packaging>pom</packaging>
+  <name>Tileverse - Coverage Report</name>
+  <description>Aggregate coverage report for all Tileverse modules</description>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>io.tileverse</groupId>
+        <artifactId>tileverse-dependencies</artifactId>
+        <version>${project.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.tileverse</groupId>
+        <artifactId>tileverse-bom</artifactId>
+        <version>${project.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+  <dependencies>
+    <!-- All Tileverse Range Reader modules -->
+    <dependency>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-s3</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-azure</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-gcs</artifactId>
+    </dependency>
+
+    <!-- Vector Tiles module -->
+    <dependency>
+      <groupId>io.tileverse.vectortiles</groupId>
+      <artifactId>tileverse-vectortiles</artifactId>
+    </dependency>
+
+    <!-- Tile Pyramid module -->
+    <dependency>
+      <groupId>io.tileverse.tilepyramid</groupId>
+      <artifactId>tileverse-tilepyramid</artifactId>
+    </dependency>
+
+    <!-- PMTiles module -->
+    <dependency>
+      <groupId>io.tileverse.pmtiles</groupId>
+      <artifactId>tileverse-pmtiles</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>report-aggregate</id>
+            <goals>
+              <goal>report-aggregate</goal>
+            </goals>
+            <phase>verify</phase>
+            <configuration>
+              <title>Tileverse Coverage</title>
+              <footer>Code coverage report for Tileverse ${project.version}</footer>
+              <outputDirectory>${project.reporting.outputDirectory}/jacoco-aggregate</outputDirectory>
+              <excludes>
+                <!-- Exclude protobuf generated classes -->
+                <exclude>**/VectorTileProto*</exclude>
+              </excludes>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -47,7 +47,7 @@ jobs:
     timeout-minutes: 20
     strategy:
       matrix:
-        java-version: ['17', '21', '24']
+        java-version: ['17', '21', '25']
         
     steps:
     - name: Checkout code
@@ -87,8 +87,7 @@ jobs:
     
     strategy:
       matrix:
-        java-version: ['17', '21', '24']
-        test-group: ['core', 's3', 'azure', 'gcs']
+        java-version: ['17', '21', '25']
         
     steps:
     - name: Checkout code
@@ -101,50 +100,17 @@ jobs:
         distribution: 'temurin'
         cache: maven
         
-    - name: Install dependencies
-      run: ./mvnw clean install -pl src/${{ matrix.test-group }} -am -DskipTests -ntp -T1C
-      
-    - name: Run integration tests - ${{ matrix.test-group }} (Java ${{ matrix.java-version }})
-      run: make test-${{ matrix.test-group }}-it
+    - name: Run integration tests - (Java ${{ matrix.java-version }})
+      run: make test-it
 
     - name: Upload integration test results
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: integration-test-results-${{ matrix.test-group }}-java-${{ matrix.java-version }}
+        name: integration-test-results-java-${{ matrix.java-version }}
         path: |
           **/target/failsafe-reports/
           **/target/logs/
-
-    - name: Remove SNAPSHOT jars from repository
-      run: |
-        find ~/.m2/repository -name "*SNAPSHOT*" -type d | xargs rm -rf {}
-
-  aggregator-integration-tests:
-    name: Aggregator Integration Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [lint, build]
-
-    strategy:
-      matrix:
-        java-version: ['17', '21', '24']
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up JDK ${{ matrix.java-version }}
-      uses: actions/setup-java@v4
-      with:
-        java-version: ${{ matrix.java-version }}
-        distribution: 'temurin'
-        cache: maven
-
-    - name: Install dependencies
-      run: ./mvnw clean install -pl src/all -am -DskipTests -ntp -T1C
-
-    - name: Run aggregator integration tests - (Java ${{ matrix.java-version }})
-      run: make test-all-it
 
     - name: Remove SNAPSHOT jars from repository
       run: |
@@ -154,7 +120,7 @@ jobs:
   pr-validation-complete:
     name: PR Validation Complete
     runs-on: ubuntu-latest
-    needs: [lint, build, integration-tests, aggregator-integration-tests]
+    needs: [lint, build, integration-tests]
     if: always()
     
     steps:
@@ -166,8 +132,7 @@ jobs:
         
         if [[ "${{ needs.lint.result }}" != "success" || 
               "${{ needs.build.result }}" != "success" || 
-              "${{ needs.integration-tests.result }}" != "success" ]] ||
-              "${{ needs.aggregator-integration-tests.result }}" != "success" ]]; then
+              "${{ needs.integration-tests.result }}" != "success" ]]; then
           echo "❌ PR validation failed"
           exit 1
         else

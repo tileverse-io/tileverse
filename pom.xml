@@ -2,12 +2,11 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>io.tileverse.rangereader</groupId>
-  <artifactId>tileverse-rangereader-parent</artifactId>
+  <groupId>io.tileverse</groupId>
+  <artifactId>tileverse-parent</artifactId>
   <version>${revision}</version>
   <packaging>pom</packaging>
-  <name>Tileverse Range Reader</name>
-  <description>A Java 17 library for reading content from multiple sources using range readers</description>
+  <name>Tileverse</name>
   <url>https://tileverse.io</url>
 
   <licenses>
@@ -30,20 +29,23 @@
   <modules>
     <module>dependencies</module>
     <module>bom</module>
-    <module>src</module>
-    <module>benchmarks</module>
+    <module>tileverse-rangereader</module>
+    <module>tileverse-vectortiles</module>
+    <module>tileverse-tilepyramid</module>
+    <module>tileverse-pmtiles</module>
+    <module>coverage-report</module>
   </modules>
 
   <scm>
-    <connection>scm:git:https://github.com/tileverse-io/tileverse-rangereader.git</connection>
-    <developerConnection>scm:git:https://github.com/tileverse-io/tileverse-rangereader.git</developerConnection>
+    <connection>scm:git:https://github.com/tileverse-io/tileverse.git</connection>
+    <developerConnection>scm:git:https://github.com/tileverse-io/tileverse.git</developerConnection>
     <tag>HEAD</tag>
-    <url>https://github.com/tileverse-io/tileverse-rangereader</url>
+    <url>https://github.com/tileverse-io/tileverse</url>
   </scm>
 
   <issueManagement>
     <system>GitHub Issues</system>
-    <url>https://github.com/tileverse-io/tileverse-rangereader/issues</url>
+    <url>https://github.com/tileverse-io/tileverse/issues</url>
   </issueManagement>
 
   <distributionManagement>
@@ -74,6 +76,7 @@
     <sortpom.action>sort</sortpom.action>
     <spotless.skip>${fmt.skip}</spotless.skip>
     <spotless.action>apply</spotless.action>
+    <palantirJavaFormat.version>2.73.0</palantirJavaFormat.version>
 
     <!-- Dependency versions -->
     <!-- Runtime dependencies are defined in the dependencies/pom.xml BOM -->
@@ -88,6 +91,11 @@
     <mockito.version>5.18.0</mockito.version>
     <testcontainers.version>1.21.3</testcontainers.version>
     <wiremock.version>3.13.1</wiremock.version>
+    <surefire.skip>false</surefire.skip>
+    <failsafe.skip>false</failsafe.skip>
+
+    <!-- Plugin versions -->
+    <jacoco.version>0.8.13</jacoco.version>
   </properties>
 
   <dependencyManagement>
@@ -174,6 +182,54 @@
       </dependency>
     </dependencies>
   </dependencyManagement>
+  <dependencies>
+    <!-- Testing -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-params</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.wiremock</groupId>
+      <artifactId>wiremock-standalone</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.awaitility</groupId>
+      <artifactId>awaitility</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
   <repositories>
     <repository>
       <releases>
@@ -260,7 +316,9 @@
           <version>3.5.3</version>
           <inherited>true</inherited>
           <configuration>
-            <argLine>--add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
+            <skip>${surefire.skip}</skip>
+            <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
+            <argLine>@{argLine} --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
           </configuration>
         </plugin>
         <plugin>
@@ -269,7 +327,9 @@
           <version>3.5.3</version>
           <inherited>true</inherited>
           <configuration>
-            <argLine>--add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
+            <skip>${failsafe.skip}</skip>
+            <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
+            <argLine>@{argLine} --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
           </configuration>
           <executions>
             <execution>
@@ -358,6 +418,40 @@
           <artifactId>maven-gpg-plugin</artifactId>
           <version>3.2.8</version>
         </plugin>
+        <plugin>
+          <groupId>org.jacoco</groupId>
+          <artifactId>jacoco-maven-plugin</artifactId>
+          <version>${jacoco.version}</version>
+          <inherited>true</inherited>
+          <executions>
+            <execution>
+              <id>prepare-agent</id>
+              <goals>
+                <goal>prepare-agent</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>prepare-agent-integration</id>
+              <goals>
+                <goal>prepare-agent-integration</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>report</id>
+              <goals>
+                <goal>report</goal>
+              </goals>
+              <phase>test</phase>
+            </execution>
+            <execution>
+              <id>report-integration</id>
+              <goals>
+                <goal>report-integration</goal>
+              </goals>
+              <phase>post-integration-test</phase>
+            </execution>
+          </executions>
+        </plugin>
       </plugins>
     </pluginManagement>
 
@@ -389,6 +483,10 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
+        <configuration>
+          <!-- Allow missing javadoc for builders and internal classes -->
+          <doclint>all,-missing</doclint>
+        </configuration>
         <executions>
           <execution>
             <id>attach-javadocs</id>
@@ -408,11 +506,13 @@
           <skip>${spotless.skip}</skip>
           <java>
             <palantirJavaFormat>
-              <version>2.61.0</version>
+              <version>${palantirJavaFormat.version}</version>
             </palantirJavaFormat>
+            <!--
             <licenseHeader>
               <file>${maven.multiModuleProjectDirectory}/license_header.txt</file>
             </licenseHeader>
+            -->
           </java>
           <upToDateChecking>
             <enabled>true</enabled>
@@ -480,6 +580,12 @@
         </executions>
       </plugin>
 
+      <!-- Code Coverage with JaCoCo -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+      </plugin>
+
       <!-- Central Portal Publishing -->
       <plugin>
         <groupId>org.sonatype.central</groupId>
@@ -487,11 +593,12 @@
         <extensions>true</extensions>
         <configuration>
           <publishingServerId>central</publishingServerId>
-          <deploymentName>Tileverse Range Reader</deploymentName>
+          <deploymentName>Tileverse</deploymentName>
           <autoPublish>true</autoPublish>
           <waitUntil>published</waitUntil>
           <excludeArtifacts>
             <excludeArtifact>tileverse-rangereader-benchmarks</excludeArtifact>
+            <excludeArtifact>tileverse-coverage-report</excludeArtifact>
           </excludeArtifacts>
         </configuration>
       </plugin>

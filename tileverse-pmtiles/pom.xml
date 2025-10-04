@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.tileverse</groupId>
+    <artifactId>tileverse-parent</artifactId>
+    <version>${revision}</version>
+  </parent>
+
+  <groupId>io.tileverse.pmtiles</groupId>
+  <artifactId>tileverse-pmtiles</artifactId>
+  <name>Tileverse PMTiles</name>
+  <description>PMTiles format implementation</description>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>io.tileverse</groupId>
+        <artifactId>tileverse-dependencies</artifactId>
+        <version>${project.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.tileverse</groupId>
+        <artifactId>tileverse-bom</artifactId>
+        <version>${project.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!--
+     Adding dependencies and bom as dependencies with type=pom and scope=provided here
+     does not change the dependency tree for the submodules at all, but forces the BOMs to be installed
+     in the local maven repository first, either when building the whole project or when a submodule is
+     built independently (e.g. mvn install -pl :<module> -am), hence ensuring any change to the dependencies
+     is picked up.
+    -->
+    <dependency>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-dependencies</artifactId>
+      <version>${project.version}</version>
+      <type>pom</type>
+      <scope>provided</scope>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-bom</artifactId>
+      <version>${project.version}</version>
+      <type>pom</type>
+      <scope>provided</scope>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.tilepyramid</groupId>
+      <artifactId>tileverse-tilepyramid</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.vectortiles</groupId>
+      <artifactId>tileverse-vectortiles</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-s3</artifactId>
+      <scope>runtime</scope>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-azure</artifactId>
+      <scope>runtime</scope>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-gcs</artifactId>
+      <scope>runtime</scope>
+      <optional>true</optional>
+    </dependency>
+
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.github.ben-manes.caffeine</groupId>
+      <artifactId>caffeine</artifactId>
+    </dependency>
+    <!-- Compression -->
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-compress</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.github.luben</groupId>
+      <artifactId>zstd-jni</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -2,27 +2,31 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>io.tileverse.rangereader</groupId>
-    <artifactId>tileverse-rangereader-parent</artifactId>
+    <groupId>io.tileverse</groupId>
+    <artifactId>tileverse-parent</artifactId>
     <version>${revision}</version>
   </parent>
-  <artifactId>tileverse-rangereader-dependencies</artifactId>
+  <artifactId>tileverse-dependencies</artifactId>
   <packaging>pom</packaging>
-  <name>Tileverse Range Reader Dependencies BOM</name>
-  <description>Manages versions of third-party libraries used by Tileverse RangeReader</description>
+  <name>Tileverse Dependencies BOM</name>
+  <description>Manages versions of third-party libraries used by Tileverse</description>
 
   <properties>
     <!-- Dependency versions -->
+    <jts.version>1.20.0</jts.version>
+    <protobuf-java.version>4.31.1</protobuf-java.version>
+    <commons-compress.version>1.28.0</commons-compress.version>
+    <zstd-jni.version>1.5.7-4</zstd-jni.version>
+    <caffeine.version>3.2.2</caffeine.version>
+    <commons-codec.version>1.19.0</commons-codec.version>
+    <jackson.version>2.19.2</jackson.version>
+    <slf4j-api.version>2.0.17</slf4j-api.version>
     <aws-s3.version>2.32.25</aws-s3.version>
     <azure-identity.version>1.16.3</azure-identity.version>
     <azure-storage-blob.version>12.31.1</azure-storage-blob.version>
-    <caffeine.version>3.2.2</caffeine.version>
-    <commons-codec.version>1.19.0</commons-codec.version>
     <google-cloud-storage.version>2.55.0</google-cloud-storage.version>
     <httpclient.version>4.5.14</httpclient.version>
-    <jackson.version>2.19.2</jackson.version>
     <msal4j.version>1.22.0</msal4j.version>
-    <slf4j-api.version>2.0.17</slf4j-api.version>
   </properties>
 
   <dependencyManagement>
@@ -110,6 +114,34 @@
         <groupId>com.github.ben-manes.caffeine</groupId>
         <artifactId>caffeine</artifactId>
         <version>${caffeine.version}</version>
+      </dependency>
+
+      <!-- JTS Topology Suite -->
+      <dependency>
+        <groupId>org.locationtech.jts</groupId>
+        <artifactId>jts-core</artifactId>
+        <version>${jts.version}</version>
+      </dependency>
+
+      <!-- Protocol Buffers -->
+      <dependency>
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-javalite</artifactId>
+        <version>${protobuf-java.version}</version>
+      </dependency>
+
+      <!-- Compression -->
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-compress</artifactId>
+        <version>${commons-compress.version}</version>
+      </dependency>
+      <dependency>
+        <!-- fulfill the optional dependency from commons-compress:1.28.0 -->
+        <!-- keep it up to date when upgrading commons-compress -->
+        <groupId>com.github.luben</groupId>
+        <artifactId>zstd-jni</artifactId>
+        <version>${zstd-jni.version}</version>
       </dependency>
 
       <!-- Google Cloud Storage -->

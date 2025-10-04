@@ -50,16 +50,16 @@
      is picked up.
     -->
     <dependency>
-      <groupId>io.tileverse.rangereader</groupId>
-      <artifactId>tileverse-rangereader-dependencies</artifactId>
+      <groupId>io.tileverse</groupId>
+      <artifactId>tileverse-dependencies</artifactId>
       <version>${project.version}</version>
       <type>pom</type>
       <scope>provided</scope>
       <optional>true</optional>
     </dependency>
     <dependency>
-      <groupId>io.tileverse.rangereader</groupId>
-      <artifactId>tileverse-rangereader-bom</artifactId>
+      <groupId>io.tileverse</groupId>
+      <artifactId>tileverse-bom</artifactId>
       <version>${project.version}</version>
       <type>pom</type>
       <scope>provided</scope>

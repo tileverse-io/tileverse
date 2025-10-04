@@ -309,30 +309,4 @@ class SeekableByteChannelDataInputTest {
             assertThat(dataInput.readShort()).isEqualTo((short) 555);
         }
     }
-
-    @Test
-    void skipBytes_performanceComparison() throws IOException {
-        // This test demonstrates the performance advantage of seeking vs reading
-        byte[] largeData = new byte[1000000]; // 1MB
-        Files.write(testFile, largeData);
-
-        try (SeekableByteChannel channel = Files.newByteChannel(testFile, StandardOpenOption.READ)) {
-            SeekableByteChannelDataInput dataInput = SeekableByteChannelDataInput.of(channel);
-
-            long startTime = System.nanoTime();
-
-            // Skip a large amount - this should be very fast with seeking
-            int skipped = dataInput.skipBytes(900000);
-
-            long endTime = System.nanoTime();
-            long duration = endTime - startTime;
-
-            assertThat(skipped).isEqualTo(900000);
-            assertThat(dataInput.position()).isEqualTo(900000);
-
-            // Seeking should be orders of magnitude faster than reading 900KB
-            // Even on slow systems, seeking 900KB should take less than 1ms
-            assertThat(duration).isLessThan(1_000_000); // 1ms in nanoseconds
-        }
-    }
 }

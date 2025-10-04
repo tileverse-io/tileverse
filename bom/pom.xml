@@ -39,8 +39,8 @@
         <version>${project.version}</version>
       </dependency>
       <dependency>
-        <groupId>io.tileverse.tilepyramid</groupId>
-        <artifactId>tileverse-tilepyramid</artifactId>
+        <groupId>io.tileverse.tilematrixset</groupId>
+        <artifactId>tileverse-tilematrixset</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>

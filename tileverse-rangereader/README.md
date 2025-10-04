@@ -74,4 +74,4 @@ This library is used by other Tileverse modules:
 
 - **[tileverse-pmtiles](../tileverse-pmtiles/)**: PMTiles format support
 - **[tileverse-vectortiles](../tileverse-vectortiles/)**: Mapbox Vector Tiles support
-- **[tileverse-tilepyramid](../tileverse-tilepyramid/)**: Tile pyramid models
+- **[tileverse-tilematrixset](../tileverse-tilematrixset/)**: Tile matrixset models

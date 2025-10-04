@@ -12,24 +12,24 @@ jobs:
   publish-snapshot:
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
         java-version: '21'
         distribution: 'temurin'
         cache: maven
-        
+
     - name: Import GPG key
       uses: crazy-max/ghaction-import-gpg@v6
       with:
         gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
         passphrase: ${{ secrets.GPG_PASSPHRASE }}
-        
+
     - name: Configure Maven settings
       uses: s4u/maven-settings-action@v3.1.0
       with:
@@ -39,7 +39,7 @@ jobs:
             "username": "${{ secrets.CENTRAL_USERNAME }}",
             "password": "${{ secrets.CENTRAL_TOKEN }}"
           }]
-          
+
     - name: Build and test (manual trigger only)
       if: ${{ github.event_name == 'workflow_dispatch' }}
       run: ./mvnw clean verify

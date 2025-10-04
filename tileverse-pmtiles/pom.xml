@@ -57,8 +57,8 @@
       <optional>true</optional>
     </dependency>
     <dependency>
-      <groupId>io.tileverse.tilepyramid</groupId>
-      <artifactId>tileverse-tilepyramid</artifactId>
+      <groupId>io.tileverse.tilematrixset</groupId>
+      <artifactId>tileverse-tilematrixset</artifactId>
     </dependency>
     <dependency>
       <groupId>io.tileverse.vectortiles</groupId>

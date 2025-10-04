@@ -31,7 +31,7 @@
     <module>bom</module>
     <module>tileverse-rangereader</module>
     <module>tileverse-vectortiles</module>
-    <module>tileverse-tilepyramid</module>
+    <module>tileverse-tilematrixset</module>
     <module>tileverse-pmtiles</module>
     <module>coverage-report</module>
   </modules>

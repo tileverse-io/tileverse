@@ -6,9 +6,9 @@ Optimize the Tileverse Range Reader for your specific use case with proper confi
 
 ### Using BOMs (Recommended)
 
-The Tileverse Range Reader provides Bills of Materials (BOMs) to simplify dependency management:
+The Tileverse provides Bills of Materials (BOMs) to simplify dependency management:
 
-#### Range Reader BOM
+#### TileVerse BOM
 
 Use this BOM in your application to manage Range Reader module versions:
 
@@ -16,8 +16,8 @@ Use this BOM in your application to manage Range Reader module versions:
 <dependencyManagement>
     <dependencies>
         <dependency>
-            <groupId>io.tileverse.rangereader</groupId>
-            <artifactId>tileverse-rangereader-bom</artifactId>
+            <groupId>io.tileverse</groupId>
+            <artifactId>tileverse-bom</artifactId>
             <version>1.0-SNAPSHOT</version>
             <type>pom</type>
             <scope>import</scope>
@@ -45,18 +45,18 @@ If you're developing libraries that extend Range Reader or need specific third-p
 ```xml
 <dependencyManagement>
     <dependencies>
-        <!-- Import Range Reader dependencies BOM first -->
+        <!-- Import TileVerse dependencies BOM first -->
         <dependency>
-            <groupId>io.tileverse.rangereader</groupId>
-            <artifactId>tileverse-rangereader-dependencies</artifactId>
+            <groupId>io.tileverse</groupId>
+            <artifactId>tileverse-dependencies</artifactId>
             <version>1.0-SNAPSHOT</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
-        <!-- Then import Range Reader modules BOM -->
+        <!-- Then import TileVerse modules BOM -->
         <dependency>
-            <groupId>io.tileverse.rangereader</groupId>
-            <artifactId>tileverse-rangereader-bom</artifactId>
+            <groupId>io.tileverse</groupId>
+            <artifactId>tileverse-bom</artifactId>
             <version>1.0-SNAPSHOT</version>
             <type>pom</type>
             <scope>import</scope>

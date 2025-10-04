@@ -17,8 +17,8 @@ The project provides a Bill of Materials (BOM) to manage dependency versions:
 <dependencyManagement>
     <dependencies>
         <dependency>
-            <groupId>io.tileverse.rangereader</groupId>
-            <artifactId>tileverse-rangereader-bom</artifactId>
+            <groupId>io.tileverse</groupId>
+            <artifactId>tileverse-bom</artifactId>
             <version>1.0-SNAPSHOT</version>
             <type>pom</type>
             <scope>import</scope>
@@ -107,7 +107,7 @@ If you prefer not to use the BOM, specify versions explicitly:
 
 The project provides two BOMs for different use cases:
 
-#### Tileverse Range Reader BOM
+#### Tileverse BOM
 
 Manages versions of all Tileverse Range Reader modules:
 
@@ -115,8 +115,8 @@ Manages versions of all Tileverse Range Reader modules:
 <dependencyManagement>
     <dependencies>
         <dependency>
-            <groupId>io.tileverse.rangereader</groupId>
-            <artifactId>tileverse-rangereader-bom</artifactId>
+            <groupId>io.tileverse</groupId>
+            <artifactId>tileverse-bom</artifactId>
             <version>1.0-SNAPSHOT</version>
             <type>pom</type>
             <scope>import</scope>
@@ -133,8 +133,8 @@ Manages versions of third-party dependencies (for library developers):
 <dependencyManagement>
     <dependencies>
         <dependency>
-            <groupId>io.tileverse.rangereader</groupId>
-            <artifactId>tileverse-rangereader-dependencies</artifactId>
+            <groupId>io.tileverse</groupId>
+            <artifactId>tileverse-dependencies</artifactId>
             <version>1.0-SNAPSHOT</version>
             <type>pom</type>
             <scope>import</scope>
@@ -158,7 +158,7 @@ This BOM includes managed versions for:
 ```gradle
 dependencyManagement {
     imports {
-        mavenBom 'io.tileverse.rangereader:tileverse-rangereader-bom:1.0-SNAPSHOT'
+        mavenBom 'io.tileverse:tileverse-bom:1.0-SNAPSHOT'
     }
 }
 

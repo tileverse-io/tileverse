@@ -34,7 +34,7 @@ Reading and writing PMTiles archives - a cloud-optimized format for map tiles.
 - Memory-efficient streaming
 - Vector and raster tile support
 
-### 📐 [Tile Pyramid](tileverse-tilepyramid/)
+### 📐 [Tile Matrixset](tileverse-tilematrixset/)
 
 Generic object model for defining tile pyramids and tiling schemes.
 
@@ -94,8 +94,8 @@ Then add the modules you need:
 
   <!-- Tile Pyramid model -->
   <dependency>
-    <groupId>io.tileverse.tilepyramid</groupId>
-    <artifactId>tileverse-tilepyramid</artifactId>
+    <groupId>io.tileverse.tilematrixset</groupId>
+    <artifactId>tileverse-tilematrixset</artifactId>
   </dependency>
 
   <!-- Vector Tiles -->
@@ -114,7 +114,7 @@ dependencies {
 
     implementation 'io.tileverse.rangereader:tileverse-rangereader-all'
     implementation 'io.tileverse.pmtiles:tileverse-pmtiles'
-    implementation 'io.tileverse.tilepyramid:tileverse-tilepyramid'
+    implementation 'io.tileverse.tilematrixset:tileverse-tilematrixset'
     implementation 'io.tileverse.vectortiles:tileverse-vectortiles'
 }
 ```
@@ -211,7 +211,7 @@ tileverse/
 │   ├── gcs/                  # Google Cloud Storage support
 │   └── all/                  # Aggregator with all providers
 ├── tileverse-vectortiles/    # Mapbox Vector Tiles support
-├── tileverse-tilepyramid/    # Tile pyramid model
+├── tileverse-tilematrixset/    # Tile pyramid model
 ├── tileverse-pmtiles/        # PMTiles format support
 ├── dependencies/             # BOM for dependency management
 ├── bom/                      # BOM for Tileverse modules

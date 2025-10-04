@@ -121,7 +121,7 @@ This library works together with other Tileverse modules:
 
 - **[tileverse-rangereader](../tileverse-rangereader/)**: Provides the underlying data access layer
 - **[tileverse-vectortiles](../tileverse-vectortiles/)**: For working with Mapbox Vector Tiles
-- **[tileverse-tilepyramid](../tileverse-tilepyramid/)**: Generic tile pyramid and tiling scheme models
+- **[tileverse-tilematrixset](../tileverse-tilematrixset/)**: Generic tile pyramid and tiling scheme models
 
 ## Performance
 

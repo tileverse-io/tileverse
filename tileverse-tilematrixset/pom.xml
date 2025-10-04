@@ -8,8 +8,8 @@
     <version>${revision}</version>
   </parent>
 
-  <groupId>io.tileverse.tilepyramid</groupId>
-  <artifactId>tileverse-tilepyramid</artifactId>
+  <groupId>io.tileverse.tilematrixset</groupId>
+  <artifactId>tileverse-tilematrixset</artifactId>
   <name>Tileverse Tile Pyramid</name>
   <description>Generic object model for defining tile pyramids and tiling schemes</description>
 

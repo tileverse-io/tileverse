@@ -643,20 +643,5 @@
         <sortpom.verifyFail>stop</sortpom.verifyFail>
       </properties>
     </profile>
-
-    <!-- Skip formatting plugins in Eclipse to avoid IDE integration issues -->
-    <profile>
-      <id>eclipse-integration</id>
-      <activation>
-        <property>
-          <name>m2e.version</name>
-        </property>
-      </activation>
-      <properties>
-        <spotless.skip>true</spotless.skip>
-        <sortpom.skip>true</sortpom.skip>
-      </properties>
-    </profile>
-
   </profiles>
 </project>

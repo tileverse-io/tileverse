@@ -1,0 +1,177 @@
+/* Custom styles for Tileverse Range Reader documentation */
+
+/* Color scheme customization */
+:root {
+  --md-primary-fg-color: #2563eb;
+  --md-primary-fg-color--light: #3b82f6;
+  --md-primary-fg-color--dark: #1d4ed8;
+  --md-accent-fg-color: #2563eb;
+}
+
+/* Card grid layout for index pages */
+.grid.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.grid.cards > .card {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.25rem;
+  padding: 1.5rem;
+  transition: border-color 0.125s, box-shadow 0.125s;
+}
+
+.grid.cards > .card:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Performance table styling */
+.performance-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.performance-table th,
+.performance-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.performance-table th {
+  font-weight: 600;
+  background-color: var(--md-default-bg-color);
+}
+
+/* Code block enhancements */
+.highlight .filename {
+  background-color: var(--md-code-bg-color);
+  color: var(--md-code-fg-color);
+  padding: 0.5rem 1rem;
+  border-top-left-radius: 0.25rem;
+  border-top-right-radius: 0.25rem;
+  font-family: var(--md-code-font);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Architecture diagram styling */
+.architecture-diagram {
+  text-align: center;
+  margin: 2rem 0;
+}
+
+.architecture-diagram img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.25rem;
+}
+
+/* Module badge styling */
+.module-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: white;
+  border-radius: 0.25rem;
+  margin-right: 0.5rem;
+}
+
+.module-badge.core {
+  background-color: #2563eb;
+}
+
+.module-badge.cloud {
+  background-color: #f59e0b;
+}
+
+.module-badge.benchmarks {
+  background-color: #64748b;
+}
+
+/* API reference styling */
+.api-method {
+  border-left: 4px solid var(--md-accent-fg-color);
+  padding-left: 1rem;
+  margin: 1rem 0;
+}
+
+.api-method-signature {
+  font-family: var(--md-code-font);
+  background-color: var(--md-code-bg-color);
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Quality attributes styling */
+.quality-tree {
+  margin: 1.5rem 0;
+}
+
+.quality-tree ul {
+  list-style-type: none;
+  padding-left: 1.5rem;
+}
+
+.quality-tree > ul {
+  padding-left: 0;
+}
+
+.quality-tree li {
+  margin: 0.5rem 0;
+  position: relative;
+}
+
+.quality-tree li:before {
+  content: "▸";
+  position: absolute;
+  left: -1rem;
+  color: var(--md-accent-fg-color);
+}
+
+/* Responsive design */
+@media screen and (max-width: 768px) {
+  .grid.cards {
+    grid-template-columns: 1fr;
+  }
+  
+  .architecture-diagram {
+    margin: 1rem 0;
+  }
+}
+
+/* Dark mode adjustments */
+[data-md-color-scheme="slate"] {
+  .grid.cards > .card {
+    border-color: var(--md-default-fg-color--lightest);
+    background-color: var(--md-default-bg-color);
+  }
+  
+  .performance-table th {
+    background-color: var(--md-code-bg-color);
+  }
+}
+
+/* Print styles */
+@media print {
+  .grid.cards {
+    display: block;
+  }
+  
+  .grid.cards > .card {
+    break-inside: avoid;
+    margin-bottom: 1rem;
+  }
+  
+  .architecture-diagram img {
+    max-width: 100%;
+    page-break-inside: avoid;
+  }
+}

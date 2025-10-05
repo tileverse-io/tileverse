@@ -240,33 +240,111 @@ var reader = HttpRangeReader.builder()
 
 ### HTTP with Authentication
 
+#### Programmatic Configuration
+
+Using the builder API directly:
+
 ```java
 // Basic authentication
 var reader = HttpRangeReader.builder()
     .uri(URI.create("https://example.com/data.bin"))
-    .withBasicAuth("username", "password")
+    .basicAuth("username", "password")
     .build();
 
 // Bearer token
 var reader = HttpRangeReader.builder()
     .uri(URI.create("https://api.example.com/data.bin"))
-    .withBearerToken("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
+    .bearerToken("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
     .build();
 
 // API key
 var reader = HttpRangeReader.builder()
     .uri(URI.create("https://api.example.com/data.bin"))
-    .withApiKey("X-API-Key", "your-api-key")
+    .apiKey("X-API-Key", "your-api-key", null)
     .build();
 
-// Custom headers
+// API key with prefix
 var reader = HttpRangeReader.builder()
     .uri(URI.create("https://api.example.com/data.bin"))
-    .withCustomHeaders(Map.of(
-        "X-Custom-Auth", "auth-value",
-        "X-Client-Version", "1.0"
-    ))
+    .apiKey("Authorization", "your-api-key", "ApiKey ")
     .build();
+```
+
+#### Property-Based Configuration
+
+Using `RangeReaderFactory` with properties for declarative configuration:
+
+```java
+// Basic authentication
+Properties props = new Properties();
+props.setProperty("io.tileverse.rangereader.http.username", "username");
+props.setProperty("io.tileverse.rangereader.http.password", "password");
+
+var reader = RangeReaderFactory.create(
+    URI.create("https://example.com/data.bin"),
+    props);
+
+// Bearer token authentication
+Properties props = new Properties();
+props.setProperty("io.tileverse.rangereader.http.bearer-token",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...");
+
+var reader = RangeReaderFactory.create(
+    URI.create("https://api.example.com/data.bin"),
+    props);
+
+// API key authentication
+Properties props = new Properties();
+props.setProperty("io.tileverse.rangereader.http.api-key-headername", "X-API-Key");
+props.setProperty("io.tileverse.rangereader.http.api-key", "your-api-key-here");
+
+var reader = RangeReaderFactory.create(
+    URI.create("https://api.example.com/data.bin"),
+    props);
+
+// API key with prefix
+Properties props = new Properties();
+props.setProperty("io.tileverse.rangereader.http.api-key-headername", "Authorization");
+props.setProperty("io.tileverse.rangereader.http.api-key", "your-api-key");
+props.setProperty("io.tileverse.rangereader.http.api-key-value-prefix", "ApiKey ");
+
+var reader = RangeReaderFactory.create(
+    URI.create("https://api.example.com/data.bin"),
+    props);
+```
+
+**Available HTTP Configuration Parameters:**
+
+| Parameter Key | Type | Description |
+|--------------|------|-------------|
+| `io.tileverse.rangereader.http.timeout-millis` | Integer | Connection timeout in milliseconds (default: 5000) |
+| `io.tileverse.rangereader.http.trust-all-certificates` | Boolean | Trust all SSL certificates, including self-signed (dev only) |
+| `io.tileverse.rangereader.http.username` | String | Username for HTTP Basic Authentication |
+| `io.tileverse.rangereader.http.password` | String | Password for HTTP Basic Authentication |
+| `io.tileverse.rangereader.http.bearer-token` | String | Bearer token for OAuth 2.0/JWT authentication |
+| `io.tileverse.rangereader.http.api-key-headername` | String | HTTP header name for API key (e.g., "X-API-Key") |
+| `io.tileverse.rangereader.http.api-key` | String | API key value |
+| `io.tileverse.rangereader.http.api-key-value-prefix` | String | Optional prefix for API key value (e.g., "ApiKey ") |
+
+#### Environment Variables
+
+HTTP configuration can also be provided via environment variables (useful for containerized deployments):
+
+```bash
+# Connection settings
+export IO_TILEVERSE_RANGEREADER_HTTP_TIMEOUT_MILLIS=10000
+export IO_TILEVERSE_RANGEREADER_HTTP_TRUST_ALL_CERTIFICATES=false
+
+# Basic authentication
+export IO_TILEVERSE_RANGEREADER_HTTP_USERNAME=myuser
+export IO_TILEVERSE_RANGEREADER_HTTP_PASSWORD=mypassword
+
+# Bearer token authentication
+export IO_TILEVERSE_RANGEREADER_HTTP_BEARER_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# API key authentication
+export IO_TILEVERSE_RANGEREADER_HTTP_API_KEY_HEADERNAME=X-API-Key
+export IO_TILEVERSE_RANGEREADER_HTTP_API_KEY=abc123xyz
 ```
 
 ### HTTP Client Tuning
@@ -275,10 +353,15 @@ var reader = HttpRangeReader.builder()
 // For high-throughput scenarios
 var reader = HttpRangeReader.builder()
     .uri(URI.create("https://example.com/data.bin"))
-    .connectTimeout(Duration.ofSeconds(10))
-    .readTimeout(Duration.ofSeconds(30))
-    .maxRetries(3)
+    .connectionTimeout(Duration.ofSeconds(10))
     .build();
+
+// Property-based configuration
+Properties props = new Properties();
+props.setProperty("io.tileverse.rangereader.http.timeout-millis", "10000");
+var reader = RangeReaderFactory.create(
+    URI.create("https://example.com/data.bin"),
+    props);
 ```
 
 ## Optimal Configurations by Use Case

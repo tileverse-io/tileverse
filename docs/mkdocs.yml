@@ -1,10 +1,10 @@
-site_name: Tileverse Range Reader Documentation
-site_description: A Java library for reading byte ranges from various data sources
+site_name: Tileverse Documentation
+site_description: Java libraries for cloud-optimized geospatial data access
 site_author: Multiversio LLC
 copyright: "&copy; 2025 Multiversio LLC. All rights reserved."
-repo_url: https://github.com/tileverse-io/tileverse-rangereader
+repo_url: https://github.com/tileverse-io/tileverse
 edit_uri: edit/main/docs/src/
-site_url: https://docs.tileverse.io/rangereader/
+site_url: https://tileverse.io/
 docs_dir: src
 
 theme:
@@ -91,20 +91,49 @@ plugins:
 
 nav:
   - Home: index.md
-  - User Guide:
-    - Introduction: user-guide/index.md
-    - Installation: user-guide/installation.md
-    - Quick Start: user-guide/quick-start.md
-    - Configuration: user-guide/configuration.md
-    - Authentication: user-guide/authentication.md
-    - Troubleshooting: user-guide/troubleshooting.md
-  - Developer Guide:
-    - Introduction: developer-guide/index.md
-    - Architecture: developer-guide/architecture.md
-    - Building: developer-guide/building.md
-    - Testing: developer-guide/testing.md
-    - Performance: developer-guide/performance.md
-    - Contributing: developer-guide/contributing.md
+  - Getting Started: getting-started.md
+  - Range Reader:
+    - Overview: rangereader/index.md
+    - User Guide:
+      - Introduction: rangereader/user-guide/index.md
+      - Installation: rangereader/user-guide/installation.md
+      - Quick Start: rangereader/user-guide/quick-start.md
+      - Configuration: rangereader/user-guide/configuration.md
+      - Authentication: rangereader/user-guide/authentication.md
+      - Troubleshooting: rangereader/user-guide/troubleshooting.md
+    - Developer Guide:
+      - Introduction: rangereader/developer-guide/index.md
+      - Architecture: rangereader/developer-guide/architecture.md
+      - Building: rangereader/developer-guide/building.md
+      - Testing: rangereader/developer-guide/testing.md
+      - Performance: rangereader/developer-guide/performance.md
+      - Contributing: rangereader/developer-guide/contributing.md
+  - PMTiles:
+    - Overview: pmtiles/index.md
+    - User Guide:
+      - Introduction: pmtiles/user-guide/index.md
+      - Quick Start: pmtiles/user-guide/quick-start.md
+      - Reading PMTiles: pmtiles/user-guide/reading.md
+      - Writing PMTiles: pmtiles/user-guide/writing.md
+      - Cloud Storage: pmtiles/user-guide/cloud-storage.md
+  - Vector Tiles:
+    - Overview: vectortiles/index.md
+    - User Guide:
+      - Introduction: vectortiles/user-guide/index.md
+      - Quick Start: vectortiles/user-guide/quick-start.md
+      - Encoding Tiles: vectortiles/user-guide/encoding.md
+      - Decoding Tiles: vectortiles/user-guide/decoding.md
+  - Tile Matrix Set:
+    - Overview: tilematrixset/index.md
+    - User Guide:
+      - Introduction: tilematrixset/user-guide/index.md
+      - Quick Start: tilematrixset/user-guide/quick-start.md
+      - Tile Pyramids: tilematrixset/user-guide/tile-pyramids.md
+      - Standard Sets: tilematrixset/user-guide/standard-sets.md
+  - Architecture:
+    - Overview: architecture/index.md
+    - System Design: architecture/system-design.md
+    - Module Dependencies: architecture/dependencies.md
 
 extra:
   analytics:
@@ -114,6 +143,6 @@ extra:
     provider: mike
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/tileverse-io/tileverse-rangereader
+      link: https://github.com/tileverse-io/tileverse
     - icon: fontawesome/solid/globe
       link: https://tileverse.io

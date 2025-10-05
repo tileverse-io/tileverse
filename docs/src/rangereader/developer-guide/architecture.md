@@ -33,13 +33,13 @@ ByteBuffer data = reader.readRange(offset, length);  // Same operation everywher
 
 This architectural foundation allows format libraries to focus on **parsing logic** instead of **I/O plumbing**.
 
-![System Context Diagram](../assets/images/structurizr/structurizr-SystemContext.svg)
+![System Context Diagram](../../assets/images/structurizr/structurizr-SystemContext.svg)
 
 ## Module Architecture
 
 The Tileverse Range Reader library follows a **modular architecture** that enables incremental adoption and minimal dependency footprint. Each module serves a specific purpose and can be used independently or in combination with others.
 
-![Container Diagram](../assets/images/structurizr/structurizr-Containers.svg)
+![Container Diagram](../../assets/images/structurizr/structurizr-Containers.svg)
 
 ### Module Dependencies
 
@@ -82,7 +82,7 @@ graph TD
 
 ## Component View
 
-![Core Module Components](../assets/images/structurizr/structurizr-CoreComponents.svg)
+![Core Module Components](../../assets/images/structurizr/structurizr-CoreComponents.svg)
 
 ### Component Responsibilities
 
@@ -173,13 +173,13 @@ S3RangeReader reader = S3RangeReader.builder()
 The runtime view describes the dynamic behavior of the library.
 
 ### Basic File Range Reading
-![Basic File Read](../assets/images/structurizr/structurizr-BasicFileRead.svg)
+![Basic File Read](../../assets/images/structurizr/structurizr-BasicFileRead.svg)
 
 ### HTTP Range Reading with Authentication
-![HTTP Range Read](../assets/images/structurizr/structurizr-HttpRangeRead.svg)
+![HTTP Range Read](../../assets/images/structurizr/structurizr-HttpRangeRead.svg)
 
 ### Multi-Level Caching Scenario
-![Multi-Level Caching](../assets/images/structurizr/structurizr-MultiLevelCaching.svg)
+![Multi-Level Caching](../../assets/images/structurizr/structurizr-MultiLevelCaching.svg)
 
 ## Thread Safety Design
 

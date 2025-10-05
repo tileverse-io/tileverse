@@ -186,6 +186,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
             .type(String.class)
             .group(ID)
             .subgroup(SUBGROUP_AUTHENTICATION)
+            .password(true)
             .build();
 
     /** Configuration parameter to control whether to use the default AWS credentials provider chain. */

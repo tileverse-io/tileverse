@@ -184,6 +184,7 @@ public class HttpRangeReaderProvider extends AbstractRangeReaderProvider {
             .type(String.class)
             .group(ID)
             .subgroup(SUBGROUP_AUTHENTICATION)
+            .password(true)
             .build();
 
     /**
@@ -206,6 +207,7 @@ public class HttpRangeReaderProvider extends AbstractRangeReaderProvider {
             .type(String.class)
             .group(ID)
             .subgroup(SUBGROUP_AUTHENTICATION)
+            .password(true)
             .build();
 
     /**
@@ -248,6 +250,7 @@ public class HttpRangeReaderProvider extends AbstractRangeReaderProvider {
             .type(String.class)
             .group(ID)
             .subgroup(SUBGROUP_AUTHENTICATION)
+            .password(true)
             .build();
 
     /**

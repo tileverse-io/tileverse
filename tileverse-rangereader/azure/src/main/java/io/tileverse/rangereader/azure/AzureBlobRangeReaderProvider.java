@@ -68,7 +68,7 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
 
     /**
      * Creates a new AzureBlobRangeReaderProvider with support for caching parameters
-     * @see AbstractRangeReaderProvider#MEMORY_CACHE
+     * @see AbstractRangeReaderProvider#MEMORY_CACHE_ENABLED
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_BLOCK_ALIGNED
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_BLOCK_SIZE
      */
@@ -81,7 +81,7 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
      *
      * @see BlobClientBuilder#blobName(String)
      */
-    public static final RangeReaderParameter<String> BLOB_NAME = RangeReaderParameter.builder()
+    public static final RangeReaderParameter<String> AZURE_BLOB_NAME = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.azure.blob-name")
             .title("Set the blob name if the endpoint points to the account url")
             .description(
@@ -103,7 +103,7 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
      * The account access key used to authenticate the request.
      * @see StorageSharedKeyCredential
      */
-    public static final RangeReaderParameter<String> ACCOUNT_KEY = RangeReaderParameter.builder()
+    public static final RangeReaderParameter<String> AZURE_ACCOUNT_KEY = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.azure.account-key")
             .title("Account access key")
             .description(
@@ -122,7 +122,7 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
     /**
      * SAS token to use for authenticating requests
      */
-    public static final RangeReaderParameter<String> SAS_TOKEN = RangeReaderParameter.builder()
+    public static final RangeReaderParameter<String> AZURE_SAS_TOKEN = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.azure.sas-token")
             .title("SAS token to use for authenticating requests")
             .description(
@@ -137,7 +137,8 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
             .subgroup(SUBGROUP_AUTHENTICATION)
             .build();
 
-    private static final List<RangeReaderParameter<?>> PARAMS = List.of(BLOB_NAME, ACCOUNT_KEY, SAS_TOKEN);
+    private static final List<RangeReaderParameter<?>> PARAMS =
+            List.of(AZURE_BLOB_NAME, AZURE_ACCOUNT_KEY, AZURE_SAS_TOKEN);
 
     @Override
     public String getId() {
@@ -181,7 +182,7 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
         }
         String blobName = parts.getBlobName();
         if (blobName == null) {
-            return config.getParameter(BLOB_NAME).isPresent();
+            return config.getParameter(AZURE_BLOB_NAME).isPresent();
         }
         return true;
     }
@@ -195,9 +196,9 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
     protected RangeReader createInternal(RangeReaderConfig opts) throws IOException {
         URI uri = opts.uri();
         Builder builder = AzureBlobRangeReader.builder().endpoint(uri);
-        opts.getParameter(BLOB_NAME).ifPresent(builder::blobName);
-        opts.getParameter(ACCOUNT_KEY).ifPresent(builder::accountKey);
-        opts.getParameter(SAS_TOKEN).ifPresent(builder::sasToken);
+        opts.getParameter(AZURE_BLOB_NAME).ifPresent(builder::blobName);
+        opts.getParameter(AZURE_ACCOUNT_KEY).ifPresent(builder::accountKey);
+        opts.getParameter(AZURE_SAS_TOKEN).ifPresent(builder::sasToken);
         return builder.build();
     }
 }

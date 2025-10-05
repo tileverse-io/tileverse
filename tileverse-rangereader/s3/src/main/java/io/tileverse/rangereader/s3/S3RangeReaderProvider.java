@@ -79,7 +79,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
 
     /**
      * Creates a new S3RangeReaderProvider with support for caching parameters
-     * @see AbstractRangeReaderProvider#MEMORY_CACHE
+     * @see AbstractRangeReaderProvider#MEMORY_CACHE_ENABLED
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_BLOCK_ALIGNED
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_BLOCK_SIZE
      */
@@ -93,7 +93,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
      * addressing will be used instead (e.g., {@code https://bucket.s3.amazonaws.com/key}). This can be useful for
      * compatibility with S3-compatible storage systems that do not support virtual-hosted-style requests.
      */
-    public static final RangeReaderParameter<Boolean> FORCE_PATH_STYLE = RangeReaderParameter.builder()
+    public static final RangeReaderParameter<Boolean> S3_FORCE_PATH_STYLE = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.s3.force-path-style")
             .title("Enable S3 path style access")
             .description(
@@ -116,7 +116,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
             .build();
 
     /** Configuration parameter for AWS S3 region. */
-    public static final RangeReaderParameter<String> REGION = RangeReaderParameter.builder()
+    public static final RangeReaderParameter<String> S3_REGION = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.s3.region")
             .title("Region")
             .description(
@@ -149,7 +149,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
     /**
      * The AWS access key ID to use for authentication when both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are provided.
      */
-    public static final RangeReaderParameter<String> AWS_ACCESS_KEY_ID = RangeReaderParameter.builder()
+    public static final RangeReaderParameter<String> S3_AWS_ACCESS_KEY_ID = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.s3.aws-access-key-id")
             .title("AWS Access Key ID")
             .description(
@@ -170,7 +170,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
     /**
      * The AWS secret access key to use for authentication when both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are provided.
      */
-    public static final RangeReaderParameter<String> AWS_SECRET_ACCESS_KEY = RangeReaderParameter.builder()
+    public static final RangeReaderParameter<String> S3_AWS_SECRET_ACCESS_KEY = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.s3.aws-secret-access-key")
             .title("AWS Secret Access Key")
             .description(
@@ -189,11 +189,12 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
             .build();
 
     /** Configuration parameter to control whether to use the default AWS credentials provider chain. */
-    public static final RangeReaderParameter<Boolean> USE_DEFAULT_CREDENTIALS_PROVIDER = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.s3.use-default-credentials-provider")
-            .title("Use Default Credentials Provider")
-            .description(
-                    """
+    public static final RangeReaderParameter<Boolean> S3_USE_DEFAULT_CREDENTIALS_PROVIDER =
+            RangeReaderParameter.builder()
+                    .key("io.tileverse.rangereader.s3.use-default-credentials-provider")
+                    .title("Use Default Credentials Provider")
+                    .description(
+                            """
                     When enabled, the AWS default credentials provider chain is used, which looks for credentials \
                     in this order:
                       1. Java System Properties - aws.accessKeyId and aws.secretAccessKey
@@ -206,13 +207,13 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
                     If neither default credentials provider or access/secret key are used, annonymous access will \
                     be attempted.
                     """)
-            .type(Boolean.class)
-            .group(ID)
-            .subgroup(SUBGROUP_AUTHENTICATION)
-            .build();
+                    .type(Boolean.class)
+                    .group(ID)
+                    .subgroup(SUBGROUP_AUTHENTICATION)
+                    .build();
 
     /** Configuration parameter to specify a custom AWS credentials profile name. */
-    public static final RangeReaderParameter<String> DEFAULT_CREDENTIALS_PROFILE = RangeReaderParameter.builder()
+    public static final RangeReaderParameter<String> S3_DEFAULT_CREDENTIALS_PROFILE = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.s3.default-credentials-profile")
             .title("Default Credentials Profile")
             .description(
@@ -231,12 +232,12 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
             .build();
 
     static final List<RangeReaderParameter<?>> PARAMS = List.of(
-            FORCE_PATH_STYLE,
-            REGION,
-            AWS_ACCESS_KEY_ID,
-            AWS_SECRET_ACCESS_KEY,
-            USE_DEFAULT_CREDENTIALS_PROVIDER,
-            DEFAULT_CREDENTIALS_PROFILE);
+            S3_FORCE_PATH_STYLE,
+            S3_REGION,
+            S3_AWS_ACCESS_KEY_ID,
+            S3_AWS_SECRET_ACCESS_KEY,
+            S3_USE_DEFAULT_CREDENTIALS_PROVIDER,
+            S3_DEFAULT_CREDENTIALS_PROFILE);
 
     @Override
     public String getId() {
@@ -272,12 +273,12 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
     Builder prepareRangeReaderBuilder(RangeReaderConfig opts) {
         URI uri = opts.uri();
         Builder builder = S3RangeReader.builder().uri(uri);
-        opts.getParameter(FORCE_PATH_STYLE).ifPresent(builder::forcePathStyle);
-        opts.getParameter(REGION).filter(r -> !r.isBlank()).map(Region::of).ifPresent(builder::region);
-        opts.getParameter(AWS_ACCESS_KEY_ID).ifPresent(builder::awsAccessKeyId);
-        opts.getParameter(AWS_SECRET_ACCESS_KEY).ifPresent(builder::awsSecretAccessKey);
-        opts.getParameter(USE_DEFAULT_CREDENTIALS_PROVIDER).ifPresent(builder::useDefaultCredentialsProvider);
-        opts.getParameter(DEFAULT_CREDENTIALS_PROFILE).ifPresent(builder::defaultCredentialsProfile);
+        opts.getParameter(S3_FORCE_PATH_STYLE).ifPresent(builder::forcePathStyle);
+        opts.getParameter(S3_REGION).filter(r -> !r.isBlank()).map(Region::of).ifPresent(builder::region);
+        opts.getParameter(S3_AWS_ACCESS_KEY_ID).ifPresent(builder::awsAccessKeyId);
+        opts.getParameter(S3_AWS_SECRET_ACCESS_KEY).ifPresent(builder::awsSecretAccessKey);
+        opts.getParameter(S3_USE_DEFAULT_CREDENTIALS_PROVIDER).ifPresent(builder::useDefaultCredentialsProvider);
+        opts.getParameter(S3_DEFAULT_CREDENTIALS_PROFILE).ifPresent(builder::defaultCredentialsProfile);
         return builder;
     }
 

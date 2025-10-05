@@ -71,7 +71,7 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
 
     /**
      * Creates a new GoogleCloudStorageRangeReaderProvider with support for caching parameters
-     * @see AbstractRangeReaderProvider#MEMORY_CACHE
+     * @see AbstractRangeReaderProvider#MEMORY_CACHE_ENABLED
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_BLOCK_ALIGNED
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_BLOCK_SIZE
      */
@@ -82,7 +82,7 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
     /**
      * Project ID is a unique, user-defined identifier for a Google Cloud project.
      */
-    public static final RangeReaderParameter<String> PROJECT_ID = RangeReaderParameter.builder()
+    public static final RangeReaderParameter<String> GCS_PROJECT_ID = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.gcs.project-id")
             .title("Google Cloud project ID")
             .description(
@@ -107,7 +107,7 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
     /**
      * Quota ProjectId that specifies the project used for quota and billing purposes.
      */
-    public static final RangeReaderParameter<String> QUOTA_PROJECT_ID = RangeReaderParameter.builder()
+    public static final RangeReaderParameter<String> GCS_QUOTA_PROJECT_ID = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.gcs.quota-project-id")
             .title("Quota Project ID")
             .description(
@@ -123,7 +123,7 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
     /**
      * Use the default application credentials chain, defaults to {@code false}
      */
-    public static final RangeReaderParameter<Boolean> USE_DEFAULT_APPLICTION_CREDENTIALS =
+    public static final RangeReaderParameter<Boolean> GCS_USE_DEFAULT_APPLICTION_CREDENTIALS =
             RangeReaderParameter.builder()
                     .key("io.tileverse.rangereader.gcs.default-credentials-chain")
                     .title("Use the default application credentials chain")
@@ -143,7 +143,7 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
                     .build();
 
     private static final List<RangeReaderParameter<?>> PARAMS =
-            List.of(PROJECT_ID, QUOTA_PROJECT_ID, USE_DEFAULT_APPLICTION_CREDENTIALS);
+            List.of(GCS_PROJECT_ID, GCS_QUOTA_PROJECT_ID, GCS_USE_DEFAULT_APPLICTION_CREDENTIALS);
 
     @Override
     public String getId() {

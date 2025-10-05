@@ -43,7 +43,7 @@ public class HttpRangeReaderProvider extends AbstractRangeReaderProvider {
 
     /**
      * Creates a new HttpRangeReaderProvider with support for caching parameters
-     * @see AbstractRangeReaderProvider#MEMORY_CACHE
+     * @see AbstractRangeReaderProvider#MEMORY_CACHE_ENABLED
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_BLOCK_ALIGNED
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_BLOCK_SIZE
      */

@@ -278,7 +278,7 @@ class RangeReaderFactoryIT {
         RangeReaderConfig config = new RangeReaderConfig().uri(URI.create(url));
 
         if (accountKey != null) {
-            config.setParameter(AzureBlobRangeReaderProvider.ACCOUNT_KEY, accountKey);
+            config.setParameter(AzureBlobRangeReaderProvider.AZURE_ACCOUNT_KEY, accountKey);
         }
 
         return testCreate(config, AzureBlobRangeReader.class);
@@ -301,8 +301,8 @@ class RangeReaderFactoryIT {
                             "Forbidden",
                             "Failed to access S3 object",
                             "Unable to load credentials from any of the providers");
-            config.setParameter(S3RangeReaderProvider.AWS_ACCESS_KEY_ID, accessKey);
-            config.setParameter(S3RangeReaderProvider.AWS_SECRET_ACCESS_KEY, secretKey);
+            config.setParameter(S3RangeReaderProvider.S3_AWS_ACCESS_KEY_ID, accessKey);
+            config.setParameter(S3RangeReaderProvider.S3_AWS_SECRET_ACCESS_KEY, secretKey);
         }
         return testCreate(config, S3RangeReader.class);
     }

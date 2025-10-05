@@ -16,9 +16,9 @@
 package io.tileverse.rangereader.s3;
 
 import static io.tileverse.rangereader.s3.S3RangeReaderProvider.*;
-import static io.tileverse.rangereader.s3.S3RangeReaderProvider.AWS_SECRET_ACCESS_KEY;
-import static io.tileverse.rangereader.s3.S3RangeReaderProvider.FORCE_PATH_STYLE;
-import static io.tileverse.rangereader.s3.S3RangeReaderProvider.REGION;
+import static io.tileverse.rangereader.s3.S3RangeReaderProvider.S3_AWS_SECRET_ACCESS_KEY;
+import static io.tileverse.rangereader.s3.S3RangeReaderProvider.S3_FORCE_PATH_STYLE;
+import static io.tileverse.rangereader.s3.S3RangeReaderProvider.S3_REGION;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.doReturn;
@@ -88,12 +88,12 @@ class S3RangeReaderProviderTest {
         List<RangeReaderParameter<?>> parameters = provider.buildParameters();
         assertThat(parameters)
                 .isEqualTo(List.of(
-                        FORCE_PATH_STYLE,
-                        REGION,
-                        AWS_ACCESS_KEY_ID,
-                        AWS_SECRET_ACCESS_KEY,
-                        USE_DEFAULT_CREDENTIALS_PROVIDER,
-                        DEFAULT_CREDENTIALS_PROFILE));
+                        S3_FORCE_PATH_STYLE,
+                        S3_REGION,
+                        S3_AWS_ACCESS_KEY_ID,
+                        S3_AWS_SECRET_ACCESS_KEY,
+                        S3_USE_DEFAULT_CREDENTIALS_PROVIDER,
+                        S3_DEFAULT_CREDENTIALS_PROFILE));
     }
 
     @Test
@@ -206,7 +206,7 @@ class S3RangeReaderProviderTest {
         // The FORCE_PATH_STYLE parameter doesn't affect canProcess() anymore
         // because the URL parsing now automatically detects the required style
 
-        config.setParameter(FORCE_PATH_STYLE.key(), false);
+        config.setParameter(S3_FORCE_PATH_STYLE.key(), false);
         // These should still work because the parser detects the URL format
         assertThat(provider.canProcess(config.uri("http://localhost:9000/my-bucket/file.txt")))
                 .as("MinIO URLs work regardless of force-path-style setting")
@@ -215,7 +215,7 @@ class S3RangeReaderProviderTest {
                 .as("AWS virtual hosted-style URLs work regardless of force-path-style setting")
                 .isTrue();
 
-        config.setParameter(FORCE_PATH_STYLE.key(), true);
+        config.setParameter(S3_FORCE_PATH_STYLE.key(), true);
         assertThat(provider.canProcess(config.uri("http://localhost:9000/my-bucket/file.txt")))
                 .as("MinIO URLs work regardless of force-path-style setting")
                 .isTrue();
@@ -279,7 +279,7 @@ class S3RangeReaderProviderTest {
         RangeReaderConfig capturedConfig = configCaptor.getValue();
         assertThat(capturedConfig.uri()).isEqualTo(testUri);
         //        assertThat(capturedConfig.providerId()).isEqualTo("s3");
-        assertThat(capturedConfig.getParameter(FORCE_PATH_STYLE)).hasValue(true);
+        assertThat(capturedConfig.getParameter(S3_FORCE_PATH_STYLE)).hasValue(true);
     }
 
     @Test
@@ -296,10 +296,10 @@ class S3RangeReaderProviderTest {
                 .hasFieldOrPropertyWithValue("s3Location.bucket", "my-bucket")
                 .hasFieldOrPropertyWithValue("s3Location.key", "file.txt");
 
-        config.setParameter(FORCE_PATH_STYLE, true);
-        config.setParameter(REGION, "us-west-2");
-        config.setParameter(AWS_ACCESS_KEY_ID, "access-key");
-        config.setParameter(AWS_SECRET_ACCESS_KEY, "secret-key");
+        config.setParameter(S3_FORCE_PATH_STYLE, true);
+        config.setParameter(S3_REGION, "us-west-2");
+        config.setParameter(S3_AWS_ACCESS_KEY_ID, "access-key");
+        config.setParameter(S3_AWS_SECRET_ACCESS_KEY, "secret-key");
 
         rangeReaderBuilder = provider.prepareRangeReaderBuilder(config);
         assertThat(rangeReaderBuilder)

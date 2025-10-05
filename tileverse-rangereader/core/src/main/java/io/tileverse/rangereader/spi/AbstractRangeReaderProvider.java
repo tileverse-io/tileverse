@@ -32,7 +32,7 @@ public abstract class AbstractRangeReaderProvider implements RangeReaderProvider
      * byte range requests. When enabled, a {@link CachingRangeReader} will wrap the
      * underlying {@link RangeReader}.
      */
-    public static final RangeReaderParameter<Boolean> MEMORY_CACHE = CachingProviderHelper.MEMORY_CACHE;
+    public static final RangeReaderParameter<Boolean> MEMORY_CACHE_ENABLED = CachingProviderHelper.MEMORY_CACHE_ENABLED;
 
     /**
      * A {@link RangeReaderParameter} to control whether cached byte ranges should
@@ -50,7 +50,7 @@ public abstract class AbstractRangeReaderProvider implements RangeReaderProvider
      * <p>
      * It also helps in reducing the number of small, fragmented reads.
      * <p>
-     * This setting is only effective when {@link #MEMORY_CACHE caching} is enabled.
+     * This setting is only effective when {@link #MEMORY_CACHE_ENABLED caching} is enabled.
      */
     public static final RangeReaderParameter<Boolean> MEMORY_CACHE_BLOCK_ALIGNED =
             CachingProviderHelper.MEMORY_CACHE_BLOCK_ALIGNED;

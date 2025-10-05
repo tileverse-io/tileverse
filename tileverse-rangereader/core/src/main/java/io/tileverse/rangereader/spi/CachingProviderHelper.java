@@ -34,7 +34,7 @@ class CachingProviderHelper {
      * A {@link RangeReaderParameter} to enable or disable memory caching for raw byte range requests.
      * When enabled, a {@link CachingRangeReader} will wrap the underlying {@link RangeReader}.
      */
-    static final RangeReaderParameter<Boolean> MEMORY_CACHE = RangeReaderParameter.builder()
+    static final RangeReaderParameter<Boolean> MEMORY_CACHE_ENABLED = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.caching.enabled")
             .title("Enable memory cache for raw byte data")
             .description(
@@ -106,7 +106,7 @@ class CachingProviderHelper {
             .build();
 
     private static final List<RangeReaderParameter<?>> PARAMS =
-            List.of(MEMORY_CACHE, MEMORY_CACHE_BLOCK_ALIGNED, MEMORY_CACHE_BLOCK_SIZE);
+            List.of(MEMORY_CACHE_ENABLED, MEMORY_CACHE_BLOCK_ALIGNED, MEMORY_CACHE_BLOCK_SIZE);
 
     /**
      * Returns a new list of parameters that includes the provided parameters along with
@@ -141,7 +141,7 @@ class CachingProviderHelper {
      * @return The decorated {@link RangeReader} (a {@link CachingRangeReader}) or the original reader if caching is disabled.
      */
     public static RangeReader decorate(RangeReader reader, RangeReaderConfig opts) {
-        final boolean enableCaching = opts.getParameter(MEMORY_CACHE).orElse(false);
+        final boolean enableCaching = opts.getParameter(MEMORY_CACHE_ENABLED).orElse(false);
         if (!enableCaching) {
             return reader;
         }

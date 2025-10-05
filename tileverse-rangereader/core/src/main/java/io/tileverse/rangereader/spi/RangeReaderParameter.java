@@ -43,7 +43,8 @@ public record RangeReaderParameter<T>(
         Optional<String> subgroup,
         Class<T> type,
         Optional<T> defaultValue,
-        List<T> sampleValues) {
+        List<T> sampleValues,
+        boolean password) {
 
     /** Standard parameter group for caching-related configuration. */
     public static final String GROUP_CACHING = "caching";
@@ -61,6 +62,7 @@ public record RangeReaderParameter<T>(
      * @param type the Java type of values this parameter accepts
      * @param defaultValue optional default value for this parameter
      * @param sampleValues list of example values to help users understand valid inputs
+     * @param password metadata about whether the parameter should be treated as password by the client code (e.g. mask it in user interfaces)
      */
     public RangeReaderParameter {
         requireNonNull(key, "Parameter key cannot be null");
@@ -91,6 +93,7 @@ public record RangeReaderParameter<T>(
         String description;
         String group;
         String subgroup;
+        boolean password;
 
         @SuppressWarnings("rawtypes")
         Class type;
@@ -193,6 +196,17 @@ public record RangeReaderParameter<T>(
         }
 
         /**
+         * Sets whether the parameter is a "password" field
+         *
+         * @param isPassword true if the parameter should be treated as password by the client code (e.g. mask it in user interfaces)
+         * @return This builder instance.
+         */
+        public Builder password(boolean isPassword) {
+            this.password = isPassword;
+            return this;
+        }
+
+        /**
          * Builds a new {@link RangeReaderParameter} instance.
          *
          * @param <T> The type of the parameter value.
@@ -202,7 +216,15 @@ public record RangeReaderParameter<T>(
         @SuppressWarnings("unchecked")
         public <T> RangeReaderParameter<T> build() {
             return new RangeReaderParameter<>(
-                    key, title, description, group, Optional.ofNullable(subgroup), type, defaultValue, sampleValues);
+                    key,
+                    title,
+                    description,
+                    group,
+                    Optional.ofNullable(subgroup),
+                    type,
+                    defaultValue,
+                    sampleValues,
+                    password);
         }
     }
 }

@@ -117,6 +117,7 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
             .type(String.class)
             .group(ID)
             .subgroup(SUBGROUP_AUTHENTICATION)
+            .password(true)
             .build();
 
     /**
@@ -135,6 +136,7 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
             .type(String.class)
             .group(ID)
             .subgroup(SUBGROUP_AUTHENTICATION)
+            .password(true)
             .build();
 
     private static final List<RangeReaderParameter<?>> PARAMS =

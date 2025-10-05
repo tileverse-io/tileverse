@@ -10,66 +10,87 @@ The library supports multiple HTTP authentication methods through the `HttpRange
 
 Username and password authentication:
 
+**Programmatic:**
 ```java
 var reader = HttpRangeReader.builder()
     .uri(URI.create("https://secure.example.com/data.bin"))
-    .withBasicAuth("username", "password")
+    .basicAuth("username", "password")
     .build();
+```
+
+**Property-based:**
+```java
+Properties props = new Properties();
+props.setProperty("io.tileverse.rangereader.http.username", "username");
+props.setProperty("io.tileverse.rangereader.http.password", "password");
+
+var reader = RangeReaderFactory.create(
+    URI.create("https://secure.example.com/data.bin"),
+    props);
 ```
 
 ### Bearer Token Authentication
 
 JWT or other bearer tokens:
 
+**Programmatic:**
 ```java
 var reader = HttpRangeReader.builder()
     .uri(URI.create("https://api.example.com/data.bin"))
-    .withBearerToken("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
+    .bearerToken("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
     .build();
+```
+
+**Property-based:**
+```java
+Properties props = new Properties();
+props.setProperty("io.tileverse.rangereader.http.bearer-token",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...");
+
+var reader = RangeReaderFactory.create(
+    URI.create("https://api.example.com/data.bin"),
+    props);
 ```
 
 ### API Key Authentication
 
 Custom API key headers:
 
+**Programmatic:**
 ```java
+// Without prefix
 var reader = HttpRangeReader.builder()
     .uri(URI.create("https://api.example.com/data.bin"))
-    .withApiKey("X-API-Key", "your-api-key-here")
+    .apiKey("X-API-Key", "your-api-key-here", null)
+    .build();
+
+// With prefix (e.g., "ApiKey abc123")
+var reader = HttpRangeReader.builder()
+    .uri(URI.create("https://api.example.com/data.bin"))
+    .apiKey("Authorization", "your-api-key", "ApiKey ")
     .build();
 ```
 
-### Custom Header Authentication
-
-Multiple custom headers for complex authentication:
-
+**Property-based:**
 ```java
-var reader = HttpRangeReader.builder()
-    .uri(URI.create("https://api.example.com/data.bin"))
-    .withCustomHeaders(Map.of(
-        "X-Auth-Token", "token-value",
-        "X-Client-ID", "client-123",
-        "X-Signature", "hmac-signature"
-    ))
-    .build();
-```
+// Without prefix
+Properties props = new Properties();
+props.setProperty("io.tileverse.rangereader.http.api-key-headername", "X-API-Key");
+props.setProperty("io.tileverse.rangereader.http.api-key", "your-api-key-here");
 
-### Digest Authentication
+var reader = RangeReaderFactory.create(
+    URI.create("https://api.example.com/data.bin"),
+    props);
 
-HTTP Digest authentication with multiple algorithms:
+// With prefix
+Properties props = new Properties();
+props.setProperty("io.tileverse.rangereader.http.api-key-headername", "Authorization");
+props.setProperty("io.tileverse.rangereader.http.api-key", "your-api-key");
+props.setProperty("io.tileverse.rangereader.http.api-key-value-prefix", "ApiKey ");
 
-```java
-// MD5 digest (default)
-var reader = HttpRangeReader.builder()
-    .uri(URI.create("https://secure.example.com/data.bin"))
-    .withDigestAuth("username", "password")
-    .build();
-
-// SHA-256 digest
-var reader = HttpRangeReader.builder()
-    .uri(URI.create("https://secure.example.com/data.bin"))
-    .withDigestAuth("username", "password", "SHA-256")
-    .build();
+var reader = RangeReaderFactory.create(
+    URI.create("https://api.example.com/data.bin"),
+    props);
 ```
 
 ## Amazon S3 Authentication

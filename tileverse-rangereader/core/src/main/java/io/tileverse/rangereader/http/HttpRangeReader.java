@@ -421,7 +421,7 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
         /**
          * The connection timeout for the HTTP client.
          */
-        public Duration connectionTimeout = DEFAULT_CONNECTION_TIMEOUT;
+        private Duration connectionTimeout = DEFAULT_CONNECTION_TIMEOUT;
 
         private HttpClient suppliedHttpClient;
 
@@ -469,7 +469,16 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
          * @return this builder
          */
         public Builder trustAllCertificates() {
-            this.trustAllCertificates = true;
+            return trustAllCertificates(true);
+        }
+
+        /**
+         * Enables or disables trusting all SSL certificates.
+         * @param trustAll whether to trust all SSL certificates
+         * @return this builder
+         */
+        public Builder trustAllCertificates(boolean trustAll) {
+            this.trustAllCertificates = trustAll;
             return this;
         }
 
@@ -502,7 +511,7 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
          * @param token the bearer token
          * @return this builder
          */
-        public Builder bearerToken(String token) {
+        public Builder bearerToken(@NonNull String token) {
             this.authentication = new io.tileverse.rangereader.http.BearerTokenAuthentication(token);
             return this;
         }
@@ -514,7 +523,7 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
          * @param apiKey the API key value
          * @return this builder
          */
-        public Builder apiKey(String headerName, String apiKey) {
+        public Builder apiKey(@NonNull String headerName, @NonNull String apiKey) {
             this.authentication = new io.tileverse.rangereader.http.ApiKeyAuthentication(headerName, apiKey);
             return this;
         }
@@ -527,7 +536,7 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
          * @param valuePrefix the prefix for the API key value (e.g., "ApiKey ")
          * @return this builder
          */
-        public Builder apiKey(String headerName, String apiKey, String valuePrefix) {
+        public Builder apiKey(@NonNull String headerName, @NonNull String apiKey, String valuePrefix) {
             this.authentication =
                     new io.tileverse.rangereader.http.ApiKeyAuthentication(headerName, apiKey, valuePrefix);
             return this;

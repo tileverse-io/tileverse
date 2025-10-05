@@ -1,50 +1,125 @@
-# Tileverse Range Reader
+# Tileverse
 
-A high-performance Java library for reading byte ranges from various data sources including local files, HTTP servers, and cloud storage services.
+A comprehensive Java library ecosystem for working with geospatial tiles, cloud-optimized formats, and efficient data access.
 
-## The Cloud-Native Geospatial Challenge
+## Overview
 
-The geospatial data landscape has fundamentally shifted from traditional "download-and-process" workflows to **cloud-native** patterns. Modern formats like **Cloud Optimized GeoTIFF (COG)**, **PMTiles**, **GeoParquet**, **Zarr**, and **FlatGeobuf** are explicitly designed to leverage **HTTP range requests**, allowing applications to fetch only the specific byte ranges needed for a query rather than downloading entire multi-gigabyte files.
+Tileverse is a modular collection of libraries designed for building high-performance geospatial applications. It provides everything from low-level efficient data access to high-level tile format support, with a focus on cloud-native architectures and modern Java practices.
 
-However, the Java ecosystem has suffered from **significant fragmentation** in this space. Tileverse Range Reader provides the **missing architectural layer** that the Java geospatial ecosystem needs—a lightweight, extensible, and cloud-agnostic abstraction for range-based I/O operations.
+## Libraries
 
-## Key Features
+### 🌐 Range Reader
 
-- **Multiple Data Sources**: Local files, HTTP/HTTPS, Amazon S3, Azure Blob Storage, and Google Cloud Storage.
-- **High Performance**: Multi-level caching, block alignment, and concurrent access.
-- **Flexible Architecture**: Composable functionality through decorators and builder APIs.
-- **Comprehensive Authentication**: Support for a wide range of authentication mechanisms.
+Efficient random access to byte ranges from local files, HTTP servers, and cloud storage (S3, Azure Blob, Google Cloud Storage).
 
-## Getting Started
+**Key Features:**
 
-Choose your path based on your role:
+- Universal API for multiple data sources
+- Multi-level caching (memory + disk)
+- Block alignment optimization
+- Thread-safe concurrent access
+- HTTP authentication support
+
+[:octicons-arrow-right-24: Learn More](rangereader/index.md){ .md-button .md-button--primary }
+
+### 🗺️ PMTiles
+
+Reading and writing PMTiles archives - a cloud-optimized format for map tiles.
+
+**Key Features:**
+
+- PMTiles v3 format support
+- Hilbert curve spatial indexing
+- Cloud-optimized access patterns
+- Memory-efficient streaming
+- Vector and raster tile support
+
+[:octicons-arrow-right-24: Learn More](pmtiles/index.md){ .md-button .md-button--primary }
+
+### 📐 Tile Matrix Set
+
+Generic object model for defining tile pyramids and tiling schemes.
+
+**Key Features:**
+
+- Standard tile matrix set definitions
+- Coordinate transformations
+- Flexible tiling schemes
+- Web Mercator, WGS84, and custom CRS support
+
+[:octicons-arrow-right-24: Learn More](tilematrixset/index.md){ .md-button .md-button--primary }
+
+### 🎨 Vector Tiles
+
+Encoding and decoding Mapbox Vector Tiles (MVT).
+
+**Key Features:**
+
+- MVT format encoding/decoding
+- Protocol Buffers support
+- Geometry transformations
+- Layer and feature manipulation
+
+[:octicons-arrow-right-24: Learn More](vectortiles/index.md){ .md-button .md-button--primary }
+
+## Quick Start
+
+Get started with Tileverse in minutes:
 
 <div class="grid cards" markdown>
 
--   :material-rocket-launch: **User Guide**
+-   :material-clock-fast: **Quick Start**
 
     ---
 
-    Learn how to use the library in your applications.
+    Jump right in with installation and basic examples.
 
-    [:octicons-arrow-right-24: Get Started](user-guide/index.md)
+    [:octicons-arrow-right-24: Getting Started](getting-started.md)
 
--   :material-code-braces: **Developer Guide**
+-   :material-book-open: **Architecture**
 
     ---
 
-    Contribute to the project or understand the internals.
+    Understand how the modules fit together.
 
-    [:octicons-arrow-right-24: Development](developer-guide/index.md)
+    [:octicons-arrow-right-24: Architecture](architecture/index.md)
+
+-   :fontawesome-brands-github: **Source Code**
+
+    ---
+
+    Browse the source code on GitHub.
+
+    [:octicons-arrow-right-24: GitHub](https://github.com/tileverse-io/tileverse)
+
+-   :material-package: **Maven Central**
+
+    ---
+
+    Find published artifacts and versions.
+
+    [:octicons-arrow-right-24: Maven Central](https://central.sonatype.com/search?q=io.tileverse)
 
 </div>
 
+## Use Cases
+
+- **Geospatial Servers**: Build high-performance tile servers (GeoServer, MapServer plugins)
+- **Cloud-Native Applications**: Efficient access to tiles stored in S3, Azure, or GCS
+- **Map Rendering**: Client and server-side map tile rendering
+- **Data Processing**: ETL pipelines for geospatial data transformation
+- **Analytics**: Random access to large geospatial datasets
+
 ## Requirements
 
-- **Java 17+**: Minimum Java version required
-- **Maven 3.9+**: For building from source
-- **Docker**: For running benchmarks and integration tests
+- **Java 17+** (runtime)
+- **Java 21+** (development - recommended)
+- **Maven 3.9+** or **Gradle 7.0+** (build)
 
 ## License
 
-Licensed under the Apache License, Version 2.0.
+All Tileverse libraries are released under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+
+---
+
+*Built with ❤️ by [Multiversio LLC](https://multivers.io) and [Camptocamp](https://camptocamp.com) for the geospatial community.*

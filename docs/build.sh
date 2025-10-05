@@ -1,14 +1,15 @@
 #!/bin/bash
 set -e
 
-# Documentation build script for Tileverse Range Reader
+# Documentation build script for Tileverse
 # This script sets up a virtual environment and builds the complete documentation
+# for all Tileverse modules: Range Reader, PMTiles, Vector Tiles, and Tile Matrix Set
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="${SCRIPT_DIR}/.venv"
 
-echo "🏗️  Building Tileverse Range Reader Documentation"
-echo "================================================="
+echo "🏗️  Building Tileverse Documentation"
+echo "====================================="
 
 # Function to check if command exists
 command_exists() {

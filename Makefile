@@ -23,6 +23,7 @@ help:
 	@echo ""
 	@echo "Testing targets:"
 	@echo "  test          - Run all tests (unit + integration via verify)"
+	@echo "  test-coverage - Run all tests with code coverage report"
 	@echo "  test-unit     - Run unit tests only (surefire)"
 	@echo "  test-it       - Run integration tests only (failsafe)"
 	@echo "  perf-test     - Run performance tests"
@@ -73,7 +74,7 @@ lint: lint-pom lint-java
 
 .PHONY: lint-pom
 lint-pom:
-	./mvnw sortpom:verify -ntp -T1C
+	./mvnw sortpom:verify -ntp -T1C -Dcoverage
 
 .PHONY: lint-java
 lint-java:
@@ -82,6 +83,10 @@ lint-java:
 .PHONY: test
 test:
 	./mvnw verify -ntp -T1C -Dfmt.skip
+
+.PHONY: test-coverage
+test-coverage:
+	./mvnw verify -Dcoverage -ntp -T1C -Dfmt.skip
 
 .PHONY: test-unit
 test-unit:

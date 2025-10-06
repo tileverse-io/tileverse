@@ -486,6 +486,9 @@
         <configuration>
           <!-- Allow missing javadoc for builders and internal classes -->
           <doclint>all,-missing</doclint>
+          <!-- Don't try to auto-detect JavaDoc links from dependencies (prevents errors for BOM modules) -->
+          <detectLinks>false</detectLinks>
+          <detectOfflineLinks>false</detectOfflineLinks>
         </configuration>
         <executions>
           <execution>

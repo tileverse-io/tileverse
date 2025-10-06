@@ -9,7 +9,7 @@
   <artifactId>tileverse-bom</artifactId>
   <packaging>pom</packaging>
   <name>Tileverse BOM</name>
-  <description>Tileverse BOM</description>
+  <description>Bill of Materials for managing Tileverse module versions</description>
 
   <dependencyManagement>
     <dependencies>

@@ -7,6 +7,7 @@
   <version>${revision}</version>
   <packaging>pom</packaging>
   <name>Tileverse</name>
+  <description>Cloud-optimized Java libraries for efficient access to tiled geospatial data from local files, HTTP servers, and cloud storage (S3, Azure, GCS). Includes Range Reader for byte-range access, PMTiles format support, Mapbox Vector Tiles encoding/decoding, and OGC Tile Matrix Set implementation.</description>
   <url>https://tileverse.io</url>
 
   <licenses>

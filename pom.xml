@@ -33,7 +33,6 @@
     <module>tileverse-vectortiles</module>
     <module>tileverse-tilematrixset</module>
     <module>tileverse-pmtiles</module>
-    <module>coverage-report</module>
   </modules>
 
   <scm>
@@ -96,6 +95,9 @@
 
     <!-- Plugin versions -->
     <jacoco.version>0.8.13</jacoco.version>
+
+    <!-- JaCoCo argLine property (overridden by jacoco:prepare-agent when coverage profile is active) -->
+    <argLine></argLine>
   </properties>
 
   <dependencyManagement>
@@ -399,6 +401,11 @@
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-deploy-plugin</artifactId>
+          <version>3.1.4</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
           <version>3.6.0</version>
         </plugin>
@@ -422,7 +429,6 @@
           <groupId>org.jacoco</groupId>
           <artifactId>jacoco-maven-plugin</artifactId>
           <version>${jacoco.version}</version>
-          <inherited>true</inherited>
           <executions>
             <execution>
               <id>prepare-agent</id>
@@ -583,12 +589,6 @@
         </executions>
       </plugin>
 
-      <!-- Code Coverage with JaCoCo -->
-      <plugin>
-        <groupId>org.jacoco</groupId>
-        <artifactId>jacoco-maven-plugin</artifactId>
-      </plugin>
-
       <!-- Central Portal Publishing -->
       <plugin>
         <groupId>org.sonatype.central</groupId>
@@ -645,6 +645,27 @@
         <sortpom.verifyFailOn>strict</sortpom.verifyFailOn>
         <sortpom.verifyFail>stop</sortpom.verifyFail>
       </properties>
+    </profile>
+
+    <profile>
+      <id>coverage</id>
+      <activation>
+        <property>
+          <name>coverage</name>
+        </property>
+      </activation>
+      <modules>
+        <module>coverage-report</module>
+      </modules>
+      <build>
+        <plugins>
+          <!-- Code Coverage with JaCoCo -->
+          <plugin>
+            <groupId>org.jacoco</groupId>
+            <artifactId>jacoco-maven-plugin</artifactId>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
   </profiles>
 </project>

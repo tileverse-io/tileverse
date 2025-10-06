@@ -131,7 +131,13 @@ jobs:
         cache: maven
         
     - name: Run integration tests - (Java ${{ matrix.java-version }})
-      run: make test-it
+      # Enable coverage for Java 17 to generate complete aggregate report (unit + integration tests)
+      run: |
+        if [[ "${{ matrix.java-version }}" == "17" ]]; then
+          ./mvnw verify -Dcoverage -ntp -T1C -Dfmt.skip
+        else
+          make test-it
+        fi
 
     - name: Upload integration test results
       uses: actions/upload-artifact@v4
@@ -141,6 +147,13 @@ jobs:
         path: |
           **/target/failsafe-reports/
           **/target/logs/
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      if: matrix.java-version == '17'
+      with:
+        name: coverage-report
+        path: coverage-report/target/site/jacoco-aggregate/
 
     - name: Remove SNAPSHOT jars from repository
       run: |

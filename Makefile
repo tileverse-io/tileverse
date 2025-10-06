@@ -81,15 +81,15 @@ lint-java:
 
 .PHONY: test
 test:
-	./mvnw verify -ntp -T1C
+	./mvnw verify -ntp -T1C -Dfmt.skip
 
 .PHONY: test-unit
 test-unit:
-	./mvnw test -ntp -T1C -pl '!tileverse-rangereader/benchmarks'
+	./mvnw test -ntp -T1C -pl '!tileverse-rangereader/benchmarks' -Dfmt.skip
 
 .PHONY: test-it
 test-it:
-	./mvnw verify -Dsurefire.skip=true -ntp -T1C
+	./mvnw verify -Dsurefire.skip=true -ntp -T1C -Dfmt.skip
 
 .PHONY: build-benchmarks
 build-benchmarks:

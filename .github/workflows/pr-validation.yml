@@ -44,44 +44,69 @@ jobs:
       run: make lint
 
   build:
-    name: Build & Unit Tests
-    runs-on: ubuntu-latest
+    name: Build & Unit Tests (Java ${{ matrix.java-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     # Skip if this is a merged PR (tests already ran during PR validation)
     if: "github.event_name == 'pull_request' || !contains(github.event.head_commit.message, 'Merge pull request #')"
     strategy:
       matrix:
-        java-version: ['17', '21', '25']
+        # Test Java 17 (minimum version) on all operating systems
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        java-version: ['17']
+        include:
+          # Test all LTS versions on Linux only
+          - os: ubuntu-latest
+            java-version: '21'
+          - os: ubuntu-latest
+            java-version: '25'
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up JDK ${{ matrix.java-version }}
       uses: actions/setup-java@v4
       with:
         java-version: ${{ matrix.java-version }}
         distribution: 'temurin'
         cache: maven
-        
-    - name: Compile code
+
+    - name: Compile code (Unix)
+      if: runner.os != 'Windows'
       run: make install
-      
-    - name: Run unit tests
+
+    - name: Compile code (Windows)
+      if: runner.os == 'Windows'
+      run: ./mvnw.cmd install -DskipTests -ntp -T1C "-Dfmt.skip=true"
+
+    - name: Run unit tests (Unix)
+      if: runner.os != 'Windows'
       run: make test-unit
-      
+
+    - name: Run unit tests (Windows)
+      if: runner.os == 'Windows'
+      run: ./mvnw.cmd test -ntp -T1C -pl "!tileverse-rangereader/benchmarks" "-Dfmt.skip=true"
+
     - name: Upload test results
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: test-results-java-${{ matrix.java-version }}
+        name: test-results-${{ matrix.os }}-java-${{ matrix.java-version }}
         path: |
           **/target/surefire-reports/
           **/target/site/jacoco/
 
     - name: Remove SNAPSHOT jars from repository
+      if: runner.os != 'Windows'
       run: |
         find ~/.m2/repository -name "*SNAPSHOT*" -type d | xargs rm -rf {}
+
+    - name: Remove SNAPSHOT jars from repository (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Get-ChildItem -Path ~/.m2/repository -Recurse -Filter "*SNAPSHOT*" -Directory | Remove-Item -Recurse -Force
 
   integration-tests:
     name: Integration Tests

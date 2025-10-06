@@ -17,7 +17,10 @@ package io.tileverse.rangereader.spi;
 
 import static java.util.Objects.requireNonNull;
 
+import java.io.File;
 import java.net.URI;
+import java.net.URL;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -274,7 +277,7 @@ public class RangeReaderConfig {
         requireNonNull(properties);
         Object urip = requireNonNull(properties.get(URI_KEY), "Properties must include " + URI_KEY);
 
-        URI uri = urip instanceof URI u ? u : URI.create(urip.toString());
+        URI uri = convertToURI(urip);
         String providerId = properties.getProperty(FORCE_PROVIDER_ID.key());
 
         RangeReaderConfig config = new RangeReaderConfig().uri(uri);
@@ -286,6 +289,49 @@ public class RangeReaderConfig {
         copy.remove(PROVIDER_ID_KEY);
         copy.forEach((k, v) -> config.setParameter(String.valueOf(k), v));
         return config;
+    }
+
+    /**
+     * Converts various URI-like objects to a {@link URI}.
+     * Handles {@link URI}, {@link URL}, {@link Path}, {@link File}, and {@link String} types.
+     *
+     * @param uriObject The object to convert to a URI
+     * @return A {@link URI} instance
+     * @throws IllegalArgumentException if the object cannot be converted to a valid URI
+     */
+    private static URI convertToURI(Object uriObject) {
+        if (uriObject instanceof URI uri) {
+            return uri;
+        }
+        if (uriObject instanceof URL url) {
+            try {
+                return url.toURI();
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Invalid URL: " + url, e);
+            }
+        } else if (uriObject instanceof Path path) {
+            return path.toUri();
+        } else if (uriObject instanceof File file) {
+            return file.toURI();
+        } else {
+            // Handle string representations - could be URI string or file path
+            String uriString = uriObject.toString();
+            try {
+                URI uri = URI.create(uriString);
+                // If no scheme, it might be a file path string - try Path conversion
+                if (uri.getScheme() == null) {
+                    return Path.of(uriString).toUri();
+                }
+                return uri;
+            } catch (IllegalArgumentException e) {
+                // If URI.create() fails, try interpreting as a file path
+                try {
+                    return Path.of(uriString).toUri();
+                } catch (Exception pathException) {
+                    throw new IllegalArgumentException("Invalid URI or file path: " + uriString, e);
+                }
+            }
+        }
     }
 
     /**

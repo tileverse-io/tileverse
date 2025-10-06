@@ -231,7 +231,7 @@ public class FileRangeReader extends AbstractRangeReader implements RangeReader 
          * @return this builder
          */
         public Builder path(String pathString) {
-            return uri(URI.create(pathString));
+            return path(Paths.get(pathString));
         }
 
         /**

@@ -297,9 +297,11 @@ public class RangeReaderConfig {
      *
      * @param uriObject The object to convert to a URI
      * @return A {@link URI} instance
+     * @throws NullPointerException if {@code uriObject} is null
      * @throws IllegalArgumentException if the object cannot be converted to a valid URI
      */
-    private static URI convertToURI(Object uriObject) {
+    public static URI convertToURI(Object uriObject) {
+        requireNonNull(uriObject);
         if (uriObject instanceof URI uri) {
             return uri;
         }
@@ -313,25 +315,48 @@ public class RangeReaderConfig {
             return path.toUri();
         } else if (uriObject instanceof File file) {
             return file.toURI();
-        } else {
-            // Handle string representations - could be URI string or file path
-            String uriString = uriObject.toString();
-            try {
-                URI uri = URI.create(uriString);
-                // If no scheme, it might be a file path string - try Path conversion
-                if (uri.getScheme() == null) {
+        }
+        // Handle string representations - could be URI string or file path
+        String uriString = uriObject.toString();
+        try {
+            URI uri = URI.create(uriString);
+            // If no scheme, it might be a file path string - but only if it looks like a path
+            if (uri.getScheme() == null) {
+                if (looksLikeFilePath(uriString)) {
                     return Path.of(uriString).toUri();
                 }
-                return uri;
-            } catch (IllegalArgumentException e) {
-                // If URI.create() fails, try interpreting as a file path
+                // No scheme and doesn't look like a file path - not a valid URI
+                throw new IllegalArgumentException("Invalid URI (no scheme): " + uriString
+                        + ". Expected a URI with scheme (e.g., file:// or http://) or a valid file path.");
+            }
+            return uri;
+        } catch (IllegalArgumentException e) {
+            // If URI.create() fails (e.g., Windows path with backslashes), try interpreting as a file path
+            if (looksLikeFilePath(uriString)) {
                 try {
                     return Path.of(uriString).toUri();
                 } catch (Exception pathException) {
-                    throw new IllegalArgumentException("Invalid URI or file path: " + uriString, e);
+                    throw new IllegalArgumentException("Invalid file path: " + uriString, e);
                 }
             }
+            throw new IllegalArgumentException("Invalid URI: " + uriString, e);
         }
+    }
+
+    /**
+     * Checks if a string looks like it could be a file path.
+     * Returns true if the string contains path separators or starts with path indicators.
+     */
+    private static boolean looksLikeFilePath(String str) {
+        if (str == null || str.isEmpty()) {
+            return false;
+        }
+        // Check for common path patterns
+        return str.contains("/") // Unix separator
+                || str.contains("\\") // Windows separator
+                || str.startsWith(".") // Relative path (./file or ../file)
+                || str.startsWith("~") // Home directory
+                || (str.length() >= 2 && str.charAt(1) == ':'); // Windows drive letter (C:)
     }
 
     /**

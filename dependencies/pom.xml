@@ -13,95 +13,28 @@
 
   <properties>
     <!-- Dependency versions -->
-    <jts.version>1.20.0</jts.version>
-    <protobuf-java.version>4.31.1</protobuf-java.version>
+    <aws-s3.version>2.39.5</aws-s3.version>
+    <azure-identity.version>1.18.1</azure-identity.version>
+    <azure-storage-blob.version>12.32.0</azure-storage-blob.version>
+    <caffeine.version>3.2.3</caffeine.version>
     <commons-compress.version>1.28.0</commons-compress.version>
-    <zstd-jni.version>1.5.7-4</zstd-jni.version>
-    <caffeine.version>3.2.2</caffeine.version>
-    <commons-codec.version>1.19.0</commons-codec.version>
-    <jackson.version>2.19.2</jackson.version>
+    <google-cloud-storage.version>2.60.0</google-cloud-storage.version>
+    <jackson.version>2.20.1</jackson.version>
+    <jts.version>1.20.0</jts.version>
+    <protobuf-java.version>4.33.1</protobuf-java.version>
     <slf4j-api.version>2.0.17</slf4j-api.version>
-    <aws-s3.version>2.32.25</aws-s3.version>
-    <azure-identity.version>1.16.3</azure-identity.version>
-    <azure-storage-blob.version>12.31.1</azure-storage-blob.version>
-    <google-cloud-storage.version>2.55.0</google-cloud-storage.version>
-    <httpclient.version>4.5.14</httpclient.version>
-    <msal4j.version>1.22.0</msal4j.version>
+    <zstd-jni.version>1.5.7-6</zstd-jni.version>
   </properties>
 
   <dependencyManagement>
     <dependencies>
-      <!-- overriding versions for dependency convergence -->
       <dependency>
-        <!--
-         Dependency convergence error for com.google.errorprone:error_prone_annotations:jar:2.40.0 paths to dependency are:
-         +-io.tileverse.rangereader:tileverse-rangereader-gcs:jar:1.0-SNAPSHOT
-           +-io.tileverse.rangereader:tileverse-rangereader-core:jar:1.0-SNAPSHOT:compile
-             +-com.github.ben-manes.caffeine:caffeine:jar:3.2.2:compile
-               +-com.google.errorprone:error_prone_annotations:jar:2.40.0:compile
-         and
-         +-io.tileverse.rangereader:tileverse-rangereader-gcs:jar:1.0-SNAPSHOT
-           +-com.google.cloud:google-cloud-storage:jar:2.53.1:compile
-             +-com.google.errorprone:error_prone_annotations:jar:2.38.0:compile        
-        -->
-        <groupId>com.google.errorprone</groupId>
-        <artifactId>error_prone_annotations</artifactId>
-        <version>2.40.0</version>
-      </dependency>
-      <dependency>
-        <!--
-        dependency convergence between transitive dependencies of
-        com.azure:azure-storage-blob:jar:12.30.0:compile
-         +-com.azure:azure-core:jar:1.55.3:compile
-           +-com.fasterxml.jackson.core:jackson-databind:jar:2.17.2:compile
-             +-com.fasterxml.jackson.core:jackson-core:jar:2.17.2:compile
-        and
-        com.google.cloud:google-cloud-storage:jar:2.53.1:compile
-         +-com.fasterxml.jackson.core:jackson-core:jar:2.18.2:compile
-        -->
         <groupId>com.fasterxml.jackson</groupId>
         <artifactId>jackson-bom</artifactId>
         <version>${jackson.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
-      <dependency>
-        <!--
-        dependency convergence between transitive dependencies of
-        +-io.tileverse.rangereader:tileverse-rangereader-s3:jar:1.0-SNAPSHOT
-          +-software.amazon.awssdk:s3:jar:2.31.70:compile
-            +-software.amazon.awssdk:apache-client:jar:2.31.70:runtime
-              +-org.apache.httpcomponents:httpclient:jar:4.5.13:runtime
-                +-org.apache.httpcomponents:httpcore:jar:4.4.13:runtime
-        and
-        +-io.tileverse.rangereader:tileverse-rangereader-s3:jar:1.0-SNAPSHOT
-          +-software.amazon.awssdk:s3:jar:2.31.70:compile
-            +-software.amazon.awssdk:apache-client:jar:2.31.70:runtime
-              +-org.apache.httpcomponents:httpcore:jar:4.4.16:runtime
-        -->
-        <groupId>org.apache.httpcomponents</groupId>
-        <artifactId>httpclient</artifactId>
-        <version>${httpclient.version}</version>
-      </dependency>
-      <dependency>
-        <!--
-        dependency convergence between transitive dependencies of
-         +-io.tileverse.rangereader:tileverse-rangereader-s3:jar:1.0-SNAPSHOT
-           +-software.amazon.awssdk:s3:jar:2.31.70:compile
-             +-software.amazon.awssdk:apache-client:jar:2.31.70:runtime
-               +-org.apache.httpcomponents:httpclient:jar:4.5.14:runtime
-                +-commons-codec:commons-codec:jar:1.11:runtime
-         and
-         +-io.tileverse.rangereader:tileverse-rangereader-s3:jar:1.0-SNAPSHOT
-           +-software.amazon.awssdk:s3:jar:2.31.70:compile
-             +-software.amazon.awssdk:apache-client:jar:2.31.70:runtime
-               +-commons-codec:commons-codec:jar:1.17.1:runtime
-        -->
-        <groupId>commons-codec</groupId>
-        <artifactId>commons-codec</artifactId>
-        <version>${commons-codec.version}</version>
-      </dependency>
-
       <!-- Logging -->
       <dependency>
         <groupId>org.slf4j</groupId>
@@ -168,15 +101,15 @@
         </exclusions>
       </dependency>
       <dependency>
-        <!-- JDK HttpClient -->
-        <!-- see https://learn.microsoft.com/en-us/azure/developer/java/sdk/http-client-pipeline -->
-        <!--
+        <!-- 
+	    JDK HttpClient
+        see https://learn.microsoft.com/en-us/azure/developer/java/sdk/http-client-pipeline
             Ensure dependency convergence on com.azure:azure-core by checking
             https://mvnrepository.com/artifact/com.azure/azure-core-http-jdk-httpclient
         -->
         <groupId>com.azure</groupId>
         <artifactId>azure-core-http-jdk-httpclient</artifactId>
-        <version>1.0.5</version>
+        <version>1.1.2</version>
       </dependency>
       <dependency>
         <groupId>com.azure</groupId>
@@ -189,26 +122,8 @@
             <groupId>com.azure</groupId>
             <artifactId>azure-core-http-netty</artifactId>
           </exclusion>
-          <exclusion>
-            <!-- let azure-core version be managed by azure-storage-blob -> azure-core -->
-            <groupId>com.azure</groupId>
-            <artifactId>azure-core</artifactId>
-          </exclusion>
         </exclusions>
       </dependency>
-      <dependency>
-        <groupId>com.microsoft.azure</groupId>
-        <artifactId>msal4j</artifactId>
-        <version>${msal4j.version}</version>
-        <exclusions>
-          <exclusion>
-            <!-- let azure-json version be managed by azure-storage-blob -> azure-core -> azure-json -->
-            <groupId>com.azure</groupId>
-            <artifactId>azure-json</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-
       <!-- AWS -->
       <dependency>
         <groupId>software.amazon.awssdk</groupId>
@@ -278,6 +193,108 @@
             <!-- let the version be managed by software.amazon.awssdk:s3 -->
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>apache-client</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <!-- overriding versions for dependency convergence -->
+      <dependency>
+        <!--
+		[ERROR] Dependency convergence error for com.google.errorprone:error_prone_annotations:jar:2.43.0 paths to dependency are:
+		[ERROR] +-io.tileverse.rangereader:tileverse-rangereader-gcs:jar:1.1-SNAPSHOT
+		[ERROR]   +-io.tileverse.rangereader:tileverse-rangereader-core:jar:1.1-SNAPSHOT:compile
+		[ERROR]     +-com.github.ben-manes.caffeine:caffeine:jar:3.2.3:compile
+		[ERROR]       +-com.google.errorprone:error_prone_annotations:jar:2.43.0:compile
+		[ERROR] and
+		[ERROR] +-io.tileverse.rangereader:tileverse-rangereader-gcs:jar:1.1-SNAPSHOT
+		[ERROR]   +-com.google.cloud:google-cloud-storage:jar:2.60.0:compile
+		[ERROR]     +-com.google.errorprone:error_prone_annotations:jar:2.42.0:compile
+	    -->
+        <groupId>com.google.errorprone</groupId>
+        <artifactId>error_prone_annotations</artifactId>
+        <version>2.43.0</version>
+      </dependency>
+      <dependency>
+        <!--
+        [ERROR] +-io.tileverse.rangereader:tileverse-rangereader-azure:jar:1.1-SNAPSHOT
+        [ERROR]   +-com.azure:azure-identity:jar:1.18.1:compile
+        [ERROR]     +-com.microsoft.azure:msal4j-persistence-extension:jar:1.3.0:compile
+        [ERROR]       +-net.java.dev.jna:jna-platform:jar:5.13.0:compile
+        [ERROR] and
+        [ERROR] +-io.tileverse.rangereader:tileverse-rangereader-azure:jar:1.1-SNAPSHOT
+        [ERROR]   +-com.azure:azure-identity:jar:1.18.1:compile
+        [ERROR]     +-net.java.dev.jna:jna-platform:jar:5.17.0:compile
+        -->
+        <groupId>net.java.dev.jna</groupId>
+        <artifactId>jna</artifactId>
+        <version>5.18.1</version>
+      </dependency>
+      <dependency>
+        <!--
+        [ERROR] +-io.tileverse.rangereader:tileverse-rangereader-azure:jar:1.1-SNAPSHOT
+        [ERROR]   +-com.azure:azure-identity:jar:1.18.1:compile
+        [ERROR]     +-com.microsoft.azure:msal4j-persistence-extension:jar:1.3.0:compile
+        [ERROR]       +-net.java.dev.jna:jna-platform:jar:5.13.0:compile
+        [ERROR] and
+        [ERROR] +-io.tileverse.rangereader:tileverse-rangereader-azure:jar:1.1-SNAPSHOT
+        [ERROR]   +-com.azure:azure-identity:jar:1.18.1:compile
+        [ERROR]     +-net.java.dev.jna:jna-platform:jar:5.17.0:compile
+        -->
+        <groupId>net.java.dev.jna</groupId>
+        <artifactId>jna-platform</artifactId>
+        <version>5.18.1</version>
+      </dependency>
+      <dependency>
+        <!--
+		[ERROR] Dependency convergence error for commons-codec:commons-codec:jar:1.11 paths to dependency are:
+		[ERROR] +-io.tileverse.rangereader:tileverse-rangereader-s3:jar:1.1-SNAPSHOT
+		[ERROR]   +-software.amazon.awssdk:apache-client:jar:2.39.5:compile
+		[ERROR]     +-org.apache.httpcomponents:httpclient:jar:4.5.13:compile
+		[ERROR]       +-commons-codec:commons-codec:jar:1.11:compile
+		[ERROR] and
+		[ERROR] +-io.tileverse.rangereader:tileverse-rangereader-s3:jar:1.1-SNAPSHOT
+		[ERROR]   +-software.amazon.awssdk:apache-client:jar:2.39.5:compile
+		[ERROR]     +-commons-codec:commons-codec:jar:1.17.1:compile
+        -->
+        <groupId>commons-codec</groupId>
+        <artifactId>commons-codec</artifactId>
+        <version>1.20.0</version>
+      </dependency>
+      <dependency>
+        <!--
+		[ERROR] Dependency convergence error for org.apache.httpcomponents:httpcore:jar:4.4.13 paths to dependency are:
+		[ERROR] +-io.tileverse.rangereader:tileverse-rangereader-s3:jar:1.1-SNAPSHOT
+		[ERROR]   +-software.amazon.awssdk:apache-client:jar:2.39.5:compile
+		[ERROR]     +-org.apache.httpcomponents:httpclient:jar:4.5.13:compile
+		[ERROR]       +-org.apache.httpcomponents:httpcore:jar:4.4.13:compile
+		[ERROR] and
+		[ERROR] +-io.tileverse.rangereader:tileverse-rangereader-s3:jar:1.1-SNAPSHOT
+		[ERROR]   +-software.amazon.awssdk:apache-client:jar:2.39.5:compile
+		[ERROR]     +-org.apache.httpcomponents:httpcore:jar:4.4.16:compile
+	    -->
+        <groupId>org.apache.httpcomponents</groupId>
+        <artifactId>httpclient</artifactId>
+        <version>4.5.14</version>
+      </dependency>
+      <dependency>
+        <!---
+		[ERROR] Dependency convergence error for com.microsoft.azure:msal4j:jar:1.23.1 paths to dependency are:
+		[ERROR] +-io.tileverse.rangereader:tileverse-rangereader-azure:jar:1.1-SNAPSHOT
+		[ERROR]   +-com.azure:azure-identity:jar:1.18.1:compile
+		[ERROR]     +-com.microsoft.azure:msal4j:jar:1.23.1:compile
+		[ERROR] and
+		[ERROR] +-io.tileverse.rangereader:tileverse-rangereader-azure:jar:1.1-SNAPSHOT
+		[ERROR]   +-com.azure:azure-identity:jar:1.18.1:compile
+		[ERROR]     +-com.microsoft.azure:msal4j-persistence-extension:jar:1.3.0:compile
+		[ERROR]       +-com.microsoft.azure:msal4j:jar:1.15.0:compile
+        -->
+        <groupId>com.microsoft.azure</groupId>
+        <artifactId>msal4j</artifactId>
+        <version>1.23.1</version>
+        <exclusions>
+          <exclusion>
+            <!-- let azure-json version be managed by azure-storage-blob -> azure-core -> azure-json -->
+            <groupId>com.azure</groupId>
+            <artifactId>azure-json</artifactId>
           </exclusion>
         </exclusions>
       </dependency>

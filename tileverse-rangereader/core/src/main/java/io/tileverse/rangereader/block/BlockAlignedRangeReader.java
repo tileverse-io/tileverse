@@ -120,9 +120,8 @@ public class BlockAlignedRangeReader extends AbstractRangeReader implements Rang
         }
 
         // Keep a small working buffer to read blocks
-        final ByteBufferPool pool = ByteBufferPool.getDefault();
-        final ByteBuffer blockBuffer = pool.borrowDirect(blockSize);
-        try {
+        try (var pooled = ByteBufferPool.directBuffer(blockSize)) {
+            ByteBuffer blockBuffer = pooled.buffer();
             // Position tracking for partial blocks
             int bytesRemaining = actualLength;
 
@@ -172,8 +171,6 @@ public class BlockAlignedRangeReader extends AbstractRangeReader implements Rang
             // Calculate how many bytes were actually read
             int bytesRead = actualLength - bytesRemaining;
             return bytesRead;
-        } finally {
-            pool.returnBuffer(blockBuffer);
         }
     }
 

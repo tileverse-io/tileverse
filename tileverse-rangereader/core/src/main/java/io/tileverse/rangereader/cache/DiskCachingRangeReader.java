@@ -657,9 +657,8 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
         logger.debug("Cache miss for key: offset={}, length={}", key.offset(), key.length());
 
         // Read the data from the delegate
-        ByteBufferPool pool = ByteBufferPool.getDefault();
-        ByteBuffer buffer = pool.borrowDirect(key.length());
-        try {
+        try (var pooled = ByteBufferPool.directBuffer(key.length())) {
+            ByteBuffer buffer = pooled.buffer();
             int bytesRead = delegate.readRange(key.offset(), key.length(), buffer);
 
             // It's acceptable to read fewer bytes if we reached EOF
@@ -698,8 +697,6 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
             }
             logger.debug("Added to disk cache: offset={}, length={}, path={}", key.offset(), key.length(), cachePath);
             return cachePath;
-        } finally {
-            pool.returnBuffer(buffer);
         }
     }
 

@@ -57,7 +57,7 @@ class ByteBufferPoolTest {
 
         assertThatThrownBy(() -> new ByteBufferPool(10, 20, 0))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("minBufferSize must be positive");
+                .hasMessageContaining("blockSize must be positive");
     }
 
     @Test
@@ -69,24 +69,28 @@ class ByteBufferPoolTest {
 
     @Test
     void borrowDirect_withValidCapacity_returnsDirectBuffer() {
-        ByteBuffer buffer = pool.borrowDirect(2048);
+        try (var pooledBuffer = pool.borrowDirect(2048)) {
+            ByteBuffer buffer = pooledBuffer.buffer();
 
-        assertThat(buffer).isNotNull();
-        assertThat(buffer.isDirect()).isTrue();
-        assertThat(buffer.capacity()).isGreaterThanOrEqualTo(2048);
-        assertThat(buffer.position()).isZero();
-        assertThat(buffer.limit()).isEqualTo(2048);
+            assertThat(buffer).isNotNull();
+            assertThat(buffer.isDirect()).isTrue();
+            assertThat(buffer.capacity()).isEqualTo(2048);
+            assertThat(buffer.position()).isZero();
+            assertThat(buffer.limit()).isEqualTo(2048);
+        }
     }
 
     @Test
     void borrowHeap_withValidCapacity_returnsHeapBuffer() {
-        ByteBuffer buffer = pool.borrowHeap(2048);
+        try (var pooledBuffer = pool.borrowHeap(2048)) {
+            ByteBuffer buffer = pooledBuffer.buffer();
 
-        assertThat(buffer).isNotNull();
-        assertThat(buffer.isDirect()).isFalse();
-        assertThat(buffer.capacity()).isGreaterThanOrEqualTo(2048);
-        assertThat(buffer.position()).isZero();
-        assertThat(buffer.limit()).isEqualTo(2048);
+            assertThat(buffer).isNotNull();
+            assertThat(buffer.isDirect()).isFalse();
+            assertThat(buffer.capacity()).isEqualTo(2048);
+            assertThat(buffer.position()).isZero();
+            assertThat(buffer.limit()).isEqualTo(2048);
+        }
     }
 
     @Test
@@ -114,24 +118,31 @@ class ByteBufferPoolTest {
 
     @Test
     void returnBuffer_withValidBuffer_addsToPool() {
-        ByteBuffer buffer = pool.borrowDirect(2048);
-
-        // Modify buffer to ensure it gets cleared
-        buffer.putInt(12345);
-        buffer.flip();
-
-        pool.returnBuffer(buffer);
+        ByteBuffer pooled = null;
+        try (var pooledBuffer = pool.borrowHeap(2048)) {
+            ByteBuffer buffer = pooledBuffer.buffer();
+            // Modify buffer to ensure it gets cleared
+            buffer.putInt(12345);
+            buffer.flip();
+            pooled = ((ByteBufferPool.PooledByteBufferImpl) pooledBuffer).pooled();
+        }
 
         // Borrow again and verify it's reused and cleared
-        ByteBuffer reused = pool.borrowDirect(2048);
-        assertThat(reused).isSameAs(buffer);
-        assertThat(reused.position()).isZero();
-        assertThat(reused.limit()).isEqualTo(2048);
+        try (var pooledBuffer = pool.borrowHeap(2048)) {
+
+            assertThat(((ByteBufferPool.PooledByteBufferImpl) pooledBuffer).pooled())
+                    .isSameAs(pooled);
+
+            ByteBuffer reused = pooledBuffer.buffer();
+            assertThat(reused.position()).isZero();
+            assertThat(reused.limit()).isEqualTo(2048);
+            assertThat(reused.capacity()).isEqualTo(2048);
+        }
     }
 
     @Test
     void returnBuffer_withSmallBuffer_discardsBuffer() {
-        ByteBuffer smallBuffer = ByteBuffer.allocateDirect(512); // Below minBufferSize
+        ByteBuffer smallBuffer = ByteBuffer.allocateDirect(512); // Below blockSize
 
         pool.returnBuffer(smallBuffer);
 
@@ -142,26 +153,37 @@ class ByteBufferPoolTest {
 
     @Test
     void bufferReuse_withSufficientCapacity_reusesBuffer() {
-        // Borrow and return a large buffer (will be rounded up to 8KB)
-        ByteBuffer buffer = pool.borrowDirect(4096);
-        pool.returnBuffer(buffer);
+        // Use the pool from setUp() which has 1KB block size
+        try (var pooledBuffer = pool.borrowHeap(2048)) {
+            ByteBuffer buffer = pooledBuffer.buffer();
+            assertThat(buffer.capacity()).isEqualTo(2048);
+        }
+        // Borrow same size buffer - should reuse the pooled one (no new allocation)
+        try (var pooledBuffer = pool.borrowHeap(2048)) {
+            ByteBuffer reused = pooledBuffer.buffer();
+            assertThat(reused.capacity()).isEqualTo(2048); // slice matches requested size
+        }
 
-        // Borrow smaller buffer - should reuse the large one
-        ByteBuffer reused = pool.borrowDirect(2048);
-        assertThat(reused).isSameAs(buffer);
-        assertThat(reused.capacity()).isEqualTo(8192); // 4096 was rounded up to 8KB
+        ByteBufferPool.PoolStatistics stats = pool.getStatistics();
+        // First borrow creates one buffer, second borrow reuses it
+        assertThat(stats.buffersCreated()).isEqualTo(1);
+        assertThat(stats.buffersReused()).isEqualTo(1);
     }
 
     @Test
     void bufferReuse_withInsufficientCapacity_discardsAndCreatesNew() {
-        // Borrow and return a buffer (will be rounded up to 8KB)
-        ByteBuffer smallBuffer = pool.borrowDirect(2048);
-        pool.returnBuffer(smallBuffer);
+        // Borrow and return a small buffer (pool uses 1KB block size)
+        ByteBuffer smallBuffer;
+        try (var pooledBuffer = pool.borrowDirect(2048)) {
+            smallBuffer = pooledBuffer.buffer();
+        }
 
         // Borrow much larger buffer - need more than 8KB, should create new one
-        ByteBuffer largeBuffer = pool.borrowDirect(16384); // 16KB
-        assertThat(largeBuffer).isNotSameAs(smallBuffer); // Should create new buffer
-        assertThat(largeBuffer.capacity()).isEqualTo(16384); // Should be rounded to 16KB
+        try (var pooledBuffer = pool.borrowDirect(16384)) {
+            ByteBuffer largeBuffer = pooledBuffer.buffer();
+            assertThat(largeBuffer).isNotSameAs(smallBuffer); // Should create new buffer
+            assertThat(largeBuffer.capacity()).isEqualTo(16384); // Should be rounded to 16KB
+        }
 
         ByteBufferPool.PoolStatistics stats = pool.getStatistics();
         assertThat(stats.buffersDiscarded()).isEqualTo(1); // Small buffer was discarded when looking for 16KB
@@ -169,24 +191,24 @@ class ByteBufferPoolTest {
 
     @Test
     void poolLimits_exceedingMaxBuffers_discardsExcess() {
-        List<ByteBuffer> buffers = new ArrayList<>();
+        // Fill the direct buffer pool (max 4) by borrowing 4 buffers simultaneously
+        var pooled1 = pool.borrowDirect(1024);
+        var pooled2 = pool.borrowDirect(1024);
+        var pooled3 = pool.borrowDirect(1024);
+        var pooled4 = pool.borrowDirect(1024);
 
-        // Fill the direct buffer pool (max 4)
-        for (int i = 0; i < 4; i++) {
-            buffers.add(pool.borrowDirect(2048));
-        }
-
-        // Return all buffers
-        for (ByteBuffer buffer : buffers) {
-            pool.returnBuffer(buffer);
-        }
+        // Return all 4 buffers
+        pooled1.close();
+        pooled2.close();
+        pooled3.close();
+        pooled4.close();
 
         ByteBufferPool.PoolStatistics stats = pool.getStatistics();
         assertThat(stats.currentDirectBuffers()).isEqualTo(4);
         assertThat(stats.buffersReturned()).isEqualTo(4);
 
         // Create a new buffer (not from pool) and try to return it - should be discarded
-        ByteBuffer extra = ByteBuffer.allocateDirect(2048);
+        ByteBuffer extra = ByteBuffer.allocateDirect(1024);
         pool.returnBuffer(extra);
 
         stats = pool.getStatistics();
@@ -196,14 +218,14 @@ class ByteBufferPoolTest {
 
     @Test
     void separatePoolsForDirectAndHeap() {
-        ByteBuffer direct = pool.borrowDirect(2048);
-        ByteBuffer heap = pool.borrowHeap(2048);
+        try (var pooledDirect = pool.borrowDirect(2048);
+                var pooledHeap = pool.borrowHeap(2048)) {
+            ByteBuffer direct = pooledDirect.buffer();
+            ByteBuffer heap = pooledHeap.buffer();
 
-        assertThat(direct.isDirect()).isTrue();
-        assertThat(heap.isDirect()).isFalse();
-
-        pool.returnBuffer(direct);
-        pool.returnBuffer(heap);
+            assertThat(direct.isDirect()).isTrue();
+            assertThat(heap.isDirect()).isFalse();
+        }
 
         ByteBufferPool.PoolStatistics stats = pool.getStatistics();
         assertThat(stats.currentDirectBuffers()).isEqualTo(1);
@@ -213,10 +235,10 @@ class ByteBufferPoolTest {
     @Test
     void clear_removesAllBuffers() {
         // Add some buffers to pools
-        ByteBuffer direct = pool.borrowDirect(2048);
-        ByteBuffer heap = pool.borrowHeap(2048);
-        pool.returnBuffer(direct);
-        pool.returnBuffer(heap);
+        try (var pooledDirect = pool.borrowDirect(2048);
+                var pooledHeap = pool.borrowHeap(2048)) {
+            // Just borrow and return via try-with-resources
+        }
 
         assertThat(pool.getStatistics().currentDirectBuffers()).isEqualTo(1);
         assertThat(pool.getStatistics().currentHeapBuffers()).isEqualTo(1);
@@ -230,14 +252,16 @@ class ByteBufferPoolTest {
 
     @Test
     void statistics_trackCorrectly() {
-        // Create some activity
-        ByteBuffer buffer1 = pool.borrowDirect(2048); // created
-        ByteBuffer buffer2 = pool.borrowDirect(2048); // created
+        // Create some activity - borrow 2 buffers simultaneously to force creation
+        var pooledBuffer1 = pool.borrowDirect(2048); // created
+        var pooledBuffer2 = pool.borrowDirect(2048); // created (can't reuse, buffer1 is still borrowed)
 
-        pool.returnBuffer(buffer1); // returned
-        pool.returnBuffer(buffer2); // returned
+        pooledBuffer1.close(); // returned
+        pooledBuffer2.close(); // returned
 
-        ByteBuffer buffer3 = pool.borrowDirect(2048); // reused (buffer1 or buffer2)
+        try (var pooledBuffer3 = pool.borrowDirect(2048)) { // reused (buffer1 or buffer2)
+            // Will be returned
+        }
 
         // Return small buffer (should be discarded)
         ByteBuffer smallBuffer = ByteBuffer.allocateDirect(512);
@@ -246,11 +270,11 @@ class ByteBufferPoolTest {
         ByteBufferPool.PoolStatistics stats = pool.getStatistics();
         assertThat(stats.buffersCreated()).isEqualTo(2);
         assertThat(stats.buffersReused()).isEqualTo(1);
-        assertThat(stats.buffersReturned()).isEqualTo(2);
-        assertThat(stats.buffersDiscarded()).isEqualTo(1);
+        assertThat(stats.buffersReturned()).isEqualTo(3); // All three PooledByteBuffers returned
+        assertThat(stats.buffersDiscarded()).isEqualTo(1); // Only the small buffer discarded
 
         assertThat(stats.hitRate()).isCloseTo(33.33, within(0.1)); // 1 reused out of 3 total
-        assertThat(stats.returnRate()).isCloseTo(66.67, within(0.1)); // 2 returned out of 3 total
+        assertThat(stats.returnRate()).isCloseTo(75.0, within(0.1)); // 3 returned out of 4 total (3 + 1 discarded)
     }
 
     @Test
@@ -270,14 +294,12 @@ class ByteBufferPoolTest {
 
                     for (int op = 0; op < operationsPerThread; op++) {
                         // Randomly borrow direct or heap buffers
-                        ByteBuffer buffer =
-                                (op % 2 == 0) ? pool.borrowDirect(1024 + op * 10) : pool.borrowHeap(1024 + op * 10);
-
-                        // Use the buffer briefly
-                        buffer.putInt(op);
-
-                        // Return the buffer
-                        pool.returnBuffer(buffer);
+                        try (var pooledBuffer =
+                                (op % 2 == 0) ? pool.borrowDirect(1024 + op * 10) : pool.borrowHeap(1024 + op * 10)) {
+                            ByteBuffer buffer = pooledBuffer.buffer();
+                            // Use the buffer briefly
+                            buffer.putInt(op);
+                        } // Auto-returned via try-with-resources
                     }
 
                     endLatch.countDown();
@@ -310,10 +332,10 @@ class ByteBufferPoolTest {
 
     @Test
     void toString_includesRelevantInformation() {
-        ByteBuffer direct = pool.borrowDirect(2048);
-        ByteBuffer heap = pool.borrowHeap(2048);
-        pool.returnBuffer(direct);
-        pool.returnBuffer(heap);
+        try (var pooledDirect = pool.borrowDirect(2048);
+                var pooledHeap = pool.borrowHeap(2048)) {
+            // Will be returned
+        }
 
         String result = pool.toString();
         assertThat(result)
@@ -329,37 +351,83 @@ class ByteBufferPoolTest {
         ByteBufferPool defaultPool = ByteBufferPool.getDefault();
 
         // Should be able to borrow buffers
-        ByteBuffer direct = defaultPool.borrowDirect(8192);
-        ByteBuffer heap = defaultPool.borrowHeap(8192);
+        try (var pooledDirect = defaultPool.borrowDirect(8192);
+                var pooledHeap = defaultPool.borrowHeap(8192)) {
+            ByteBuffer direct = pooledDirect.buffer();
+            ByteBuffer heap = pooledHeap.buffer();
 
-        assertThat(direct.isDirect()).isTrue();
-        assertThat(heap.isDirect()).isFalse();
-
-        // Clean up
-        defaultPool.returnBuffer(direct);
-        defaultPool.returnBuffer(heap);
+            assertThat(direct.isDirect()).isTrue();
+            assertThat(heap.isDirect()).isFalse();
+        }
     }
 
     @Test
-    void directBufferAlignment_roundsUpTo8KB() {
-        // Test various sizes to ensure they're rounded up to multiples of 8KB
-        ByteBuffer buffer1 = pool.borrowDirect(1);
-        assertThat(buffer1.capacity()).isEqualTo(8192); // 1 byte -> 8KB
+    void directBufferAlignment_roundsUpToBlockSize() {
+        // Test various sizes with default 8KB block size
+        try (var pooledBuffer1 = pool.borrowDirect(1)) {
+            assertThat(pooledBuffer1.buffer().capacity()).isEqualTo(1); // slice capacity matches request
+        }
 
-        ByteBuffer buffer2 = pool.borrowDirect(4096);
-        assertThat(buffer2.capacity()).isEqualTo(8192); // 4KB -> 8KB
+        try (var pooledBuffer2 = pool.borrowDirect(4096)) {
+            assertThat(pooledBuffer2.buffer().capacity()).isEqualTo(4096); // slice capacity matches request
+        }
 
-        ByteBuffer buffer3 = pool.borrowDirect(8192);
-        assertThat(buffer3.capacity()).isEqualTo(8192); // 8KB -> 8KB (no change)
+        try (var pooledBuffer3 = pool.borrowDirect(8192)) {
+            assertThat(pooledBuffer3.buffer().capacity()).isEqualTo(8192); // exact match, no slice
+        }
 
-        ByteBuffer buffer4 = pool.borrowDirect(8193);
-        assertThat(buffer4.capacity()).isEqualTo(16384); // 8KB+1 -> 16KB
+        try (var pooledBuffer4 = pool.borrowDirect(8193)) {
+            assertThat(pooledBuffer4.buffer().capacity()).isEqualTo(8193); // slice capacity matches request
+        }
 
-        ByteBuffer buffer5 = pool.borrowDirect(12288);
-        assertThat(buffer5.capacity()).isEqualTo(16384); // 12KB -> 16KB
+        try (var pooledBuffer5 = pool.borrowDirect(12288)) {
+            assertThat(pooledBuffer5.buffer().capacity()).isEqualTo(12288); // slice capacity matches request
+        }
 
-        ByteBuffer buffer6 = pool.borrowDirect(16384);
-        assertThat(buffer6.capacity()).isEqualTo(16384); // 16KB -> 16KB (no change)
+        try (var pooledBuffer6 = pool.borrowDirect(16384)) {
+            assertThat(pooledBuffer6.buffer().capacity()).isEqualTo(16384); // exact match, no slice
+        }
+    }
+
+    @Test
+    void customBlockSize_affectsAllocationAndPooling() {
+        // Create pool with 2KB block size
+        ByteBufferPool customPool = new ByteBufferPool(4, 8, 2048);
+
+        // Test allocation rounding and that buffers get pooled
+        // Borrow two buffers simultaneously to force creation of 2 buffers
+        var pooled1 = customPool.borrowDirect(100);
+        var pooled2 = customPool.borrowDirect(2049);
+
+        // Verify capacities
+        assertThat(pooled1.buffer().capacity()).isEqualTo(100);
+        assertThat(pooled2.buffer().capacity()).isEqualTo(2049);
+
+        // Return both
+        pooled1.close(); // Will be pooled (>= block size)
+        pooled2.close(); // Will be pooled (>= block size)
+
+        ByteBufferPool.PoolStatistics stats = customPool.getStatistics();
+        assertThat(stats.buffersCreated()).isEqualTo(2);
+        assertThat(stats.buffersReturned()).isEqualTo(2);
+        assertThat(stats.currentDirectBuffers()).isEqualTo(2); // Both pooled
+
+        // Test pooling threshold - buffers smaller than block size are discarded
+        ByteBuffer tooSmall = ByteBuffer.allocateDirect(1024); // 1KB < 2KB block size
+        customPool.returnBuffer(tooSmall);
+
+        stats = customPool.getStatistics();
+        assertThat(stats.buffersDiscarded()).isEqualTo(1); // Too small buffer discarded
+        assertThat(stats.currentDirectBuffers()).isEqualTo(2); // Still only the 2 pooled buffers
+
+        // Verify buffer reuse
+        try (var pooled3 = customPool.borrowDirect(2048)) {
+            // Should reuse one of the pooled buffers
+        }
+
+        stats = customPool.getStatistics();
+        assertThat(stats.buffersReused()).isEqualTo(1); // Reused from pool
+        assertThat(stats.buffersReturned()).isEqualTo(3); // 3 total returned
     }
 
     private static org.assertj.core.data.Offset<Double> within(double offset) {

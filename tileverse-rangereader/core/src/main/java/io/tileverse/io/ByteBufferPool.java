@@ -37,25 +37,20 @@ import org.slf4j.LoggerFactory;
  * of pooled buffers to prevent unbounded memory growth. Buffers that exceed
  * the pool capacity are simply discarded when returned.
  * <p>
- * <strong>Buffer Lifecycle:</strong> Borrowed buffers are automatically cleared
- * (position=0, limit=capacity) before being returned to callers. Returned buffers
- * are validated and cleaned before being added back to the pool.
+ * <strong>Buffer Lifecycle:</strong> Borrowed buffers are wrapped in a
+ * {@link PooledByteBuffer} that automatically returns the buffer to the pool
+ * when closed. Always use try-with-resources to ensure proper cleanup.
  *
- * <p><strong>Usage Example:</strong></p>
+ * <p><strong>Usage Example (Recommended):</strong></p>
  * <pre>{@code
- * ByteBufferPool pool = ByteBufferPool.getDefault();
- *
- * // Borrow a direct buffer for I/O
- * ByteBuffer buffer = pool.borrowDirect(8192);
- * try {
+ * // Using static convenience methods with default pool
+ * try (var pooled = ByteBufferPool.directBuffer(8192)) {
+ *     ByteBuffer buffer = pooled.buffer();
  *     // Use buffer for I/O operations
  *     channel.read(buffer);
  *     buffer.flip();
  *     // Process data...
- * } finally {
- *     // Always return buffers in a finally block
- *     pool.returnBuffer(buffer);
- * }
+ * } // Buffer automatically returned to pool
  * }</pre>
  *
  * <p><strong>Custom Pool Configuration:</strong></p>
@@ -64,16 +59,24 @@ import org.slf4j.LoggerFactory;
  * ByteBufferPool customPool = new ByteBufferPool(
  *     50,    // maxDirectBuffers
  *     100,   // maxHeapBuffers
- *     1024   // minBufferSize
+ *     1024   // blockSize
  * );
  *
- * ByteBuffer largeBuffer = customPool.borrowDirect(65536);
- * try {
+ * try (var pooled = customPool.borrowDirect(65536)) {
+ *     ByteBuffer buffer = pooled.buffer();
  *     // Use large buffer...
- * } finally {
- *     customPool.returnBuffer(largeBuffer);
- * }
+ * } // Automatically returned to pool
  * }</pre>
+ *
+ * <p><strong>Buffer Capacity:</strong></p>
+ * The {@link PooledByteBuffer#buffer()} method returns a buffer whose capacity
+ * matches the requested size exactly. Internally, the pool may allocate larger
+ * buffers (rounded to block size boundaries for alignment), but the returned buffer
+ * is a slice that matches your requested capacity.
+ *
+ * @see PooledByteBuffer
+ * @see #directBuffer(int)
+ * @see #heapBuffer(int)
  */
 public class ByteBufferPool {
 
@@ -100,8 +103,8 @@ public class ByteBufferPool {
     /** Maximum number of heap buffers to pool. */
     private final int maxHeapBuffers;
 
-    /** Minimum buffer size to pool (smaller buffers are discarded). */
-    private final int minBufferSize;
+    /** Block size for allocation alignment and minimum pooling threshold. */
+    private final int blockSize;
 
     /** Statistics: total buffers created. */
     private final AtomicLong buffersCreated = new AtomicLong(0);
@@ -121,14 +124,14 @@ public class ByteBufferPool {
     /** Default maximum number of heap buffers to pool. */
     public static final int DEFAULT_MAX_HEAP_BUFFERS = 64;
 
-    /** Default minimum buffer size to pool (4KB). */
-    public static final int DEFAULT_MIN_BUFFER_SIZE = 4096;
+    /** Default block size for allocation alignment and pooling (8KB). */
+    public static final int DEFAULT_BLOCK_SIZE = 8192;
 
     /**
      * Creates a new ByteBuffer pool with default settings.
      */
     public ByteBufferPool() {
-        this(DEFAULT_MAX_DIRECT_BUFFERS, DEFAULT_MAX_HEAP_BUFFERS, DEFAULT_MIN_BUFFER_SIZE);
+        this(DEFAULT_MAX_DIRECT_BUFFERS, DEFAULT_MAX_HEAP_BUFFERS, DEFAULT_BLOCK_SIZE);
     }
 
     /**
@@ -136,29 +139,29 @@ public class ByteBufferPool {
      *
      * @param maxDirectBuffers maximum number of direct buffers to pool
      * @param maxHeapBuffers maximum number of heap buffers to pool
-     * @param minBufferSize minimum buffer size to pool (bytes)
+     * @param blockSize block size for allocation alignment and minimum pooling threshold (bytes)
      * @throws IllegalArgumentException if any parameter is negative or zero
      */
-    public ByteBufferPool(int maxDirectBuffers, int maxHeapBuffers, int minBufferSize) {
+    public ByteBufferPool(int maxDirectBuffers, int maxHeapBuffers, int blockSize) {
         if (maxDirectBuffers <= 0) {
             throw new IllegalArgumentException("maxDirectBuffers must be positive: " + maxDirectBuffers);
         }
         if (maxHeapBuffers <= 0) {
             throw new IllegalArgumentException("maxHeapBuffers must be positive: " + maxHeapBuffers);
         }
-        if (minBufferSize <= 0) {
-            throw new IllegalArgumentException("minBufferSize must be positive: " + minBufferSize);
+        if (blockSize <= 0) {
+            throw new IllegalArgumentException("blockSize must be positive: " + blockSize);
         }
 
         this.maxDirectBuffers = maxDirectBuffers;
         this.maxHeapBuffers = maxHeapBuffers;
-        this.minBufferSize = minBufferSize;
+        this.blockSize = blockSize;
 
         logger.debug(
-                "Created ByteBufferPool: maxDirect={}, maxHeap={}, minSize={}",
+                "Created ByteBufferPool: maxDirect={}, maxHeap={}, blockSize={}",
                 maxDirectBuffers,
                 maxHeapBuffers,
-                minBufferSize);
+                blockSize);
     }
 
     /**
@@ -177,18 +180,27 @@ public class ByteBufferPool {
     /**
      * Borrows a direct ByteBuffer with at least the specified capacity.
      * <p>
-     * The returned buffer will be cleared (position=0, limit=capacity) and
-     * ready for use. The buffer may have a larger capacity than requested
-     * if a suitable buffer was available in the pool.
+     * Returns a {@link PooledByteBuffer} that must be used in a try-with-resources
+     * block to ensure proper return to the pool. The {@link PooledByteBuffer#buffer()}
+     * method returns a ByteBuffer with capacity matching the requested size exactly.
      * <p>
-     * For optimal memory alignment and performance, new buffers are created
-     * with sizes that are multiples of 8KB (8192 bytes).
+     * For optimal memory alignment and performance, internal buffers are allocated
+     * with sizes that are multiples of the configured block size, but the returned buffer
+     * will be a slice matching your requested capacity.
+     *
+     * <pre>{@code
+     * try (var pooled = pool.borrowDirect(8192)) {
+     *     ByteBuffer buffer = pooled.buffer();
+     *     // Use buffer for I/O operations
+     *     channel.read(buffer);
+     * } // Automatically returned to pool
+     * }</pre>
      *
      * @param size minimum required capacity in bytes
-     * @return a direct ByteBuffer with at least the requested capacity, and the limit set to the requested {@code size}
-     * @throws IllegalArgumentException if minCapacity is negative
+     * @return a {@link PooledByteBuffer} wrapping a direct ByteBuffer with the requested capacity
+     * @throws IllegalArgumentException if size is negative
      */
-    public ByteBuffer borrowDirect(int size) {
+    public PooledByteBuffer borrowDirect(int size) {
         if (size < 0) {
             throw new IllegalArgumentException("minCapacity cannot be negative: " + size);
         }
@@ -199,27 +211,91 @@ public class ByteBufferPool {
             buffersReused.incrementAndGet();
             logger.trace("Reused direct buffer: capacity={}", buffer.capacity());
         } else {
-            // Create new direct buffer with size rounded up to multiple of 8KB
-            int alignedCapacity = roundUpTo8KB(size);
+            // Create new direct buffer with size rounded up to multiple of block size
+            int alignedCapacity = roundUpToBlockSize(size);
             buffer = ByteBuffer.allocateDirect(alignedCapacity);
             buffersCreated.incrementAndGet();
             logger.trace("Created new direct buffer: requested={}, aligned={}", size, alignedCapacity);
         }
-        return buffer.clear().limit(size);
+        buffer.clear().limit(size);
+        if (size == buffer.capacity()) {
+            return new PooledByteBufferImpl(buffer, buffer, this);
+        }
+        return new PooledByteBufferImpl(buffer, buffer.slice(), this);
+    }
+
+    /**
+     * Convenience method to borrow a direct ByteBuffer from the default pool.
+     * <p>
+     * This is equivalent to {@code ByteBufferPool.getDefault().borrowDirect(size)}.
+     * The returned {@link PooledByteBuffer} must be used in a try-with-resources
+     * block to ensure proper return to the pool.
+     *
+     * <pre>{@code
+     * try (var pooled = ByteBufferPool.directBuffer(8192)) {
+     *     ByteBuffer buffer = pooled.buffer();
+     *     // Use buffer for I/O operations
+     *     channel.read(buffer);
+     * } // Automatically returned to pool
+     * }</pre>
+     *
+     * @param size minimum required capacity in bytes
+     * @return a {@link PooledByteBuffer} wrapping a direct ByteBuffer with at least the requested capacity
+     * @throws IllegalArgumentException if size is negative
+     * @see #borrowDirect(int)
+     */
+    public static PooledByteBuffer directBuffer(int size) {
+        return getDefault().borrowDirect(size);
+    }
+
+    /**
+     * Convenience method to borrow a heap ByteBuffer from the default pool.
+     * <p>
+     * This is equivalent to {@code ByteBufferPool.getDefault().borrowHeap(size)}.
+     * The returned {@link PooledByteBuffer} must be used in a try-with-resources
+     * block to ensure proper return to the pool.
+     *
+     * <pre>{@code
+     * try (var pooled = ByteBufferPool.heapBuffer(8192)) {
+     *     ByteBuffer buffer = pooled.buffer();
+     *     // Use buffer for in-memory processing
+     *     buffer.put(data);
+     * } // Automatically returned to pool
+     * }</pre>
+     *
+     * @param size minimum required capacity in bytes
+     * @return a {@link PooledByteBuffer} wrapping a heap ByteBuffer with at least the requested capacity
+     * @throws IllegalArgumentException if size is negative
+     * @see #borrowHeap(int)
+     */
+    public static PooledByteBuffer heapBuffer(int size) {
+        return getDefault().borrowHeap(size);
     }
 
     /**
      * Borrows a heap ByteBuffer with at least the specified capacity.
      * <p>
-     * The returned buffer will be cleared (position=0, limit=capacity) and
-     * ready for use. The buffer may have a larger capacity than requested
-     * if a suitable buffer was available in the pool.
+     * Returns a {@link PooledByteBuffer} that must be used in a try-with-resources
+     * block to ensure proper return to the pool. The {@link PooledByteBuffer#buffer()}
+     * method returns a ByteBuffer with capacity matching the requested size exactly.
+     * <p>
+     * For optimal memory alignment and performance, internal buffers are allocated
+     * with sizes that are multiples of the configured block size, but the returned buffer
+     * will be a slice matching your requested capacity.
+     *
+     * <pre>{@code
+     * try (var pooled = pool.borrowHeap(4096)) {
+     *     ByteBuffer buffer = pooled.buffer();
+     *     // Use buffer for in-memory processing
+     *     buffer.put(data);
+     * } // Automatically returned to pool
+     * }</pre>
      *
      * @param size minimum required capacity in bytes
-     * @return a heap ByteBuffer with at least the requested capacity, and the limit set to the requested {@code capacity}
-     * @throws IllegalArgumentException if minCapacity is negative
+     * @return a {@link PooledByteBuffer} wrapping a heap ByteBuffer with the requested capacity
+     * @throws IllegalArgumentException if size is negative
      */
-    public ByteBuffer borrowHeap(int size) {
+    public PooledByteBuffer borrowHeap(int size) {
         if (size < 0) {
             throw new IllegalArgumentException("minCapacity cannot be negative: " + size);
         }
@@ -231,12 +307,16 @@ public class ByteBufferPool {
             logger.trace("Reused heap buffer: capacity={}", buffer.capacity());
         } else {
             // Create new heap buffer
-            int alignedCapacity = roundUpTo8KB(size);
+            int alignedCapacity = roundUpToBlockSize(size);
             buffer = ByteBuffer.allocate(alignedCapacity);
             buffersCreated.incrementAndGet();
             logger.trace("Created new heap buffer: capacity={}", buffer.capacity());
         }
-        return buffer.clear().limit(size);
+        buffer.clear().limit(size);
+        if (size == buffer.capacity()) {
+            return new PooledByteBufferImpl(buffer, buffer, this);
+        }
+        return new PooledByteBufferImpl(buffer, buffer.slice(), this);
     }
 
     /**
@@ -251,7 +331,7 @@ public class ByteBufferPool {
      *
      * @param buffer the buffer to return (may be null, in which case this is a no-op)
      */
-    public void returnBuffer(ByteBuffer buffer) {
+    protected void returnBuffer(ByteBuffer buffer) {
         if (buffer == null) {
             return;
         }
@@ -260,9 +340,9 @@ public class ByteBufferPool {
         buffer.clear();
 
         // Check if buffer is large enough to pool
-        if (buffer.capacity() < minBufferSize) {
+        if (buffer.capacity() < blockSize) {
             buffersDiscarded.incrementAndGet();
-            logger.trace("Discarded buffer (too small): capacity={}, minSize={}", buffer.capacity(), minBufferSize);
+            logger.trace("Discarded buffer (too small): capacity={}, blockSize={}", buffer.capacity(), blockSize);
             return;
         }
 
@@ -338,15 +418,14 @@ public class ByteBufferPool {
     }
 
     /**
-     * Rounds up the given capacity to the next multiple of 8KB (8192 bytes).
+     * Rounds up the given capacity to the next multiple of the block size.
      * This provides better memory alignment and can improve performance.
      *
      * @param capacity the capacity to round up
-     * @return the capacity rounded up to the next multiple of 8KB
+     * @return the capacity rounded up to the next multiple of block size
      */
-    private static int roundUpTo8KB(int capacity) {
-        final int alignment = 8192; // 8KB alignment
-        return ((capacity + alignment - 1) / alignment) * alignment;
+    private int roundUpToBlockSize(int capacity) {
+        return ((capacity + blockSize - 1) / blockSize) * blockSize;
     }
 
     /**
@@ -438,6 +517,67 @@ public class ByteBufferPool {
         public double returnRate() {
             long totalReturns = buffersReturned + buffersDiscarded;
             return totalReturns > 0 ? (buffersReturned * 100.0) / totalReturns : 0.0;
+        }
+    }
+
+    /**
+     * A wrapper around a pooled {@link ByteBuffer} that implements {@link AutoCloseable}
+     * to enable try-with-resources syntax for automatic buffer return to the pool.
+     * <p>
+     * This interface ensures that borrowed buffers are always returned to the pool,
+     * preventing resource leaks and maintaining optimal pool performance.
+     *
+     * <p><strong>Usage Example:</strong></p>
+     * <pre>{@code
+     * try (var pooled = ByteBufferPool.directBuffer(8192)) {
+     *     ByteBuffer buffer = pooled.buffer();
+     *     // Use buffer
+     *     channel.read(buffer);
+     *     buffer.flip();
+     *     // Process data
+     * } // Buffer automatically returned to pool here
+     * }</pre>
+     *
+     * @since 1.1
+     */
+    public static interface PooledByteBuffer extends AutoCloseable {
+        /**
+         * Returns the underlying {@link ByteBuffer} for use.
+         * <p>
+         * The returned buffer's capacity will match the requested size (not the pooled
+         * buffer's capacity, which may be larger). The buffer's position will be 0
+         * and its limit will be set to the requested capacity.
+         * <p>
+         * <strong>Important:</strong> The buffer should only be used within the
+         * try-with-resources block. Do not store references to the buffer beyond
+         * the scope of the try block.
+         *
+         * @return the underlying ByteBuffer, ready for use
+         */
+        public ByteBuffer buffer();
+
+        /**
+         * Returns the buffer to the pool.
+         * <p>
+         * This method is called automatically when exiting a try-with-resources block.
+         * After calling this method, the buffer should not be used anymore.
+         */
+        @Override
+        void close();
+    }
+
+    // visible for testing
+    static record PooledByteBufferImpl(ByteBuffer pooled, ByteBuffer slice, ByteBufferPool pool)
+            implements PooledByteBuffer {
+
+        @Override
+        public void close() {
+            pool.returnBuffer(this.pooled);
+        }
+
+        @Override
+        public ByteBuffer buffer() {
+            return slice;
         }
     }
 }

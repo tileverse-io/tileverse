@@ -539,17 +539,15 @@ public record PMTilesHeader(
 
     static PMTilesHeader readHeader(ReadableByteChannel channel) throws IOException, InvalidHeaderException {
         // Read the header
-        ByteBuffer headerBuffer = ByteBufferPool.getDefault().borrowHeap(127);
-        try {
-            int bytesRead = channel.read(headerBuffer);
+        try (var pooledBuffer = ByteBufferPool.heapBuffer(127)) {
+            ByteBuffer buffer = pooledBuffer.buffer();
+            int bytesRead = channel.read(buffer);
             if (bytesRead != 127) {
                 throw new InvalidHeaderException("Failed to read complete header. Read " + bytesRead + " bytes");
             }
-            headerBuffer.flip();
+            buffer.flip();
             // Deserialize the header directly from the ByteBuffer
-            return deserialize(headerBuffer);
-        } finally {
-            ByteBufferPool.getDefault().returnBuffer(headerBuffer);
+            return deserialize(buffer);
         }
     }
 }

@@ -509,16 +509,15 @@ public class PMTilesReader {
     }
 
     private ByteBuffer readData(ByteRange range, byte compression) {
-        ByteBuffer buffer = ByteBufferPool.getDefault().borrowHeap(range.length());
-        try (SeekableByteChannel channel = channelSupplier.get()) {
+        try (SeekableByteChannel channel = channelSupplier.get();
+                var pooledBuffer = ByteBufferPool.heapBuffer(range.length())) {
+            ByteBuffer buffer = pooledBuffer.buffer();
             channel.position(range.offset());
             channel.read(buffer);
             buffer.flip();
             return CompressionUtil.decompress(buffer, compression);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
-        } finally {
-            ByteBufferPool.getDefault().returnBuffer(buffer);
         }
     }
 

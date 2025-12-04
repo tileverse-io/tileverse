@@ -1,66 +1,34 @@
 # Tileverse
 
-A comprehensive Java library ecosystem for working with geospatial tiles, cloud-optimized formats, and efficient data access.
+**A high-performance, modular Java ecosystem for cloud-native geospatial data.**
+
+[![Maven Central](https://img.shields.io/maven-central/v/io.tileverse/tileverse-parent?label=Maven%20Central&logo=apachemaven&style=flat-square)](https://central.sonatype.com/search?q=io.tileverse)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/tileverse-io/tileverse/pr-validation.yml?branch=main&label=Build&logo=github&style=flat-square)](https://github.com/tileverse-io/tileverse/actions)
+[![License](https://img.shields.io/github/license/tileverse-io/tileverse?label=License&style=flat-square)](LICENSE)
+[![Java Version](https://img.shields.io/badge/Java-17%2B-blue?logo=openjdk&style=flat-square)](https://openjdk.org/)
+
+---
 
 ## Overview
 
-Tileverse is a modular collection of libraries designed for building high-performance geospatial applications. It provides everything from low-level efficient data access to high-level tile format support, with a focus on cloud-native architectures and modern Java practices.
+**Tileverse** is a collection of loosely coupled Java libraries designed to solve the challenges of modern, cloud-centric geospatial applications. It provides the foundational blocks—efficient I/O, standardized tiling schemes, and robust format parsers—needed to build tile servers, ETL pipelines, and analytical tools.
 
-## Libraries
+Unlike monolithic GIS frameworks, Tileverse modules are designed to be **composable**. Pick exactly what you need: just the I/O layer for reading COGs from S3, just the math library for tile grid calculations, or the full stack for serving PMTiles.
 
-### 🌐 [Range Reader](tileverse-rangereader/)
+## Modules
 
-Efficient random access to byte ranges from local files, HTTP servers, and cloud storage (S3, Azure Blob, Google Cloud Storage).
-
-**Features:**
-
-- Universal API for multiple data sources
-- Multi-level caching (memory + disk)
-- Block alignment optimization
-- Thread-safe concurrent access
-- HTTP authentication support
-
-**[📖 Documentation](https://tileverse-io.github.io/tileverse-rangereader/)** | **[🚀 Quick Start](https://tileverse-io.github.io/tileverse-rangereader/user-guide/quick-start/)**
-
-### 🗺️ [PMTiles](tileverse-pmtiles/)
-
-Reading and writing PMTiles archives - a cloud-optimized format for map tiles.
-
-**Features:**
-
-- PMTiles v3 format support
-- Hilbert curve spatial indexing
-- Cloud-optimized access patterns
-- Memory-efficient streaming
-- Vector and raster tile support
-
-### 📐 [Tile Matrixset](tileverse-tilematrixset/)
-
-Generic object model for defining tile pyramids and tiling schemes.
-
-**Features:**
-
-- Standard tile matrix set definitions
-- Coordinate transformations
-- Flexible tiling schemes
-- Web Mercator, WGS84, and custom CRS support
-
-### 🎨 [Vector Tiles](tileverse-vectortiles/)
-
-Encoding and decoding Mapbox Vector Tiles (MVT).
-
-**Features:**
-
-- MVT format encoding/decoding
-- Protocol Buffers support
-- Geometry transformations
-- Layer and feature manipulation
+| Module | Description | Key Capabilities |
+| :--- | :--- | :--- |
+| **[Range Reader](tileverse-rangereader/)** | Unified I/O | Abstract byte-range access across **S3**, **Azure**, **GCS**, **HTTP**, and local files. Includes intelligent multi-level caching and block alignment. |
+| **[PMTiles](tileverse-pmtiles/)** | Archive Format | Read/write support for the **[PMTiles v3](https://github.com/protomaps/PMTiles)** specification. Leverages `RangeReader` for cloud-optimized random access. |
+| **[Vector Tiles](tileverse-vectortiles/)** | Data Encoding | High-performance encoding and decoding of **Mapbox Vector Tiles (MVT)** to/from JTS Geometries using Protocol Buffers. |
+| **[Tile Matrix Set](tileverse-tilematrixset/)** | Spatial Logic | Implementation of the **OGC Tile Matrix Set** standard. Handles coordinate transforms, bounding box logic, and tile pyramid definitions. |
 
 ## Installation
 
-### Maven
+Tileverse is available on Maven Central. We recommend using the **Bill of Materials (BOM)** to align versions across modules.
 
-Add the Tileverse BOM to your `dependencyManagement`:
+### Maven
 
 ```xml
 <dependencyManagement>
@@ -68,40 +36,24 @@ Add the Tileverse BOM to your `dependencyManagement`:
     <dependency>
       <groupId>io.tileverse</groupId>
       <artifactId>tileverse-bom</artifactId>
-      <version>1.0-SNAPSHOT</version>
+      <version>1.1.0</version>
       <type>pom</type>
       <scope>import</scope>
     </dependency>
   </dependencies>
 </dependencyManagement>
-```
 
-Then add the modules you need:
-
-```xml
 <dependencies>
-  <!-- Range Reader with all providers -->
+  <!-- I/O Layer -->
   <dependency>
     <groupId>io.tileverse.rangereader</groupId>
     <artifactId>tileverse-rangereader-all</artifactId>
   </dependency>
 
-  <!-- PMTiles support -->
+  <!-- Format Support -->
   <dependency>
     <groupId>io.tileverse.pmtiles</groupId>
     <artifactId>tileverse-pmtiles</artifactId>
-  </dependency>
-
-  <!-- Tile Pyramid model -->
-  <dependency>
-    <groupId>io.tileverse.tilematrixset</groupId>
-    <artifactId>tileverse-tilematrixset</artifactId>
-  </dependency>
-
-  <!-- Vector Tiles -->
-  <dependency>
-    <groupId>io.tileverse.vectortiles</groupId>
-    <artifactId>tileverse-vectortiles</artifactId>
   </dependency>
 </dependencies>
 ```
@@ -110,140 +62,103 @@ Then add the modules you need:
 
 ```gradle
 dependencies {
-    implementation platform('io.tileverse:tileverse-bom:1.0-SNAPSHOT')
+    implementation platform('io.tileverse:tileverse-bom:1.1.0')
 
     implementation 'io.tileverse.rangereader:tileverse-rangereader-all'
     implementation 'io.tileverse.pmtiles:tileverse-pmtiles'
-    implementation 'io.tileverse.tilematrixset:tileverse-tilematrixset'
-    implementation 'io.tileverse.vectortiles:tileverse-vectortiles'
 }
 ```
 
-## Use Cases
+## Quick Start: Reading PMTiles from S3
 
-- **Geospatial Servers**: Build high-performance tile servers (GeoServer, MapServer plugins)
-- **Cloud-Native Applications**: Efficient access to tiles stored in S3, Azure, or GCS
-- **Map Rendering**: Client and server-side map tile rendering
-- **Data Processing**: ETL pipelines for geospatial data transformation
-- **Analytics**: Random access to large geospatial datasets
+This example demonstrates how the modules compose to solve a real-world problem: reading a specific map tile from an S3 bucket without downloading the entire archive.
 
-## Architecture
+```java
+import io.tileverse.rangereader.s3.S3RangeReader;
+import io.tileverse.rangereader.cache.CachingRangeReader;
+import io.tileverse.pmtiles.PMTilesReader;
+import java.nio.ByteBuffer;
+import java.net.URI;
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   Applications                      │
-│  (GeoServer, Custom Tile Servers, ETL Pipelines)    │
-└──────────────────────┬──────────────────────────────┘
-                       │
-                       ▼
-                ┌──────────────┐
-                │   PMTiles    │
-                │   (Format)   │
-                └─┬────┬─────┬─┘
-                  │    │     │
-      ┌───────────┘    │     └──────────┐
-      │                │                │
-      ▼                ▼                ▼
-┌──────────┐    ┌────────────┐   ┌──────────────┐
-│  Vector  │    │    Tile    │   │Range Reader  │
-│  Tiles   │    │  Pyramid   │   │ (Data Access)│
-└──────────┘    └────────────┘   └──────┬───────┘
-                                        │
-                                ┌───────┼──────┬────────┬────────┐
-                                │       │      │        │        │
-                                ▼       ▼      ▼        ▼        ▼
-                              ┌────┐ ┌────┐ ┌─────┐ ┌───────┐ ┌─────┐
-                              │File│ │HTTP│ │ S3  │ │ Azure │ │ GCS │
-                              └────┘ └────┘ └─────┘ └───────┘ └─────┘
+// 1. Configure the I/O layer (S3 + Memory Caching)
+var s3Source = S3RangeReader.builder()
+    .uri(URI.create("s3://my-bucket/maps/planet.pmtiles"))
+    .region(Region.US_EAST_1)
+    .build();
+
+var cachedSource = CachingRangeReader.builder(s3Source)
+    .capacity(50_000_000) // 50MB cache for headers/directories
+    .build();
+
+// 2. Initialize the Format Reader
+try (var reader = new PMTilesReader(cachedSource::asByteChannel)) {
+    
+    // 3. Fetch a specific tile (z=0, x=0, y=0)
+    Optional<ByteBuffer> tile = reader.getTile(0, 0, 0);
+    
+    tile.ifPresent(buffer -> {
+        buffer.flip();
+        System.out.println("Found tile: " + buffer.remaining() + " bytes");
+        // Pass 'buffer' to VectorTileCodec to decode...
+    });
+}
 ```
 
-## Requirements
+## Ecosystem Architecture
 
-- **Java 17+** (runtime)
-- **Java 21+** (development - recommended)
-- **Maven 3.9+** or **Gradle 7.0+** (build)
+The libraries are designed to work together but remain independent. `PMTiles` orchestrates the others, while `RangeReader`, `VectorTiles`, and `TileMatrixSet` are standalone utilities.
+
+```mermaid
+graph TD
+    App[Your Application]
+    
+    subgraph "Core I/O"
+        RR[Range Reader]
+    end
+    
+    subgraph "Formats & Codecs"
+        VT[Vector Tiles]
+        PMT[PMTiles]
+    end
+    
+    subgraph "Spatial Logic"
+        TMS[Tile Matrix Set]
+    end
+    
+    App --> RR
+    App --> VT
+    App --> PMT
+    App --> TMS
+    
+    PMT -.-> RR
+    PMT -.-> VT
+    PMT -.-> TMS
+```
+
+## Documentation
+
+Complete documentation is available at **[tileverse.io](https://tileverse.io)**.
+
+- **[Developer Guide](https://tileverse.io/developer-guide/)**: Building, testing, and contributing.
+- **[Range Reader Guide](https://tileverse.io/rangereader/)**: Advanced caching and authentication.
+- **[Javadoc](https://javadoc.io/doc/io.tileverse)**: API reference.
 
 ## Development
 
-Quick development commands using the included Makefile:
+This is a standard Maven project wrapped with a Makefile for convenience.
+
+*   **Java 21+** is required for building (runtime support starts at Java 17).
+*   **Docker** is required for running integration tests.
 
 ```bash
-make help      # Show all available targets
+make help      # Show all commands
 make           # Build and test everything
-make test      # Run all tests (unit + integration)
-make verify    # Full verification (lint + test)
-make format    # Format code (Spotless + SortPOM)
-make lint      # Check code formatting
-make clean     # Clean build artifacts
+make test      # Run unit & integration tests
+make format    # Fix code style (Spotless)
 ```
-
-### Maven Commands
-
-```bash
-# Build everything
-./mvnw clean install
-
-# Run tests
-./mvnw test                    # Unit tests
-./mvnw verify                  # Unit + integration tests
-./mvnw verify -DskipTests      # Skip tests
-
-# Run tests for specific modules
-./mvnw test -pl tileverse-rangereader/core
-./mvnw test -pl tileverse-pmtiles
-
-# Code formatting
-./mvnw validate                # Apply formatting
-./mvnw validate -Pqa          # Check formatting without changes
-
-# Generate coverage reports
-./mvnw verify -pl coverage-report
-```
-
-### Project Structure
-
-```
-tileverse/
-├── tileverse-rangereader/    # Range-based data access
-│   ├── core/                 # Core interfaces and implementations
-│   ├── s3/                   # AWS S3 support
-│   ├── azure/                # Azure Blob Storage support
-│   ├── gcs/                  # Google Cloud Storage support
-│   └── all/                  # Aggregator with all providers
-├── tileverse-vectortiles/    # Mapbox Vector Tiles support
-├── tileverse-tilematrixset/    # Tile pyramid model
-├── tileverse-pmtiles/        # PMTiles format support
-├── dependencies/             # BOM for dependency management
-├── bom/                      # BOM for Tileverse modules
-└── coverage-report/          # Aggregate coverage reports
-```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues and pull requests.
-
-### Guidelines
-
-1. Follow the existing code style (enforced by Spotless)
-2. Add tests for new functionality
-3. Update documentation as needed
-4. Ensure all tests pass: `make verify`
-5. Add license headers to new files
-
-See the **[Contributing Guide](CONTRIBUTING.md)** for more details.
 
 ## License
 
-[Apache License 2.0](LICENSE)
+Released under the [Apache License 2.0](LICENSE).
 
-## Acknowledgments
-
-- [Protomaps](https://github.com/protomaps/PMTiles) for the PMTiles specification
-- [Mapbox](https://github.com/mapbox/tippecanoe) for vector tile innovations
-- The geospatial open-source community
-
-## Links
-
-- **Documentation**: [tileverse.io](https://tileverse.io)
-- **Issues**: [GitHub Issues](https://github.com/tileverse-io/tileverse/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/tileverse-io/tileverse/discussions)
+Copyright &copy; 2025 Multiversio LLC.

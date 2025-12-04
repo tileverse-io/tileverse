@@ -14,7 +14,7 @@ Tileverse is available on Maven Central. You can use the Bill of Materials (BOM)
             <dependency>
                 <groupId>io.tileverse</groupId>
                 <artifactId>tileverse-bom</artifactId>
-                <version>1.0.0</version>
+                <version>1.1.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -44,7 +44,7 @@ Tileverse is available on Maven Central. You can use the Bill of Materials (BOM)
 
     ```kotlin
     dependencies {
-        implementation(platform("io.tileverse:tileverse-bom:1.0.0"))
+        implementation(platform("io.tileverse:tileverse-bom:1.1.0"))
         
         implementation("io.tileverse.rangereader:tileverse-rangereader-all")
         implementation("io.tileverse.pmtiles:tileverse-pmtiles")
@@ -55,7 +55,7 @@ Tileverse is available on Maven Central. You can use the Bill of Materials (BOM)
 
 | Library Version | Java Version | Maven Version |
 |----------------|--------------|---------------|
-| 1.0.x | 17+ | 3.9+ |
+| 1.1.x | 17+ | 3.9+ |
 
 ## Basic Usage
 

@@ -13,12 +13,12 @@ First, add the dependencies:
       <dependency>
         <groupId>io.tileverse.pmtiles</groupId>
         <artifactId>tileverse-pmtiles</artifactId>
-        <version>1.1-SNAPSHOT</version>
+        <version>1.1.0</version>
       </dependency>
       <dependency>
         <groupId>io.tileverse.rangereader</groupId>
         <artifactId>tileverse-rangereader-all</artifactId>
-        <version>1.1-SNAPSHOT</version>
+        <version>1.1.0</version>
       </dependency>
     </dependencies>
     ```
@@ -27,8 +27,8 @@ First, add the dependencies:
 
     ```gradle
     dependencies {
-        implementation 'io.tileverse.pmtiles:tileverse-pmtiles:1.1-SNAPSHOT'
-        implementation 'io.tileverse.rangereader:tileverse-rangereader-all:1.1-SNAPSHOT'
+        implementation 'io.tileverse.pmtiles:tileverse-pmtiles:1.1.0'
+        implementation 'io.tileverse.rangereader:tileverse-rangereader-all:1.1.0'
     }
     ```
 

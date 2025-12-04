@@ -9,13 +9,13 @@ Learn how to work with tile pyramids and matrix sets.
     <dependency>
         <groupId>io.tileverse.tilematrixset</groupId>
         <artifactId>tileverse-tilematrixset</artifactId>
-        <version>1.1-SNAPSHOT</version>
+        <version>1.1.0</version>
     </dependency>
     ```
 
 === "Gradle"
     ```gradle
-    implementation 'io.tileverse.tilematrixset:tileverse-tilematrixset:1.1-SNAPSHOT'
+    implementation 'io.tileverse.tilematrixset:tileverse-tilematrixset:1.1.0'
     ```
 
 ## Topics

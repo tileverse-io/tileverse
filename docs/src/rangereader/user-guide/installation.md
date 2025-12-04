@@ -14,7 +14,7 @@ The project provides a Bill of Materials (BOM) to manage dependency versions:
         <dependency>
             <groupId>io.tileverse</groupId>
             <artifactId>tileverse-bom</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>1.1.0</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -43,7 +43,7 @@ Include all functionality with a single dependency:
 <dependency>
     <groupId>io.tileverse.rangereader</groupId>
     <artifactId>tileverse-rangereader-all</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
@@ -62,7 +62,7 @@ If you prefer not to use the BOM, specify versions explicitly:
 <dependency>
     <groupId>io.tileverse.rangereader</groupId>
     <artifactId>tileverse-rangereader-core</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
@@ -74,7 +74,7 @@ If you prefer not to use the BOM, specify versions explicitly:
     <dependency>
         <groupId>io.tileverse.rangereader</groupId>
         <artifactId>tileverse-rangereader-s3</artifactId>
-        <version>1.0-SNAPSHOT</version>
+        <version>1.1.0</version>
     </dependency>
     ```
 
@@ -84,7 +84,7 @@ If you prefer not to use the BOM, specify versions explicitly:
     <dependency>
         <groupId>io.tileverse.rangereader</groupId>
         <artifactId>tileverse-rangereader-azure</artifactId>
-        <version>1.0-SNAPSHOT</version>
+        <version>1.1.0</version>
     </dependency>
     ```
 
@@ -94,7 +94,7 @@ If you prefer not to use the BOM, specify versions explicitly:
     <dependency>
         <groupId>io.tileverse.rangereader</groupId>
         <artifactId>tileverse-rangereader-gcs</artifactId>
-        <version>1.0-SNAPSHOT</version>
+        <version>1.1.0</version>
     </dependency>
     ```
 
@@ -112,7 +112,7 @@ Manages versions of all Tileverse Range Reader modules:
         <dependency>
             <groupId>io.tileverse</groupId>
             <artifactId>tileverse-bom</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>1.1.0</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -130,7 +130,7 @@ Manages versions of third-party dependencies (for library developers):
         <dependency>
             <groupId>io.tileverse</groupId>
             <artifactId>tileverse-dependencies</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>1.1.0</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -153,7 +153,7 @@ This BOM includes managed versions for:
 ```gradle
 dependencyManagement {
     imports {
-        mavenBom 'io.tileverse:tileverse-bom:1.0-SNAPSHOT'
+        mavenBom 'io.tileverse:tileverse-bom:1.1.0'
     }
 }
 
@@ -167,19 +167,19 @@ dependencies {
 ### All Modules
 
 ```gradle
-implementation 'io.tileverse.rangereader:tileverse-rangereader-all:1.0-SNAPSHOT'
+implementation 'io.tileverse.rangereader:tileverse-rangereader-all:1.1.0'
 ```
 
 ### Individual Modules
 
 ```gradle
 // Core module (required)
-implementation 'io.tileverse.rangereader:tileverse-rangereader-core:1.0-SNAPSHOT'
+implementation 'io.tileverse.rangereader:tileverse-rangereader-core:1.1.0'
 
 // Cloud provider modules (optional)
-implementation 'io.tileverse.rangereader:tileverse-rangereader-s3:1.0-SNAPSHOT'
-implementation 'io.tileverse.rangereader:tileverse-rangereader-azure:1.0-SNAPSHOT'
-implementation 'io.tileverse.rangereader:tileverse-rangereader-gcs:1.0-SNAPSHOT'
+implementation 'io.tileverse.rangereader:tileverse-rangereader-s3:1.1.0'
+implementation 'io.tileverse.rangereader:tileverse-rangereader-azure:1.1.0'
+implementation 'io.tileverse.rangereader:tileverse-rangereader-gcs:1.1.0'
 ```
 
 ## Verify Installation

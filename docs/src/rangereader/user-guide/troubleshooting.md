@@ -59,7 +59,7 @@ export JAVA_HOME=/path/to/java17
 <dependency>
     <groupId>io.tileverse.rangereader</groupId>
     <artifactId>tileverse-rangereader-s3</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 

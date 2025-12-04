@@ -34,13 +34,13 @@ try (RangeReader reader = S3RangeReader.builder()
 <dependency>
     <groupId>io.tileverse.rangereader</groupId>
     <artifactId>tileverse-rangereader-all</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
 **Gradle:**
 ```gradle
-implementation 'io.tileverse.rangereader:tileverse-rangereader-all:1.0-SNAPSHOT'
+implementation 'io.tileverse.rangereader:tileverse-rangereader-all:1.1.0'
 ```
 
 For modular installations and cloud-specific dependencies, see the **[Installation Guide](https://tileverse-io.github.io/tileverse-rangereader/user-guide/installation/)**.

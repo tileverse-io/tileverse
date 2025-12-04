@@ -14,14 +14,14 @@ This guide covers encoding and decoding Mapbox Vector Tiles (MVT) in Java.
     <dependency>
         <groupId>io.tileverse.vectortiles</groupId>
         <artifactId>tileverse-vectortiles</artifactId>
-        <version>1.1-SNAPSHOT</version>
+        <version>1.1.0</version>
     </dependency>
     ```
 
 === "Gradle"
 
     ```gradle
-    implementation 'io.tileverse.vectortiles:tileverse-vectortiles:1.1-SNAPSHOT'
+    implementation 'io.tileverse.vectortiles:tileverse-vectortiles:1.1.0'
     ```
 
 ## Topics

@@ -25,13 +25,13 @@ Tileverse PMTiles is a Java implementation of the PMTiles format that provides e
 <dependency>
     <groupId>io.tileverse.pmtiles</groupId>
     <artifactId>tileverse-pmtiles</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
 **Gradle:**
 ```gradle
-implementation 'io.tileverse.pmtiles:tileverse-pmtiles:1.0-SNAPSHOT'
+implementation 'io.tileverse.pmtiles:tileverse-pmtiles:1.1.0'
 ```
 
 See the [main README](../README.md#installation) for BOM usage.

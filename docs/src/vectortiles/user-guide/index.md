@@ -6,11 +6,6 @@ Welcome to the Tileverse Vector Tiles User Guide.
 
 This guide covers encoding and decoding Mapbox Vector Tiles (MVT) in Java.
 
-## Prerequisites
-
-- Java 17 or newer
-- Basic understanding of vector tiles and tiled mapping
-
 ## Installation
 
 === "Maven"

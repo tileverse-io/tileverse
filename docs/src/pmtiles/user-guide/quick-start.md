@@ -50,7 +50,7 @@ public class QuickStart {
             .build();
 
         // Open the PMTiles archive
-        try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
+        try (PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel)) {
             // Read the header to get metadata
             PMTilesHeader header = reader.getHeader();
             System.out.println("Tile Format: " + header.tileType());
@@ -58,11 +58,11 @@ public class QuickStart {
             System.out.println("Max Zoom: " + header.maxZoom());
 
             // Get a specific tile (zoom=10, x=885, y=412)
-            Optional<byte[]> tileData = reader.getTile(10, 885, 412);
+            Optional<ByteBuffer> tileData = reader.getTile(10, 885, 412);
 
             if (tileData.isPresent()) {
                 System.out.printf("Tile found! Size: %d bytes%n",
-                    tileData.get().length);
+                    tileData.get().remaining());
             } else {
                 System.out.println("Tile not found");
             }
@@ -81,8 +81,8 @@ RangeReader httpReader = HttpRangeReader.builder()
     .uri(URI.create("https://example.com/tiles.pmtiles"))
     .build();
 
-try (PMTilesReader reader = new PMTilesReader(httpReader)) {
-    Optional<byte[]> tile = reader.getTile(10, 885, 412);
+try (PMTilesReader reader = new PMTilesReader(httpReader::asByteChannel)) {
+    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
     // Process tile...
 }
 ```
@@ -99,9 +99,8 @@ RangeReader s3Reader = S3RangeReader.builder()
     .region(Region.US_WEST_2)
     .build();
 
-try (PMTilesReader reader = new PMTilesReader(s3Reader)) {
-    Optional<byte[]> tile = reader.getTile(10, 885, 412);
-    // Process tile...
+    try (PMTilesReader reader = new PMTilesReader(s3Reader::asByteChannel)) {
+        Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);    // Process tile...
 }
 ```
 
@@ -118,9 +117,9 @@ RangeReader cachedReader = CachingRangeReader.builder(s3Reader)
     .withBlockAlignment()  // Optimize reads
     .build();
 
-try (PMTilesReader reader = new PMTilesReader(cachedReader)) {
+try (PMTilesReader reader = new PMTilesReader(cachedReader::asByteChannel)) {
     // Subsequent reads will be cached
-    Optional<byte[]> tile = reader.getTile(10, 885, 412);
+    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
 }
 ```
 
@@ -132,13 +131,13 @@ int zoom = 10;
 int minX = 880, maxX = 890;
 int minY = 410, maxY = 420;
 
-try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
+try (PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel)) {
     for (int x = minX; x <= maxX; x++) {
         for (int y = minY; y <= maxY; y++) {
-            Optional<byte[]> tile = reader.getTile(zoom, x, y);
+            Optional<ByteBuffer> tile = reader.getTile(zoom, x, y);
             if (tile.isPresent()) {
                 System.out.printf("Tile %d/%d/%d: %d bytes%n",
-                    zoom, x, y, tile.get().length);
+                    zoom, x, y, tile.get().remaining());
             }
         }
     }

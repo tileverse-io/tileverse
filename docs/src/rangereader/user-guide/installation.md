@@ -2,11 +2,6 @@
 
 This guide explains how to add the Tileverse Range Reader library to your Java project.
 
-## Requirements
-
-- **Java 17+**: Minimum runtime version
-- **Maven 3.9+** or **Gradle 7.0+**: For dependency management
-
 ## Maven Installation
 
 ### Using the BOM (Recommended)
@@ -187,12 +182,6 @@ implementation 'io.tileverse.rangereader:tileverse-rangereader-azure:1.0-SNAPSHO
 implementation 'io.tileverse.rangereader:tileverse-rangereader-gcs:1.0-SNAPSHOT'
 ```
 
-## Version Compatibility
-
-| Library Version | Java Version | Maven Version |
-|----------------|--------------|---------------|
-| 1.0.x | 17+ | 3.9+ |
-
 ## Verify Installation
 
 Create a simple test to verify the installation:
@@ -214,6 +203,7 @@ public class InstallationTest {
                 .build()) {
             
             var data = reader.readRange(0, 5);
+            data.flip();
             String result = new String(data.array(), 0, data.remaining());
             System.out.println("Read: " + result); // Should print "Hello"
             

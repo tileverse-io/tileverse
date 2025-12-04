@@ -1,50 +1,52 @@
-# Tileverse Range Reader
+# Range Reader
 
-A high-performance Java library for reading byte ranges from various data sources including local files, HTTP servers, and cloud storage services.
+Range Reader is the foundational I/O layer for the Tileverse ecosystem. It provides a unified API for efficient, random-access byte reading across local files, HTTP endpoints, and cloud storage services.
 
-## The Cloud-Native Geospatial Challenge
+## Core Concepts
 
-The geospatial data landscape has fundamentally shifted from traditional "download-and-process" workflows to **cloud-native** patterns. Modern formats like **Cloud Optimized GeoTIFF (COG)**, **PMTiles**, **GeoParquet**, **Zarr**, and **FlatGeobuf** are explicitly designed to leverage **HTTP range requests**, allowing applications to fetch only the specific byte ranges needed for a query rather than downloading entire multi-gigabyte files.
+The library is built around the `RangeReader` interface, which abstracts the underlying storage mechanism. This allows upper-level applications (like PMTiles readers) to be agnostic about where the data resides.
 
-However, the Java ecosystem has suffered from **significant fragmentation** in this space. Tileverse Range Reader provides the **missing architectural layer** that the Java geospatial ecosystem needs—a lightweight, extensible, and cloud-agnostic abstraction for range-based I/O operations.
+### Supported Backends
 
-## Key Features
+| Backend | Class | Description |
+| :--- | :--- | :--- |
+| **Local File** | `FileRangeReader` | Uses `java.nio.channels.FileChannel` for efficient local reads. |
+| **HTTP/HTTPS** | `HttpRangeReader` | Uses `java.net.http.HttpClient` with `Range` headers. |
+| **AWS S3** | `S3RangeReader` | Native AWS SDK integration. |
+| **Azure Blob** | `AzureRangeReader` | Native Azure SDK integration. |
+| **Google Cloud** | `GcsRangeReader` | Native Google Cloud Storage integration. |
 
-- **Multiple Data Sources**: Local files, HTTP/HTTPS, Amazon S3, Azure Blob Storage, and Google Cloud Storage.
-- **High Performance**: Multi-level caching, block alignment, and concurrent access.
-- **Flexible Architecture**: Composable functionality through decorators and builder APIs.
-- **Comprehensive Authentication**: Support for a wide range of authentication mechanisms.
+## Performance Features
 
-## Getting Started
+- **Smart Caching**: Decorate any reader with `CachingRangeReader` to cache frequently accessed headers or index sections in memory or on disk.
+- **Block Alignment**: Optimize read requests to align with cloud storage pricing models (e.g., reading full 4KB or 16KB blocks to minimize GET requests).
+- **Coalescing**: Automatically merges adjacent read requests to reduce network overhead.
 
-Choose your path based on your role:
+## Installation
 
-<div class="grid cards" markdown>
+```xml
+<dependency>
+    <groupId>io.tileverse.rangereader</groupId>
+    <artifactId>tileverse-rangereader-all</artifactId>
+</dependency>
+```
 
--   :material-rocket-launch: **User Guide**
+## Basic Usage
 
-    ---
+```java
+// 1. Create a basic reader (e.g., S3)
+var s3Reader = S3RangeReader.builder()
+    .uri(URI.create("s3://bucket/key"))
+    .build();
 
-    Learn how to use the library in your applications.
+// 2. Wrap with performance optimizations
+var reader = CachingRangeReader.builder(s3Reader)
+    .capacity(1024 * 1024 * 10) // 10 MB cache
+    .build();
 
-    [:octicons-arrow-right-24: Get Started](user-guide/index.md)
-
--   :material-code-braces: **Developer Guide**
-
-    ---
-
-    Contribute to the project or understand the internals.
-
-    [:octicons-arrow-right-24: Development](developer-guide/index.md)
-
-</div>
-
-## Requirements
-
-- **Java 17+**: Minimum Java version required
-- **Maven 3.9+**: For building from source
-- **Docker**: For running benchmarks and integration tests
-
-## License
-
-Licensed under the Apache License, Version 2.0.
+// 3. Read arbitrary byte ranges
+ByteBuffer header = reader.readRange(0, 127);
+header.flip();
+ByteBuffer slice = reader.readRange(5000, 1000); // Read 1000 bytes at offset 5000
+slice.flip();
+```

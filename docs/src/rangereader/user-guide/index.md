@@ -45,15 +45,6 @@ This guide is designed for:
 - **Performance Engineers** optimizing I/O patterns and caching strategies
 - **Library Authors** building format readers on a common foundation
 
-## Prerequisites
-
-Before using this library, you should have:
-
-- **Java 17+** installed and configured
-- **Maven 3.9+** for dependency management
-- Basic familiarity with **Java NIO** and **ByteBuffer** operations
-- Understanding of your target data sources (local files, HTTP, cloud storage)
-
 ## Getting Started Quickly
 
 If you're in a hurry, start with these essentials:

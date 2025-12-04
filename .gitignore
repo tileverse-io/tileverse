@@ -67,11 +67,6 @@ logs/
 /src/generated/
 docs/site
 
-# Documentation build artifacts
-docs/.venv/
-docs/structurizr/exports/*.puml
-docs/src/assets/images/structurizr/*.svg
-
 # PMTiles files
 *.pmtiles
 /data/

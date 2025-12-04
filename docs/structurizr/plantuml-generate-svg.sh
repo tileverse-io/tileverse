@@ -3,7 +3,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXPORT_DIR="${SCRIPT_DIR}/exports"
-OUTPUT_DIR="${SCRIPT_DIR}/../src/assets/images/structurizr"
+OUTPUT_DIR="${SCRIPT_DIR}/../src/assets/images/rangereader"
 
 # Create the output directory if it doesn't exist
 mkdir -p "$OUTPUT_DIR"

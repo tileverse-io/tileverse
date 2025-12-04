@@ -59,7 +59,7 @@ echo "Step 3: Converting PlantUML to SVG"
 ./plantuml-generate-svg.sh
 
 # Verify SVG files were created
-SVG_OUTPUT_DIR="${SCRIPT_DIR}/../src/assets/images/structurizr"
+SVG_OUTPUT_DIR="${SCRIPT_DIR}/../src/assets/images/rangereader"
 if ! ls "${SVG_OUTPUT_DIR}"/*.svg 1> /dev/null 2>&1; then
     echo "❌ ERROR: No SVG files were generated!"
     exit 1

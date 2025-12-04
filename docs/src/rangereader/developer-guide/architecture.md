@@ -1,248 +1,89 @@
 # Architecture
 
-This document provides a deep dive into the design patterns, architectural decisions, and technical implementation of the Tileverse Range Reader library.
+This document explains the internal design of the Range Reader library, detailing how it achieves a unified API across diverse storage backends.
 
-## The Architectural Gap We Fill
+![System Context Diagram](../../assets/images/rangereader/structurizr-SystemContext.svg)
 
-### The Fragmented State of Java Geospatial I/O
+## Core Design
 
-The Java geospatial ecosystem has suffered from a critical architectural gap: **the lack of a unified, lightweight abstraction for remote range-based I/O**. This has led to repeated, incompatible solutions across the ecosystem:
-
-| Library | Custom I/O Abstraction | Cloud Support | Reusability |
-|---------|------------------------|---------------|-------------|
-| **imageio-ext** | `RangeReader` SPI | HTTP, S3, GCS, Azure | Internal only |
-| **netCDF-Java** | `cdms3://` protocol | S3-compatible | Internal only |
-| **simonpoole/pmtiles-reader** | `FileChannel` wrapper | User-implemented | Requires custom code |
-| **Apache Parquet** | `SeekableInputStream` | User-implemented | Complex to implement |
-
-Each library has essentially **re-invented the same wheel**, creating:
-- **Code duplication** across the ecosystem
-- **Inconsistent APIs** for similar operations  
-- **High barriers to entry** for new format libraries
-- **Vendor lock-in** to specific cloud providers
-
-### Our Solution: The Missing Middle Layer
-
-Tileverse Range Reader provides the **unified abstraction layer** that the Java ecosystem has been missing—comparable to Python's **fsspec** library. We enable:
+The library is built around a single, synchronous interface: `RangeReader`.
 
 ```java
-// One interface, any backend
-RangeReader reader = createReader(uri);  // Works with s3://, https://, file://
-ByteBuffer data = reader.readRange(offset, length);  // Same operation everywhere
-```
-
-This architectural foundation allows format libraries to focus on **parsing logic** instead of **I/O plumbing**.
-
-![System Context Diagram](../../assets/images/structurizr/structurizr-SystemContext.svg)
-
-## Module Architecture
-
-The Tileverse Range Reader library follows a **modular architecture** that enables incremental adoption and minimal dependency footprint. Each module serves a specific purpose and can be used independently or in combination with others.
-
-![Container Diagram](../../assets/images/structurizr/structurizr-Containers.svg)
-
-### Module Dependencies
-
-```mermaid
-graph TD
-    A[all] --> B[core]
-    A --> C[s3]
-    A --> D[azure]
-    A --> E[gcs]
-    C --> B
-    D --> B
-    E --> B
-    F[benchmarks] --> A
-```
-
-### Core Module (`tileverse-rangereader-core`)
-
-**Purpose**: Provides fundamental abstractions, base implementations, and decorators.
-
-**Key Responsibilities**:
-- Core `RangeReader` interface definition
-- Abstract base classes with common functionality
-- Local file system implementation (`FileRangeReader`)
-- HTTP/HTTPS implementation (`HttpRangeReader`)
-- Performance decorators (caching, disk caching)
-- Authentication framework for HTTP sources
-
-### Cloud Provider Modules (`s3`, `azure`, `gcs`)
-
-**Purpose**: Provider-specific implementations for AWS, Azure, and Google Cloud.
-
-**Key Features**:
-- Native SDK integration
-- Full credential chain support
-- Provider-specific optimizations
-
-### All Module (`tileverse-rangereader-all`)
-
-**Purpose**: Convenience aggregation module that provides unified access to all functionality.
-
-## Component View
-
-![Core Module Components](../../assets/images/structurizr/structurizr-CoreComponents.svg)
-
-### Component Responsibilities
-
-| Component | Responsibility |
-|-----------|---------------|
-| **RangeReader** | Define the contract for reading byte ranges |
-| **RangeReaderProvider** | Service Provider Interface for discovering and creating RangeReader instances |
-| **RangeReaderFactory** | Discovers and selects the appropriate RangeReaderProvider to create RangeReader instances |
-| **AbstractRangeReader** | Provide common functionality and validation |
-| **FileRangeReader** | Read ranges from local files using NIO |
-| **HttpRangeReader** | Read ranges from HTTP servers with authentication |
-| **S3RangeReader** | Read ranges from Amazon S3 and S3-compatible storage |
-| **AzureBlobRangeReader** | Read ranges from Azure Blob Storage |
-| **GoogleCloudStorageRangeReader** | Read ranges from Google Cloud Storage |
-| **CachingRangeReader** | Provide in-memory caching with configurable policies |
-| **DiskCachingRangeReader** | Provide persistent disk-based caching |
-
-## Core Design Patterns
-
-The library is built on proven architectural patterns that provide flexibility, performance, and maintainability.
-
-### Decorator Pattern
-
-The primary architectural pattern enabling composable functionality:
-
-```java
-// ✅ CORRECT: Proper decorator stacking order
-RangeReader reader = 
-    CachingRangeReader.builder(             // ← Outermost: memory caching
-        DiskCachingRangeReader.builder(     // ← Persistent caching
-            S3RangeReader.builder()         // ← Base implementation
-                .uri(uri)
-                .build())
-            .maxCacheSizeBytes(1024 * 1024 * 1024)  // 1GB disk cache
-            .build())
-        .maximumSize(1000)                  // 1000 entries in memory
-        .build();
-```
-
-### Template Method Pattern
-
-`AbstractRangeReader` implements the Template Method pattern for consistent behavior:
-
-```java
-public abstract class AbstractRangeReader implements RangeReader {
+public interface RangeReader extends Closeable {
+    // The fundamental atomic operation
+    int readRange(long offset, int length, ByteBuffer target) throws IOException;
     
-    // Template method - final to prevent override
-    @Override
-    public final int readRange(long offset, int length, ByteBuffer target) {
-        // 1. Parameter validation (consistent across all implementations)
-        validateParameters(offset, length, target);
-        
-        // 2. Boundary checking (handles EOF scenarios)
-        int actualLength = calculateActualLength(offset, length);
-        
-        // 3. Buffer preparation
-        int initialPosition = target.position();
-        
-        // 4. Delegate to implementation (hook method)
-        int bytesRead = readRangeNoFlip(offset, actualLength, target);
-        
-        // 5. Buffer post-processing (flip for consumption)
-        prepareBufferForReading(target, initialPosition);
-        
-        return bytesRead;
-    }
-    
-    // Hook method - implementations provide specific logic
-    protected abstract int readRangeNoFlip(long offset, int actualLength, ByteBuffer target);
+    // Metadata
+    long size() throws IOException;
+    String getSourceIdentifier();
 }
 ```
 
-### Builder Pattern
+### Design Decisions
 
-The library uses type-safe builders for configuration:
+1.  **Synchronous API**: We chose a blocking API over `CompletableFuture` or Reactor. This simplifies the implementation of complex logic (like caching and retries) and aligns with Java's `FileChannel` and standard `InputStream` patterns, which are what most format parsers expect.
+2.  **ByteBuffers**: All data transfer happens via `java.nio.ByteBuffer`. This allows for off-heap storage, direct memory mapping, and efficient I/O operations without unnecessary array copying.
+3.  **Thread Safety**: All implementations must be thread-safe. State (like connection pools) is shared, but individual read operations are isolated.
 
-```java
-// Type-safe, fluent configuration
-S3RangeReader reader = S3RangeReader.builder()
-    .uri(URI.create("s3://bucket/key"))
-    .region(Region.US_WEST_2)
-    .credentialsProvider(credentialsProvider)
-    .build();
-```
+## Implementation Hierarchy
+
+![Core Module Components](../../assets/images/rangereader/structurizr-CoreComponents.svg)
+
+### Base Layer: `AbstractRangeReader`
+This abstract class handles the boilerplate:
+
+*   Argument validation (bounds checks).
+*   Buffer handling (position management, slicing).
+*   Template pattern: delegates the actual byte fetching to `readRangeNoFlip`.
+
+### Backend Layer
+These classes implement the actual network/disk I/O:
+
+*   **`FileRangeReader`**: Wraps `FileChannel`. Uses OS page cache.
+*   **`HttpRangeReader`**: Uses `java.net.http.HttpClient` to issue `GET` requests with `Range` headers.
+*   **`S3RangeReader`**: Wraps AWS SDK v2. Maps exceptions to standard `IOException`.
+*   **`Azure` / `GCS`**: Similar wrappers for their respective SDKs.
+
+### Decorator Layer
+We use the Decorator pattern to add behaviors without modifying backends.
+
+*   **`CachingRangeReader`**: Intercepts `readRange`. Checks in-memory Caffeine cache. If miss, calls delegate, caches result, returns data.
+*   **`DiskCachingRangeReader`**: Similar to above, but persists to a local file store.
+*   **`BlockAlignedRangeReader`**: Expands arbitrary read requests (e.g., "bytes 100-150") to align with specific block boundaries (e.g., "bytes 0-4096"), optimizing cache hit rates.
 
 ## Runtime View
 
 The runtime view describes the dynamic behavior of the library.
 
 ### Basic File Range Reading
-![Basic File Read](../../assets/images/structurizr/structurizr-BasicFileRead.svg)
+![Basic File Read](../../assets/images/rangereader/structurizr-BasicFileRead.svg)
 
 ### HTTP Range Reading with Authentication
-![HTTP Range Read](../../assets/images/structurizr/structurizr-HttpRangeRead.svg)
+![HTTP Range Read](../../assets/images/rangereader/structurizr-HttpRangeRead.svg)
 
 ### Multi-Level Caching Scenario
-![Multi-Level Caching](../../assets/images/structurizr/structurizr-MultiLevelCaching.svg)
+![Multi-Level Caching](../../assets/images/rangereader/structurizr-MultiLevelCaching.svg)
 
-## Thread Safety Design
+## Service Provider Interface (SPI)
 
-All `RangeReader` implementations MUST be thread-safe. This is achieved through:
-- **Immutable State**: Fields are final and set at construction.
-- **Concurrent Collections**: Using thread-safe caches like Caffeine.
-- **Per-Operation Resources**: Creating new resources (like HTTP connections) for each request.
+To support dynamic loading (e.g., for configuration-driven applications), we expose a `RangeReaderFactory`.
 
-## Performance Architecture
 
-### Multi-Level Caching Strategy
 
-`Request → Memory Cache → Disk Cache → Base Reader → Source`
+1.  **Discovery**: Uses `java.util.ServiceLoader` to find registered `RangeReaderProvider` implementations.
+2.  **Resolution**: `RangeReaderFactory.create(uri)` iterates providers. The first one returning `true` for `canHandle(uri)` is instantiated.
+3.  **Extensibility**: Users can write their own backend (e.g., `FtpRangeReader`) and register it via `META-INF/services` without forking the codebase.
 
-- **L1 (Memory)**: Fastest access, limited capacity.
-- **L2 (Disk)**: Persistent, larger capacity.
-- **L3 (Network/Disk)**: Authoritative source.
+## Dependency Structure
 
-### Read Optimization
+![Container Diagram](../../assets/images/rangereader/structurizr-Containers.svg)
 
-The library optimizes read patterns through intelligent caching strategies. Memory caching provides fast access to frequently used ranges, while disk caching offers persistence for large datasets across application sessions.
+To avoid "dependency hell" (e.g., conflicting Netty versions between Azure and AWS SDKs), the core module has zero heavy dependencies.
 
-## Error Handling Architecture
 
-A standard `IOException` hierarchy is used, with specific exceptions for cloud providers. Resilience patterns like graceful degradation (e.g., handling a deleted cache file) and retry logic with exponential backoff are implemented.
 
-## Extension Architecture
+*   `tileverse-rangereader-core`: Lightweight. Only depends on SLF4J and Caffeine.
+*   `tileverse-rangereader-s3`: Pulls in AWS SDK.
+*   `tileverse-rangereader-azure`: Pulls in Azure SDK.
 
-New data sources can be added by extending `AbstractRangeReader` and implementing the builder pattern. New decorators can be created by implementing the `RangeReader` interface and delegating to a wrapped reader.
-
-### Service Provider Interface (SPI)
-
-The Tileverse Range Reader library leverages the Java Service Provider Interface (SPI) to enable flexible and extensible discovery of `RangeReader` implementations. Instead of directly instantiating `RangeReader` classes, the `RangeReaderFactory` uses the SPI to find and load available `RangeReaderProvider` implementations at runtime.
-
-**Key Concepts:**
-
--   **`RangeReaderProvider`**: This interface defines the contract for a service provider. Each concrete implementation (e.g., `FileRangeReaderProvider`, `S3RangeReaderProvider`) is responsible for:
-    -   Identifying itself with a unique ID.
-    -   Declaring its availability (e.g., checking for necessary system properties or environment variables).
-    -   Specifying the URI schemes and hostname patterns it can process.
-    -   Providing a factory method to create a `RangeReader` instance based on a `RangeReaderConfig`.
-    -   Optionally, defining configuration parameters specific to its implementation.
-
--   **`RangeReaderFactory`**: This factory class is the entry point for obtaining `RangeReader` instances. It performs the following steps:
-    1.  **Discovery**: Uses `java.util.ServiceLoader` to find all registered `RangeReaderProvider` implementations.
-    2.  **Filtering**: Filters the discovered providers based on their `canProcess(RangeReaderConfig)` method, which checks the URI scheme and other static criteria.
-    3.  **Disambiguation**: For ambiguous cases (e.g., multiple providers supporting HTTP/HTTPS), it employs a multi-step process:
-        -   Checks for explicit provider IDs in the `RangeReaderConfig`.
-        -   Analyzes URI hostname patterns to identify cloud-specific endpoints (e.g., Azure Blob Storage, AWS S3).
-        -   Performs a `HEAD` request to the resource to inspect provider-specific HTTP headers (e.g., `x-ms-request-id` for Azure, `x-amz-request-id` for S3).
-        -   Resolves remaining ambiguities by selecting the provider with the highest priority (lowest `getOrder()` value).
-    4.  **Instantiation**: Once a single best provider is identified, it delegates the creation of the `RangeReader` to that provider.
-
-**Adding a New Provider:**
-
-To add support for a new data source or protocol, you need to:
-
-1.  Implement the `RangeReaderProvider` interface.
-2.  Create a `META-INF/services/io.tileverse.rangereader.spi.RangeReaderProvider` file in your JAR, listing the fully qualified name of your `RangeReaderProvider` implementation.
-3.  Implement your specific `RangeReader` logic, typically by extending `AbstractRangeReader`.
-
-This SPI mechanism ensures that the core library remains lightweight and extensible, allowing developers to easily integrate new storage backends without modifying the core codebase.
-
-## Testing Architecture
-
-A base integration test class, `AbstractRangeReaderIT`, is used for all implementations. [Testcontainers](https://www.testcontainers.org/) is used to run tests against real service APIs in Docker containers.
+This allows consumers to pick exactly the providers they need.

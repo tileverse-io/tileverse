@@ -1,0 +1,4 @@
+# Documentation build artifacts
+.venv/
+src/assets/images/rangereader/*svg
+structurizr/exports/

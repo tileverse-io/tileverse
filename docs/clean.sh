@@ -28,9 +28,9 @@ else
 fi
 
 # Remove SVG files from src/assets
-if [ -d "src/assets/images/structurizr" ]; then
+if [ -d "src/assets/images/rangereader" ]; then
     echo "🗑️  Removing SVG diagrams from src/assets..."
-    rm -f src/assets/images/structurizr/*.svg
+    rm -f src/assets/images/rangereader/*.svg
     echo "✅ Src assets SVG files removed"
 else
     echo "ℹ️  No src assets SVG files to remove"

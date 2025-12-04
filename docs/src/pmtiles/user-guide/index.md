@@ -11,14 +11,6 @@ This guide covers:
 - **[Writing PMTiles](writing.md)**: Create new PMTiles archives
 - **[Cloud Storage](cloud-storage.md)**: Work with PMTiles in S3, Azure, and GCS
 
-## Prerequisites
-
-Before you begin, make sure you have:
-
-- Java 17 or newer installed
-- Basic familiarity with Maven or Gradle
-- Understanding of tile-based mapping concepts
-
 ## Installation
 
 Add the PMTiles dependency to your project:

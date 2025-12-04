@@ -104,13 +104,10 @@ nav:
       - Configuration: rangereader/user-guide/configuration.md
       - Authentication: rangereader/user-guide/authentication.md
       - Troubleshooting: rangereader/user-guide/troubleshooting.md
-    - Developer Guide:
-      - Introduction: rangereader/developer-guide/index.md
+    - Internals:
+      - Overview: rangereader/developer-guide/index.md
       - Architecture: rangereader/developer-guide/architecture.md
-      - Building: rangereader/developer-guide/building.md
-      - Testing: rangereader/developer-guide/testing.md
       - Performance: rangereader/developer-guide/performance.md
-      - Contributing: rangereader/developer-guide/contributing.md
   - PMTiles:
     - Overview: pmtiles/index.md
     - User Guide:
@@ -133,10 +130,15 @@ nav:
       - Quick Start: tilematrixset/user-guide/quick-start.md
       - Tile Pyramids: tilematrixset/user-guide/tile-pyramids.md
       - Standard Sets: tilematrixset/user-guide/standard-sets.md
-  - Architecture:
-    - Overview: architecture/index.md
-    - System Design: architecture/system-design.md
-    - Module Dependencies: architecture/dependencies.md
+  - Developer Guide:
+    - Overview: developer-guide/index.md
+    - Building: developer-guide/building.md
+    - Testing: developer-guide/testing.md
+    - Contributing: developer-guide/contributing.md
+    - Architecture:
+      - Overview: developer-guide/architecture/index.md
+      - System Design: developer-guide/architecture/system-design.md
+      - Module Dependencies: developer-guide/architecture/dependencies.md
 
 extra:
   analytics:

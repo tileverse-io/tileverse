@@ -1,68 +1,38 @@
-# Tileverse Tile Matrix Set
+# Tile Matrix Set
 
-Generic object model for defining tile pyramids and tiling schemes.
-
-## Overview
-
-Tileverse Tile Matrix Set provides Java implementations of tile pyramid concepts and OGC Tile Matrix Set standard. It includes models for working with tile coordinates, tile ranges, and standard tiling schemes like Web Mercator.
+A Java implementation of the OGC Two-Phase Tile Matrix Set (TMS) standard. This library handles the mathematical complexity of tile pyramids, coordinate systems, and grid definitions.
 
 ## Features
 
-- **Standard tile matrix sets**: Web Mercator, WGS84, and custom definitions
-- **Coordinate transformations**: Convert between geographic and tile coordinates
-- **Flexible tiling schemes**: Support for various CRS and tile configurations
-- **Tile pyramid models**: Generic abstractions for tiled data structures
+- **OGC Compliance**: Implements the data model for Tile Matrix Sets.
+- **Standard Sets**: Includes built-in definitions for `WebMercatorQuad` and `WorldCRS84Quad`.
+- **Math Utilities**: Helper functions for converting between bounding boxes, geographic coordinates, and tile indices.
 
-## Quick Start
+## Installation
 
-```java
-import io.tileverse.tiling.matrix.TileMatrixSet;
-import io.tileverse.tiling.matrix.DefaultTileMatrixSets;
-import io.tileverse.tiling.pyramid.TileIndex;
-
-// Use a standard tile matrix set
-TileMatrixSet webMercator = DefaultTileMatrixSets.WEB_MERCATOR_QUAD;
-
-// Get tile matrix for zoom level 10
-TileMatrix matrix = webMercator.tileMatrix(10);
-
-// Convert geographic bounds to tile range
-BoundingBox2D bbox = new BoundingBox2D(-122.5, 37.7, -122.3, 37.9);
-TileRange tiles = matrix.getTilesIntersecting(bbox);
-
-System.out.printf("Tiles at zoom %d: %s%n", 10, tiles);
+```xml
+<dependency>
+    <groupId>io.tileverse.tilematrixset</groupId>
+    <artifactId>tileverse-tilematrixset</artifactId>
+</dependency>
 ```
 
-## Use Cases
+## Usage
 
-- **Tile coordinate calculations**: Convert between geographic and tile coordinates
-- **Tile server development**: Implement standard tiling schemes
-- **Spatial indexing**: Use tile coordinates for data organization
-- **Multi-resolution data**: Work with pyramidal tile structures
+### Working with Coordinates
 
-## Getting Started
+```java
+import io.tileverse.tiling.matrix.DefaultTileMatrixSets;
 
-<div class="grid cards" markdown>
+var tms = DefaultTileMatrixSets.WEB_MERCATOR_QUAD;
+var matrix = tms.tileMatrix(12); // Zoom level 12
 
--   :material-rocket-launch: **User Guide**
+// Calculate which tiles cover a specific geographic area
+var bbox = new BoundingBox2D(-74.0, 40.7, -73.9, 40.8); // NYC
+var tileRange = matrix.getTilesIntersecting(bbox);
 
-    ---
-
-    Learn how to work with tile pyramids and matrix sets.
-
-    [:octicons-arrow-right-24: User Guide](user-guide/index.md)
-
-</div>
-
-## Related Modules
-
-- **[PMTiles](../pmtiles/index.md)**: Uses tile coordinates from matrix sets
-- **[Vector Tiles](../vectortiles/index.md)**: Often organized in tile pyramids
-
-## Requirements
-
-- **Java 17+**: Minimum runtime version
-
-## License
-
-Licensed under the Apache License, Version 2.0.
+System.out.println("Tiles needed: " + tileRange.size());
+for (var tile : tileRange) {
+    System.out.printf("Fetch z=%d x=%d y=%d%n", 12, tile.x(), tile.y());
+}
+```

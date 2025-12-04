@@ -214,6 +214,7 @@ public class InstallationTest {
                 .build()) {
             
             var data = reader.readRange(0, 5);
+            data.flip();
             String result = new String(data.array(), 0, data.remaining());
             System.out.println("Read: " + result); // Should print "Hello"
             

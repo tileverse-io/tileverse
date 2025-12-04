@@ -1,64 +1,70 @@
-# Tileverse Architecture
+# System Architecture
 
-Understand how the Tileverse modules fit together.
+Tileverse is designed as a collection of **loosely coupled, composable libraries**. While they work seamlessly together, each module acts as a standalone tool for its specific domain (I/O, Tiling, Encodings).
 
-## Module Overview
+## Component Relationships
 
-Tileverse is composed of four main modules:
+The following diagram illustrates how the libraries relate to user applications and each other. Note that `pmtiles` is the only module that strictly depends on others (`rangereader` for I/O and `vectortiles` for decoding).
 
-1. **Range Reader**: Foundation for byte-range data access
-2. **Tile Matrix Set**: Coordinate systems and tiling schemes
-3. **Vector Tiles**: MVT encoding/decoding
-4. **PMTiles**: Tile archive format
+```mermaid
+graph TD
+    subgraph "Application Layer"
+        App[User Application]
+    end
 
-## Architecture Diagram
+    subgraph "Independent Modules"
+        RR[tileverse-rangereader]
+        VT[tileverse-vectortiles]
+        TMS[tileverse-tilematrixset]
+    end
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   Applications                      │
-│  (GeoServer, Custom Tile Servers, ETL Pipelines)   │
-└─────────────────┬───────────────────────────────────┘
-                  │
-    ┌─────────────┼─────────────┬─────────────┐
-    │             │             │             │
-    ▼             ▼             ▼             ▼
-┌─────────┐  ┌──────────┐  ┌────────┐  ┌──────────┐
-│ PMTiles │  │  Vector  │  │  Tile  │  │  Other   │
-│         │  │  Tiles   │  │Matrix  │  │ Formats  │
-└────┬────┘  └────┬─────┘  └────┬───┘  └────┬─────┘
-     │            │             │            │
-     └────────────┴─────────────┴────────────┘
-                       │
-                       ▼
-              ┌────────────────┐
-              │ Range Reader   │
-              │  (Core Layer)  │
-              └────────┬───────┘
-                       │
-         ┌─────────────┼─────────────┬────────────┐
-         │             │             │            │
-         ▼             ▼             ▼            ▼
-    ┌────────┐    ┌───────┐    ┌────────┐   ┌─────┐
-    │  File  │    │  HTTP │    │   S3   │   │ ... │
-    └────────┘    └───────┘    └────────┘   └─────┘
+    subgraph "Composed Modules"
+        PMT[tileverse-pmtiles]
+    end
+
+    App --> RR
+    App --> VT
+    App --> TMS
+    App --> PMT
+    
+    PMT --> RR
+    PMT --> VT
+    PMT --> TMS
 ```
 
-## Design Principles
+## Design Philosophy
 
-1. **Modularity**: Each library can be used independently
-2. **Composability**: Libraries work together seamlessly
-3. **Cloud-native**: Designed for cloud storage from the ground up
-4. **Performance**: Optimized for high-throughput server applications
-5. **Standards-based**: Implements established specifications
+### 1. I/O Independence (`rangereader`)
+We treat data access as a distinct problem from data format. 
 
-## Module Dependencies
+*   **Goal:** Read bytes from anywhere (S3, HTTP, Azure, File) efficiently.
+*   **Anti-Pattern:** Format libraries (like a GeoTIFF reader) implementing their own S3 clients.
+*   **Solution:** `RangeReader` provides a unified `readRange(start, length)` interface.
 
-- **PMTiles** depends on Range Reader, Tile Matrix Set, and Vector Tiles
-- **Vector Tiles** is independent
-- **Tile Matrix Set** is independent
-- **Range Reader** is the foundation
+### 2. Pure Mathematical Models (`tilematrixset`)
+Spatial reference systems and grid logic are kept separate from data storage.
 
-## Next Steps
+*   **Goal:** Calculate tile coordinates and bounding boxes without external dependencies.
+*   **Benefit:** Can be used by a tile server to calculate grids even if the data source isn't Java-based or uses a different I/O library.
 
-- [System Design](system-design.md)
-- [Module Dependencies](dependencies.md)
+### 3. Format Specificity (`vectortiles`, `pmtiles`)
+These libraries handle the parsing and encoding logic for specific file specs.
+
+*   **Vector Tiles:** Pure Protocol Buffers / JTS transcoding. No I/O logic.
+*   **PMTiles:** Orchestrates `RangeReader` to fetch specific directory bytes, uses `VectorTiles` to parse the result, and `TileMatrixSet` to understand the grid.
+
+## Integration Patterns
+
+### Direct Usage
+Applications often use modules directly:
+
+*   **ETL Pipelines:** Use `vectortiles` to convert PostGIS geometry to MVT bytes.
+*   **Tile Servers:** Use `tilematrixset` to calculate which tiles cover a viewport.
+*   **Data Access:** Use `rangereader` to fetch partial content from Cloud Optimized GeoTIFFs (COGs) stored on S3.
+
+### Composed Usage
+The `pmtiles` library demonstrates the power of composition:
+
+1.  Accepts a `RangeReader` interface (polymorphic backend).
+2.  Uses `HilbertCurve` (internal) for index lookup.
+3.  Returns raw bytes or uses `vectortiles` to return parsed geometry.

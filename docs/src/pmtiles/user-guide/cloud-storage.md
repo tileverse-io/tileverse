@@ -19,7 +19,7 @@ RangeReader s3Reader = S3RangeReader.builder()
     .region(Region.US_WEST_2)
     .build();
 
-try (PMTilesReader reader = new PMTilesReader(s3Reader)) {
+try (PMTilesReader reader = new PMTilesReader(s3Reader::asByteChannel)) {
     Optional<byte[]> tile = reader.getTile(10, 885, 412);
 }
 ```
@@ -34,7 +34,7 @@ RangeReader cachedReader = CachingRangeReader.builder(s3Reader)
     .withBlockAlignment()
     .build();
 
-try (PMTilesReader reader = new PMTilesReader(cachedReader)) {
+try (PMTilesReader reader = new PMTilesReader(cachedReader::asByteChannel)) {
     // Cached reads
     Optional<byte[]> tile = reader.getTile(10, 885, 412);
 }
@@ -51,7 +51,7 @@ RangeReader azureReader = AzureBlobRangeReader.builder()
     .blobPath("world.pmtiles")
     .build();
 
-try (PMTilesReader reader = new PMTilesReader(azureReader)) {
+try (PMTilesReader reader = new PMTilesReader(azureReader::asByteChannel)) {
     Optional<byte[]> tile = reader.getTile(10, 885, 412);
 }
 ```
@@ -65,7 +65,7 @@ RangeReader gcsReader = GoogleCloudStorageRangeReader.builder()
     .uri(URI.create("gs://my-bucket/world.pmtiles"))
     .build();
 
-try (PMTilesReader reader = new PMTilesReader(gcsReader)) {
+try (PMTilesReader reader = new PMTilesReader(gcsReader::asByteChannel)) {
     Optional<byte[]> tile = reader.getTile(10, 885, 412);
 }
 ```
@@ -88,7 +88,7 @@ RangeReader memoryCached = CachingRangeReader.builder(diskCached)
     .maximumSize(1000)
     .build();
 
-try (PMTilesReader reader = new PMTilesReader(memoryCached)) {
+try (PMTilesReader reader = new PMTilesReader(memoryCached::asByteChannel)) {
     // Optimized access
 }
 ```

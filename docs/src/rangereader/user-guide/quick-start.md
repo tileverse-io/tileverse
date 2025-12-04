@@ -62,6 +62,7 @@ try (var reader = S3RangeReader.builder()
     
     // Read from S3 object
     ByteBuffer data = reader.readRange(0, 1024);
+    data.flip();
     
     System.out.println("Read from S3: " + data.remaining() + " bytes");
 }
@@ -88,9 +89,11 @@ try (var cachedReader = CachingRangeReader.builder(baseReader)
     
     // First read - network request to S3
     ByteBuffer data1 = cachedReader.readRange(0, 1024);
+    data1.flip();
     
     // Second read - served from cache (much faster, no network)
     ByteBuffer data2 = cachedReader.readRange(0, 1024);
+    data2.flip();
 }
 ```
 
@@ -111,6 +114,7 @@ try (var cachedReader = DiskCachingRangeReader.builder(s3Reader)
     
     // Reads are cached to disk for persistence across sessions
     ByteBuffer data = cachedReader.readRange(100, 500);
+    data.flip();
 }
 ```
 

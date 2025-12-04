@@ -28,7 +28,7 @@ RangeReader s3Reader = S3RangeReader.builder()
 The header contains essential metadata about the tileset:
 
 ```java
-try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
+try (PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel)) {
     PMTilesHeader header = reader.getHeader();
 
     // Tile format (MVT, PNG, JPEG, WEBP, etc.)
@@ -54,10 +54,11 @@ try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
 Tiles are retrieved using the standard Z/X/Y addressing:
 
 ```java
-Optional<byte[]> tileData = reader.getTile(zoom, x, y);
+Optional<ByteBuffer> tileData = reader.getTile(zoom, x, y);
 
 if (tileData.isPresent()) {
-    byte[] tile = tileData.get();
+    ByteBuffer tile = tileData.get();
+    tile.flip(); // Important: flip the buffer before reading
     // Process tile data...
 } else {
     // Tile doesn't exist in the archive
@@ -72,10 +73,10 @@ if (tileData.isPresent()) {
 int zoom = 10;
 for (int x = 880; x <= 890; x++) {
     for (int y = 410; y <= 420; y++) {
-        Optional<byte[]> tile = reader.getTile(zoom, x, y);
-        if (tile.isPresent()) {
-            processTile(zoom, x, y, tile.get());
-        }
+                    Optional<ByteBuffer> tile = reader.getTile(zoom, x, y);
+                    if (tile.isPresent()) {
+                        tile.get().flip(); // Flip before processing
+                        processTile(zoom, x, y, tile.get());        }
     }
 }
 ```
@@ -89,8 +90,9 @@ IntStream.range(880, 891)
     .parallel()
     .forEach(x -> {
         IntStream.range(410, 421).forEach(y -> {
-            reader.getTile(zoom, x, y).ifPresent(tile -> {
-                processTile(zoom, x, y, tile);
+            reader.getTile(zoom, x, y).ifPresent(buffer -> {
+                buffer.flip();
+                processTile(zoom, x, y, buffer);
             });
         });
     });
@@ -108,7 +110,7 @@ See [Cloud Storage](cloud-storage.md) for detailed performance optimization stra
 ## Error Handling
 
 ```java
-try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
+try (PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel)) {
     Optional<byte[]> tile = reader.getTile(zoom, x, y);
     // Process tile...
 } catch (UncheckedIOException e) {

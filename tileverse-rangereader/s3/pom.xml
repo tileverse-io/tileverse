@@ -27,10 +27,21 @@
       <artifactId>s3</artifactId>
     </dependency>
     <dependency>
+      <!-- blocking client alternative -->
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>apache-client</artifactId>
     </dependency>
     <dependency>
+      <!-- Async client alternative -->
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>aws-crt-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk.crt</groupId>
+      <artifactId>aws-crt</artifactId>
+    </dependency>
+    <dependency>
+      <!-- AWS STS (Security Token Service)  -->
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>sts</artifactId>
     </dependency>

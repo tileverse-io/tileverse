@@ -130,8 +130,23 @@
         <exclusions>
           <exclusion>
             <!--
-                exclude netty, we don't want all the transitive dependencies, it'll use
-                software.amazon.awssdk:apache-client -> org.apache.httpcomponents:httpclient instead
+              Exclude netty, we don't want all the transitive dependencies.
+              For the blocking client, use software.amazon.awssdk:apache-client -> org.apache.httpcomponents:httpclient instead
+
+              As a replacement for  the netty software.amazon.awssdk.services.s3.S3AsyncClient implementation use
+              software.amazon.awssdk:aws-crt-client
+              <quote>
+              The AWS CRT-based S3 client improves transfer reliability in case there is a network failure.
+              Reliability is improved by retrying individual failed parts of a file transfer without restarting
+              the transfer from the beginning.
+
+              In addition, the AWS CRT-based S3 client offers enhanced connection pooling and
+              Domain Name System (DNS)load balancing, which also improves throughput.
+
+              You can use the AWS CRT-based S3 client in place of the SDK's standard S3 asynchronous
+              client and take advantage of its improved throughput right away.
+              </quote>
+              See https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/crt-based-s3-client.html
             -->
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>netty-nio-client</artifactId>
@@ -139,10 +154,23 @@
         </exclusions>
       </dependency>
       <dependency>
+        <!-- blocking client alternative -->
         <groupId>software.amazon.awssdk</groupId>
         <artifactId>apache-client</artifactId>
         <version>${aws-s3.version}</version>
       </dependency>
+      <dependency>
+        <!-- Async client alternative -->
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>aws-crt-client</artifactId>
+        <version>2.40.2</version>
+      </dependency>
+      <dependency>
+        <groupId>software.amazon.awssdk.crt</groupId>
+        <artifactId>aws-crt</artifactId>
+        <version>0.40.3</version>
+      </dependency>
+
       <dependency>
         <groupId>software.amazon.awssdk</groupId>
         <artifactId>auth</artifactId>

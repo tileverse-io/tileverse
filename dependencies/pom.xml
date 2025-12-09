@@ -91,7 +91,6 @@
         <groupId>com.azure</groupId>
         <artifactId>azure-storage-blob</artifactId>
         <version>${azure-storage-blob.version}</version>
-        <optional>true</optional>
         <exclusions>
           <exclusion>
             <!-- exclude netty, we don't want all the transitive dependencies, will use azure-core-http-jdk-httpclient instead-->
@@ -115,7 +114,6 @@
         <groupId>com.azure</groupId>
         <artifactId>azure-identity</artifactId>
         <version>${azure-identity.version}</version>
-        <optional>true</optional>
         <exclusions>
           <exclusion>
             <!-- exclude netty, we don't want all the transitive dependencies, will use azure-core-http-jdk-httpclient instead-->
@@ -129,7 +127,6 @@
         <groupId>software.amazon.awssdk</groupId>
         <artifactId>s3</artifactId>
         <version>${aws-s3.version}</version>
-        <optional>true</optional>
         <exclusions>
           <exclusion>
             <!--
@@ -145,20 +142,17 @@
         <groupId>software.amazon.awssdk</groupId>
         <artifactId>apache-client</artifactId>
         <version>${aws-s3.version}</version>
-        <optional>true</optional>
       </dependency>
       <dependency>
         <groupId>software.amazon.awssdk</groupId>
         <artifactId>auth</artifactId>
         <version>${aws-s3.version}</version>
-        <optional>true</optional>
       </dependency>
       <!-- S3 specific authentication methods -->
       <dependency>
         <groupId>software.amazon.awssdk</groupId>
         <artifactId>sts</artifactId>
         <version>${aws-s3.version}</version>
-        <optional>true</optional>
         <exclusions>
           <exclusion>
             <!--
@@ -179,7 +173,6 @@
         <groupId>software.amazon.awssdk</groupId>
         <artifactId>sso</artifactId>
         <version>${aws-s3.version}</version>
-        <optional>true</optional>
         <exclusions>
           <exclusion>
             <!--

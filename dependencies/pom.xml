@@ -13,7 +13,7 @@
 
   <properties>
     <!-- Dependency versions -->
-    <aws-s3.version>2.39.5</aws-s3.version>
+    <aws-s3.version>2.40.2</aws-s3.version>
     <azure-identity.version>1.18.1</azure-identity.version>
     <azure-storage-blob.version>12.32.0</azure-storage-blob.version>
     <caffeine.version>3.2.3</caffeine.version>

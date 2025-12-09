@@ -25,6 +25,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
 import io.tileverse.rangereader.RangeReader;
+import io.tileverse.rangereader.s3.S3RangeReader.Builder;
 import io.tileverse.rangereader.spi.RangeReaderConfig;
 import io.tileverse.rangereader.spi.RangeReaderParameter;
 import io.tileverse.rangereader.spi.RangeReaderProvider;
@@ -307,5 +308,19 @@ class S3RangeReaderProviderTest {
                 .hasFieldOrPropertyWithValue("region", Region.US_WEST_2)
                 .hasFieldOrPropertyWithValue("awsAccessKeyId", "access-key")
                 .hasFieldOrPropertyWithValue("awsSecretAccessKey", "secret-key");
+    }
+
+    @Test
+    void createWithCustomRegion() throws IOException {
+        final String customRegion = "eu-central-12";
+        assertThat(Region.regions().stream().anyMatch(region -> region.id().equals(customRegion)))
+                .isFalse();
+
+        RangeReaderConfig config = new RangeReaderConfig().uri("s3://my-bucket/file.txt");
+
+        config.setParameter(S3_REGION, customRegion);
+
+        Builder rangeReaderBuilder = provider.prepareRangeReaderBuilder(config);
+        assertThat(rangeReaderBuilder).hasFieldOrPropertyWithValue("region", Region.of(customRegion));
     }
 }

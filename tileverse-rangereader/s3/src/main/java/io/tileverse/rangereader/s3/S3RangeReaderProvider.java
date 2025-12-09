@@ -139,8 +139,8 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
                     """)
             .type(String.class)
             .group(ID)
-            // filter out global regions as of Region.of(String)
             .options(Region.regions().stream()
+                    // filter out global regions, S3 is inherently regional
                     .filter(not(Region::isGlobalRegion))
                     .map(Region::id)
                     .toArray())

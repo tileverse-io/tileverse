@@ -28,7 +28,12 @@ import java.util.Arrays;
 
 /**
  * Represents the header of a PMTiles file, based on version 3 of the PMTiles specification.
+ * <p>
  * The header is a fixed-length structure of 127 bytes containing metadata and offsets.
+ * It provides the layout of the file, including the location of the root directory,
+ * metadata, leaf directories, and tile data. It also includes global metadata such as
+ * the coordinate bounds, zoom levels, and compression types used.
+ * </p>
  *
  * @param rootDirOffset the byte offset from the start of the archive to the first byte of the root directory
  * @param rootDirBytes the number of bytes in the root directory
@@ -310,6 +315,9 @@ public record PMTilesHeader(
 
     /**
      * Builder for PMTilesHeader instances.
+     * <p>
+     * Provides a fluent API for constructing PMTilesHeader objects.
+     * Default values are set for typical use cases (MVT tiles, gzip compression, full world bounds).
      */
     public static class Builder {
         private long rootDirOffset = 127; // Default starts after header
@@ -337,159 +345,310 @@ public record PMTilesHeader(
         private int centerLonE7 = 0;
         private int centerLatE7 = 0;
 
-        // Builder methods for all fields
+        /**
+         * Sets the offset to the root directory.
+         * @param rootDirOffset the offset in bytes
+         * @return this builder
+         */
         public Builder rootDirOffset(long rootDirOffset) {
             this.rootDirOffset = rootDirOffset;
             return this;
         }
 
+        /**
+         * Sets the size of the root directory.
+         * @param rootDirBytes the size in bytes
+         * @return this builder
+         */
         public Builder rootDirBytes(long rootDirBytes) {
             this.rootDirBytes = rootDirBytes;
             return this;
         }
 
+        /**
+         * Sets the offset to the JSON metadata.
+         * @param jsonMetadataOffset the offset in bytes
+         * @return this builder
+         */
         public Builder jsonMetadataOffset(long jsonMetadataOffset) {
             this.jsonMetadataOffset = jsonMetadataOffset;
             return this;
         }
 
+        /**
+         * Sets the size of the JSON metadata.
+         * @param jsonMetadataBytes the size in bytes
+         * @return this builder
+         */
         public Builder jsonMetadataBytes(long jsonMetadataBytes) {
             this.jsonMetadataBytes = jsonMetadataBytes;
             return this;
         }
 
+        /**
+         * Sets the offset to the leaf directories section.
+         * @param leafDirsOffset the offset in bytes
+         * @return this builder
+         */
         public Builder leafDirsOffset(long leafDirsOffset) {
             this.leafDirsOffset = leafDirsOffset;
             return this;
         }
 
+        /**
+         * Sets the size of the leaf directories section.
+         * @param leafDirsBytes the size in bytes
+         * @return this builder
+         */
         public Builder leafDirsBytes(long leafDirsBytes) {
             this.leafDirsBytes = leafDirsBytes;
             return this;
         }
 
+        /**
+         * Sets the offset to the tile data section.
+         * @param tileDataOffset the offset in bytes
+         * @return this builder
+         */
         public Builder tileDataOffset(long tileDataOffset) {
             this.tileDataOffset = tileDataOffset;
             return this;
         }
 
+        /**
+         * Sets the size of the tile data section.
+         * @param tileDataBytes the size in bytes
+         * @return this builder
+         */
         public Builder tileDataBytes(long tileDataBytes) {
             this.tileDataBytes = tileDataBytes;
             return this;
         }
 
+        /**
+         * Sets the total count of addressed tiles (before RLE).
+         * @param addressedTilesCount the count
+         * @return this builder
+         */
         public Builder addressedTilesCount(long addressedTilesCount) {
             this.addressedTilesCount = addressedTilesCount;
             return this;
         }
 
+        /**
+         * Sets the total count of tile entries (where RunLength > 0).
+         * @param tileEntriesCount the count
+         * @return this builder
+         */
         public Builder tileEntriesCount(long tileEntriesCount) {
             this.tileEntriesCount = tileEntriesCount;
             return this;
         }
 
+        /**
+         * Sets the total count of distinct tile contents.
+         * @param tileContentsCount the count
+         * @return this builder
+         */
         public Builder tileContentsCount(long tileContentsCount) {
             this.tileContentsCount = tileContentsCount;
             return this;
         }
 
+        /**
+         * Sets whether the tiles are clustered by TileID.
+         * @param clustered true if clustered
+         * @return this builder
+         */
         public Builder clustered(boolean clustered) {
             this.clustered = clustered;
             return this;
         }
 
+        /**
+         * Sets the compression type for internal structures.
+         * @param internalCompression the compression type
+         * @return this builder
+         */
         public Builder internalCompression(byte internalCompression) {
             this.internalCompression = internalCompression;
             return this;
         }
 
+        /**
+         * Sets the compression type for tiles.
+         * @param tileCompression the compression type
+         * @return this builder
+         */
         public Builder tileCompression(byte tileCompression) {
             this.tileCompression = tileCompression;
             return this;
         }
 
+        /**
+         * Sets the tile type.
+         * @param tileType the tile type
+         * @return this builder
+         */
         public Builder tileType(byte tileType) {
             this.tileType = tileType;
             return this;
         }
 
+        /**
+         * Sets the minimum zoom level.
+         * @param minZoom the zoom level
+         * @return this builder
+         */
         public Builder minZoom(byte minZoom) {
             this.minZoom = minZoom;
             return this;
         }
 
+        /**
+         * Sets the maximum zoom level.
+         * @param maxZoom the zoom level
+         * @return this builder
+         */
         public Builder maxZoom(byte maxZoom) {
             this.maxZoom = maxZoom;
             return this;
         }
 
+        /**
+         * Sets the minimum longitude in E7 format.
+         * @param minLonE7 the longitude
+         * @return this builder
+         */
         public Builder minLonE7(int minLonE7) {
             this.minLonE7 = minLonE7;
             return this;
         }
 
+        /**
+         * Sets the minimum latitude in E7 format.
+         * @param minLatE7 the latitude
+         * @return this builder
+         */
         public Builder minLatE7(int minLatE7) {
             this.minLatE7 = minLatE7;
             return this;
         }
 
+        /**
+         * Sets the maximum longitude in E7 format.
+         * @param maxLonE7 the longitude
+         * @return this builder
+         */
         public Builder maxLonE7(int maxLonE7) {
             this.maxLonE7 = maxLonE7;
             return this;
         }
 
+        /**
+         * Sets the maximum latitude in E7 format.
+         * @param maxLatE7 the latitude
+         * @return this builder
+         */
         public Builder maxLatE7(int maxLatE7) {
             this.maxLatE7 = maxLatE7;
             return this;
         }
 
+        /**
+         * Sets the center zoom level.
+         * @param centerZoom the zoom level
+         * @return this builder
+         */
         public Builder centerZoom(byte centerZoom) {
             this.centerZoom = centerZoom;
             return this;
         }
 
+        /**
+         * Sets the center longitude in E7 format.
+         * @param centerLonE7 the longitude
+         * @return this builder
+         */
         public Builder centerLonE7(int centerLonE7) {
             this.centerLonE7 = centerLonE7;
             return this;
         }
 
+        /**
+         * Sets the center latitude in E7 format.
+         * @param centerLatE7 the latitude
+         * @return this builder
+         */
         public Builder centerLatE7(int centerLatE7) {
             this.centerLatE7 = centerLatE7;
             return this;
         }
 
-        // Convenience methods for setting floating-point coordinates
+        /**
+         * Convenience method for setting the minimum longitude.
+         * @param minLon the longitude in decimal degrees
+         * @return this builder
+         */
         public Builder minLon(double minLon) {
             this.minLonE7 = (int) (minLon * 10000000);
             return this;
         }
 
+        /**
+         * Convenience method for setting the minimum latitude.
+         * @param minLat the latitude in decimal degrees
+         * @return this builder
+         */
         public Builder minLat(double minLat) {
             this.minLatE7 = (int) (minLat * 10000000);
             return this;
         }
 
+        /**
+         * Convenience method for setting the maximum longitude.
+         * @param maxLon the longitude in decimal degrees
+         * @return this builder
+         */
         public Builder maxLon(double maxLon) {
             this.maxLonE7 = (int) (maxLon * 10000000);
             return this;
         }
 
+        /**
+         * Convenience method for setting the maximum latitude.
+         * @param maxLat the latitude in decimal degrees
+         * @return this builder
+         */
         public Builder maxLat(double maxLat) {
             this.maxLatE7 = (int) (maxLat * 10000000);
             return this;
         }
 
+        /**
+         * Convenience method for setting the center longitude.
+         * @param centerLon the longitude in decimal degrees
+         * @return this builder
+         */
         public Builder centerLon(double centerLon) {
             this.centerLonE7 = (int) (centerLon * 10000000);
             return this;
         }
 
+        /**
+         * Convenience method for setting the center latitude.
+         * @param centerLat the latitude in decimal degrees
+         * @return this builder
+         */
         public Builder centerLat(double centerLat) {
             this.centerLatE7 = (int) (centerLat * 10000000);
             return this;
         }
 
-        // Build the final header
+        /**
+         * Builds the final header.
+         * @return the constructed PMTilesHeader
+         */
         public PMTilesHeader build() {
             return new PMTilesHeader(
                     rootDirOffset,

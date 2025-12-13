@@ -162,22 +162,43 @@ public class PMTilesReader {
 
     /**
      * Gets a tile by its ZXY coordinates.
+     * <p>
+     * This is a convenience method that wraps the coordinates in a {@link TileIndex}.
      *
      * @param z the zoom level
      * @param x the X coordinate
      * @param y the Y coordinate
-     * @return the tile data, or empty if the tile doesn't exist
+     * @return an Optional containing the tile data as a ByteBuffer if found, or empty if not
      * @throws IOException if an I/O error occurs
-     * @throws UnsupportedCompressionException if the compression type is not supported
+     * @throws UnsupportedCompressionException if the tile compression is not supported
      */
     public Optional<ByteBuffer> getTile(int z, int x, int y) throws IOException {
         return getTile(TileIndex.xyz((long) x, (long) y, z));
     }
 
+    /**
+     * Gets a tile by its TileIndex.
+     *
+     * @param tileIndex the tile coordinates
+     * @return an Optional containing the tile data as a ByteBuffer if found, or empty if not
+     * @throws IOException if an I/O error occurs
+     */
     public Optional<ByteBuffer> getTile(TileIndex tileIndex) throws IOException {
         return getTile(tileIndex, Function.identity());
     }
 
+    /**
+     * Gets a tile by its TileIndex and applies a mapping function to the data.
+     * <p>
+     * This method allows efficient transformation of the tile data (e.g., decoding a VectorTile)
+     * immediately after reading, potentially avoiding intermediate object creation or copies.
+     *
+     * @param <D> the type of the result
+     * @param tileIndex the tile coordinates
+     * @param mapper a function to transform the ByteBuffer into the desired type
+     * @return an Optional containing the transformed result if the tile was found, or empty if not
+     * @throws IOException if an I/O error occurs
+     */
     public <D> Optional<D> getTile(TileIndex tileIndex, Function<ByteBuffer, D> mapper) throws IOException {
         if (tileIndex.z() < 0) throw new IllegalArgumentException("z can't be < 0");
         if (tileIndex.x() < 0) throw new IllegalArgumentException("x can't be < 0");
@@ -220,8 +241,8 @@ public class PMTilesReader {
 
         List<TileIndex> tileIndices = new java.util.ArrayList<>();
         try {
-            collectTileIndicesForZoomLevel(
-                    ByteRange.of(header.rootDirOffset(), (int) header.rootDirBytes()), zoomLevel, tileIndices, false);
+            ByteRange entryRange = ByteRange.of(header.rootDirOffset(), (int) header.rootDirBytes());
+            collectTileIndicesForZoomLevel(entryRange, zoomLevel, tileIndices);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -280,7 +301,7 @@ public class PMTilesReader {
     static PMTilesMetadata parseMetadata(String jsonMetadata) throws IOException {
         if (jsonMetadata == null || jsonMetadata.isBlank()) {
             // Return empty metadata if no metadata is present
-            return PMTilesMetadata.of(null);
+            return PMTilesMetadata.empty();
         }
 
         try {
@@ -478,12 +499,10 @@ public class PMTilesReader {
      * @param entryRange the directory entry range to search
      * @param targetZoomLevel the zoom level to collect tiles for
      * @param tileIndices the list to collect tile indices into
-     * @param isLeafDir whether this is a leaf directory
      * @throws IOException if an I/O error occurs
      * @throws UnsupportedCompressionException if the compression type is not supported
      */
-    private void collectTileIndicesForZoomLevel(
-            ByteRange entryRange, int targetZoomLevel, List<TileIndex> tileIndices, boolean isLeafDir)
+    private void collectTileIndicesForZoomLevel(ByteRange entryRange, int targetZoomLevel, List<TileIndex> tileIndices)
             throws IOException, UnsupportedCompressionException {
 
         PMTilesDirectory entries = getDirectory(entryRange);
@@ -491,7 +510,7 @@ public class PMTilesReader {
         for (PMTilesEntry entry : entries) {
             if (entry.isLeaf()) {
                 // Recursively search the leaf directory
-                collectTileIndicesForZoomLevel(header.leafDirDataRange(entry), targetZoomLevel, tileIndices, true);
+                collectTileIndicesForZoomLevel(header.leafDirDataRange(entry), targetZoomLevel, tileIndices);
             } else {
                 // This is a tile entry - check if it's at our target zoom level
                 TileIndex tileCoord = HilbertCurve.tileIdToTileIndex(entry.tileId());

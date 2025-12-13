@@ -78,39 +78,11 @@ class PMTilesReaderTest {
      * }</pre>
      */
     @Test
-    void testPMTilesShowInfo() throws Exception {
+    void testPMTilesShowInfo() throws IOException {
         try (RangeReader rangeReader = getAndorraRangeReader()) {
             PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
-            PMTilesHeader header = reader.getHeader();
-
             // Test header information
-            assertEquals(3, header.version());
-            assertEquals(PMTilesHeader.TILETYPE_MVT, header.tileType());
-
-            // Test bounds (using utility methods)
-            assertEquals(1.412368, header.minLon(), 0.000001);
-            assertEquals(42.427600, header.minLat(), 0.000001);
-            assertEquals(1.787481, header.maxLon(), 0.000001);
-            assertEquals(42.657170, header.maxLat(), 0.000001);
-
-            // Test zoom levels
-            assertEquals(0, header.minZoom());
-            assertEquals(14, header.maxZoom());
-
-            // Test center
-            assertEquals(1.599924, header.centerLon(), 0.000001);
-            assertEquals(42.542385, header.centerLat(), 0.000001);
-            assertEquals(10, header.centerZoom());
-
-            // Test tile counts
-            assertEquals(329, header.addressedTilesCount());
-            assertEquals(329, header.tileEntriesCount());
-            assertEquals(329, header.tileContentsCount());
-
-            // Test clustering and compression
-            assertTrue(header.clustered());
-            assertEquals(PMTilesHeader.COMPRESSION_GZIP, header.internalCompression());
-            assertEquals(PMTilesHeader.COMPRESSION_GZIP, header.tileCompression());
+            verifyHeader(reader.getHeader());
 
             // Test metadata JSON
             String metadata = reader.getMetadataAsString();
@@ -132,8 +104,7 @@ class PMTilesReaderTest {
             assertNotNull(metadataObj.attribution());
             assertTrue(metadataObj.attribution().contains("OpenStreetMap contributors"));
 
-            assertNotNull(metadataObj.vectorLayers());
-            assertFalse(metadataObj.vectorLayers().isEmpty());
+            assertThat(metadataObj.vectorLayers()).isNotNull().isNotEmpty();
 
             // Check that we have some expected vector layers
             boolean hasLandLayer = metadataObj.vectorLayers().stream().anyMatch(layer -> "land".equals(layer.id()));
@@ -142,10 +113,37 @@ class PMTilesReaderTest {
 
             // At least one of these layers should exist in the Shortbread schema
             assertTrue(hasLandLayer || hasWaterLayer, "Should have land or water layer");
-
-            // Note: PMTiles metadata doesn't define minZoom/maxZoom fields
-            // Those are in the header, not the metadata JSON
         }
+    }
+
+    private void verifyHeader(PMTilesHeader header) {
+        assertEquals(3, header.version());
+        assertEquals(PMTilesHeader.TILETYPE_MVT, header.tileType());
+
+        // Test bounds (using utility methods)
+        assertEquals(1.412368, header.minLon(), 0.000001);
+        assertEquals(42.427600, header.minLat(), 0.000001);
+        assertEquals(1.787481, header.maxLon(), 0.000001);
+        assertEquals(42.657170, header.maxLat(), 0.000001);
+
+        // Test zoom levels
+        assertEquals(0, header.minZoom());
+        assertEquals(14, header.maxZoom());
+
+        // Test center
+        assertEquals(1.599924, header.centerLon(), 0.000001);
+        assertEquals(42.542385, header.centerLat(), 0.000001);
+        assertEquals(10, header.centerZoom());
+
+        // Test tile counts
+        assertEquals(329, header.addressedTilesCount());
+        assertEquals(329, header.tileEntriesCount());
+        assertEquals(329, header.tileContentsCount());
+
+        // Test clustering and compression
+        assertTrue(header.clustered());
+        assertEquals(PMTilesHeader.COMPRESSION_GZIP, header.internalCompression());
+        assertEquals(PMTilesHeader.COMPRESSION_GZIP, header.tileCompression());
     }
 
     /**
@@ -329,7 +327,7 @@ class PMTilesReaderTest {
     }
 
     @Test
-    void testParseMetadataException() throws IOException {
+    void testParseMetadataException() {
         final String rawMetadata =
                 """
                 {

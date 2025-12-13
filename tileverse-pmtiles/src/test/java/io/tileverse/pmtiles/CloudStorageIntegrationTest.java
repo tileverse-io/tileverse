@@ -48,7 +48,7 @@ import software.amazon.awssdk.regions.Region;
  * 4. Run Maven with the integration profile: mvn test -Pintegration
  */
 @Tag("integration")
-public class CloudStorageIntegrationTest {
+class CloudStorageIntegrationTest {
 
     // Test configuration from environment variables
     private static String s3Bucket;
@@ -62,7 +62,7 @@ public class CloudStorageIntegrationTest {
     private static String httpUrl;
 
     @BeforeAll
-    public static void setup() {
+    static void setup() {
         // S3 configuration
         s3Bucket = System.getenv("TEST_S3_BUCKET");
         s3Key = System.getenv("TEST_S3_KEY");
@@ -87,7 +87,7 @@ public class CloudStorageIntegrationTest {
      * - Reading the PMTiles header and a tile
      */
     @Test
-    void testReadPMTilesFromS3() throws IOException, InvalidHeaderException, UnsupportedCompressionException {
+    void testReadPMTilesFromS3() throws IOException {
         assumeTrue(
                 s3Bucket != null && s3Key != null && s3Region != null,
                 "S3 test configuration not found in environment variables");
@@ -129,7 +129,7 @@ public class CloudStorageIntegrationTest {
      * - Reading the PMTiles header and metadata
      */
     @Test
-    void testReadPMTilesFromAzure() throws IOException, InvalidHeaderException, UnsupportedCompressionException {
+    void testReadPMTilesFromAzure() throws IOException {
         assumeTrue(
                 azureConnectionString != null && azureContainer != null && azureBlob != null,
                 "Azure test configuration not found in environment variables");
@@ -169,7 +169,7 @@ public class CloudStorageIntegrationTest {
      * - Reading the PMTiles header and a specific tile
      */
     @Test
-    void testReadPMTilesFromHttp() throws IOException, InvalidHeaderException, UnsupportedCompressionException {
+    void testReadPMTilesFromHttp() throws IOException {
         assumeTrue(httpUrl != null, "HTTP test configuration not found in environment variables");
 
         URI httpUri = URI.create(httpUrl);

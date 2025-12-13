@@ -37,7 +37,7 @@ import org.junit.jupiter.api.io.TempDir;
 /**
  * Tests for the PMTilesWriter implementation.
  */
-public class PMTilesWriterTest {
+class PMTilesWriterTest {
 
     @TempDir
     Path tempDir;
@@ -62,7 +62,7 @@ public class PMTilesWriterTest {
     }
 
     @Test
-    void testWriteAndReadSingleTile() throws IOException, UnsupportedCompressionException, InvalidHeaderException {
+    void testWriteAndReadSingleTile() throws IOException {
         // Create sample tile data
         byte[] tileData = "Sample tile data".getBytes(StandardCharsets.UTF_8);
 
@@ -100,7 +100,7 @@ public class PMTilesWriterTest {
     }
 
     @Test
-    void testWriteAndReadMultipleTiles() throws IOException, UnsupportedCompressionException, InvalidHeaderException {
+    void testWriteAndReadMultipleTiles() throws IOException {
         // Create sample tile data
         byte[] tileData1 = "Tile data 1".getBytes(StandardCharsets.UTF_8);
         byte[] tileData2 = "Tile data 2".getBytes(StandardCharsets.UTF_8);
@@ -149,7 +149,7 @@ public class PMTilesWriterTest {
     }
 
     @Test
-    void testSetMetadata() throws IOException, UnsupportedCompressionException, InvalidHeaderException {
+    void testSetMetadata() throws IOException {
         // Create sample tile data and metadata
         byte[] tileData = "Sample tile data".getBytes(StandardCharsets.UTF_8);
         String metadata = "{\"name\":\"Test Tileset\",\"version\":\"1.0\"}";

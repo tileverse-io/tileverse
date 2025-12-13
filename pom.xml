@@ -80,12 +80,12 @@
 
     <!-- Dependency versions -->
     <!-- Runtime dependencies are defined in the dependencies/pom.xml BOM -->
-    <lombok.version>1.18.38</lombok.version>
+    <lombok.version>1.18.42</lombok.version>
 
     <!-- Test Dependency versions -->
     <assertj.version>3.27.3</assertj.version>
     <awaitility.version>4.3.0</awaitility.version>
-    <commons-io.version>2.19.0</commons-io.version>
+    <commons-io.version>2.21.0</commons-io.version>
     <junit.version>5.13.2</junit.version>
     <logback.version>1.5.18</logback.version>
     <mockito.version>5.18.0</mockito.version>

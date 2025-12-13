@@ -15,6 +15,7 @@
  */
 package io.tileverse.jackson.databind.pmtiles.v3;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -63,8 +64,8 @@ class PMTilesMetadataTest {
         assertEquals("1.0.0", metadata.version());
         assertEquals("© Test Contributors", metadata.attribution());
         assertEquals(TilesetType.BASELAYER, metadata.type());
-        assertNull(metadata.vectorLayers());
-        assertNull(metadata.extras());
+        assertThat(metadata.vectorLayers()).isNotNull().isEmpty();
+        assertThat(metadata.extras()).isNotNull().isEmpty();
     }
 
     @Test
@@ -167,7 +168,10 @@ class PMTilesMetadataTest {
 
     @Test
     void testMetadataSerialization() throws Exception {
-        PMTilesMetadata original = PMTilesMetadata.of("Test Tileset", "Test description", "© Test")
+        PMTilesMetadata original = PMTilesMetadata.empty()
+                .withName("Test Tileset")
+                .withDescription("Test description")
+                .withAttribution("© Test")
                 .withVersion("1.0.0")
                 .withType(TilesetType.BASELAYER)
                 .withVectorLayers(List.of(VectorLayer.of("test", Map.of("name", "String"), "Test layer")
@@ -235,7 +239,7 @@ class PMTilesMetadataTest {
         assertNull(unknownMetadata.type());
 
         // Test serialization
-        PMTilesMetadata original = PMTilesMetadata.of("Test").withType(TilesetType.BASELAYER);
+        PMTilesMetadata original = PMTilesMetadata.empty().withName("Test").withType(TilesetType.BASELAYER);
         String json = objectMapper.writeValueAsString(original);
         assertTrue(json.contains("\"type\":\"baselayer\""));
 
@@ -245,7 +249,8 @@ class PMTilesMetadataTest {
 
     @Test
     void testBuilderMethods() {
-        PMTilesMetadata metadata = PMTilesMetadata.of("Original Name")
+        PMTilesMetadata metadata = PMTilesMetadata.empty()
+                .withName("Original Name")
                 .withDescription("Test description")
                 .withVersion("1.0")
                 .withAttribution("© Test")
@@ -275,14 +280,14 @@ class PMTilesMetadataTest {
 
     @Test
     void testEmptyMetadata() {
-        PMTilesMetadata empty = PMTilesMetadata.of(null);
+        PMTilesMetadata empty = PMTilesMetadata.empty();
         assertNull(empty.name());
         assertNull(empty.description());
         assertNull(empty.version());
         assertNull(empty.attribution());
-        assertNull(empty.vectorLayers());
+        assertThat(empty.vectorLayers()).isNotNull().isEmpty();
         assertNull(empty.type());
-        assertNull(empty.extras());
+        assertThat(empty.extras()).isNotNull().isEmpty();
     }
 
     @Test

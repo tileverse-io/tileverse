@@ -25,14 +25,29 @@ import java.util.Optional;
 
 /**
  * Example usage of the PMTilesWriter to create a simple PMTiles file.
+ * <p>
+ * This class demonstrates the complete workflow of creating a PMTiles archive:
+ * <ul>
+ *   <li>Configuring the writer with metadata and compression settings</li>
+ *   <li>Adding tiles to the archive (including handling duplicate content)</li>
+ *   <li>Setting global metadata</li>
+ *   <li>Monitoring progress</li>
+ *   <li>Finalizing the archive</li>
+ * </ul>
+ * <p>
+ * It also shows how to read back the created file using {@link PMTilesReader}.
  */
-public class PMTilesWriterExample {
+class PMTilesWriterExample {
 
     /**
      * Example method that demonstrates how to create a PMTiles file.
+     * <p>
+     * This method creates a sample PMTiles file with a few tiles at zoom levels 0-2.
+     * It demonstrates how to reuse tile content (deduplication) which is a key feature
+     * of the PMTiles format.
      *
      * @param outputPath the path to write the PMTiles file to
-     * @throws IOException if an I/O error occurs
+     * @throws IOException if an I/O error occurs during writing
      */
     public static void createExamplePMTiles(Path outputPath) throws IOException {
         // Create some example tile data

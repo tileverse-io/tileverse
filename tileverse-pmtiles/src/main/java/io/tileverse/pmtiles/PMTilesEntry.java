@@ -69,34 +69,74 @@ public record PMTilesEntry(
      */
     static final int SERIALIZED_SIZE = Long.BYTES + Long.BYTES + Integer.BYTES + Integer.BYTES;
 
+    /**
+     * Sets the tile ID in the byte buffer.
+     * @param entry the byte buffer
+     * @param tileId the tile ID to set
+     */
     static void setId(ByteBuffer entry, long tileId) {
         entry.putLong(0, tileId);
     }
 
+    /**
+     * Gets the tile ID from the byte buffer.
+     * @param entry the byte buffer
+     * @return the tile ID
+     */
     static long getId(ByteBuffer entry) {
         return entry.getLong(0);
     }
 
-    static void setOffset(ByteBuffer entry, long tileId) {
-        entry.putLong(8, tileId);
+    /**
+     * Sets the offset in the byte buffer.
+     * @param entry the byte buffer
+     * @param offset the offset to set
+     */
+    static void setOffset(ByteBuffer entry, long offset) {
+        entry.putLong(8, offset);
     }
 
+    /**
+     * Gets the offset from the byte buffer.
+     * @param entry the byte buffer
+     * @return the offset
+     */
     static long getOffset(ByteBuffer entry) {
         return entry.getLong(8);
     }
 
+    /**
+     * Sets the length in the byte buffer.
+     * @param entry the byte buffer
+     * @param length the length to set
+     */
     static void setLength(ByteBuffer entry, int length) {
         entry.putInt(16, length);
     }
 
+    /**
+     * Gets the length from the byte buffer.
+     * @param entry the byte buffer
+     * @return the length
+     */
     static int getLength(ByteBuffer entry) {
         return entry.getInt(16);
     }
 
+    /**
+     * Sets the run length in the byte buffer.
+     * @param entry the byte buffer
+     * @param runLength the run length to set
+     */
     static void setRunLength(ByteBuffer entry, int runLength) {
         entry.putInt(20, runLength);
     }
 
+    /**
+     * Gets the run length from the byte buffer.
+     * @param entry the byte buffer
+     * @return the run length
+     */
     static int getRunLength(ByteBuffer entry) {
         return entry.getInt(20);
     }

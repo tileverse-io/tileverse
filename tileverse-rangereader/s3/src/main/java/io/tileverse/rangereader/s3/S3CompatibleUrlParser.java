@@ -280,10 +280,64 @@ class S3CompatibleUrlParser {
             return new S3Reference(null, pathStyleLocation.bucket(), pathStyleLocation.key(), region);
         }
 
+        if (isGenericVirtualHostedStyle(host)) {
+            return parseGenericVirtualHostedStyle(uri);
+        }
+
         // Non-AWS S3-compatible service using path-style
         S3Reference pathStyleLocation = parsePathStyleComponents(uri);
         URI customEndpoint = buildCustomEndpoint(uri);
         return new S3Reference(customEndpoint, pathStyleLocation.bucket(), pathStyleLocation.key(), null);
+    }
+
+    private static S3Reference parseGenericVirtualHostedStyle(URI uri) {
+        String host = uri.getHost();
+        String path = uri.getPath();
+        String scheme = uri.getScheme();
+
+        // Host format: <bucket>.s3.<region>.<domain>
+        // Example: mobi-test-data.s3.eu-central-3.ionoscloud.com
+
+        int s3Index = host.indexOf(".s3.");
+        // Should have been checked by isGenericVirtualHostedStyle, but safe guard
+        if (s3Index == -1) {
+            throw new IllegalArgumentException("Invalid virtual hosted-style URL: " + host);
+        }
+
+        String bucket = host.substring(0, s3Index);
+        String remainder = host.substring(s3Index + 4); // skip ".s3."
+
+        // Remainder: eu-central-3.ionoscloud.com
+        // We assume the next part is the region.
+        int dotIndex = remainder.indexOf('.');
+        if (dotIndex == -1) {
+            // Fallback: if we can't parse region/domain, default to path style behavior
+            // or throw exception. For now, let's treat it as a custom endpoint if parsing fails,
+            // but that might be ambiguous.
+            // Let's assume the whole remainder is the endpoint host for now (e.g. s3.localhost)
+            String endpointHost = "s3." + remainder;
+            return createReference(scheme, endpointHost, uri.getPort(), bucket, path, null);
+        }
+
+        String region = remainder.substring(0, dotIndex);
+        String domain = remainder.substring(dotIndex + 1);
+
+        String endpointHost = "s3." + region + "." + domain;
+        return createReference(scheme, endpointHost, uri.getPort(), bucket, path, region);
+    }
+
+    private static S3Reference createReference(
+            String scheme, String endpointHost, int port, String bucket, String path, String region) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(scheme).append("://").append(endpointHost);
+        if (port != -1) {
+            sb.append(":").append(port);
+        }
+        URI endpoint = URI.create(sb.toString());
+
+        String key = path != null && path.startsWith("/") ? path.substring(1) : (path != null ? path : "");
+
+        return new S3Reference(endpoint, bucket, key, region);
     }
 
     private static boolean isAwsVirtualHostedStyle(String host) {
@@ -297,20 +351,8 @@ class S3CompatibleUrlParser {
                 && (host.equals("s3.amazonaws.com") || (host.startsWith("s3.") && host.endsWith(".amazonaws.com")));
     }
 
-    private static URI extractAwsEndpoint(String host) {
-        // For most AWS regions, we can use null to let SDK use default endpoints
-        // But if you want explicit region endpoints:
-        if (host.equals("s3.amazonaws.com")) {
-            return null; // Default us-east-1
-        }
-
-        // Extract region and build regional endpoint
-        String region = extractAwsRegion(host);
-        if (region != null && !region.equals("us-east-1")) {
-            return URI.create("https://s3." + region + ".amazonaws.com");
-        }
-
-        return null; // Use SDK default
+    private static boolean isGenericVirtualHostedStyle(String host) {
+        return host != null && host.contains(".s3.");
     }
 
     private static String extractAwsRegion(String host) {

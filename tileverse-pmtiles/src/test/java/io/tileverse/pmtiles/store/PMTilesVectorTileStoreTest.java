@@ -21,7 +21,6 @@ import static org.assertj.core.api.Assertions.fail;
 
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
 import io.tileverse.jackson.databind.tilejson.v3.VectorLayer;
-import io.tileverse.pmtiles.InvalidHeaderException;
 import io.tileverse.pmtiles.PMTilesHeader;
 import io.tileverse.pmtiles.PMTilesReader;
 import io.tileverse.pmtiles.PMTilesTestData;
@@ -57,14 +56,14 @@ class PMTilesVectorTileStoreTest {
     private PMTilesVectorTileStore andorraStore;
 
     @BeforeEach
-    void setup() throws IOException, InvalidHeaderException {
+    void setup() throws IOException {
         Path file = PMTilesTestData.andorra(tmpFolder);
         andorraReader = new PMTilesReader(file);
         andorraStore = new PMTilesVectorTileStore(andorraReader);
     }
 
     @Test
-    void layerNames() throws IOException, InvalidHeaderException {
+    void layerNames() throws IOException {
 
         PMTilesMetadata metadata = andorraStore.getMetadata();
         List<VectorLayer> vectorLayers = metadata.vectorLayers();
@@ -181,7 +180,7 @@ class PMTilesVectorTileStoreTest {
     }
 
     @Test
-    void getWithTileIndex() throws IOException {
+    void getWithTileIndex() {
         TileMatrixSet andorraMatrixSet = andorraStore.matrixSet();
 
         assertThat(andorraMatrixSet.tilePyramid().cornerOfOrigin()).isEqualTo(CornerOfOrigin.TOP_LEFT);
@@ -238,7 +237,7 @@ class PMTilesVectorTileStoreTest {
     }
 
     @Test
-    void debugCoordinateConversion() throws IOException {
+    void debugCoordinateConversion() {
         PMTilesHeader header = andorraReader.getHeader();
 
         System.out.println("=== PMTiles Header Info ===");
@@ -273,7 +272,7 @@ class PMTilesVectorTileStoreTest {
 
             // What tiles actually exist in PMTiles?
             List<io.tileverse.tiling.pyramid.TileIndex> actualTiles =
-                    andorraReader.getTileIndicesByZoomLevel(z).collect(java.util.stream.Collectors.toList());
+                    andorraReader.getTileIndicesByZoomLevel(z).toList();
 
             System.out.println("Actual PMTiles tiles: " + actualTiles.size() + " tiles");
             actualTiles.forEach(tile -> System.out.println("  " + tile));
@@ -411,7 +410,7 @@ class PMTilesVectorTileStoreTest {
 
                 // Check if the actual PMTiles tiles are within this range
                 List<io.tileverse.tiling.pyramid.TileIndex> actualTiles =
-                        andorraReader.getTileIndicesByZoomLevel(zoom).collect(java.util.stream.Collectors.toList());
+                        andorraReader.getTileIndicesByZoomLevel(zoom).toList();
 
                 if (!actualTiles.isEmpty()) {
                     System.out.println("Actual PMTiles tiles: " + actualTiles);

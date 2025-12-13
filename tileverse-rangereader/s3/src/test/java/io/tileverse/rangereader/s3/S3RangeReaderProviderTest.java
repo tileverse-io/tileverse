@@ -67,7 +67,7 @@ class S3RangeReaderProviderTest {
                     .isPresent();
             IllegalStateException ex = assertThrows(
                     IllegalStateException.class, () -> RangeReaderProvider.getProvider(S3RangeReaderProvider.ID, true));
-            assertThat(ex.getMessage().contains("The specified RangeReaderProvider is not available: s3"));
+            assertThat(ex.getMessage()).contains("The specified RangeReaderProvider is not available: s3");
         } finally {
             System.clearProperty(S3RangeReaderProvider.ENABLED_KEY);
         }
@@ -284,7 +284,7 @@ class S3RangeReaderProviderTest {
     }
 
     @Test
-    void createWithConfig() throws IOException {
+    void createWithConfig() {
         assertThrows(NullPointerException.class, () -> provider.create((RangeReaderConfig) null));
         RangeReaderConfig config = new RangeReaderConfig();
         NullPointerException npe = assertThrows(NullPointerException.class, () -> provider.create(config));
@@ -311,7 +311,7 @@ class S3RangeReaderProviderTest {
     }
 
     @Test
-    void createWithCustomRegion() throws IOException {
+    void createWithCustomRegion() {
         final String customRegion = "eu-central-12";
         assertThat(Region.regions().stream().anyMatch(region -> region.id().equals(customRegion)))
                 .isFalse();

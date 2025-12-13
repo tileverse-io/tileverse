@@ -222,16 +222,14 @@ class HilbertCurveTest {
     @Test
     void testCoordinateValidation() {
         // Test coordinates beyond valid range for zoom level
-        assertThrows(
-                IllegalArgumentException.class, () -> HilbertCurve.tileIndexToTileId(xyz(1, 0, 0))); // Max at z=0 is 0
+        TileIndex tileIndex1 = xyz(1, 0, 0); // Max at z=0 is 0
+        assertThrows(IllegalArgumentException.class, () -> HilbertCurve.tileIndexToTileId(tileIndex1));
 
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> HilbertCurve.tileIndexToTileId(xyz(32, 0, 5))); // Max at z=5 is 31
+        TileIndex tileIndex2 = xyz(32, 0, 5); // Max at z=5 is 31
+        assertThrows(IllegalArgumentException.class, () -> HilbertCurve.tileIndexToTileId(tileIndex2));
 
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> HilbertCurve.tileIndexToTileId(xyz(0, 32, 5))); // Max at z=5 is 31
+        TileIndex tileIndex3 = xyz(0, 32, 5); // Max at z=5 is 31
+        assertThrows(IllegalArgumentException.class, () -> HilbertCurve.tileIndexToTileId(tileIndex3));
     }
 
     /**

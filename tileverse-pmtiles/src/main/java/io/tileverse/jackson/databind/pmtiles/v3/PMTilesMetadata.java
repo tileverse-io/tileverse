@@ -22,6 +22,8 @@ import io.tileverse.jackson.databind.tilejson.v3.TilesetType;
 import io.tileverse.jackson.databind.tilejson.v3.VectorLayer;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.stream.Collectors;
 
 /**
  * Represents PMTiles v3 metadata as defined in the PMTiles specification.
@@ -90,30 +92,25 @@ public record PMTilesMetadata(
         @JsonProperty("extras") Map<String, Object> extras) {
 
     /**
-     * Creates a new PMTilesMetadata with all fields.
+     * Override default constructor for defensive, non-null and read-only copies of collection arguments
      */
-    public PMTilesMetadata {}
-
-    /**
-     * Creates a minimal PMTilesMetadata with just a name.
-     *
-     * @param name the name of the tileset
-     * @return a new PMTilesMetadata instance
-     */
-    public static PMTilesMetadata of(String name) {
-        return new PMTilesMetadata(name, null, null, null, null, null, null);
+    public PMTilesMetadata {
+        if (vectorLayers == null) {
+            vectorLayers = List.of();
+        } else {
+            vectorLayers = List.copyOf(vectorLayers);
+        }
+        if (extras == null) {
+            extras = Map.of();
+        } else {
+            extras = extras.entrySet().stream()
+                    .filter(e -> e.getKey() != null && e.getValue() != null)
+                    .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+        }
     }
 
-    /**
-     * Creates a PMTilesMetadata with basic tileset information.
-     *
-     * @param name the name of the tileset
-     * @param description the description of the tileset
-     * @param attribution the attribution text
-     * @return a new PMTilesMetadata instance
-     */
-    public static PMTilesMetadata of(String name, String description, String attribution) {
-        return new PMTilesMetadata(name, description, attribution, null, null, null, null);
+    public static PMTilesMetadata empty() {
+        return new PMTilesMetadata(null, null, null, null, null, null, null);
     }
 
     /**

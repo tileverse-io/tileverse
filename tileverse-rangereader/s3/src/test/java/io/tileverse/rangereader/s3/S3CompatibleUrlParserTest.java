@@ -38,15 +38,20 @@ class S3CompatibleUrlParserTest {
             String expectedBucket,
             String expectedKey,
             boolean shouldSucceed) {
+
         if (shouldSucceed) {
             S3Reference location = S3CompatibleUrlParser.parseS3Url(url);
-            assertThat(location.endpoint())
+            URI endpoint = location.endpoint();
+            String bucket = location.bucket();
+            String key = location.key();
+
+            assertThat(endpoint)
                     .as("Endpoint should match for '%s'".formatted(description))
                     .isEqualTo(expectedEndpoint);
-            assertThat(location.bucket())
+            assertThat(bucket)
                     .as("Bucket should match for '%s'".formatted(description))
                     .isEqualTo(expectedBucket);
-            assertThat(location.key())
+            assertThat(key)
                     .as("Key should match for '%s'".formatted(description))
                     .isEqualTo(expectedKey);
         } else {
@@ -59,6 +64,20 @@ class S3CompatibleUrlParserTest {
 
     private static Stream<Arguments> provideS3UrlTestCases() {
         return Stream.of(
+                Arguments.of( // endpoint should be the full url and key the full path
+                        "Custom endpoint custom region",
+                        "https://mobi-test-data.s3.eu-central-3.ionoscloud.com/subfolder/andorra.pmtiles",
+                        URI.create("https://s3.eu-central-3.ionoscloud.com"),
+                        "mobi-test-data",
+                        "subfolder/andorra.pmtiles",
+                        true),
+                Arguments.of( // endpoint should be the full url and key the full path
+                        "Custom endpoint custom region, file at root bucket endpoint",
+                        "https://mobi-test-data.s3.eu-central-3.ionoscloud.com/andorra.pmtiles",
+                        URI.create("https://s3.eu-central-3.ionoscloud.com"),
+                        "mobi-test-data",
+                        "andorra.pmtiles",
+                        true),
                 // AWS S3 URI format - uses default AWS endpoints
                 Arguments.of(
                         "AWS S3 URI with nested path",

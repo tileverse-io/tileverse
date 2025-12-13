@@ -35,6 +35,20 @@ import java.util.Objects;
 import java.util.Optional;
 import org.locationtech.jts.geom.Envelope;
 
+/**
+ * A VectorTileStore implementation backed by a PMTiles file.
+ * <p>
+ * This store provides access to vector tiles stored in a PMTiles archive. It uses
+ * a {@link PMTilesReader} to fetch the raw tile data and decodes it into
+ * {@link VectorTile} objects.
+ * <p>
+ * Features:
+ * <ul>
+ *   <li>Efficient tile access using the PMTiles directory structure</li>
+ *   <li>Caching of decoded {@link VectorTile} objects</li>
+ *   <li>Integration with the {@link VectorTileStore} abstraction</li>
+ * </ul>
+ */
 public class PMTilesVectorTileStore extends VectorTileStore {
 
     private final PMTilesReader reader;
@@ -42,7 +56,10 @@ public class PMTilesVectorTileStore extends VectorTileStore {
     private static final Duration expireAfterAccess = Duration.ofSeconds(10);
 
     /**
-     * Short-lived (expireAfterAccess) {@link VectorTile} cache to account for consecutive single-layer requests
+     * Short-lived (expireAfterAccess) {@link VectorTile} cache to account for consecutive single-layer requests.
+     * <p>
+     * Since {@link VectorTile} objects are immutable and relatively expensive to decode,
+     * caching them improves performance when multiple layers are requested for the same tile.
      */
     private final LoadingCache<TileIndex, Optional<VectorTile>> vectorTileCache;
 
@@ -93,18 +110,14 @@ public class PMTilesVectorTileStore extends VectorTileStore {
      */
     @Override
     public Optional<TileData<VectorTile>> loadTile(Tile tile) {
-        try {
-            Optional<VectorTile> decoded = getVectorTile(tile);
-            Envelope bounds = toEnvelope(tile.extent());
-            decoded = decoded.map(vt -> vt.withBoundingBox(bounds));
+        Optional<VectorTile> decoded = getVectorTile(tile);
+        Envelope bounds = toEnvelope(tile.extent());
+        decoded = decoded.map(vt -> vt.withBoundingBox(bounds));
 
-            return decoded.map(vt -> new TileData<>(tile, vt));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        return decoded.map(vt -> new TileData<>(tile, vt));
     }
 
-    private Optional<VectorTile> getVectorTile(Tile tile) throws IOException {
+    private Optional<VectorTile> getVectorTile(Tile tile) {
         TileIndex tileIndex = tile.tileIndex();
         return vectorTileCache.get(tileIndex);
     }

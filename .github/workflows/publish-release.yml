@@ -73,4 +73,4 @@ jobs:
         body: |
           ## Changes in version ${{ env.RELEASE_VERSION }}
           
-          Published to Maven Central: https://central.sonatype.com/artifact/io.tileverse.rangereader/tileverse-rangereader-bom/${{ env.RELEASE_VERSION }}
+          Published to Maven Central: https://central.sonatype.com/artifact/io.tileverse/tileverse-bom/${{ env.RELEASE_VERSION }}

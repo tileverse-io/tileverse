@@ -24,7 +24,6 @@ import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 import org.locationtech.jts.geom.Geometry;
-import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.util.AffineTransformation;
 
 record VectorTileLayerReader(VectorTile.Layer layer, TileData<VectorTile> tileData, VectorTilesQuery query) {
@@ -36,18 +35,18 @@ record VectorTileLayerReader(VectorTile.Layer layer, TileData<VectorTile> tileDa
 
         Predicate<VectorTile.Layer.Feature> filter = query.filter().orElse(f -> true);
         GeometryReader decoder = buildTileGeometryDecoder();
-        Stream<VectorTile.Layer.Feature> features = layer.getFeatures(filter, decoder);
-        return features;
+        return layer.getFeatures(filter, decoder);
     }
 
     public GeometryReader buildTileGeometryDecoder() {
-        GeometryFactory geometryFactory = query.geometryFactory().orElse(null);
-        UnaryOperator<Geometry> transform = buildGeometryTransform();
-
         GeometryReader geometryReader = VectorTileCodec.newGeometryReader();
-        if (geometryFactory != null) {
-            geometryReader = geometryReader.withGeometryFactory(geometryFactory);
+
+        if (query.geometryFactory().isPresent()) {
+            geometryReader =
+                    geometryReader.withGeometryFactory(query.geometryFactory().orElseThrow());
         }
+
+        UnaryOperator<Geometry> transform = buildGeometryTransform();
         if (transform != null) {
             geometryReader = geometryReader.withGeometryTransformation(transform);
         }

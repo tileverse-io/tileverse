@@ -22,11 +22,12 @@ import io.tileverse.vectortile.model.VectorTile;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import org.locationtech.jts.geom.Envelope;
 
 /**
- * Creates an MvtTile from protobuf data with default GeometryFactory.
+ * Creates an MvtTile from protobuf data.
  * <p>
  * Coordinates are returned in their natural extent space (0 to extent-1) as stored in the MVT data.
  *
@@ -72,6 +73,11 @@ record MvtTile(VectorTileProto.Tile tileProto, Envelope bounds) implements Vecto
 
     private Layer newLayer(VectorTileProto.Tile.Layer layer) {
         return new MvtLayer(this, layer);
+    }
+
+    @Override
+    public OptionalInt serializedSize() {
+        return OptionalInt.of(getSerializedSize());
     }
 
     public int getSerializedSize() {

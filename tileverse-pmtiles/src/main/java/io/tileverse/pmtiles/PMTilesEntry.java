@@ -15,198 +15,124 @@
  */
 package io.tileverse.pmtiles;
 
-import java.nio.ByteBuffer;
+import java.util.Objects;
+import java.util.function.LongConsumer;
 
-/**
- * Represents a directory entry in a PMTiles file.
- * <p>
- * Each entry maps a tile ID to its location and size in the file, and optionally
- * indicates a run of consecutive tiles that share the same content.
- */
-public record PMTilesEntry(
-        /**
-         * The ID of the tile or the start of a run of tiles.
-         * Tile IDs uniquely identify tiles using a Z-order curve value derived
-         * from the tile's Z/X/Y coordinates. This allows for efficient binary search
-         * and ensures entries are ordered.
-         */
-        long tileId,
-
-        /**
-         * The offset of the tile data or leaf directory in the file.
-         * <p>
-         * For regular entries, this is the offset within the tile data section,
-         * relative to the tileDataOffset in the header.
-         * <p>
-         * For leaf directory entries, this is the offset within the leaf directories section,
-         * relative to the leafDirsOffset in the header.
-         */
-        long offset,
-
-        /**
-         * The length of the tile data or leaf directory in bytes.
-         * <p>
-         * A length of 0 indicates an empty entry (no tile data).
-         */
-        int length,
-
-        /**
-         * The number of consecutive tiles with the same content.
-         * <p>
-         * A runLength of 0 indicates this is a leaf directory entry.
-         * A runLength of 1 indicates a single tile.
-         * A runLength greater than 1 indicates a run of tiles that share the same content,
-         * starting at the tileId and continuing for runLength consecutive tile IDs.
-         * <p>
-         * Runs are used to efficiently represent repeated tiles, such as ocean or
-         * empty areas in maps.
-         */
-        int runLength)
-        implements Comparable<PMTilesEntry> {
+public interface PMTilesEntry extends Comparable<PMTilesEntry> {
 
     /**
-     * Size of {@code tileId + offset + length + runLength}
+     * Specifies the ID of the tile or the first tile in the leaf directory. The
+     * TileID corresponds to a cumulative position on the series of Hilbert curves
+     * starting at zoom level {@code 0}.
+     * <p>
+     * When an entry points to a {@link PMTilesEntry#isLeaf Leaf Directory} (rather
+     * than a map tile), the TileID field serves as a routing key.
+     * <p>
+     * Specifically, the TileID represents the lowest (first) Hilbert TileID
+     * contained within that leaf directory, hence acting as the inclusive start of
+     * the range covered by that leaf, allowing the client to perform a binary
+     * search or linear scan to find the correct directory to fetch.
      */
-    static final int SERIALIZED_SIZE = Long.BYTES + Long.BYTES + Integer.BYTES + Integer.BYTES;
+    long tileId();
 
     /**
-     * Sets the tile ID in the byte buffer.
-     * @param entry the byte buffer
-     * @param tileId the tile ID to set
+     * The offset of the tile data or leaf directory in the file.
+     * <p>
+     * For regular entries, this is the offset within the tile data section,
+     * relative to the tileDataOffset in the header.
+     * <p>
+     * For leaf directory entries, this is the offset within the leaf directories
+     * section, relative to the leafDirsOffset in the header.
      */
-    static void setId(ByteBuffer entry, long tileId) {
-        entry.putLong(0, tileId);
+    long offset();
+
+    /**
+     * Specifies the number of bytes of this tile or leaf directory. This size
+     * always indicates the compressed size, if the tile or leaf directory is
+     * compressed. The length <strong>MUST</strong> be greater than {@code 0}
+     */
+    int length();
+
+    /**
+     * Specifies the number of tiles for which this entry is valid.
+     * <p>
+     * A runLength of {@code 0} indicates this is a leaf directory entry. A
+     * runLength of {@code 1} indicates a single tile. A runLength greater than
+     * {@code 1} indicates a run of tiles that share the same content, starting at
+     * the {@code tileId} and continuing for {@code runLength} consecutive tile IDs.
+     * <p>
+     * Runs are used to efficiently represent repeated tiles, such as ocean or empty
+     * areas in maps.
+     */
+    int runLength();
+
+    default boolean contains(long tileId) {
+        return tileId == tileId() || tileId > tileId() && tileId < tileId() + runLength();
     }
 
-    /**
-     * Gets the tile ID from the byte buffer.
-     * @param entry the byte buffer
-     * @return the tile ID
-     */
-    static long getId(ByteBuffer entry) {
-        return entry.getLong(0);
-    }
-
-    /**
-     * Sets the offset in the byte buffer.
-     * @param entry the byte buffer
-     * @param offset the offset to set
-     */
-    static void setOffset(ByteBuffer entry, long offset) {
-        entry.putLong(8, offset);
-    }
-
-    /**
-     * Gets the offset from the byte buffer.
-     * @param entry the byte buffer
-     * @return the offset
-     */
-    static long getOffset(ByteBuffer entry) {
-        return entry.getLong(8);
-    }
-
-    /**
-     * Sets the length in the byte buffer.
-     * @param entry the byte buffer
-     * @param length the length to set
-     */
-    static void setLength(ByteBuffer entry, int length) {
-        entry.putInt(16, length);
-    }
-
-    /**
-     * Gets the length from the byte buffer.
-     * @param entry the byte buffer
-     * @return the length
-     */
-    static int getLength(ByteBuffer entry) {
-        return entry.getInt(16);
-    }
-
-    /**
-     * Sets the run length in the byte buffer.
-     * @param entry the byte buffer
-     * @param runLength the run length to set
-     */
-    static void setRunLength(ByteBuffer entry, int runLength) {
-        entry.putInt(20, runLength);
-    }
-
-    /**
-     * Gets the run length from the byte buffer.
-     * @param entry the byte buffer
-     * @return the run length
-     */
-    static int getRunLength(ByteBuffer entry) {
-        return entry.getInt(20);
-    }
-
-    /**
-     * Creates a new PMTilesEntry with a runLength of 1.
-     *
-     * @param tileId the tile ID
-     * @param offset the offset of the tile data in the file
-     * @param length the length of the tile data
-     * @return a new PMTilesEntry
-     */
-    public static PMTilesEntry of(long tileId, long offset, int length) {
-        return new PMTilesEntry(tileId, offset, length, 1);
+    default void forEachId(LongConsumer consumer) {
+        Objects.requireNonNull(consumer);
+        consumer.accept(tileId());
+        if (runLength() > 0) {
+            long max = tileId() + runLength();
+            for (long id = tileId() + 1; id < max; id++) {
+                consumer.accept(id);
+            }
+        }
     }
 
     /**
      * Creates a new PMTilesEntry with the specified runLength.
      *
-     * @param tileId the tile ID
-     * @param offset the offset of the tile data in the file
-     * @param length the length of the tile data
+     * @param tileId    the tile ID
+     * @param offset    the offset of the tile data in the file
+     * @param length    the length of the tile data
      * @param runLength the number of consecutive tiles with the same content
      * @return a new PMTilesEntry
      */
     public static PMTilesEntry of(long tileId, long offset, int length, int runLength) {
-        return new PMTilesEntry(tileId, offset, length, runLength);
-    }
-
-    /**
-     * Creates a new leaf directory entry.
-     * Leaf directory entries have a runLength of 0 to indicate they point to a subdirectory.
-     *
-     * @param tileId the tile ID
-     * @param offset the offset of the subdirectory in the file
-     * @param length the length of the subdirectory
-     * @return a new PMTilesEntry for a leaf directory
-     */
-    public static PMTilesEntry leaf(long tileId, long offset, int length) {
-        return new PMTilesEntry(tileId, offset, length, 0);
-    }
-
-    /**
-     * Checks if this entry is a leaf directory entry.
-     *
-     * @return true if this is a leaf directory entry, false otherwise
-     */
-    public boolean isLeaf() {
-        return runLength == 0;
-    }
-
-    /**
-     * Checks if this entry is empty.
-     * Empty entries are used to represent missing tiles.
-     *
-     * @return true if this entry is empty, false otherwise
-     */
-    public boolean isEmpty() {
-        return length == 0;
+        return PMTilesEntryImpl.of(tileId, offset, length, runLength);
     }
 
     /**
      * Compares this entry with another entry based on tile ID.
      *
      * @param other the entry to compare with
-     * @return a negative integer, zero, or a positive integer as this entry's tile ID
-     *         is less than, equal to, or greater than the other entry's tile ID
+     * @return a negative integer, zero, or a positive integer as this entry's tile
+     *         ID is less than, equal to, or greater than the other entry's tile ID
      */
     @Override
-    public int compareTo(PMTilesEntry other) {
-        return Long.compare(this.tileId, other.tileId);
+    default int compareTo(PMTilesEntry other) {
+        return Long.compare(this.tileId(), other.tileId());
+    }
+
+    /**
+     * @return true if this is a leaf directory entry, false if {@link #isTile()}
+     */
+    default boolean isLeaf() {
+        return runLength() == 0;
+    }
+
+    /**
+     * @return true if this is a tile entry (or multiple tiles entry, depending on
+     *         runLenght being 1 or > 1), false if {@link #isLeaf()}
+     */
+    default boolean isTile() {
+        return runLength() > 0;
+    }
+
+    static boolean equals(PMTilesEntry e1, PMTilesEntry e2) {
+        return e1.tileId() == e2.tileId()
+                && e1.offset() == e2.offset()
+                && e1.length() == e2.length()
+                && e1.runLength() == e2.runLength();
+    }
+
+    static int hashCode(PMTilesEntry e) {
+        int result = Long.hashCode(e.tileId());
+        result = 31 * result + Long.hashCode(e.offset());
+        result = 31 * result + Integer.hashCode(e.length());
+        result = 31 * result + Integer.hashCode(e.runLength());
+        return result;
     }
 }

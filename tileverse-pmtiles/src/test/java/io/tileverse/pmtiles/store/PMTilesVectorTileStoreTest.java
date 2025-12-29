@@ -19,6 +19,7 @@ import static io.tileverse.tiling.pyramid.TileIndex.xyz;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
+import io.tileverse.cache.CacheManager;
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
 import io.tileverse.jackson.databind.tilejson.v3.VectorLayer;
 import io.tileverse.pmtiles.PMTilesHeader;
@@ -52,14 +53,16 @@ class PMTilesVectorTileStoreTest {
     @TempDir
     private Path tmpFolder;
 
+    private CacheManager cacheManager;
     private PMTilesReader andorraReader;
     private PMTilesVectorTileStore andorraStore;
 
     @BeforeEach
     void setup() throws IOException {
         Path file = PMTilesTestData.andorra(tmpFolder);
-        andorraReader = new PMTilesReader(file);
-        andorraStore = new PMTilesVectorTileStore(andorraReader);
+        this.cacheManager = CacheManager.newInstance();
+        this.andorraReader = new PMTilesReader(file).cacheManager(cacheManager);
+        this.andorraStore = new PMTilesVectorTileStore(andorraReader).cacheManager(cacheManager);
     }
 
     @Test
@@ -188,18 +191,12 @@ class PMTilesVectorTileStoreTest {
         System.out.println(
                 "Total available indices: " + andorraReader.getTileIndices().count());
 
-        for (int z = andorraMatrixSet.minZoomLevel(); z <= 12 /*andorraMatrixSet.maxZoomLevel()*/; z++) {
-            System.out.println("--------------------------------------");
-            System.out.println("Zoom level " + z);
-
-            System.out.println("Available indices: "
-                    + andorraReader.getTileIndicesByZoomLevel(z).count());
+        for (int z = andorraMatrixSet.minZoomLevel(); z <= 14 /*andorraMatrixSet.maxZoomLevel()*/; z++) {
             andorraReader.getTileIndicesByZoomLevel(z).forEach(index -> {
                 try {
                     Optional<ByteBuffer> tile = andorraReader.getTile(index);
                     Optional<VectorTile> vectorTile = decode(tile);
-                    System.out.printf(
-                            "%s -> tile found: %s, decoded: %s %n", index, tile.isPresent(), vectorTile.isPresent());
+                    assertThat(vectorTile).isPresent();
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }
@@ -207,11 +204,6 @@ class PMTilesVectorTileStoreTest {
 
             TileMatrix zMatrix = andorraMatrixSet.getTileMatrix(z);
             TileRange zRange = zMatrix.tileRange();
-            System.out.println("Matrix at z=%d (%s to %s): ".formatted(z, zRange.first(), zRange.last()));
-            System.out.println("Available indices: %d".formatted(zRange.count()));
-            System.out.printf(
-                    "Covers PMTiles indices: %s%n",
-                    andorraReader.getTileIndicesByZoomLevel(z).noneMatch(i -> !zMatrix.contains(i)));
             TileIndex index = zRange.first();
             do {
                 assertExists(index);

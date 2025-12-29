@@ -34,7 +34,7 @@ import org.slf4j.LoggerFactory;
 class RangeReaderCache {
     private static final Logger log = LoggerFactory.getLogger("io.tileverse.rangereader.cache");
 
-    private static final String SHARED_CACHE_NAME = "tileverse-rangereader-cache";
+    static final String SHARED_CACHE_NAME = "tileverse-rangereader-cache";
 
     private static final int DEFAULT_MAX_HEAP_PERCENT = 20;
 

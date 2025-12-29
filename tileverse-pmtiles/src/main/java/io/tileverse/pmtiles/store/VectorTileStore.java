@@ -28,7 +28,7 @@ import java.util.stream.Stream;
 
 public abstract class VectorTileStore extends AbstractTileStore<VectorTile> {
 
-    public VectorTileStore(TileMatrixSet matrixSet) {
+    protected VectorTileStore(TileMatrixSet matrixSet) {
         super(matrixSet);
     }
 
@@ -57,8 +57,7 @@ public abstract class VectorTileStore extends AbstractTileStore<VectorTile> {
     protected Stream<TileData<VectorTile>> findTiles(VectorTilesQuery query) {
         final int zoomLevel = determineZoomLevel(query);
         final List<BoundingBox2D> queryExtent = query.extent();
-        Stream<TileData<VectorTile>> matchingTiles = findTiles(queryExtent, zoomLevel);
-        return matchingTiles;
+        return findTiles(queryExtent, zoomLevel);
     }
 
     protected int determineZoomLevel(VectorTilesQuery query) {

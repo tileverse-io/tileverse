@@ -22,11 +22,12 @@ import java.nio.file.Path;
 
 /**
  * Interface for writing PMTiles files.
+ * <p>This is work in progress, not ready for prime time
  * <p>
  * A PMTilesWriter is used to create PMTiles files by adding tiles and metadata,
  * then finalizing the file with the complete() method.
  */
-public interface PMTilesWriter extends Closeable {
+interface PMTilesWriter extends Closeable {
 
     /**
      * Adds a tile with the specified coordinates and data.

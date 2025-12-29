@@ -62,7 +62,7 @@ import java.util.Arrays;
  */
 public record PMTilesHeader(
         long rootDirOffset,
-        long rootDirBytes,
+        int rootDirBytes,
         long jsonMetadataOffset,
         long jsonMetadataBytes,
         long leafDirsOffset,
@@ -111,6 +111,16 @@ public record PMTilesHeader(
      */
     public byte version() {
         return VERSION;
+    }
+
+    public ByteRange rootDirectory() {
+        return ByteRange.of(rootDirOffset(), rootDirBytes());
+    }
+
+    public ByteRange jsonMetadata() {
+        final long offset = jsonMetadataOffset();
+        final int length = (int) jsonMetadataBytes();
+        return ByteRange.of(offset, length);
     }
 
     /**
@@ -216,16 +226,30 @@ public record PMTilesHeader(
         return out.toByteArray();
     }
 
-    private void writeInt64(ByteArrayOutputStream out, ByteBuffer buffer, long value) throws IOException {
+    private void writeInt64(ByteArrayOutputStream out, ByteBuffer buffer, long value) {
         buffer.clear();
         buffer.putLong(value);
         out.write(buffer.array(), 0, 8);
     }
 
-    private void writeInt32(ByteArrayOutputStream out, ByteBuffer buffer, int value) throws IOException {
+    private void writeInt32(ByteArrayOutputStream out, ByteBuffer buffer, int value) {
         buffer.clear();
         buffer.putInt(value);
         out.write(buffer.array(), 0, 4);
+    }
+
+    public static PMTilesHeader deserialize(ReadableByteChannel channel) throws IOException {
+        // Read the header
+        try (var pooledBuffer = ByteBufferPool.heapBuffer(HEADER_SIZE)) {
+            ByteBuffer buffer = pooledBuffer.buffer();
+            int bytesRead = channel.read(buffer);
+            if (bytesRead != 127) {
+                throw new InvalidHeaderException("Failed to read complete header. Read " + bytesRead + " bytes");
+            }
+            buffer.flip();
+            // Deserialize the header directly from the ByteBuffer
+            return deserialize(buffer);
+        }
     }
 
     /**
@@ -263,7 +287,7 @@ public record PMTilesHeader(
 
         return new PMTilesHeader(
                 dup.getLong(), // rootDirOffset
-                dup.getLong(), // rootDirBytes
+                (int) dup.getLong(), // rootDirBytes
                 dup.getLong(), // jsonMetadataOffset
                 dup.getLong(), // jsonMetadataBytes
                 dup.getLong(), // leafDirsOffset
@@ -321,7 +345,7 @@ public record PMTilesHeader(
      */
     public static class Builder {
         private long rootDirOffset = 127; // Default starts after header
-        private long rootDirBytes = 0;
+        private int rootDirBytes = 0;
         private long jsonMetadataOffset = 0;
         private long jsonMetadataBytes = 0;
         private long leafDirsOffset = 0;
@@ -361,7 +385,7 @@ public record PMTilesHeader(
          * @return this builder
          */
         public Builder rootDirBytes(long rootDirBytes) {
-            this.rootDirBytes = rootDirBytes;
+            this.rootDirBytes = (int) rootDirBytes;
             return this;
         }
 
@@ -694,19 +718,5 @@ public record PMTilesHeader(
         final long offset = tileDataOffset() + tileEntry.offset();
         final int length = tileEntry.length();
         return ByteRange.of(offset, length);
-    }
-
-    static PMTilesHeader readHeader(ReadableByteChannel channel) throws IOException, InvalidHeaderException {
-        // Read the header
-        try (var pooledBuffer = ByteBufferPool.heapBuffer(127)) {
-            ByteBuffer buffer = pooledBuffer.buffer();
-            int bytesRead = channel.read(buffer);
-            if (bytesRead != 127) {
-                throw new InvalidHeaderException("Failed to read complete header. Read " + bytesRead + " bytes");
-            }
-            buffer.flip();
-            // Deserialize the header directly from the ByteBuffer
-            return deserialize(buffer);
-        }
     }
 }

@@ -20,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.tileverse.cache.CacheManager;
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -44,9 +46,12 @@ class PMTilesWriterTest {
 
     private Path outputPath;
 
+    private CacheManager cacheManager;
+
     @BeforeEach
     void setup() {
-        outputPath = tempDir.resolve("test.pmtiles");
+        this.outputPath = tempDir.resolve("test.pmtiles");
+        this.cacheManager = CacheManager.newInstance();
     }
 
     @AfterEach
@@ -83,7 +88,8 @@ class PMTilesWriterTest {
         assertTrue(Files.size(outputPath) > 0);
 
         // Read the file back and verify the content
-        PMTilesReader reader = new PMTilesReader(outputPath);
+        @SuppressWarnings("resource")
+        PMTilesReader reader = new PMTilesReader(outputPath).cacheManager(cacheManager);
         PMTilesHeader header = reader.getHeader();
 
         // Check header values
@@ -94,7 +100,7 @@ class PMTilesWriterTest {
         assertEquals(1, header.addressedTilesCount());
 
         // Read the tile
-        Optional<ByteBuffer> readTileData = reader.getTile(0, 0, 0);
+        Optional<ByteBuffer> readTileData = reader.getTile(TileIndex.zxy(0, 0, 0));
         assertTrue(readTileData.isPresent());
         assertArrayEquals(tileData, readTileData.get());
     }
@@ -121,7 +127,8 @@ class PMTilesWriterTest {
         }
 
         // Read the file back and verify
-        PMTilesReader reader = new PMTilesReader(outputPath);
+        @SuppressWarnings("resource")
+        PMTilesReader reader = new PMTilesReader(outputPath).cacheManager(cacheManager);
         PMTilesHeader header = reader.getHeader();
 
         // Check header values
@@ -132,9 +139,9 @@ class PMTilesWriterTest {
         assertEquals(2, header.tileContentsCount());
 
         // Read the tiles
-        Optional<ByteBuffer> readTileData1 = reader.getTile(0, 0, 0);
-        Optional<ByteBuffer> readTileData2 = reader.getTile(1, 0, 0);
-        Optional<ByteBuffer> readTileData3 = reader.getTile(1, 0, 1);
+        Optional<ByteBuffer> readTileData1 = reader.getTile(TileIndex.zxy(0, 0, 0));
+        Optional<ByteBuffer> readTileData2 = reader.getTile(TileIndex.zxy(1, 0, 0));
+        Optional<ByteBuffer> readTileData3 = reader.getTile(TileIndex.zxy(1, 0, 1));
 
         assertTrue(readTileData1.isPresent());
         assertTrue(readTileData2.isPresent());

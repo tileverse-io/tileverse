@@ -19,6 +19,7 @@ import io.tileverse.vectortile.model.VectorTile.Layer.Feature;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
@@ -103,6 +104,8 @@ public interface VectorTile {
     default Stream<Feature> getFeatures() {
         return getLayers().stream().flatMap(Layer::getFeatures);
     }
+
+    OptionalInt serializedSize();
 
     /**
      * A named collection of vector features with shared coordinate space.

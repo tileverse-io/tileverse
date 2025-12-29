@@ -500,6 +500,7 @@ class PMTilesWriterImpl implements PMTilesWriter {
      * significantly reducing file size for repetitive data (e.g., ocean tiles).
      */
     private static class TileRegistry {
+        private final HilbertCurve hilbertCurve = new HilbertCurve();
         // Map of tile ID to content hash
         private final Map<Long, String> tileIdToHash = new TreeMap<>();
 
@@ -516,7 +517,7 @@ class PMTilesWriterImpl implements PMTilesWriter {
          * @param data the tile data
          */
         public void addTile(TileIndex tileIndex, byte[] data) {
-            long tileId = HilbertCurve.tileIndexToTileId(tileIndex);
+            long tileId = hilbertCurve.tileIndexToTileId(tileIndex);
             String hash = computeHash(data);
 
             tileIdToHash.put(tileId, hash);
@@ -589,7 +590,7 @@ class PMTilesWriterImpl implements PMTilesWriter {
                 } else {
                     // End the current run and start a new one
                     TileContent runContent = contentMap.get(runHash);
-                    entries.add(new PMTilesEntry(runStart, runContent.offset, runContent.data.length, (int) runLength));
+                    entries.add(PMTilesEntry.of(runStart, runContent.offset, runContent.data.length, (int) runLength));
 
                     runStart = tileId;
                     runHash = hash;
@@ -600,7 +601,7 @@ class PMTilesWriterImpl implements PMTilesWriter {
             // Add the last run
             if (runStart != -1) {
                 TileContent runContent = contentMap.get(runHash);
-                entries.add(new PMTilesEntry(runStart, runContent.offset, runContent.data.length, (int) runLength));
+                entries.add(PMTilesEntry.of(runStart, runContent.offset, runContent.data.length, (int) runLength));
             }
 
             return entries;

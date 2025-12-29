@@ -19,6 +19,7 @@ import static java.util.Objects.requireNonNull;
 
 import io.tileverse.tiling.common.CornerOfOrigin;
 import java.util.Comparator;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -284,7 +285,17 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     default Stream<TileIndex> all() {
-        return Stream.iterate(first(), prev -> this.next(prev).orElseThrow()).limit(count());
+        TileIndex first = first();
+        long count = count();
+        return Stream.iterate(first, this::nextOrNull).filter(Objects::nonNull).limit(count);
+    }
+
+    private TileIndex nextOrNull(TileIndex prev) {
+        if (prev == null) {
+            return null;
+        }
+        Optional<TileIndex> next = this.next(prev);
+        return next.orElse(null);
     }
 
     /**

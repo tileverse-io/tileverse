@@ -22,7 +22,7 @@ import io.tileverse.tiling.matrix.TileMatrixSet;
 public abstract class AbstractTileStore<T> implements TileStore<T> {
     protected TileMatrixSet matrixSet;
 
-    public AbstractTileStore(TileMatrixSet matrixSet) {
+    protected AbstractTileStore(TileMatrixSet matrixSet) {
         this.matrixSet = requireNonNull(matrixSet);
     }
 

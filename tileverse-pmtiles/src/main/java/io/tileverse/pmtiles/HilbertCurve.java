@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *          http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,22 +16,35 @@
 package io.tileverse.pmtiles;
 
 import io.tileverse.tiling.pyramid.TileIndex;
+import java.util.Arrays;
 
 /**
- * Hilbert curve algorithms for PMTiles tile ID encoding/decoding.
+ * High-performance Hilbert curve implementation for PMTiles tile ID encoding/decoding.
  *
- * <p>PMTiles uses a Hilbert curve to convert 2D tile coordinates (x,y,z) into
- * a single tile ID that preserves spatial locality. This implementation provides
- * the conversion methods needed for PMTiles compatibility.
+ * <p>
+ * PMTiles uses a Hilbert curve to map 2D tile coordinates (x, y, z) into a single scalar
+ * "Tile ID". This preserves spatial locality: tiles that are close geographically are
+ * likely to have close Tile IDs, optimizing storage layout and range requests.
  *
- * <p>The implementation includes both the standard reference algorithm and an
- * optimized version based on the BareMaps/flatgeobuf approach.
+ * <p>
+ * <strong>Performance Notes:</strong>
+ * <ul>
+ * <li>This class is zero-allocation (except for the final {@link TileIndex} result).</li>
+ * <li>All coordinate math uses inlined primitive operations to facilitate JIT loop unrolling.</li>
+ * <li>Zoom level lookup uses binary search rather than linear scan.</li>
+ * </ul>
+ * * <p>
+ * This implementation assumes {@link TileIndex} will become a Value Object in future JDKs (Project Valhalla).
  */
-class HilbertCurve {
+final class HilbertCurve {
 
     /**
-     * Pre-computed values for tile count accumulation across zoom levels.
-     * TZ_VALUES[z] represents the total number of tiles in zoom levels 0 through z-1.
+     * Pre-computed offsets for the start of each zoom level.
+     * <p>
+     * {@code TZ_VALUES[z]} is the cumulative count of all tiles in levels {@code 0} through {@code z-1}.
+     * Effectively, it is the Tile ID of the first tile at zoom level {@code z} (coordinate 0,0).
+     * <p>
+     * Max supported Zoom: 26.
      */
     private static final long[] TZ_VALUES = {
         0L,
@@ -63,132 +76,149 @@ class HilbertCurve {
         1501199875790165L
     };
 
-    private HilbertCurve() {
-        // Utility class
-    }
-
     /**
-     * Converts tile coordinates to a PMTiles tile ID using Hilbert curve encoding.
+     * Decodes a scalar PMTiles Tile ID into (z, x, y) coordinates.
      *
-     * @param tileIndex the tile coordinates
-     * @return the PMTiles tile ID
-     * @throws IllegalArgumentException if the zoom level exceeds limits
-     */
-    public static long tileIndexToTileId(TileIndex tileIndex) {
-        return zxyToTileId(tileIndex.z(), tileIndex.x(), tileIndex.y());
-    }
-
-    /**
-     * Converts a PMTiles tile ID back to tile coordinates using Hilbert curve decoding.
+     * <p>
+     * This method determines the zoom level via binary search, validates bounds,
+     * and performs the inverse Hilbert mapping to reconstruct the 2D position.
      *
-     * @param tileId the PMTiles tile ID
-     * @return the tile coordinates
-     * @throws IllegalArgumentException if the tile ID is invalid
+     * @param tileId the global PMTiles identifier (must be positive).
+     * @return the decoded {@link TileIndex}.
+     * @throws IllegalArgumentException if {@code tileId} is negative or exceeds the max zoom limit.
      */
-    public static TileIndex tileIdToTileIndex(long tileId) {
-        long[] zxy = tileIdToZxy(tileId);
-        return TileIndex.xyz(zxy[1], zxy[2], (int) zxy[0]);
-    }
-
-    /**
-     * Converts z,x,y coordinates to a PMTiles tile ID using Hilbert curve encoding.
-     * This matches the PMTiles specification exactly.
-     *
-     * @param z the zoom level
-     * @param x the X coordinate
-     * @param y the Y coordinate
-     * @return the PMTiles tile ID
-     * @throws IllegalArgumentException if coordinates are invalid
-     */
-    public static long zxyToTileId(int z, long x, long y) {
-        if (z > 26) {
-            throw new IllegalArgumentException("Tile zoom level exceeds max safe number limit (26)");
-        }
-        if (x > Math.pow(2, z) - 1 || y > Math.pow(2, z) - 1) {
-            throw new IllegalArgumentException("tile x/y outside zoom level bounds");
-        }
-
-        long acc = TZ_VALUES[z];
-        long n = 1L << z;
-        long rx, ry, d = 0;
-        long[] xy = {x, y};
-
-        for (long s = n / 2; s > 0; s /= 2) {
-            rx = (xy[0] & s) > 0 ? 1 : 0;
-            ry = (xy[1] & s) > 0 ? 1 : 0;
-            d += s * s * ((3 * rx) ^ ry);
-            rotate(s, xy, rx, ry);
-        }
-
-        return acc + d;
-    }
-
-    /**
-     * Converts a PMTiles tile ID back to z,x,y coordinates.
-     *
-     * @param tileId the PMTiles tile ID
-     * @return array containing [z, x, y]
-     * @throws IllegalArgumentException if tile ID is invalid
-     */
-    public static long[] tileIdToZxy(long tileId) {
+    public TileIndex tileIdToTileIndex(long tileId) {
         if (tileId < 0) {
             throw new IllegalArgumentException("Tile ID cannot be negative: " + tileId);
         }
 
-        long acc = 0;
-        for (int z = 0; z < 27; z++) {
-            long numTiles = (1L << z) * (1L << z);
-            if (acc + numTiles > tileId) {
-                return idOnLevel(z, tileId - acc);
-            }
-            acc += numTiles;
+        // Optimization 1: Binary Search for Zoom Level instead of linear scan.
+        // This reduces complexity from O(Z) to O(log Z), crucial for high-throughput lookups.
+        int z = Arrays.binarySearch(TZ_VALUES, tileId);
+        if (z < 0) {
+            // Arrays.binarySearch returns (-(insertion point) - 1).
+            // We need the index of the start of the range (the value just <= tileId).
+            z = -z - 2;
         }
-        throw new IllegalArgumentException("Tile zoom level exceeds max safe number limit (26)");
-    }
 
-    /**
-     * Convert a position to z, x, y coordinates at a specific zoom level.
-     *
-     * @param z the zoom level
-     * @param pos the position on the Hilbert curve
-     * @return array containing [z, x, y]
-     */
-    private static long[] idOnLevel(int z, long pos) {
+        checkBounds(tileId, z);
+
+        // Optimization 2: Primitive-only logic (Zero Allocation).
+        // Using local variables ensures variables stay on the stack/registers.
+        long rx;
+        long ry;
+        long t;
+        long tmp;
+        long x = 0;
+        long y = 0;
+
+        // Calculate the relative position of the ID within its specific zoom level.
+        t = tileId - TZ_VALUES[z];
+
+        // n is the dimension of the grid at this zoom level (2^z).
+        // We loop 's' through powers of 2 (1, 2, 4...) until we reach n.
         long n = 1L << z;
-        long rx, ry, t = pos;
-        long[] xy = {0, 0};
 
-        for (long s = 1; s < n; s *= 2) {
-            rx = 1 & (t / 2);
-            ry = 1 & (t ^ rx);
-            rotate(s, xy, rx, ry);
-            xy[0] += s * rx;
-            xy[1] += s * ry;
-            t /= 4;
+        for (long s = 1; s < n; s <<= 1) {
+            rx = 1 & (t >> 1); // Extract bit for X component
+            ry = 1 & (t ^ rx); // Extract bit for Y component
+
+            // Rotate/Flip quadrant if necessary
+            if (ry == 0) {
+                if (rx == 1) {
+                    x = (s - 1) - x;
+                    y = (s - 1) - y;
+                }
+                // Swap x and y
+                tmp = x;
+                x = y;
+                y = tmp;
+            }
+
+            // Accumulate coordinates
+            x += s * rx;
+            y += s * ry;
+            t >>= 2; // Move to next pair of bits
         }
 
-        return new long[] {z, xy[0], xy[1]};
+        return TileIndex.xyz(x, y, z);
     }
 
     /**
-     * Rotate coordinates using Hilbert curve rotation.
-     * This method properly modifies the coordinates in place.
-     *
-     * @param n the size of the quadrant
-     * @param xy the coordinates to rotate (modified in place)
-     * @param rx the x transform
-     * @param ry the y transform
+     * Validates that the given {@code tileId} actually falls within the range of the detected zoom level {@code z}.
+     * * @param tileId the input tile ID.
+     * @param z the zoom level detected by binary search.
      */
-    private static void rotate(long n, long[] xy, long rx, long ry) {
-        if (ry == 0) {
-            if (rx == 1) {
-                xy[0] = n - 1 - xy[0];
-                xy[1] = n - 1 - xy[1];
-            }
-            // Swap x and y
-            long t = xy[0];
-            xy[0] = xy[1];
-            xy[1] = t;
+    private void checkBounds(long tileId, int z) {
+        if (z >= TZ_VALUES.length) {
+            throw new IllegalArgumentException("Tile ID exceeds max supported zoom limit (26)");
         }
+
+        // Calculate the relative ID (index within the specific zoom level).
+        long levelStart = TZ_VALUES[z];
+        long relativeId = tileId - levelStart;
+
+        // Max tiles in level z is 4^z.
+        // 4^z == (2^2)^z == 2^(2z) == 1 << (2*z).
+        // For z=26, 1L << 52 is valid.
+        long maxTilesInLevel = 1L << (z * 2);
+
+        if (relativeId >= maxTilesInLevel) {
+            throw new IllegalArgumentException("Tile ID " + tileId + " is too large for zoom level " + z);
+        }
+    }
+
+    /**
+     * Encodes (z, x, y) coordinates into a scalar PMTiles Tile ID.
+     *
+     * <p>
+     * This performs the forward Hilbert curve mapping.
+     *
+     * @param tileIndex the tile coordinates.
+     * @return the scalar PMTiles ID.
+     * @throws IllegalArgumentException if the zoom level > 26 or x/y are out of bounds.
+     */
+    public long tileIndexToTileId(TileIndex tileIndex) {
+        final int z = tileIndex.z();
+        long x = tileIndex.x();
+        long y = tileIndex.y();
+
+        if (z > 26) {
+            throw new IllegalArgumentException("Zoom level " + z + " exceeds limit (26)");
+        }
+
+        final long n = 1L << z; // Equivalent to Math.pow(2, z)
+        if (x >= n || y >= n) {
+            throw new IllegalArgumentException("x/y out of bounds for zoom level " + z);
+        }
+
+        long d = 0;
+        long rx;
+        long ry;
+        long tmp;
+
+        // Iterate from the most significant bit (n/2) down to 1.
+        for (long s = n >> 1; s > 0; s >>= 1) {
+            rx = (x & s) > 0 ? 1 : 0;
+            ry = (y & s) > 0 ? 1 : 0;
+
+            // Update the Hilbert distance 'd' based on the quadrant.
+            // Formula: d += s^2 * ((3 * rx) ^ ry)
+            d += s * s * ((3 * rx) ^ ry);
+
+            // Rotate/Flip quadrant if necessary to match Hilbert orientation
+            if (ry == 0) {
+                if (rx == 1) {
+                    x = (s - 1) - x;
+                    y = (s - 1) - y;
+                }
+                // Swap x and y
+                tmp = x;
+                x = y;
+                y = tmp;
+            }
+        }
+
+        return TZ_VALUES[z] + d;
     }
 }

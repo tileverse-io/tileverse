@@ -170,8 +170,7 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
      * @return true if the objects are equal, false otherwise
      */
     static boolean tilesEqual(TileIndex tile1, TileIndex tile2) {
-        if (tile1 == tile2) return true;
-        return tile1.z() == tile2.z() && tile1.x() == tile2.x() && tile1.y() == tile2.y();
+        return (tile1 == tile2) || (tile1.z() == tile2.z() && tile1.x() == tile2.x() && tile1.y() == tile2.y());
     }
 
     /**
@@ -182,6 +181,9 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
      * @return the hash code
      */
     static int tilesHashCode(TileIndex tile) {
-        return Long.hashCode(tile.x()) ^ Long.hashCode(tile.y()) ^ Integer.hashCode(tile.z());
+        int result = Long.hashCode(tile.x());
+        result = 31 * result + Long.hashCode(tile.y());
+        result = 31 * result + Integer.hashCode(tile.z());
+        return result;
     }
 }

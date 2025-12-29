@@ -15,25 +15,35 @@
  */
 package io.tileverse.pmtiles;
 
-import java.io.ByteArrayInputStream;
+import io.tileverse.io.ByteBufferPool;
+import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
+import io.tileverse.io.ByteRange;
+import io.tileverse.io.IOFunction;
 import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.SeekableByteChannel;
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.commons.compress.compressors.CompressorException;
 import org.apache.commons.compress.compressors.brotli.BrotliCompressorInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
 import org.apache.commons.compress.compressors.zstandard.ZstdCompressorInputStream;
 import org.apache.commons.compress.compressors.zstandard.ZstdCompressorOutputStream;
-import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.input.BoundedInputStream;
 
 /**
  * Utility class for compressing and decompressing data using various
  * compression algorithms.
  */
-public final class CompressionUtil {
+final class CompressionUtil {
 
     private CompressionUtil() {
         // Prevent instantiation
@@ -49,8 +59,7 @@ public final class CompressionUtil {
      * @throws UnsupportedCompressionException if the compression type is not
      *                                         supported
      */
-    public static byte[] compress(byte[] data, byte compressionType)
-            throws IOException, UnsupportedCompressionException {
+    public static byte[] compress(byte[] data, byte compressionType) throws IOException {
         if (compressionType == PMTilesHeader.COMPRESSION_NONE) {
             return data;
         }
@@ -64,60 +73,181 @@ public final class CompressionUtil {
         return outputStream.toByteArray();
     }
 
-    public static ByteBuffer decompress(ByteBuffer buffer, byte compression)
-            throws UnsupportedCompressionException, IOException {
+    public static ByteBuffer decompress(SeekableByteChannel channel, ByteRange range, byte compressionType)
+            throws IOException {
 
-        final int compressedLength = buffer.remaining();
-
-        if (buffer.hasArray() && compression != PMTilesHeader.COMPRESSION_NONE) {
-            // For compressed data, we can safely use the backing array since decompress will create new data
-            final int offset = buffer.position();
-            final byte[] compressed = buffer.array();
-            return decompress(compressed, offset, compressedLength, compression);
+        if (compressionType == PMTilesHeader.COMPRESSION_NONE) {
+            ByteBuffer target = ByteBuffer.allocate(range.length());
+            channel.position(range.offset());
+            int read = fill(channel, target);
+            if (read < range.length()) {
+                throw new EOFException();
+            }
+            return target.rewind();
         }
 
-        // For uncompressed data or non-array buffers, create a copy to avoid sharing backing arrays
-        byte[] compressed = new byte[compressedLength];
-        buffer.get(compressed);
-        return decompress(compressed, 0, compressedLength, compression);
+        final int tmpBuffSize = range.length() * 4;
+        List<PooledByteBuffer> pooledBuffers = List.of();
+        try (ReadableByteChannel decompressingChannel = decompressingChannel(channel, range, compressionType);
+                PooledByteBuffer pooledBuffer = ByteBufferPool.directBuffer(tmpBuffSize)) {
+
+            ByteBuffer tmpBuff = pooledBuffer.buffer();
+            int read = fill(decompressingChannel, tmpBuff);
+            if (tmpBuff.hasRemaining()) {
+                // channel exhausted at the first try, return fast
+                tmpBuff.flip();
+                return ByteBuffer.allocate(read).put(tmpBuff).rewind();
+            }
+
+            pooledBuffers = new ArrayList<>();
+            pooledBuffers.add(pooledBuffer);
+            do {
+                PooledByteBuffer pb = ByteBufferPool.directBuffer(tmpBuffSize);
+                pooledBuffers.add(pb);
+                tmpBuff = pb.buffer();
+                read = fill(decompressingChannel, tmpBuff);
+            } while (!tmpBuff.hasRemaining());
+            return flipAndCopy(pooledBuffers);
+        } finally {
+            if (!pooledBuffers.isEmpty()) {
+                pooledBuffers.forEach(PooledByteBuffer::close);
+                pooledBuffers.clear();
+            }
+        }
+    }
+
+    public static <D> D decompressAndTransform(
+            SeekableByteChannel channel, ByteRange range, byte compressionType, IOFunction<ByteBuffer, D> mapper)
+            throws IOException {
+
+        int targetBufferMultiplier;
+        if (compressionType == PMTilesHeader.COMPRESSION_NONE) {
+            targetBufferMultiplier = 1;
+        } else {
+            targetBufferMultiplier = 4;
+        }
+        try {
+            return decompressAndTransform(channel, range, compressionType, mapper, targetBufferMultiplier);
+        } catch (BufferOverflowException boe) {
+            targetBufferMultiplier = 8;
+            return decompressAndTransform(channel, range, compressionType, mapper, targetBufferMultiplier);
+        }
     }
 
     /**
-     * Decompresses data using the specified compression type.
-     *
-     * @param data            the data to decompress
-     * @param compressionType the compression type used
-     * @return the decompressed data
-     * @throws IOException                     if an I/O error occurs
-     * @throws UnsupportedCompressionException if the compression type is not
-     *                                         supported
+     * @throws IOException
+     * @throws BufferOverflowException
      */
-    public static ByteBuffer decompress(byte[] data, int offset, int length, byte compressionType)
-            throws IOException, UnsupportedCompressionException {
-        if (compressionType == PMTilesHeader.COMPRESSION_NONE) {
-            return ByteBuffer.wrap(data, offset, length);
+    private static <D> D decompressAndTransform(
+            SeekableByteChannel channel,
+            ByteRange range,
+            byte compressionType,
+            IOFunction<ByteBuffer, D> mapper,
+            int targetBufferMultiplier)
+            throws IOException {
+
+        final int tmpBuffSize = targetBufferMultiplier * range.length();
+        try (PooledByteBuffer pooledBuff = ByteBufferPool.directBuffer(tmpBuffSize)) {
+            ByteBuffer targetBuffer = pooledBuff.buffer();
+            decompressInto(channel, range, compressionType, targetBuffer);
+            targetBuffer.flip();
+            return mapper.apply(targetBuffer);
         }
-
-        ByteArrayInputStream inputStream = new ByteArrayInputStream(data, offset, length);
-        ByteArrayOutputStreamInternal outputStream = new ByteArrayOutputStreamInternal(4 * length);
-
-        try (InputStream decompressor = createDecompressor(inputStream, compressionType)) {
-            IOUtils.copy(decompressor, outputStream);
-        } catch (CompressorException e) {
-            throw new IOException("Failed to create decompressor", e);
-        }
-
-        return ByteBuffer.wrap(outputStream.bytes()).limit(outputStream.size());
     }
 
-    private static class ByteArrayOutputStreamInternal extends ByteArrayOutputStream {
-        ByteArrayOutputStreamInternal(int initialSize) {
-            super(initialSize);
+    /**
+     *
+     * @param channel
+     * @param range
+     * @param compressionType
+     * @param target
+     * @throws IOException
+     * @throws BufferOverflowException
+     */
+    public static void decompressInto(
+            SeekableByteChannel channel, ByteRange range, byte compressionType, ByteBuffer target) throws IOException {
+
+        if (compressionType == PMTilesHeader.COMPRESSION_NONE) {
+            channel.position(range.offset());
+            int read = fill(channel, target);
+            if (read < range.length()) {
+                throw new EOFException();
+            }
         }
 
-        public byte[] bytes() {
-            return super.buf;
+        try (ReadableByteChannel decompressingChannel = decompressingChannel(channel, range, compressionType)) {
+            int read = fill(decompressingChannel, target);
+            if (target.hasRemaining()) {
+                // channel exhausted, return
+                return;
+            }
+            // if there's more bytes to read, throw BufferOverflowException
+            try (PooledByteBuffer pb = ByteBufferPool.heapBuffer(1)) {
+                read = channel.read(pb.buffer());
+                if (read > 0) {
+                    throw new BufferOverflowException();
+                }
+            }
         }
+    }
+
+    private static ByteBuffer flipAndCopy(List<PooledByteBuffer> pooledBuffers) {
+        // flip all buffers and compute required final size
+        final int size = pooledBuffers.stream()
+                .map(PooledByteBuffer::buffer)
+                .map(ByteBuffer::flip)
+                .mapToInt(ByteBuffer::limit)
+                .sum();
+        ByteBuffer buff = ByteBuffer.allocate(size);
+        for (PooledByteBuffer pb : pooledBuffers) {
+            buff.put(pb.buffer());
+        }
+        return buff.rewind();
+    }
+
+    private static int fill(ReadableByteChannel channel, ByteBuffer target) throws IOException {
+        int total = 0;
+        while (target.hasRemaining()) {
+            int count = channel.read(target);
+            if (count == -1) {
+                break;
+            }
+            total += count;
+        }
+        return total;
+    }
+
+    public static InputStream decompress(InputStream compressed, byte compressionType) throws IOException {
+        if (compressionType == PMTilesHeader.COMPRESSION_NONE) {
+            return compressed;
+        }
+        return createDecompressor(compressed, compressionType);
+    }
+
+    static ReadableByteChannel decompressingChannel(
+            SeekableByteChannel channel, ByteRange byteRange, byte compressionType) throws IOException {
+
+        InputStream in = decompressingInputStream(channel, byteRange, compressionType);
+        return Channels.newChannel(in);
+    }
+
+    public static InputStream decompressingInputStream(
+            SeekableByteChannel channel, ByteRange byteRange, byte compressionType) throws IOException {
+
+        final int size = byteRange.length();
+
+        SeekableByteChannel positionedChannel = channel.position(byteRange.offset());
+        BoundedInputStream boundedInputStream = boundedInputStream(positionedChannel, size);
+        return decompress(boundedInputStream, compressionType);
+    }
+
+    private static BoundedInputStream boundedInputStream(SeekableByteChannel positionedChannel, final int maxCount)
+            throws IOException {
+        return BoundedInputStream.builder()
+                .setInputStream(Channels.newInputStream(positionedChannel))
+                .setMaxCount(maxCount)
+                .setPropagateClose(false) // we don't own the channel
+                .get();
     }
 
     /**
@@ -130,8 +260,7 @@ public final class CompressionUtil {
      * @throws UnsupportedCompressionException if the compression type is not
      *                                         supported
      */
-    private static OutputStream createCompressor(OutputStream outputStream, byte compressionType)
-            throws IOException, UnsupportedCompressionException {
+    private static OutputStream createCompressor(OutputStream outputStream, byte compressionType) throws IOException {
         return switch (compressionType) {
             case PMTilesHeader.COMPRESSION_NONE -> outputStream;
             case PMTilesHeader.COMPRESSION_GZIP -> new GzipCompressorOutputStream(outputStream);
@@ -153,8 +282,7 @@ public final class CompressionUtil {
      * @throws UnsupportedCompressionException if the compression type is not
      *                                         supported
      */
-    private static InputStream createDecompressor(InputStream inputStream, byte compressionType)
-            throws IOException, CompressorException, UnsupportedCompressionException {
+    private static InputStream createDecompressor(InputStream inputStream, byte compressionType) throws IOException {
         return switch (compressionType) {
             case PMTilesHeader.COMPRESSION_NONE ->
                 throw new IllegalArgumentException("Cannot create decompressor for COMPRESSION_NONE");

@@ -15,54 +15,48 @@
  */
 package io.tileverse.pmtiles;
 
-import java.nio.ByteBuffer;
 import java.util.Iterator;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
+import java.util.Spliterator;
+import java.util.stream.Stream;
 
 /**
- * Represents a directory of PMTiles entries.
+ * A directory is simply a list of {@link PMTilesEntry entries}. Each entry
+ * describes either where a specific tile can be found in the tile data section
+ * or where a leaf directory can be found in the leaf directories section.
  * <p>
- * A directory is a collection of {@link PMTilesEntry} objects, either stored in memory
- * as a list or backed by a ByteBuffer. This class provides methods to access entries
- * and iterate over them.
+ * The number of entries in the root directory and in the leaf directories is
+ * left to the implementation and can vary depending on what the writer has
+ * optimized for (cost, bandwidth, latency, etc.). However, the size of the
+ * header plus the compressed size of the root directory MUST NOT exceed
+ * {@code 16384} bytes to allow latency-optimized clients to retrieve the root
+ * directory in its entirety. Therefore, the maximum compressed size of the root
+ * directory is {@code 16257} bytes ({@code 16384 - 127} bytes). A sophisticated
+ * writer might need several attempts to optimize this.
  * <p>
- * This class is package-private as it is an internal detail of the PMTiles implementation.
+ * The order of leaf directories SHOULD be ascending by starting TileID. It is
+ * discouraged to create an archive with more than one level of leaf
+ * directories. If you are implementing a writer and discover this need, please
+ * open an issue.
+ * <p>
+ * This class provides methods to access entries and iterate over them.
  */
-class PMTilesDirectory implements Iterable<PMTilesEntry> {
-
-    private final int size;
-    private final ByteBuffer unpacked;
-
-    /**
-     * Constructs a PMTilesDirectory from a buffer of unpacked entries.
-     *
-     * @param size the number of entries in the directory
-     * @param unpackedEntries the buffer containing the unpacked entries
-     */
-    PMTilesDirectory(int size, ByteBuffer unpackedEntries) {
-        this.size = size;
-        this.unpacked = unpackedEntries;
-    }
-
-    /**
-     * Creates a builder for creating a new PMTilesDirectory.
-     *
-     * @param numEntries the number of entries the directory will contain
-     * @return a new Builder instance
-     */
-    static Builder builder(int numEntries) {
-        return new Builder(numEntries);
-    }
+public interface PMTilesDirectory extends Iterable<PMTilesEntry> {
 
     /**
      * Returns the number of entries in this directory.
      *
-     * @return the number of entries
+     * @return the number of entries, greater than zero
      */
-    public int size() {
-        return size;
-    }
+    int size();
+
+    /**
+     * Finds the index of the entry with the given tileId using binary search.
+     * This method allocates NO memory.
+     *
+     * @param tileId the tile ID to search for
+     * @return the index of the entry, or -1 if not found
+     */
+    int findEntryIndex(long tileId);
 
     /**
      * Retrieves the entry at the specified index.
@@ -70,143 +64,40 @@ class PMTilesDirectory implements Iterable<PMTilesEntry> {
      * @param index the index of the entry to retrieve
      * @return the PMTilesEntry at the specified index
      */
-    public PMTilesEntry get(int index) {
-        ByteBuffer entry = PMTilesDirectory.entry(unpacked, index);
-        long tileId = PMTilesEntry.getId(entry);
-        long offset = PMTilesEntry.getOffset(entry);
-        int length = PMTilesEntry.getLength(entry);
-        int runLength = PMTilesEntry.getRunLength(entry);
-        return new PMTilesEntry(tileId, offset, length, runLength);
-    }
+    PMTilesEntry getEntry(int index);
 
-    @Override
-    public Iterator<PMTilesEntry> iterator() {
-        return IntStream.range(0, size).mapToObj(this::get).iterator();
-    }
+    long getTileId(int index);
 
-    @Override
-    public String toString() {
-        String ids = IntStream.range(0, Math.min(size, 10))
-                .mapToObj(i -> entry(unpacked, i))
-                .mapToLong(PMTilesEntry::getId)
-                .mapToObj(String::valueOf)
-                .collect(Collectors.joining(","));
-        return "%s[size: %,d, unpacked size: %,d, tileIds: %s]"
-                .formatted(getClass().getSimpleName(), size, unpacked.capacity(), ids);
-    }
+    long getOffset(int index);
+
+    int getLength(int index);
+
+    int getRunLength(int index);
+
+    Iterator<PMTilesEntry> iterator();
+
+    Spliterator<PMTilesEntry> spliterator();
+
+    PMTilesEntry firstEntry();
+
+    PMTilesEntry lastEntry();
 
     /**
-     * Helper method to get a slice of the ByteBuffer corresponding to a specific entry.
-     *
-     * @param unpacked the buffer containing all entries
-     * @param index the index of the entry
-     * @return a ByteBuffer slice for the entry
+     * @return all entries
      */
-    static ByteBuffer entry(ByteBuffer unpacked, int index) {
-        int len = PMTilesEntry.SERIALIZED_SIZE;
-        int offset = len * index;
-        return unpacked.slice(offset, len);
-    }
+    Stream<PMTilesEntry> entries();
 
     /**
-     * Builder for creating PMTilesDirectory instances.
+     * @return only directory entries
      */
-    static class Builder {
+    Stream<PMTilesEntry> directoryEntries();
 
-        private final int numEntries;
-        private final ByteBuffer unpacked;
+    int numDirectoryEntries();
 
-        /**
-         * Constructs a new Builder.
-         *
-         * @param numEntries the number of entries to be added
-         */
-        public Builder(int numEntries) {
-            this.numEntries = numEntries;
-            this.unpacked = ByteBuffer.allocate(numEntries * PMTilesEntry.SERIALIZED_SIZE);
-        }
+    /**
+     * @return only tile entries
+     */
+    Stream<PMTilesEntry> tileEntries();
 
-        /**
-         * Sets the tile ID for the entry at the specified index.
-         *
-         * @param index the index of the entry
-         * @param tileId the tile ID
-         * @return this builder
-         */
-        public Builder tileId(int index, long tileId) {
-            ByteBuffer entry = PMTilesDirectory.entry(unpacked, index);
-            PMTilesEntry.setId(entry, tileId);
-            return this;
-        }
-
-        /**
-         * Sets the run length for the entry at the specified index.
-         *
-         * @param index the index of the entry
-         * @param runLength the run length
-         * @return this builder
-         */
-        public Builder runLength(int index, int runLength) {
-            ByteBuffer entry = PMTilesDirectory.entry(unpacked, index);
-            PMTilesEntry.setRunLength(entry, runLength);
-            return this;
-        }
-
-        /**
-         * Sets the offset for the entry at the specified index.
-         *
-         * @param index the index of the entry
-         * @param offset the offset
-         * @return this builder
-         */
-        public Builder offset(int index, long offset) {
-            ByteBuffer entry = PMTilesDirectory.entry(unpacked, index);
-            PMTilesEntry.setOffset(entry, offset);
-            return this;
-        }
-
-        /**
-         * Sets the length for the entry at the specified index.
-         *
-         * @param index the index of the entry
-         * @param length the length
-         * @return this builder
-         */
-        public Builder length(int index, int length) {
-            ByteBuffer entry = PMTilesDirectory.entry(unpacked, index);
-            PMTilesEntry.setLength(entry, length);
-            return this;
-        }
-
-        /**
-         * Gets the offset of the entry at the specified index.
-         *
-         * @param index the index of the entry
-         * @return the offset
-         */
-        public long getOffset(int index) {
-            ByteBuffer entry = PMTilesDirectory.entry(unpacked, index);
-            return PMTilesEntry.getOffset(entry);
-        }
-
-        /**
-         * Gets the length of the entry at the specified index.
-         *
-         * @param index the index of the entry
-         * @return the length
-         */
-        public int getLength(int index) {
-            ByteBuffer entry = PMTilesDirectory.entry(unpacked, index);
-            return PMTilesEntry.getLength(entry);
-        }
-
-        /**
-         * Builds the PMTilesDirectory.
-         *
-         * @return the constructed PMTilesDirectory
-         */
-        public PMTilesDirectory build() {
-            return new PMTilesDirectory(numEntries, unpacked);
-        }
-    }
+    int numTileEntries();
 }

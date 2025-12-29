@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.tileverse.cache.CacheManager;
 import io.tileverse.cache.CacheStats;
 import io.tileverse.rangereader.file.FileRangeReader;
 import java.io.IOException;
@@ -26,6 +27,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Random;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -36,17 +38,25 @@ import org.junit.jupiter.api.io.TempDir;
 class CacheStatsTest {
 
     @TempDir
-    Path tempDir;
+    private Path tempDir;
 
     private Path testFile;
     private static final int FILE_SIZE = 10_000;
     private static final byte[] TEST_DATA = new byte[FILE_SIZE];
+
+    private CacheManager cacheManager;
 
     @BeforeEach
     void setUp() throws IOException {
         testFile = tempDir.resolve("test.bin");
         new Random(42).nextBytes(TEST_DATA);
         Files.write(testFile, TEST_DATA);
+        cacheManager = CacheManager.newInstance();
+    }
+
+    @AfterEach
+    void cleanUp() {
+        cacheManager.invalidateAll();
     }
 
     @Test
@@ -54,8 +64,9 @@ class CacheStatsTest {
         // Test both caching readers have consistent APIs
         FileRangeReader baseReader = FileRangeReader.builder().path(testFile).build();
 
-        try (CachingRangeReader memoryCache =
-                        CachingRangeReader.builder(baseReader).build();
+        try (CachingRangeReader memoryCache = CachingRangeReader.builder(baseReader)
+                        .cacheManager(cacheManager)
+                        .build();
                 DiskCachingRangeReader diskCache = DiskCachingRangeReader.builder(baseReader)
                         .cacheDirectory(tempDir.resolve("cache"))
                         .build()) {
@@ -99,7 +110,9 @@ class CacheStatsTest {
         // Test the factory method by using a real cache and getting its stats
         FileRangeReader baseReader = FileRangeReader.builder().path(testFile).build();
 
-        try (CachingRangeReader reader = CachingRangeReader.builder(baseReader).build()) {
+        try (CachingRangeReader reader = CachingRangeReader.builder(baseReader)
+                .cacheManager(cacheManager)
+                .build()) {
             // Generate some cache activity
             ByteBuffer buff = ByteBuffer.allocate(2048);
             reader.readRange(1000, 500, buff); // miss

@@ -17,6 +17,7 @@ package io.tileverse.pmtiles;
 
 import static io.tileverse.tiling.pyramid.TileIndex.zxy;
 
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -145,10 +146,9 @@ class PMTilesWriterExample {
             System.out.println("\nMetadata: " + metadata);
 
             // Read a specific tile
-            Optional<ByteBuffer> tileData = reader.getTile(0, 0, 0);
+            Optional<ByteBuffer> tileData = reader.getTile(TileIndex.zxy(0, 0, 0));
             if (tileData.isPresent()) {
-                String stringData = PMTilesReader.toString(tileData.get());
-                System.out.println("\nRoot tile data: " + stringData);
+                System.out.println("\nRoot tile data: " + tileData.get().remaining());
             }
         } catch (InvalidHeaderException | UnsupportedCompressionException e) {
             e.printStackTrace();

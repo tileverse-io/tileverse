@@ -32,6 +32,8 @@ import org.junit.jupiter.params.provider.CsvSource;
  */
 class HilbertCurveTest {
 
+    private HilbertCurve hilbertCurve = new HilbertCurve();
+
     /**
      * Test round-trip conversion from TileIndex to tileId and back.
      */
@@ -51,10 +53,10 @@ class HilbertCurveTest {
         TileIndex original = xyz(x, y, z);
 
         // Convert to tileId
-        long tileId = HilbertCurve.tileIndexToTileId(original);
+        long tileId = hilbertCurve.tileIndexToTileId(original);
 
         // Convert back to TileIndex
-        TileIndex converted = HilbertCurve.tileIdToTileIndex(tileId);
+        TileIndex converted = hilbertCurve.tileIdToTileIndex(tileId);
 
         // Verify round-trip conversion is successful
         assertEquals(original.z(), converted.z(), "Zoom level should match after round-trip");
@@ -90,8 +92,8 @@ class HilbertCurveTest {
             System.out.printf("Testing tile %s%n", expected);
 
             // Convert to tile ID and back using HilbertCurve
-            long tileId = HilbertCurve.tileIndexToTileId(expected);
-            TileIndex roundTrip = HilbertCurve.tileIdToTileIndex(tileId);
+            long tileId = hilbertCurve.tileIndexToTileId(expected);
+            TileIndex roundTrip = hilbertCurve.tileIdToTileIndex(tileId);
 
             System.out.printf("  Tile ID: %d%n", tileId);
             System.out.printf("  Round trip: %s%n", roundTrip);
@@ -110,17 +112,17 @@ class HilbertCurveTest {
     void testTileIdEdgeCases() {
         // Test zoom level 0 (single tile)
         TileIndex z0 = xyz(0, 0, 0);
-        assertEquals(0L, HilbertCurve.tileIndexToTileId(z0), "Zoom 0 tile should have ID 0");
+        assertEquals(0L, hilbertCurve.tileIndexToTileId(z0), "Zoom 0 tile should have ID 0");
 
         // Test first tile at zoom 1
         TileIndex z1first = xyz(0, 0, 1);
-        assertEquals(1L, HilbertCurve.tileIndexToTileId(z1first), "First tile at zoom 1 should have ID 1");
+        assertEquals(1L, hilbertCurve.tileIndexToTileId(z1first), "First tile at zoom 1 should have ID 1");
 
         // Test that tile IDs increase with zoom level
         long prevMaxTileId = 0;
         for (int z = 1; z <= 10; z++) {
             TileIndex firstTileAtZoom = xyz(0, 0, z);
-            long firstTileId = HilbertCurve.tileIndexToTileId(firstTileAtZoom);
+            long firstTileId = hilbertCurve.tileIndexToTileId(firstTileAtZoom);
             assertTrue(
                     firstTileId > prevMaxTileId,
                     "First tile at zoom " + z + " should have ID greater than previous zoom's max");
@@ -134,10 +136,10 @@ class HilbertCurveTest {
     @Test
     void testTileIdToTileIndexInvalidInputs() {
         // Test negative tile ID
-        assertThrows(IllegalArgumentException.class, () -> HilbertCurve.tileIdToTileIndex(-1));
+        assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIdToTileIndex(-1));
 
         // Test extremely large tile ID (beyond 26 zoom levels)
-        assertThrows(IllegalArgumentException.class, () -> HilbertCurve.tileIdToTileIndex(Long.MAX_VALUE));
+        assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIdToTileIndex(Long.MAX_VALUE));
     }
 
     /**
@@ -147,11 +149,11 @@ class HilbertCurveTest {
     void testTileIdZoomTooLarge() {
         // Test that zoom level > 26 throws exception
         TileIndex invalidZoom = xyz(0, 0, 27);
-        assertThrows(IllegalArgumentException.class, () -> HilbertCurve.tileIndexToTileId(invalidZoom));
+        assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIndexToTileId(invalidZoom));
 
         // Test that zoom level 26 works (it's at the limit)
         TileIndex validMaxZoom = xyz(0, 0, 26);
-        long tileId = HilbertCurve.tileIndexToTileId(validMaxZoom);
+        long tileId = hilbertCurve.tileIndexToTileId(validMaxZoom);
         assertTrue(tileId >= 0, "Valid tile ID should be non-negative");
     }
 
@@ -168,9 +170,9 @@ class HilbertCurveTest {
         TileIndex right = xyz(17, 16, z);
         TileIndex down = xyz(16, 17, z);
 
-        long centerId = HilbertCurve.tileIndexToTileId(center);
-        long rightId = HilbertCurve.tileIndexToTileId(right);
-        long downId = HilbertCurve.tileIndexToTileId(down);
+        long centerId = hilbertCurve.tileIndexToTileId(center);
+        long rightId = hilbertCurve.tileIndexToTileId(right);
+        long downId = hilbertCurve.tileIndexToTileId(down);
 
         // The tile IDs shouldn't be identical (obviously)
         assertNotEquals(centerId, rightId);
@@ -199,7 +201,7 @@ class HilbertCurveTest {
         for (long x = 0; x <= maxCoord; x++) {
             for (long y = 0; y <= maxCoord; y++) {
                 TileIndex tileIndex = xyz(x, y, z);
-                long tileId = HilbertCurve.tileIndexToTileId(tileIndex);
+                long tileId = hilbertCurve.tileIndexToTileId(tileIndex);
 
                 // Verify this tile ID hasn't been seen before
                 assertTrue(
@@ -223,13 +225,13 @@ class HilbertCurveTest {
     void testCoordinateValidation() {
         // Test coordinates beyond valid range for zoom level
         TileIndex tileIndex1 = xyz(1, 0, 0); // Max at z=0 is 0
-        assertThrows(IllegalArgumentException.class, () -> HilbertCurve.tileIndexToTileId(tileIndex1));
+        assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIndexToTileId(tileIndex1));
 
         TileIndex tileIndex2 = xyz(32, 0, 5); // Max at z=5 is 31
-        assertThrows(IllegalArgumentException.class, () -> HilbertCurve.tileIndexToTileId(tileIndex2));
+        assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIndexToTileId(tileIndex2));
 
         TileIndex tileIndex3 = xyz(0, 32, 5); // Max at z=5 is 31
-        assertThrows(IllegalArgumentException.class, () -> HilbertCurve.tileIndexToTileId(tileIndex3));
+        assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIndexToTileId(tileIndex3));
     }
 
     /**
@@ -239,13 +241,13 @@ class HilbertCurveTest {
     void testSpecificProblemCases() {
         // These were problematic coordinates mentioned in previous tests
         TileIndex problematic1 = xyz(34, 51, 7);
-        long tileId1 = HilbertCurve.tileIndexToTileId(problematic1);
-        TileIndex roundTrip1 = HilbertCurve.tileIdToTileIndex(tileId1);
+        long tileId1 = hilbertCurve.tileIndexToTileId(problematic1);
+        TileIndex roundTrip1 = hilbertCurve.tileIdToTileIndex(tileId1);
         assertEquals(problematic1, roundTrip1);
 
         TileIndex problematic2 = xyz(64, 64, 7);
-        long tileId2 = HilbertCurve.tileIndexToTileId(problematic2);
-        TileIndex roundTrip2 = HilbertCurve.tileIdToTileIndex(tileId2);
+        long tileId2 = hilbertCurve.tileIndexToTileId(problematic2);
+        TileIndex roundTrip2 = hilbertCurve.tileIdToTileIndex(tileId2);
         assertEquals(problematic2, roundTrip2);
     }
 }

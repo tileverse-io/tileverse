@@ -641,4 +641,11 @@ class TileRangeTest {
         // Should end at the first tile
         assertEquals(range.first(), current, "Should end at the first tile in reverse");
     }
+
+    @Test
+    void testStreamAll() {
+        TileRange range = TileRange.of(0, 0, 99, 99, 5);
+        assertThat(range.all().count()).isEqualTo(100 * 100);
+        assertThat(range.all().parallel().count()).isEqualTo(100 * 100);
+    }
 }

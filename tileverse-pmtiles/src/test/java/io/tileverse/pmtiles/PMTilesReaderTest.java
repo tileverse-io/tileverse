@@ -22,11 +22,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.tileverse.cache.CacheManager;
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
 import io.tileverse.rangereader.RangeReader;
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -35,9 +38,28 @@ class PMTilesReaderTest {
 
     protected Path tmpFolder;
 
+    private CacheManager cacheManager;
+
+    private PMTilesReader reader;
+
     @BeforeEach
-    void setup(@TempDir Path tmpFolder) {
+    void setup(@TempDir Path tmpFolder) throws IOException {
         this.tmpFolder = tmpFolder;
+        this.cacheManager = CacheManager.newInstance();
+        this.reader = getAndorraReader();
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        reader.close();
+        this.cacheManager.invalidateAll();
+    }
+
+    protected PMTilesReader getAndorraReader() throws IOException {
+        RangeReader rangeReader = getAndorraRangeReader();
+        PMTilesReader andorraReader = new PMTilesReader(rangeReader);
+        andorraReader.cacheManager(cacheManager);
+        return andorraReader;
     }
 
     /**
@@ -49,6 +71,7 @@ class PMTilesReaderTest {
 
     /**
      * Test that validates PMTiles file information matching the output of:
+     *
      * <pre>{@code
      * pmtiles show test-data/src/main/resources/andorra.pmtiles
      * pmtiles spec version: 3
@@ -65,7 +88,8 @@ class PMTilesReaderTest {
      * internal compression: gzip
      * tile compression: gzip
      * vector_layers <object...>
-     * attribution <a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a>
+     * attribution <a href="https://www.openstreetmap.org/copyright" target=
+     * "_blank">&copy; OpenStreetMap contributors</a>
      * description A basic, lean, general-purpose vector tile schema for OpenStreetMap data. See https://shortbread.geofabrik.de/
      * name Shortbread
      * planetiler:buildtime 2025-06-19T18:35:23.558Z
@@ -79,41 +103,38 @@ class PMTilesReaderTest {
      */
     @Test
     void testPMTilesShowInfo() throws IOException {
-        try (RangeReader rangeReader = getAndorraRangeReader()) {
-            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
-            // Test header information
-            verifyHeader(reader.getHeader());
+        // Test header information
+        verifyHeader(reader.getHeader());
 
-            // Test metadata JSON
-            String metadata = reader.getMetadataAsString();
-            assertNotNull(metadata);
-            assertFalse(metadata.isEmpty());
+        // Test metadata JSON
+        String metadata = reader.getMetadataAsString();
+        assertNotNull(metadata);
+        assertFalse(metadata.isEmpty());
 
-            // Test specific metadata fields (using simple string contains for now)
-            assertTrue(metadata.contains("OpenStreetMap contributors"));
-            assertTrue(metadata.contains("Shortbread"));
-            assertTrue(metadata.contains("baselayer"));
-            assertTrue(metadata.contains("planetiler"));
-            assertTrue(metadata.contains("vector_layers"));
+        // Test specific metadata fields (using simple string contains for now)
+        assertTrue(metadata.contains("OpenStreetMap contributors"));
+        assertTrue(metadata.contains("Shortbread"));
+        assertTrue(metadata.contains("baselayer"));
+        assertTrue(metadata.contains("planetiler"));
+        assertTrue(metadata.contains("vector_layers"));
 
-            // Test metadata object parsing
-            PMTilesMetadata metadataObj = reader.getMetadata();
-            assertNotNull(metadataObj);
+        // Test metadata object parsing
+        PMTilesMetadata metadataObj = reader.getMetadata();
+        assertNotNull(metadataObj);
 
-            // Verify parsed metadata fields
-            assertNotNull(metadataObj.attribution());
-            assertTrue(metadataObj.attribution().contains("OpenStreetMap contributors"));
+        // Verify parsed metadata fields
+        assertNotNull(metadataObj.attribution());
+        assertTrue(metadataObj.attribution().contains("OpenStreetMap contributors"));
 
-            assertThat(metadataObj.vectorLayers()).isNotNull().isNotEmpty();
+        assertThat(metadataObj.vectorLayers()).isNotNull().isNotEmpty();
 
-            // Check that we have some expected vector layers
-            boolean hasLandLayer = metadataObj.vectorLayers().stream().anyMatch(layer -> "land".equals(layer.id()));
-            boolean hasWaterLayer = metadataObj.vectorLayers().stream()
-                    .anyMatch(layer -> "water".equals(layer.id()) || "ocean".equals(layer.id()));
+        // Check that we have some expected vector layers
+        boolean hasLandLayer = metadataObj.vectorLayers().stream().anyMatch(layer -> "land".equals(layer.id()));
+        boolean hasWaterLayer = metadataObj.vectorLayers().stream()
+                .anyMatch(layer -> "water".equals(layer.id()) || "ocean".equals(layer.id()));
 
-            // At least one of these layers should exist in the Shortbread schema
-            assertTrue(hasLandLayer || hasWaterLayer, "Should have land or water layer");
-        }
+        // At least one of these layers should exist in the Shortbread schema
+        assertTrue(hasLandLayer || hasWaterLayer, "Should have land or water layer");
     }
 
     private void verifyHeader(PMTilesHeader header) {
@@ -147,27 +168,24 @@ class PMTilesReaderTest {
     }
 
     /**
-     * Test tile fetching matching the output of pmtiles tile commands.
-     * Tests various tiles that should exist in the andorra.pmtiles file.
+     * Test tile fetching matching the output of pmtiles tile commands. Tests
+     * various tiles that should exist in the andorra.pmtiles file.
      */
     @Test
     void testTileFetching() throws Exception {
-        try (RangeReader rangeReader = getAndorraRangeReader()) {
-            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
-            // Test tile 0/0/0 - should exist (root tile)
-            var tile000 = reader.getTile(0, 0, 0);
-            assertTrue(tile000.isPresent(), "Tile 0/0/0 should exist");
-            assertTrue(tile000.get().remaining() > 0, "Tile 0/0/0 should have data");
+        // Test tile 0/0/0 - should exist (root tile)
+        var tile000 = reader.getTile(0L);
+        assertTrue(tile000.isPresent(), "Tile 0/0/0 should exist");
+        assertTrue(tile000.get().remaining() > 0, "Tile 0/0/0 should have data");
 
-            // Test a second tile that should exist - use different zoom level
-            // Since coordinate validation is strict, use zoom 1 where 1/1/0 is valid
-            // (confirmed to exist by pmtiles command earlier)
+        // Test a second tile that should exist - use different zoom level
+        // Since coordinate validation is strict, use zoom 1 where 1/1/0 is valid
+        // (confirmed to exist by pmtiles command earlier)
 
-            // Test tile 1/1/0 - should exist (confirmed by pmtiles command)
-            var tile110 = reader.getTile(1, 1, 0);
-            assertTrue(tile110.isPresent(), "Tile 1/1/0 should exist");
-            assertTrue(tile110.get().remaining() > 0, "Tile 1/1/0 should have data");
-        }
+        // Test tile 1/1/0 - should exist (confirmed by pmtiles command)
+        var tile110 = reader.getTile(TileIndex.zxy(1, 1, 0));
+        assertTrue(tile110.isPresent(), "Tile 1/1/0 should exist");
+        assertTrue(tile110.get().remaining() > 0, "Tile 1/1/0 should have data");
     }
 
     /**
@@ -175,53 +193,48 @@ class PMTilesReaderTest {
      */
     @Test
     void testNonExistentTiles() throws Exception {
-        try (RangeReader rangeReader = getAndorraRangeReader()) {
-            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
-            // Test beyond max zoom level
-            var tileBeyondMax = reader.getTile(15, 0, 0);
-            assertTrue(tileBeyondMax.isEmpty(), "Tile beyond max zoom should not exist");
+        // Test beyond max zoom level
+        var tileBeyondMax = reader.getTile(TileIndex.zxy(15, 0, 0));
+        assertTrue(tileBeyondMax.isEmpty(), "Tile beyond max zoom should not exist");
 
-            // Test tile that doesn't exist at zoom 1 (confirmed by pmtiles command)
-            var tileNotFound = reader.getTile(1, 0, 0);
-            assertTrue(tileNotFound.isEmpty(), "Tile 1/0/0 should not exist");
+        // Test tile that doesn't exist at zoom 1 (confirmed by pmtiles command)
+        var tileNotFound = reader.getTile(TileIndex.zxy(1, 0, 0));
+        assertTrue(tileNotFound.isEmpty(), "Tile 1/0/0 should not exist");
 
-            // Test tile way outside bounds - Andorra is small so most tiles don't exist
-            var tileOutOfBounds = reader.getTile(10, 0, 0);
-            assertTrue(tileOutOfBounds.isEmpty(), "Tile outside geographic bounds should not exist");
-        }
+        // Test tile way outside bounds - Andorra is small so most tiles don't exist
+        var tileOutOfBounds = reader.getTile(TileIndex.zxy(10, 0, 0));
+        assertTrue(tileOutOfBounds.isEmpty(), "Tile outside geographic bounds should not exist");
     }
 
     /**
      * Test edge cases and invalid coordinates.
      */
     @Test
-    void testEdgeCases() throws Exception {
-        try (RangeReader rangeReader = getAndorraRangeReader()) {
-            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
-            // Test negative coordinates - should throw IllegalArgumentException
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> reader.getTile(5, -1, 10),
-                    "Tile with negative X should throw IllegalArgumentException");
+    @SuppressWarnings("java:S5778")
+    void testEdgeCases() {
+        // Test negative coordinates - should throw IllegalArgumentException
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> reader.getTile(TileIndex.zxy(5, -1, 10)),
+                "Tile with negative X should throw IllegalArgumentException");
 
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> reader.getTile(5, 10, -1),
-                    "Tile with negative Y should throw IllegalArgumentException");
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> reader.getTile(TileIndex.zxy(5, 10, -1)),
+                "Tile with negative Y should throw IllegalArgumentException");
 
-            // Test coordinates beyond tile grid bounds at zoom level
-            int zoom = 5;
-            int maxCoord = (1 << zoom); // 2^zoom
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> reader.getTile(zoom, maxCoord, 0),
-                    "Tile with X beyond grid bounds should throw IllegalArgumentException");
+        // Test coordinates beyond tile grid bounds at zoom level
+        int zoom = 5;
+        int maxCoord = (1 << zoom); // 2^zoom
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> reader.getTile(TileIndex.zxy(zoom, maxCoord, 0)),
+                "Tile with X beyond grid bounds should throw IllegalArgumentException");
 
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> reader.getTile(zoom, 0, maxCoord),
-                    "Tile with Y beyond grid bounds should throw IllegalArgumentException");
-        }
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> reader.getTile(TileIndex.zxy(zoom, 0, maxCoord)),
+                "Tile with Y beyond grid bounds should throw IllegalArgumentException");
     }
 
     /**
@@ -229,43 +242,39 @@ class PMTilesReaderTest {
      */
     @Test
     void testDifferentZoomLevels() throws Exception {
-        try (RangeReader rangeReader = getAndorraRangeReader()) {
-            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
-            PMTilesHeader header = reader.getHeader();
+        PMTilesHeader header = reader.getHeader();
 
-            // Test at minimum zoom
-            int minZoom = header.minZoom();
-            var minZoomTile = reader.getTile(minZoom, 0, 0);
-            assertTrue(minZoomTile.isPresent(), "Tile at min zoom should exist");
+        // Test at minimum zoom
+        int minZoom = header.minZoom();
+        var minZoomTile = reader.getTile(TileIndex.zxy(minZoom, 0, 0));
+        assertTrue(minZoomTile.isPresent(), "Tile at min zoom should exist");
 
-            // Test below minimum zoom - should not exist
-            if (minZoom > 0) {
-                var belowMinZoom = reader.getTile(minZoom - 1, 0, 0);
-                assertTrue(belowMinZoom.isEmpty(), "Tile below min zoom should not exist");
-            }
+        // Test below minimum zoom - should not exist
+        if (minZoom > 0) {
+            var belowMinZoom = reader.getTile(TileIndex.zxy(minZoom - 1, 0, 0));
+            assertTrue(belowMinZoom.isEmpty(), "Tile below min zoom should not exist");
+        }
 
-            // Test at center zoom level
-            int centerZoom = header.centerZoom();
-            if (centerZoom >= minZoom && centerZoom <= header.maxZoom()) {
-                // Calculate center tile coordinates at center zoom
-                double centerLon = header.centerLon();
-                double centerLat = header.centerLat();
+        // Test at center zoom level
+        int centerZoom = header.centerZoom();
+        if (centerZoom >= minZoom && centerZoom <= header.maxZoom()) {
+            // Calculate center tile coordinates at center zoom
+            double centerLon = header.centerLon();
+            double centerLat = header.centerLat();
 
-                // Simple tile coordinate calculation (Web Mercator)
-                int tilesAtZoom = 1 << centerZoom;
-                int centerX = (int) ((centerLon + 180.0) / 360.0 * tilesAtZoom);
-                int centerY = (int) ((1.0
-                                - Math.log(Math.tan(Math.toRadians(centerLat))
-                                                + 1.0 / Math.cos(Math.toRadians(centerLat)))
-                                        / Math.PI)
-                        / 2.0
-                        * tilesAtZoom);
+            // Simple tile coordinate calculation (Web Mercator)
+            int tilesAtZoom = 1 << centerZoom;
+            int centerX = (int) ((centerLon + 180.0) / 360.0 * tilesAtZoom);
+            int centerY = (int) ((1.0
+                            - Math.log(Math.tan(Math.toRadians(centerLat)) + 1.0 / Math.cos(Math.toRadians(centerLat)))
+                                    / Math.PI)
+                    / 2.0
+                    * tilesAtZoom);
 
-                var centerTile = reader.getTile(centerZoom, centerX, centerY);
-                // Note: center tile might not exist if it's outside the actual data bounds
-                // so we don't assert its existence, just that the call works
-                assertNotNull(centerTile, "Center tile query should return a result (even if empty)");
-            }
+            var centerTile = reader.getTile(TileIndex.zxy(centerZoom, centerX, centerY));
+            // Note: center tile might not exist if it's outside the actual data bounds
+            // so we don't assert its existence, just that the call works
+            assertNotNull(centerTile, "Center tile query should return a result (even if empty)");
         }
     }
 
@@ -274,30 +283,28 @@ class PMTilesReaderTest {
      */
     @Test
     void testCoordinateUtilityMethods() throws Exception {
-        try (RangeReader rangeReader = getAndorraRangeReader()) {
-            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
-            PMTilesHeader header = reader.getHeader();
 
-            // Test that utility methods match manual E7 conversion
-            assertEquals(header.minLonE7() / 10_000_000.0, header.minLon(), 0.0000001);
-            assertEquals(header.minLatE7() / 10_000_000.0, header.minLat(), 0.0000001);
-            assertEquals(header.maxLonE7() / 10_000_000.0, header.maxLon(), 0.0000001);
-            assertEquals(header.maxLatE7() / 10_000_000.0, header.maxLat(), 0.0000001);
-            assertEquals(header.centerLonE7() / 10_000_000.0, header.centerLon(), 0.0000001);
-            assertEquals(header.centerLatE7() / 10_000_000.0, header.centerLat(), 0.0000001);
+        PMTilesHeader header = reader.getHeader();
 
-            // Test reasonable coordinate ranges for Andorra
-            assertTrue(header.minLon() > 0 && header.minLon() < 3, "Min longitude should be reasonable for Andorra");
-            assertTrue(header.minLat() > 40 && header.minLat() < 45, "Min latitude should be reasonable for Andorra");
-            assertTrue(header.maxLon() > header.minLon(), "Max longitude should be greater than min");
-            assertTrue(header.maxLat() > header.minLat(), "Max latitude should be greater than min");
-            assertTrue(
-                    header.centerLon() >= header.minLon() && header.centerLon() <= header.maxLon(),
-                    "Center longitude should be within bounds");
-            assertTrue(
-                    header.centerLat() >= header.minLat() && header.centerLat() <= header.maxLat(),
-                    "Center latitude should be within bounds");
-        }
+        // Test that utility methods match manual E7 conversion
+        assertEquals(header.minLonE7() / 10_000_000.0, header.minLon(), 0.0000001);
+        assertEquals(header.minLatE7() / 10_000_000.0, header.minLat(), 0.0000001);
+        assertEquals(header.maxLonE7() / 10_000_000.0, header.maxLon(), 0.0000001);
+        assertEquals(header.maxLatE7() / 10_000_000.0, header.maxLat(), 0.0000001);
+        assertEquals(header.centerLonE7() / 10_000_000.0, header.centerLon(), 0.0000001);
+        assertEquals(header.centerLatE7() / 10_000_000.0, header.centerLat(), 0.0000001);
+
+        // Test reasonable coordinate ranges for Andorra
+        assertTrue(header.minLon() > 0 && header.minLon() < 3, "Min longitude should be reasonable for Andorra");
+        assertTrue(header.minLat() > 40 && header.minLat() < 45, "Min latitude should be reasonable for Andorra");
+        assertTrue(header.maxLon() > header.minLon(), "Max longitude should be greater than min");
+        assertTrue(header.maxLat() > header.minLat(), "Max latitude should be greater than min");
+        assertTrue(
+                header.centerLon() >= header.minLon() && header.centerLon() <= header.maxLon(),
+                "Center longitude should be within bounds");
+        assertTrue(
+                header.centerLat() >= header.minLat() && header.centerLat() <= header.maxLat(),
+                "Center latitude should be within bounds");
     }
 
     /**
@@ -305,41 +312,39 @@ class PMTilesReaderTest {
      */
     @Test
     void testTileDecompression() throws Exception {
-        try (RangeReader rangeReader = getAndorraRangeReader()) {
-            PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel);
-            PMTilesHeader header = reader.getHeader();
 
-            // Verify that compression is enabled
-            assertEquals(PMTilesHeader.COMPRESSION_GZIP, header.tileCompression());
+        PMTilesHeader header = reader.getHeader();
 
-            // Get a tile that should exist
-            var tile = reader.getTile(0, 0, 0);
-            assertTrue(tile.isPresent(), "Root tile should exist");
+        // Verify that compression is enabled
+        assertEquals(PMTilesHeader.COMPRESSION_GZIP, header.tileCompression());
 
-            ByteBuffer tileData = tile.get();
-            assertTrue(tileData.remaining() > 0, "Tile should have data");
+        // Get a tile that should exist
+        var tile = reader.getTile(TileIndex.zxy(0, 0, 0));
+        assertTrue(tile.isPresent(), "Root tile should exist");
 
-            // For MVT tiles, decompressed data should start with protobuf-like bytes
-            // (this is a basic sanity check that decompression worked)
-            assertNotNull(tileData, "Decompressed tile data should not be null");
-            assertTrue(tileData.remaining() > 10, "Decompressed tile should be reasonably sized");
-        }
+        ByteBuffer tileData = tile.get();
+        assertTrue(tileData.remaining() > 0, "Tile should have data");
+
+        // For MVT tiles, decompressed data should start with protobuf-like bytes
+        // (this is a basic sanity check that decompression worked)
+        assertNotNull(tileData, "Decompressed tile data should not be null");
+        assertTrue(tileData.remaining() > 10, "Decompressed tile should be reasonably sized");
     }
 
     @Test
     void testParseMetadataException() {
         final String rawMetadata =
                 """
-                {
-                  "name": "Shortbread",
-                  "description": "A basic, lean, general-purpose vector tile schema for OpenStreetMap data. See https://shortbread.geofabrik.de/",
-                  "attribution": "<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">&copy; OpenStreetMap contributors</a>",
-                  "type": "baselayer",
-                  "format": "pbf",
-                  "bounds": "-34.49296,29.63555,46.75348,81.47299",
-                  "center": "6.13026,55.55427,2"
-                }
-                """;
+				{
+				  "name": "Shortbread",
+				  "description": "A basic, lean, general-purpose vector tile schema for OpenStreetMap data. See https://shortbread.geofabrik.de/",
+				  "attribution": "<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">&copy; OpenStreetMap contributors</a>",
+				  "type": "baselayer",
+				  "format": "pbf",
+				  "bounds": "-34.49296,29.63555,46.75348,81.47299",
+				  "center": "6.13026,55.55427,2"
+				}
+				""";
 
         IOException e = assertThrows(IOException.class, () -> PMTilesReader.parseMetadata(rawMetadata));
         assertThat(e.getMessage())

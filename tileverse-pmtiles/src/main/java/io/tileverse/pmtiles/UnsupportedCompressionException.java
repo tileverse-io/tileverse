@@ -15,13 +15,11 @@
  */
 package io.tileverse.pmtiles;
 
-import java.io.IOException;
-
 /**
  * Exception thrown when an unsupported compression type is used.
  */
 @SuppressWarnings("serial")
-public class UnsupportedCompressionException extends IOException {
+public class UnsupportedCompressionException extends RuntimeException {
     public UnsupportedCompressionException(String message) {
         super(message);
     }

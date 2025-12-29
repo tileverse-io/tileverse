@@ -15,8 +15,7 @@
  */
 package io.tileverse.pmtiles.store;
 
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
+import io.tileverse.cache.CacheManager;
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
 import io.tileverse.jackson.databind.tilejson.v3.VectorLayer;
 import io.tileverse.pmtiles.PMTilesReader;
@@ -25,14 +24,13 @@ import io.tileverse.tiling.matrix.Tile;
 import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.store.TileData;
 import io.tileverse.vectortile.model.VectorTile;
-import io.tileverse.vectortile.mvt.VectorTileCodec;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
-import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import org.jspecify.annotations.NullMarked;
 import org.locationtech.jts.geom.Envelope;
 
 /**
@@ -49,11 +47,10 @@ import org.locationtech.jts.geom.Envelope;
  *   <li>Integration with the {@link VectorTileStore} abstraction</li>
  * </ul>
  */
+@NullMarked
 public class PMTilesVectorTileStore extends VectorTileStore {
 
     private final PMTilesReader reader;
-
-    private static final Duration expireAfterAccess = Duration.ofSeconds(10);
 
     /**
      * Short-lived (expireAfterAccess) {@link VectorTile} cache to account for consecutive single-layer requests.
@@ -61,26 +58,23 @@ public class PMTilesVectorTileStore extends VectorTileStore {
      * Since {@link VectorTile} objects are immutable and relatively expensive to decode,
      * caching them improves performance when multiple layers are requested for the same tile.
      */
-    private final LoadingCache<TileIndex, Optional<VectorTile>> vectorTileCache;
-
-    /**
-     * Decodes {@code ByteBuffer} blobs from
-     * {@link PMTilesReader#getTile(TileIndex, java.util.function.Function)
-     * PMTilesReader} as {@link VectorTile}s
-     *
-     * @see #decodeVectorTile(ByteBuffer)
-     */
-    private final VectorTileCodec vectorTileDecoder = new VectorTileCodec();
+    private final VectorTileCache vectorTileCache;
 
     public PMTilesVectorTileStore(PMTilesReader reader) {
         super(PMTilesTileMatrixSet.fromWebMercator(reader));
         this.reader = Objects.requireNonNull(reader);
-        this.vectorTileCache = Caffeine.newBuilder()
-                .softValues()
-                .expireAfterAccess(expireAfterAccess)
-                .build(this::loadVectorTile);
+        this.vectorTileCache = new VectorTileCache(reader);
     }
 
+    public PMTilesVectorTileStore cacheManager(CacheManager cacheManager) {
+        reader.cacheManager(cacheManager);
+        vectorTileCache.setCacheManager(cacheManager);
+        return this;
+    }
+
+    /**
+     * @throws UncheckedIOException if an IO exception happens when obtaining the {@link PMTilesMetadata} containing the list of {@link VectorLayer}
+     */
     @Override
     public List<VectorLayer> getVectorLayersMetadata() {
         try {
@@ -110,31 +104,19 @@ public class PMTilesVectorTileStore extends VectorTileStore {
      */
     @Override
     public Optional<TileData<VectorTile>> loadTile(Tile tile) {
-        Optional<VectorTile> decoded = getVectorTile(tile);
+        Optional<VectorTile> vectorTile;
+        try {
+            vectorTile = vectorTileCache.getVectorTile(tile.tileIndex());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
         Envelope bounds = toEnvelope(tile.extent());
-        decoded = decoded.map(vt -> vt.withBoundingBox(bounds));
+        vectorTile = vectorTile.map(vt -> vt.withBoundingBox(bounds));
 
-        return decoded.map(vt -> new TileData<>(tile, vt));
-    }
-
-    private Optional<VectorTile> getVectorTile(Tile tile) {
-        TileIndex tileIndex = tile.tileIndex();
-        return vectorTileCache.get(tileIndex);
-    }
-
-    private Optional<VectorTile> loadVectorTile(TileIndex tileIndex) throws IOException {
-        return reader.getTile(tileIndex, this::decodeVectorTile);
+        return vectorTile.map(vt -> new TileData<>(tile, vt));
     }
 
     private Envelope toEnvelope(BoundingBox2D extent) {
         return new Envelope(extent.minX(), extent.maxX(), extent.minY(), extent.maxY());
-    }
-
-    private VectorTile decodeVectorTile(ByteBuffer rawTile) {
-        try {
-            return vectorTileDecoder.decode(rawTile);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
     }
 }

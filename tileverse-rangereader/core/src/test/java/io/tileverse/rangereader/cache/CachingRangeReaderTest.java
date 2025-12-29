@@ -22,7 +22,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.github.benmanes.caffeine.cache.Scheduler;
+import io.tileverse.cache.Cache;
 import io.tileverse.cache.CacheManager;
+import io.tileverse.cache.CaffeineCache;
+import io.tileverse.io.ByteRange;
 import io.tileverse.rangereader.AbstractRangeReader;
 import io.tileverse.rangereader.RangeReader;
 import io.tileverse.rangereader.file.FileRangeReader;
@@ -30,6 +34,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.Random;
@@ -40,6 +45,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -50,11 +56,12 @@ import org.junit.jupiter.api.io.TempDir;
 class CachingRangeReaderTest {
 
     @TempDir
-    Path tempDir;
+    private Path tempDir;
 
     private Path testFile;
     private static final int FILE_SIZE = 100_000;
     private static final byte[] TEST_DATA = new byte[FILE_SIZE];
+    private CacheManager cacheManager;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -62,6 +69,12 @@ class CachingRangeReaderTest {
         testFile = tempDir.resolve("test.bin");
         new Random(42).nextBytes(TEST_DATA); // Use fixed seed for reproducibility
         Files.write(testFile, TEST_DATA);
+        cacheManager = CacheManager.newInstance();
+    }
+
+    @AfterEach
+    void cleanUp() {
+        cacheManager.invalidateAll();
     }
 
     @Test
@@ -78,9 +91,8 @@ class CachingRangeReaderTest {
     @Test
     void testBasicCaching() throws IOException {
         RangeReader delegate = FileRangeReader.builder().path(testFile).build();
-        try (CachingRangeReader reader = CachingRangeReader.builder(delegate)
-                .cacheManager(CacheManager.newInstance())
-                .build()) {
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
 
             // First read should go to delegate
             ByteBuffer data1 = reader.readRange(1000, 500);
@@ -107,7 +119,8 @@ class CachingRangeReaderTest {
     @Test
     void testGetSourceIdentifier() throws IOException {
         RangeReader delegate = FileRangeReader.builder().path(testFile).build();
-        try (CachingRangeReader reader = CachingRangeReader.builder(delegate).build()) {
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
             String sourceId = reader.getSourceIdentifier();
             assertThat(sourceId).isEqualTo(testFile.toAbsolutePath().toString());
         }
@@ -117,9 +130,8 @@ class CachingRangeReaderTest {
     void testCacheMaxSize() throws IOException {
         RangeReader delegate = FileRangeReader.builder().path(testFile).build();
 
-        try (CachingRangeReader reader = CachingRangeReader.builder(delegate)
-                .cacheManager(CacheManager.newInstance())
-                .build()) {
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
 
             // Read multiple ranges that exceed cache size
             reader.readRange(0, 500);
@@ -135,9 +147,8 @@ class CachingRangeReaderTest {
     @Test
     void testCacheStats() throws IOException {
         RangeReader delegate = FileRangeReader.builder().path(testFile).build();
-        try (CachingRangeReader reader = CachingRangeReader.builder(delegate)
-                .cacheManager(CacheManager.newInstance())
-                .build()) {
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
 
             // Read some data to generate stats
             reader.readRange(1000, 500);
@@ -154,9 +165,8 @@ class CachingRangeReaderTest {
     @Test
     void testClearCache() throws IOException {
         RangeReader delegate = FileRangeReader.builder().path(testFile).build();
-        try (CachingRangeReader reader = CachingRangeReader.builder(delegate)
-                .cacheManager(CacheManager.newInstance())
-                .build()) {
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
 
             // Add data to cache
             reader.readRange(1000, 500);
@@ -172,9 +182,8 @@ class CachingRangeReaderTest {
     void testConcurrentAccess() throws Exception {
         CountingRangeReader delegate =
                 new CountingRangeReader(FileRangeReader.builder().path(testFile).build());
-        try (CachingRangeReader reader = CachingRangeReader.builder(delegate)
-                .cacheManager(CacheManager.newInstance())
-                .build()) {
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
 
             int numThreads = 10;
             int numReadsPerThread = 20;
@@ -217,9 +226,8 @@ class CachingRangeReaderTest {
     @Test
     void testMultipleRanges() throws IOException {
         RangeReader delegate = FileRangeReader.builder().path(testFile).build();
-        try (CachingRangeReader reader = CachingRangeReader.builder(delegate)
-                .cacheManager(CacheManager.newInstance())
-                .build()) {
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
 
             // Read multiple different ranges
             ByteBuffer data1 = reader.readRange(0, 1000);
@@ -248,9 +256,8 @@ class CachingRangeReaderTest {
     @Test
     void testPartialReads() throws IOException {
         RangeReader delegate = FileRangeReader.builder().path(testFile).build();
-        try (CachingRangeReader reader = CachingRangeReader.builder(delegate)
-                .cacheManager(CacheManager.newInstance())
-                .build()) {
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
 
             // Read near end of file where we might get fewer bytes than requested
             long fileSize = reader.size().orElseThrow();
@@ -287,11 +294,23 @@ class CachingRangeReaderTest {
     void testExpireAfterAccess() throws IOException {
         RangeReader delegate = FileRangeReader.builder().path(testFile).build();
 
+        assertThat(cacheManager.getCacheNames()).doesNotContain(RangeReaderCache.SHARED_CACHE_NAME);
+
         // Create a cache with very short expiration
-        try (CachingRangeReader reader = CachingRangeReader.builder(delegate)
-                // .maximumSize(100) // Large enough to not trigger size-based eviction
-                // .expireAfterAccess(100, TimeUnit.MILLISECONDS)
-                .build()) {
+        @SuppressWarnings("unused")
+        Cache<ByteRange, ByteBuffer> cache = cacheManager.getCache(RangeReaderCache.SHARED_CACHE_NAME, () -> {
+            return CaffeineCache.<ByteRange, ByteBuffer>newBuilder()
+                    .expireAfterAccess(Duration.ofMillis(100))
+                    .maxHeapPercent(10, RangeReaderCache::weigh)
+                    .averageWeight(64 * 1024)
+                    // run eviction tasks when idle to return memory without waiting for cache usage
+                    .scheduler(Scheduler.systemScheduler())
+                    .recordStats()
+                    .build();
+        });
+
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
 
             // Read some data
             reader.readRange(0, 100);
@@ -313,9 +332,8 @@ class CachingRangeReaderTest {
     @Test
     void testCloseDelegate() throws IOException {
         MockClosableRangeReader delegate = new MockClosableRangeReader();
-        try (CachingRangeReader reader = CachingRangeReader.builder(delegate)
-                .cacheManager(CacheManager.newInstance())
-                .build()) {
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
             // Use the reader
             reader.readRange(0, 100);
         }
@@ -327,7 +345,6 @@ class CachingRangeReaderTest {
     @Test
     void testHeaderBufferConfiguration() throws IOException {
         // Test with header buffer enabled
-        CacheManager cacheManager = CacheManager.newInstance();
         try (RangeReader delegate = FileRangeReader.builder().path(testFile).build();
                 CachingRangeReader reader = CachingRangeReader.builder(delegate)
                         .cacheManager(cacheManager)

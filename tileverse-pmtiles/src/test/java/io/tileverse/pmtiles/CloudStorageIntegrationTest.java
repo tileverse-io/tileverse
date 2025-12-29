@@ -19,11 +19,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
 import io.tileverse.rangereader.RangeReader;
 import io.tileverse.rangereader.azure.AzureBlobRangeReader;
 import io.tileverse.rangereader.cache.CachingRangeReader;
 import io.tileverse.rangereader.http.HttpRangeReader;
 import io.tileverse.rangereader.s3.S3RangeReader;
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -103,7 +105,7 @@ class CloudStorageIntegrationTest {
                 RangeReader rangeReader =
                         CachingRangeReader.builder(s3Reader).blockSize(16384).build()) {
 
-            PMTilesReader pmTilesReader = new PMTilesReader(rangeReader::asByteChannel);
+            PMTilesReader pmTilesReader = new PMTilesReader(rangeReader);
             // Verify we can read the header
             PMTilesHeader header = pmTilesReader.getHeader();
             assertNotNull(header);
@@ -112,7 +114,7 @@ class CloudStorageIntegrationTest {
 
             // Try to read a tile
             int z = header.minZoom();
-            Optional<ByteBuffer> tileData = pmTilesReader.getTile(z, 0, 0);
+            Optional<ByteBuffer> tileData = pmTilesReader.getTile(TileIndex.zxy(z, 0, 0));
             assertTrue(tileData.isPresent(), "Should be able to read a tile at minimum zoom level");
             System.out.println("Successfully read tile at z=" + z + " with size "
                     + tileData.get().remaining() + " bytes");
@@ -143,7 +145,7 @@ class CloudStorageIntegrationTest {
                         .blockSize(32768)
                         .build()) {
 
-            PMTilesReader pmTilesReader = new PMTilesReader(reader::asByteChannel);
+            PMTilesReader pmTilesReader = new PMTilesReader(azureRangeReader);
             // Verify we can read the header
             PMTilesHeader header = pmTilesReader.getHeader();
             assertNotNull(header);
@@ -151,11 +153,8 @@ class CloudStorageIntegrationTest {
                     + ", maxZoom=" + header.maxZoom());
 
             // Try to read the metadata
-            ByteBuffer metadata = pmTilesReader.getRawMetadata();
+            PMTilesMetadata metadata = pmTilesReader.getMetadata();
             assertNotNull(metadata);
-            assertTrue(metadata.remaining() > 0, "Metadata should not be empty");
-            System.out.println("Successfully read metadata with size " + metadata.remaining() + " bytes");
-            System.out.println("Metadata preview: " + pmTilesReader.getMetadataAsString() + "...");
         }
     }
 
@@ -179,7 +178,7 @@ class CloudStorageIntegrationTest {
                 RangeReader rangeReader =
                         CachingRangeReader.builder(httpRangeReader).build()) {
 
-            PMTilesReader pmTilesReader = new PMTilesReader(rangeReader::asByteChannel);
+            PMTilesReader pmTilesReader = new PMTilesReader(rangeReader);
             // Verify we can read the header
             PMTilesHeader header = pmTilesReader.getHeader();
             assertNotNull(header);
@@ -189,7 +188,7 @@ class CloudStorageIntegrationTest {
             // Try to read a tile from a specific zoom level
             int z = header.minZoom() + 1;
             if (z <= header.maxZoom()) {
-                Optional<ByteBuffer> tileData = pmTilesReader.getTile(z, 0, 0);
+                Optional<ByteBuffer> tileData = pmTilesReader.getTile(TileIndex.zxy(z, 0, 0));
                 assertTrue(tileData.isPresent(), "Should be able to read a tile at zoom level " + z);
                 System.out.println("Successfully read tile at z=" + z + " with size "
                         + tileData.get().remaining() + " bytes");

@@ -17,6 +17,7 @@ package io.tileverse.rangereader.cache;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.tileverse.cache.CacheManager;
 import io.tileverse.rangereader.RangeReader;
 import io.tileverse.rangereader.file.FileRangeReader;
 import java.io.IOException;
@@ -24,6 +25,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Random;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -31,10 +33,11 @@ import org.junit.jupiter.api.io.TempDir;
 class CachingRangeReaderBlockAlignmentTest {
 
     @TempDir
-    Path tempDir;
+    private Path tempDir;
 
     private Path testFile;
-    ByteBuffer result = ByteBuffer.allocate(2000);
+    private ByteBuffer result = ByteBuffer.allocate(2000);
+    private CacheManager cacheManager;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -45,12 +48,19 @@ class CachingRangeReaderBlockAlignmentTest {
         byte[] data = new byte[100 * 1024];
         new Random(42).nextBytes(data); // Deterministic random data
         Files.write(testFile, data);
+        cacheManager = CacheManager.newInstance();
+    }
+
+    @AfterEach
+    void cleanUp() {
+        cacheManager.invalidateAll();
     }
 
     @Test
     void blockAlignment_cachesLargerBlockButReturnsOnlyRequestedBytes() throws IOException {
         try (RangeReader baseReader = FileRangeReader.of(testFile);
                 CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
+                        .cacheManager(cacheManager)
                         .blockSize(4096) // 4KB blocks
                         .build()) {
 
@@ -74,6 +84,7 @@ class CachingRangeReaderBlockAlignmentTest {
     void blockAlignment_reusesBlockForOverlappingRequests() throws IOException {
         try (RangeReader baseReader = FileRangeReader.of(testFile);
                 CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
+                        .cacheManager(cacheManager)
                         .blockSize(4096) // 4KB blocks
                         .build()) {
 
@@ -101,6 +112,7 @@ class CachingRangeReaderBlockAlignmentTest {
     void blockAlignment_withSpanningRequest() throws IOException {
         try (RangeReader baseReader = FileRangeReader.of(testFile);
                 CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
+                        .cacheManager(cacheManager)
                         .blockSize(4096) // 4KB blocks
                         .build()) {
 
@@ -128,6 +140,7 @@ class CachingRangeReaderBlockAlignmentTest {
     void noBlockAlignment_cachesExactlyWhatWasRequested() throws IOException {
         try (RangeReader baseReader = FileRangeReader.of(testFile);
                 CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
+                        .cacheManager(cacheManager)
                         .withoutBlockAlignment() // Explicitly disable
                         .build()) {
 
@@ -149,6 +162,7 @@ class CachingRangeReaderBlockAlignmentTest {
         // Test different builder methods
         try (RangeReader baseReader1 = FileRangeReader.of(testFile);
                 CachingRangeReader reader1 = CachingRangeReader.builder(baseReader1)
+                        .cacheManager(cacheManager)
                         .withBlockAlignment() // Uses default 64KB
                         .build()) {
 
@@ -159,6 +173,7 @@ class CachingRangeReaderBlockAlignmentTest {
 
         try (RangeReader baseReader2 = FileRangeReader.of(testFile);
                 CachingRangeReader reader2 = CachingRangeReader.builder(baseReader2)
+                        .cacheManager(cacheManager)
                         .blockSize(8192) // Custom 8KB blocks
                         .build()) {
 
@@ -169,6 +184,7 @@ class CachingRangeReaderBlockAlignmentTest {
 
         try (RangeReader baseReader3 = FileRangeReader.of(testFile);
                 CachingRangeReader reader3 = CachingRangeReader.builder(baseReader3)
+                        .cacheManager(cacheManager)
                         .withoutBlockAlignment() // Disable alignment
                         .build()) {
 
@@ -181,8 +197,9 @@ class CachingRangeReaderBlockAlignmentTest {
     @Test
     void blockAlignment_defaultBehaviorWithoutConfiguration() throws IOException {
         try (RangeReader baseReader = FileRangeReader.of(testFile);
-                CachingRangeReader cachingReader =
-                        CachingRangeReader.builder(baseReader).build()) { // No block alignment configuration
+                CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
+                        .cacheManager(cacheManager)
+                        .build()) { // No block alignment configuration
 
             // Request 1 byte at offset 2000
             cachingReader.readRange(2000, 1, result);
@@ -200,6 +217,7 @@ class CachingRangeReaderBlockAlignmentTest {
     void blockAlignment_eofHandling_avoidsRedundantRequests() throws IOException {
         try (RangeReader baseReader = FileRangeReader.of(testFile);
                 CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
+                        .cacheManager(cacheManager)
                         .blockSize(16384) // 16KB blocks
                         .build()) {
 

@@ -15,9 +15,10 @@
  */
 package io.tileverse.pmtiles;
 
-import io.tileverse.pmtiles.PMTilesDirectory.Builder;
+import io.tileverse.pmtiles.PMTilesDirectoryImpl.Builder;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,9 +47,8 @@ final class DirectoryUtil {
      *
      * @param entries the list of entries to serialize
      * @return the serialized directory as a byte array
-     * @throws IOException if an I/O error occurs
      */
-    public static byte[] serializeDirectory(List<PMTilesEntry> entries) throws IOException {
+    public static byte[] serializeDirectory(List<PMTilesEntry> entries) {
         // Sort entries by tile ID if not already sorted
         List<PMTilesEntry> sortedEntries = new ArrayList<>(entries);
         Collections.sort(sortedEntries);
@@ -93,39 +93,39 @@ final class DirectoryUtil {
     /**
      * Deserializes a byte array into a list of PMTilesEntry objects.
      *
-     * @param buffer the serialized directory data
+     * @param packedData the serialized directory data
      * @return the list of directory entries
      * @throws IOException if an I/O error occurs or the data is malformed
      */
-    public static PMTilesDirectory deserializeDirectory(ByteBuffer buffer) throws IOException {
+    public static PMTilesDirectoryImpl deserializeDirectory(ByteBuffer packedData) throws IOException {
 
         // Read number of entries
-        final int numEntries = (int) readVarint(buffer);
-        Builder builder = PMTilesDirectory.builder(numEntries);
+        final int numEntries = (int) readVarint(packedData);
+        Builder builder = PMTilesDirectoryImpl.builder(numEntries);
 
         // Read tile IDs (delta encoded)
         long lastId = 0;
         for (int i = 0; i < numEntries; i++) {
-            long tileId = lastId + readVarint(buffer);
+            long tileId = lastId + readVarint(packedData);
             lastId = tileId;
             builder.tileId(i, tileId);
         }
 
         // Read run lengths
         for (int i = 0; i < numEntries; i++) {
-            int runLength = (int) readVarint(buffer);
+            int runLength = (int) readVarint(packedData);
             builder.runLength(i, runLength);
         }
 
         // Read lengths
         for (int i = 0; i < numEntries; i++) {
-            int length = (int) readVarint(buffer);
+            int length = (int) readVarint(packedData);
             builder.length(i, length);
         }
 
         // Read offsets (with optimization for consecutive entries)
         for (int i = 0; i < numEntries; i++) {
-            long tmp = readVarint(buffer);
+            long tmp = readVarint(packedData);
             long offset;
 
             if (i > 0 && tmp == 0) {
@@ -139,13 +139,57 @@ final class DirectoryUtil {
             builder.offset(i, offset);
         }
         // Ensure we've consumed the entire buffer
-        if (buffer.hasRemaining()) {
+        if (packedData.hasRemaining()) {
             throw new IOException("Malformed PMTiles directory: additional data at end of buffer");
         }
 
         return builder.build();
     }
 
+    public static PMTilesDirectory deserializeDirectory(InputStream packedData) throws IOException {
+
+        // Read number of entries
+        final int numEntries = (int) readVarint(packedData);
+        Builder builder = PMTilesDirectoryImpl.builder(numEntries);
+
+        // Read tile IDs (delta encoded)
+        long lastId = 0;
+        for (int i = 0; i < numEntries; i++) {
+            long tileId = lastId + readVarint(packedData);
+            lastId = tileId;
+            builder.tileId(i, tileId);
+        }
+
+        // Read run lengths
+        for (int i = 0; i < numEntries; i++) {
+            int runLength = (int) readVarint(packedData);
+            builder.runLength(i, runLength);
+        }
+
+        // Read lengths
+        for (int i = 0; i < numEntries; i++) {
+            int length = (int) readVarint(packedData);
+            builder.length(i, length);
+        }
+
+        // Read offsets (with optimization for consecutive entries)
+        for (int i = 0; i < numEntries; i++) {
+            long tmp = readVarint(packedData);
+            long offset;
+
+            if (i > 0 && tmp == 0) {
+                // Consecutive optimization: offset = previous entry's offset + length
+                long previousOffset = builder.getOffset(i - 1);
+                int previousLength = builder.getLength(i - 1);
+                offset = previousOffset + previousLength;
+            } else {
+                offset = tmp - 1;
+            }
+            builder.offset(i, offset);
+        }
+
+        return builder.build();
+    }
     /**
      * Builds root and leaf directories from a list of entries.
      * <p>
@@ -161,7 +205,7 @@ final class DirectoryUtil {
      * @throws UnsupportedCompressionException if the compression type is not supported
      */
     public static DirectoryResult buildRootLeaves(List<PMTilesEntry> entries, byte compressionType, int maxRootDirSize)
-            throws IOException, UnsupportedCompressionException {
+            throws IOException {
 
         // Try with just the root directory first
         byte[] uncompressedDir = serializeDirectory(entries);
@@ -198,8 +242,7 @@ final class DirectoryUtil {
      * @throws UnsupportedCompressionException if the compression type is not supported
      */
     private static DirectoryResult buildRootLeavesWithSize(
-            List<PMTilesEntry> entries, byte compressionType, int leafSize)
-            throws IOException, UnsupportedCompressionException {
+            List<PMTilesEntry> entries, byte compressionType, int leafSize) throws IOException {
 
         List<PMTilesEntry> rootEntries = new ArrayList<>();
         ByteArrayOutputStream leafDirsStream = new ByteArrayOutputStream();
@@ -214,7 +257,7 @@ final class DirectoryUtil {
             byte[] compressedLeaf = CompressionUtil.compress(uncompressedLeaf, compressionType);
 
             rootEntries.add(
-                    PMTilesEntry.leaf(subentries.get(0).tileId(), leafDirsStream.size(), compressedLeaf.length));
+                    PMTilesEntry.of(subentries.get(0).tileId(), leafDirsStream.size(), compressedLeaf.length, 0));
 
             leafDirsStream.write(compressedLeaf);
         }
@@ -231,9 +274,8 @@ final class DirectoryUtil {
      *
      * @param out the output stream to write to
      * @param value the value to write
-     * @throws IOException if an I/O error occurs
      */
-    private static void writeVarint(ByteArrayOutputStream out, long value) throws IOException {
+    private static void writeVarint(ByteArrayOutputStream out, long value) {
         while (value >= 0x80L) {
             out.write((int) ((value & 0x7FL) | 0x80L));
             value >>>= 7;
@@ -262,6 +304,24 @@ final class DirectoryUtil {
             }
 
             b = buffer.get();
+            value |= (long) (b & 0x7F) << shift;
+            shift += 7;
+        } while ((b & 0x80) != 0);
+
+        return value;
+    }
+
+    private static long readVarint(InputStream input) throws IOException {
+        long value = 0;
+        int shift = 0;
+        byte b;
+
+        do {
+            if (shift >= 64) {
+                throw new IOException("Varint too long");
+            }
+
+            b = (byte) input.read();
             value |= (long) (b & 0x7F) << shift;
             shift += 7;
         } while ((b & 0x80) != 0);

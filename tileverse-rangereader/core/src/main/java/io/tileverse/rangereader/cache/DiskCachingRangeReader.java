@@ -18,6 +18,7 @@ package io.tileverse.rangereader.cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
+import io.tileverse.cache.CacheStats;
 import io.tileverse.io.ByteBufferPool;
 import io.tileverse.io.ByteRange;
 import io.tileverse.rangereader.AbstractRangeReader;
@@ -506,7 +507,7 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
 
     @Override
     public String getSourceIdentifier() {
-        return "disk-cached:" + delegate.getSourceIdentifier();
+        return delegate.getSourceIdentifier();
     }
 
     @Override
@@ -564,9 +565,7 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
     public CacheStats getCacheStats() {
         com.github.benmanes.caffeine.cache.stats.CacheStats caffeineStats = cache.stats();
         long entryCount = cache.estimatedSize();
-        long estimatedSizeBytes = getEstimatedCacheSizeBytes();
-
-        return CacheStats.fromCaffeine(caffeineStats, entryCount, estimatedSizeBytes);
+        return CacheStats.fromCaffeine(caffeineStats, entryCount);
     }
 
     /**

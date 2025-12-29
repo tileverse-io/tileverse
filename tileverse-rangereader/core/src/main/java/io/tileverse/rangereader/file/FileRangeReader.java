@@ -20,6 +20,7 @@ import io.tileverse.rangereader.RangeReader;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.file.FileSystemNotFoundException;
 import java.nio.file.Path;
@@ -66,6 +67,7 @@ public class FileRangeReader extends AbstractRangeReader implements RangeReader 
 
     private final FileChannel channel;
     private final Path path;
+    private final long size;
 
     /**
      * Creates a new FileRangeReader for the specified file path.
@@ -82,6 +84,7 @@ public class FileRangeReader extends AbstractRangeReader implements RangeReader 
         Objects.requireNonNull(path, "Path cannot be null");
         this.path = path;
         this.channel = FileChannel.open(path, StandardOpenOption.READ);
+        this.size = channel.size();
     }
 
     /**
@@ -146,7 +149,10 @@ public class FileRangeReader extends AbstractRangeReader implements RangeReader 
      */
     @Override
     public OptionalLong size() throws IOException {
-        return OptionalLong.of(channel.size());
+        if (!channel.isOpen()) {
+            throw new ClosedChannelException();
+        }
+        return OptionalLong.of(this.size);
     }
 
     /**

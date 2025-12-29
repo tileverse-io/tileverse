@@ -51,7 +51,6 @@ class CachingRangeReaderBlockAlignmentTest {
     void blockAlignment_cachesLargerBlockButReturnsOnlyRequestedBytes() throws IOException {
         try (RangeReader baseReader = FileRangeReader.of(testFile);
                 CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
-                        .maximumSize(100) // Prevent eviction during test
                         .blockSize(4096) // 4KB blocks
                         .build()) {
 
@@ -75,7 +74,6 @@ class CachingRangeReaderBlockAlignmentTest {
     void blockAlignment_reusesBlockForOverlappingRequests() throws IOException {
         try (RangeReader baseReader = FileRangeReader.of(testFile);
                 CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
-                        .maximumSize(100) // Prevent eviction during test
                         .blockSize(4096) // 4KB blocks
                         .build()) {
 
@@ -103,7 +101,6 @@ class CachingRangeReaderBlockAlignmentTest {
     void blockAlignment_withSpanningRequest() throws IOException {
         try (RangeReader baseReader = FileRangeReader.of(testFile);
                 CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
-                        .maximumSize(100) // Prevent eviction during test
                         .blockSize(4096) // 4KB blocks
                         .build()) {
 
@@ -131,7 +128,6 @@ class CachingRangeReaderBlockAlignmentTest {
     void noBlockAlignment_cachesExactlyWhatWasRequested() throws IOException {
         try (RangeReader baseReader = FileRangeReader.of(testFile);
                 CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
-                        .maximumSize(100) // Prevent eviction during test
                         .withoutBlockAlignment() // Explicitly disable
                         .build()) {
 
@@ -153,7 +149,6 @@ class CachingRangeReaderBlockAlignmentTest {
         // Test different builder methods
         try (RangeReader baseReader1 = FileRangeReader.of(testFile);
                 CachingRangeReader reader1 = CachingRangeReader.builder(baseReader1)
-                        .maximumSize(100)
                         .withBlockAlignment() // Uses default 64KB
                         .build()) {
 
@@ -164,7 +159,6 @@ class CachingRangeReaderBlockAlignmentTest {
 
         try (RangeReader baseReader2 = FileRangeReader.of(testFile);
                 CachingRangeReader reader2 = CachingRangeReader.builder(baseReader2)
-                        .maximumSize(100)
                         .blockSize(8192) // Custom 8KB blocks
                         .build()) {
 
@@ -175,7 +169,6 @@ class CachingRangeReaderBlockAlignmentTest {
 
         try (RangeReader baseReader3 = FileRangeReader.of(testFile);
                 CachingRangeReader reader3 = CachingRangeReader.builder(baseReader3)
-                        .maximumSize(100)
                         .withoutBlockAlignment() // Disable alignment
                         .build()) {
 
@@ -188,9 +181,8 @@ class CachingRangeReaderBlockAlignmentTest {
     @Test
     void blockAlignment_defaultBehaviorWithoutConfiguration() throws IOException {
         try (RangeReader baseReader = FileRangeReader.of(testFile);
-                CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
-                        .maximumSize(100) // Prevent eviction during test
-                        .build()) { // No block alignment configuration
+                CachingRangeReader cachingReader =
+                        CachingRangeReader.builder(baseReader).build()) { // No block alignment configuration
 
             // Request 1 byte at offset 2000
             cachingReader.readRange(2000, 1, result);
@@ -208,7 +200,6 @@ class CachingRangeReaderBlockAlignmentTest {
     void blockAlignment_eofHandling_avoidsRedundantRequests() throws IOException {
         try (RangeReader baseReader = FileRangeReader.of(testFile);
                 CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
-                        .maximumSize(100) // Prevent eviction during test
                         .blockSize(16384) // 16KB blocks
                         .build()) {
 

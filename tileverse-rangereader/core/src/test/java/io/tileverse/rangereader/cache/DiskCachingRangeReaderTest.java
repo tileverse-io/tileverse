@@ -212,7 +212,7 @@ class DiskCachingRangeReaderTest {
 
             assertEquals(0, cachingReader.getCacheEntryCount(), "Should have 0 cache entries after clearing");
             await().atMost(2, SECONDS).untilAsserted(() -> assertThat(cachingReader.getEstimatedCacheSizeBytes())
-                    .isEqualTo(0));
+                    .isZero());
 
             // Verify no files in cache directory
             await().atMost(2, SECONDS)

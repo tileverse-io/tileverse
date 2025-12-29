@@ -15,8 +15,10 @@
  */
 package io.tileverse.rangereader.cache;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
+import static java.util.Objects.requireNonNull;
+
+import io.tileverse.cache.CacheManager;
+import io.tileverse.cache.CacheStats;
 import io.tileverse.io.ByteRange;
 import io.tileverse.rangereader.AbstractRangeReader;
 import io.tileverse.rangereader.RangeReader;
@@ -25,10 +27,7 @@ import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.OptionalLong;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 /**
  * A decorator for RangeReader that adds in-memory caching capabilities using Caffeine.
@@ -90,7 +89,7 @@ import java.util.concurrent.TimeUnit;
 public class CachingRangeReader extends AbstractRangeReader implements RangeReader {
 
     private final RangeReader delegate;
-    private final Cache<ByteRange, ByteBuffer> cache;
+    private final RangeReaderCache cache;
     private final int blockSize;
     private final boolean alignToBlocks;
 
@@ -111,9 +110,9 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
      * @param blockSize The block size for alignment (0 to disable alignment)
      * @param headerSize The size of the header buffer (0 to disable header buffering)
      */
-    CachingRangeReader(RangeReader delegate, Cache<ByteRange, ByteBuffer> cache, int blockSize, int headerSize) {
-        this.delegate = Objects.requireNonNull(delegate, "Delegate RangeReader cannot be null");
-        this.cache = Objects.requireNonNull(cache, "Cache cannot be null");
+    CachingRangeReader(RangeReader delegate, RangeReaderCache cache, int blockSize, int headerSize) {
+        this.delegate = requireNonNull(delegate, "Delegate RangeReader cannot be null");
+        this.cache = requireNonNull(cache, "Cache cannot be null");
         if (blockSize < 0) {
             throw new IllegalArgumentException("Block size cannot be negative: " + blockSize);
         }
@@ -275,63 +274,28 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
      * Reads a single block and copies the requested portion to the target buffer.
      */
     private int readSingleBlock(BlockRequest request, ByteBuffer target) throws IOException {
-        try {
-            // Use Caffeine's get-or-create pattern
-            ByteBuffer cachedBuffer = cache.get(request.key, this::loadRange);
-
-            // Copy the requested portion to the target
-            return copyBlockData(cachedBuffer, request, target);
-
-        } catch (Exception e) {
-            if (e.getCause() instanceof IOException) {
-                throw (IOException) e.getCause();
-            }
-            throw new IOException("Failed to read block: " + request.key, e);
-        }
+        ByteBuffer cachedBuffer = cache.get(request.key);
+        return copyBlockData(cachedBuffer, request, target);
     }
 
     /**
-     * Reads multiple blocks in parallel and assembles the result.
+     * Reads multiple blocks and assembles the result.
+     * Note: With the blocking cache API, parallel loading happens at the cache level
+     * when multiple threads request different blocks.
      */
     private int readBlocksParallel(List<BlockRequest> blockRequests, ByteBuffer target) throws IOException {
-        @SuppressWarnings("unchecked")
-        CompletableFuture<ByteBuffer>[] futures = new CompletableFuture[blockRequests.size()];
+        int totalBytesRead = 0;
+        for (BlockRequest request : blockRequests) {
+            ByteBuffer blockData = cache.get(request.key);
+            int bytesFromBlock = copyBlockData(blockData, request, target);
+            totalBytesRead += bytesFromBlock;
 
-        // Load all blocks in parallel using default ForkJoinPool
-        for (int i = 0; i < blockRequests.size(); i++) {
-            BlockRequest request = blockRequests.get(i);
-            futures[i] = CompletableFuture.supplyAsync(() -> cache.get(request.key, this::loadRange));
-        }
-
-        try {
-            // Wait for all blocks to load
-            CompletableFuture.allOf(futures).join();
-
-            // Assemble the result by copying data from each block to the target
-            int totalBytesRead = 0;
-            for (int i = 0; i < blockRequests.size(); i++) {
-                BlockRequest request = blockRequests.get(i);
-                ByteBuffer blockData = futures[i].get();
-
-                int bytesFromBlock = copyBlockData(blockData, request, target);
-                totalBytesRead += bytesFromBlock;
-
-                // If we read fewer bytes than expected, we've hit EOF
-                if (bytesFromBlock < request.bytesToRead) {
-                    break;
-                }
+            // If we read fewer bytes than expected, we've hit EOF
+            if (bytesFromBlock < request.bytesToRead) {
+                break;
             }
-
-            return totalBytesRead;
-
-        } catch (Exception e) {
-            // Handle any exceptions from the parallel loading
-            Throwable cause = e.getCause();
-            if (cause instanceof IOException) {
-                throw (IOException) cause;
-            }
-            throw new IOException("Failed to read blocks in parallel", e);
         }
+        return totalBytesRead;
     }
 
     /**
@@ -377,8 +341,10 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         // Create a cache key for the exact range
         ByteRange key = new ByteRange(offset, actualLength);
 
-        // Use Caffeine's get-or-create pattern
-        ByteBuffer cachedBuffer = cache.get(key, this::loadRange);
+        ByteBuffer cachedBuffer = cache.get(key);
+        if (cachedBuffer == null) {
+            return 0;
+        }
 
         // Duplicate the cached buffer to avoid position/limit changes affecting the cached version
         ByteBuffer duplicate = cachedBuffer.duplicate();
@@ -390,32 +356,6 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         return bytesRead;
     }
 
-    private ByteBuffer loadRange(ByteRange key) {
-        try {
-            // Allocate a buffer for the cache entry
-            ByteBuffer blockData = ByteBuffer.allocateDirect(key.length());
-
-            // Read data directly into the buffer
-            int bytesRead = this.delegate.readRange(key.offset(), key.length(), blockData);
-
-            // Handle partial reads (e.g., EOF) by creating a buffer with only the actual data
-            if (bytesRead < key.length() && bytesRead > 0) {
-                ByteBuffer actualData = ByteBuffer.allocate(bytesRead);
-                blockData.flip();
-                actualData.put(blockData);
-                actualData.flip(); // Flip to prepare for reading
-                return actualData.asReadOnlyBuffer();
-            }
-
-            // Flip the buffer to prepare it for reading by cache consumers
-            blockData.flip();
-            return blockData.asReadOnlyBuffer();
-        } catch (IOException e) {
-            // Propagate the exception through
-            throw new UncheckedIOException("Failed to load range from delegate", e);
-        }
-    }
-
     @Override
     public OptionalLong size() throws IOException {
         return delegate.size();
@@ -423,7 +363,7 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
 
     @Override
     public String getSourceIdentifier() {
-        return "memory-cached:" + delegate.getSourceIdentifier();
+        return delegate.getSourceIdentifier();
     }
 
     @Override
@@ -445,7 +385,7 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
      * @return The number of cached entries
      */
     long getCacheEntryCount() {
-        return cache.estimatedSize();
+        return cache.stats().entryCount();
     }
 
     /**
@@ -454,8 +394,7 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
      * @return The estimated cache size in bytes
      */
     long getEstimatedCacheSizeBytes() {
-        // Calculate estimated size by summing the capacity of all cached ByteBuffers
-        return cache.asMap().values().stream().mapToLong(ByteBuffer::capacity).sum();
+        return cache.getEstimatedCacheSizeBytes();
     }
 
     /**
@@ -464,11 +403,7 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
      * @return The cache statistics
      */
     public CacheStats getCacheStats() {
-        com.github.benmanes.caffeine.cache.stats.CacheStats caffeineStats = cache.stats();
-        long entryCount = cache.estimatedSize();
-        long estimatedSizeBytes = getEstimatedCacheSizeBytes();
-
-        return CacheStats.fromCaffeine(caffeineStats, entryCount, estimatedSizeBytes);
+        return cache.stats();
     }
 
     /**
@@ -487,91 +422,29 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
      */
     public static class Builder {
         private final RangeReader delegate;
-        private Long maximumSize;
-        private Long maximumWeight;
-        private Long expireAfterAccessDuration;
-        private TimeUnit expireAfterAccessUnit;
-        private boolean softValues = false;
         private Integer blockSize;
         private Integer headerSize;
+        private CacheManager cacheManager = CacheManager.getDefault();
 
         private Builder(RangeReader delegate) {
-            this.delegate = Objects.requireNonNull(delegate, "Delegate cannot be null");
+            this.delegate = requireNonNull(delegate, "Delegate cannot be null");
         }
 
-        /**
-         * Sets the maximum number of entries the cache can contain.
-         * Cannot be used together with {@link #maximumWeight(long)}.
-         *
-         * @param maximumSize the maximum number of entries
-         * @return this builder
-         */
-        public Builder maximumSize(long maximumSize) {
-            if (maximumSize <= 0) {
-                throw new IllegalArgumentException("Maximum size must be positive: " + maximumSize);
-            }
-            if (this.maximumWeight != null) {
-                throw new IllegalStateException("Cannot set both maximumSize and maximumWeight");
-            }
-            this.maximumSize = maximumSize;
+        public Builder cacheManager(CacheManager cacheManager) {
+            this.cacheManager = requireNonNull(cacheManager);
             return this;
         }
 
         /**
-         * Sets the maximum weight of entries the cache can contain.
-         * When using this method, entries are weighted by their ByteBuffer capacity.
-         * Cannot be used together with {@link #maximumSize(long)}.
+         * Builds the CachingRangeReader with the configured cache settings.
          *
-         * @param maximumWeight the maximum weight in bytes
-         * @return this builder
+         * @return a new CachingRangeReader instance
          */
-        public Builder maximumWeight(long maximumWeight) {
-            if (maximumWeight <= 0) {
-                throw new IllegalArgumentException("Maximum weight must be positive: " + maximumWeight);
-            }
-            if (this.maximumSize != null) {
-                throw new IllegalStateException("Cannot set both maximumSize and maximumWeight");
-            }
-            this.maximumWeight = maximumWeight;
-            return this;
-        }
-
-        /**
-         * Sets the duration after which entries are automatically removed from the cache
-         * following their last access.
-         *
-         * @param duration the duration
-         * @param unit     the time unit
-         * @return this builder
-         */
-        public Builder expireAfterAccess(long duration, TimeUnit unit) {
-            if (duration <= 0) {
-                throw new IllegalArgumentException("Duration must be positive: " + duration);
-            }
-            this.expireAfterAccessDuration = duration;
-            this.expireAfterAccessUnit = Objects.requireNonNull(unit, "Time unit cannot be null");
-            return this;
-        }
-
-        /**
-         * Enables soft values, allowing the garbage collector to evict entries when memory is needed.
-         * This can help prevent OutOfMemoryError in memory-constrained environments.
-         *
-         * @return this builder
-         */
-        public Builder softValues() {
-            return softValues(true);
-        }
-
-        /**
-         * Enables soft values with the specified setting.
-         *
-         * @param softValues true to enable soft values, false to use strong references
-         * @return this builder
-         */
-        public Builder softValues(boolean softValues) {
-            this.softValues = softValues;
-            return this;
+        public CachingRangeReader build() {
+            RangeReaderCache cache = new RangeReaderCache(cacheManager, delegate);
+            int effectiveBlockSize = blockSize != null ? blockSize : 0; // Default: no block alignment
+            int effectiveHeaderSize = headerSize != null ? headerSize : 0; // Default: no header buffer
+            return new CachingRangeReader(delegate, cache, effectiveBlockSize, effectiveHeaderSize);
         }
 
         /**
@@ -654,43 +527,6 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
          */
         public Builder withoutHeaderBuffer() {
             return headerSize(0);
-        }
-
-        /**
-         * Builds the CachingRangeReader with the configured cache settings.
-         *
-         * @return a new CachingRangeReader instance
-         */
-        public CachingRangeReader build() {
-            // Start with a base Caffeine builder
-            Caffeine<Object, Object> cacheBuilder = Caffeine.newBuilder().recordStats();
-
-            // Configure size limits
-            if (maximumSize != null) {
-                cacheBuilder.maximumSize(maximumSize);
-            } else if (maximumWeight != null) {
-                cacheBuilder
-                        .maximumWeight(maximumWeight)
-                        .weigher((ByteRange key, ByteBuffer value) -> value.capacity());
-            } else {
-                // Default to soft values when no size limit is specified
-                // This prevents OutOfMemoryError while still providing caching benefits
-                softValues = true;
-            }
-
-            // Configure expiration (only if explicitly set)
-            if (expireAfterAccessDuration != null && expireAfterAccessUnit != null) {
-                cacheBuilder.expireAfterAccess(expireAfterAccessDuration, expireAfterAccessUnit);
-            }
-
-            // Configure value references
-            if (softValues) {
-                cacheBuilder.softValues();
-            }
-
-            int effectiveBlockSize = blockSize != null ? blockSize : 0; // Default: no block alignment
-            int effectiveHeaderSize = headerSize != null ? headerSize : 0; // Default: no header buffer
-            return new CachingRangeReader(delegate, cacheBuilder.build(), effectiveBlockSize, effectiveHeaderSize);
         }
     }
 }

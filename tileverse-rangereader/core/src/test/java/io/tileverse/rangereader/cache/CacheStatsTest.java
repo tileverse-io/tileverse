@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.tileverse.cache.CacheStats;
 import io.tileverse.rangereader.file.FileRangeReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -84,28 +85,12 @@ class CacheStatsTest {
 
             // Verify CacheStats structure
             assertThat(memoryStats.entryCount()).isGreaterThan(0);
-            assertThat(memoryStats.estimatedSizeBytes()).isGreaterThan(0);
             assertThat(memoryStats.loadCount()).isGreaterThan(0);
             assertThat(memoryStats.requestCount()).isGreaterThan(0);
 
             assertThat(diskStats.entryCount()).isGreaterThan(0);
-            assertThat(diskStats.estimatedSizeBytes()).isGreaterThan(0);
             assertThat(diskStats.loadCount()).isGreaterThan(0);
             assertThat(diskStats.requestCount()).isGreaterThan(0);
-
-            // Test toString format
-            String memoryStatsStr = memoryStats.toString();
-            String diskStatsStr = diskStats.toString();
-
-            assertThat(memoryStatsStr).contains("CacheStats{");
-            assertThat(memoryStatsStr).contains("entries=");
-            assertThat(memoryStatsStr).contains("sizeBytes=");
-            assertThat(memoryStatsStr).contains("hitRate=");
-
-            assertThat(diskStatsStr).contains("CacheStats{");
-            assertThat(diskStatsStr).contains("entries=");
-            assertThat(diskStatsStr).contains("sizeBytes=");
-            assertThat(diskStatsStr).contains("hitRate=");
         }
     }
 
@@ -128,7 +113,6 @@ class CacheStatsTest {
             assertThat(stats.missCount()).isGreaterThan(0);
             assertThat(stats.loadCount()).isGreaterThan(0);
             assertThat(stats.entryCount()).isGreaterThan(0);
-            assertThat(stats.estimatedSizeBytes()).isGreaterThan(0);
             assertThat(stats.requestCount()).isEqualTo(stats.hitCount() + stats.missCount());
         }
     }

@@ -40,6 +40,10 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.OptionalLong;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
@@ -69,9 +73,9 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
     private final HttpClient httpClient;
     private final HttpAuthentication authentication;
 
-    private volatile OptionalLong contentLength;
+    private OptionalLong cachedContentLength;
     private volatile boolean rangeInitialized = false;
-    private volatile HttpResponse<Void> cachedHeadResponse = null;
+    private HttpResponse<Void> cachedHeadResponse = null;
 
     /**
      * Creates a new HttpRangeReader with a custom HTTP client and authentication.
@@ -106,8 +110,8 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
         HttpResponse<InputStream> response = sendRangeRequest(offset, length);
 
         int totalRead = 0;
-        try (InputStream in = response.body()) {
-            ReadableByteChannel channel = Channels.newChannel(in);
+        try (InputStream in = response.body();
+                ReadableByteChannel channel = Channels.newChannel(in)) {
             int read = 0;
             while (totalRead < length) {
                 read = channel.read(target);
@@ -126,6 +130,38 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
         return totalRead;
     }
 
+    /**
+     * Fetches a specific byte range synchronously using {@link HttpClient#send(HttpRequest, BodyHandler)}.
+     * <p>
+     * <b>Memory Efficiency:</b>
+     * This method uses {@link HttpResponse.BodyHandlers#ofInputStream()} to minimize heap pressure.
+     * Unlike {@code ofByteArray()}, which accumulates the entire range into a single contiguous
+     * byte array, the {@code InputStream} approach provides a streaming view over the client's
+     * internal {@code List<ByteBuffer>}. This avoids redundant copies and large heap allocations
+     * during the traversal of massive files.
+     * <p>
+     * <b>Thread Scheduling:</b>
+     * <ul>
+     *   <li><b>Virtual Threads (Java 21+):</b> This method is highly efficient. When blocking on I/O,
+     *   the virtual thread is unmounted, freeing the underlying carrier thread for other tasks.
+     *   <li><b>Platform Threads (Java 17):</b> This method blocks the operating system thread
+     *   for the duration of the request. High concurrency with platform threads may lead to
+     *   increased memory usage due to stack overhead and potential thread exhaustion.
+     * </ul>
+     * <p>
+     * <b>Efficiency:</b>
+     * This synchronous approach provides performance parity with {@link HttpClient#sendAsync()}
+     * because both utilize the {@code HttpClient}'s internal NIO-based executor for I/O operations.
+     * By using {@code send()}, the application reduces heap pressure by avoiding
+     * {@code CompletableFuture} allocations and lambda capture states.
+     * </p>
+     *
+     * @param offset The starting byte position.
+     * @param length The number of bytes to fetch.
+     * @return The HTTP response containing the {@link InputStream} of the range.
+     * @throws IOException if an I/O error occurs or the connection times out.
+     * @throws InterruptedException if the operation is interrupted.
+     */
     private HttpResponse<InputStream> sendRangeRequest(final long offset, final int length)
             throws IOException, InterruptedException {
 
@@ -137,7 +173,6 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
         } catch (HttpConnectTimeoutException timeout) {
             throw rethrow(timeout);
         }
-
         checkStatusCode(response);
         checkContentLength(length, response);
         return response;
@@ -188,14 +223,14 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
 
     @Override
     public OptionalLong size() throws IOException {
-        if (contentLength == null) {
+        if (cachedContentLength == null) {
             synchronized (this) {
-                if (contentLength == null) {
+                if (cachedContentLength == null) {
                     initializeSize();
                 }
             }
         }
-        return contentLength;
+        return cachedContentLength;
     }
 
     /**
@@ -264,11 +299,11 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
         HttpResponse<Void> headResponse = getHeadResponse();
 
         // Get content length
-        this.contentLength = headResponse.headers().firstValueAsLong("Content-Length");
-        if (this.contentLength.isEmpty()) {
+        this.cachedContentLength = headResponse.headers().firstValueAsLong("Content-Length");
+        if (this.cachedContentLength.isEmpty()) {
             LOGGER.warning("Content-Length unkown for " + uri);
-        } else if (this.contentLength.getAsLong() < 0) {
-            this.contentLength = OptionalLong.empty();
+        } else if (this.cachedContentLength.getAsLong() < 0) {
+            this.cachedContentLength = OptionalLong.empty();
         }
     }
 
@@ -580,8 +615,23 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
                 httpClientBuilder.connectTimeout(connectionTimeout);
             }
 
+            Executor executor = Executors.newCachedThreadPool(httpclientThreadFactory);
+            httpClientBuilder.executor(executor);
+
             return httpClientBuilder.build();
         }
+
+        private static final ThreadFactory httpclientThreadFactory = new ThreadFactory() {
+            private static final AtomicInteger executorThreadId = new AtomicInteger();
+
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r);
+                t.setDaemon(true);
+                t.setName("tileverse-http-client-%02d".formatted(executorThreadId.incrementAndGet()));
+                return t;
+            }
+        };
 
         private SSLContext createSSLContext() {
             if (trustAllCertificates) {

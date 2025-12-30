@@ -141,6 +141,10 @@ public class PMTilesReader implements AutoCloseable {
      * Usually you'd use {@link RangeReader#asByteChannel() RangeReader::asByteChannel)}, though this constructor
      * allows to use other data sources that don't implement {@code RangeReader}.
      *
+     * @param pmtilesUri      a unique identifier for the PMTiles source (e.g., file path or URI).
+     *                        This identifier is crucial for caching, as it allows the internal
+     *                        {@link CacheManager} to share cache entries across multiple reader instances
+     *                        pointing to the same resource.
      * @param channelSupplier supplier of short-lived {@link SeekableByteChannel}s
      *                        to use on each read operation
      * @throws IOException            if an I/O error occurs
@@ -178,6 +182,11 @@ public class PMTilesReader implements AutoCloseable {
         return directoryCache.stats();
     }
 
+    /**
+     * Returns the unique identifier for this PMTiles source.
+     *
+     * @return the unique URI or identifier provided at construction time.
+     */
     public String getSourceIdentifier() {
         return pmtilesUri;
     }

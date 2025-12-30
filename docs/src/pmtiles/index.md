@@ -22,7 +22,7 @@ This module provides a pure Java implementation of the [PMTiles v3 specification
 
 ### Reading
 
-The `PMTilesReader` accepts a `Supplier<SeekableByteChannel>`. The `RangeReader` can provide this via its `asByteChannel()` method.
+The `PMTilesReader` accepts either a `RangeReader` or a `Supplier<SeekableByteChannel>`. The `RangeReader` can provide this via its `asByteChannel()` method.
 
 ```java
 import io.tileverse.pmtiles.PMTilesReader;
@@ -32,7 +32,7 @@ var source = FileRangeReader.builder()
     .path(Path.of("data/map.pmtiles"))
     .build();
 
-try (var reader = new PMTilesReader(source::asByteChannel)) {
+try (var reader = new PMTilesReader(source)) {
     // Get metadata
     var header = reader.getHeader();
     System.out.println("Min Zoom: " + header.minZoom());

@@ -77,7 +77,7 @@ public class Example {
             .build();
 
         // Open the PMTiles reader
-        try (var reader = new PMTilesReader(source::asByteChannel)) {
+        try (var reader = new PMTilesReader(source)) {
             // Fetch a specific tile (z=0, x=0, y=0)
             Optional<ByteBuffer> tile = reader.getTile(0, 0, 0);
             
@@ -109,7 +109,7 @@ var cachedSource = CachingRangeReader.builder(s3Source)
     .capacity(50_000_000) // 50MB cache
     .build();
     
-var reader = new PMTilesReader(cachedSource::asByteChannel);
+var reader = new PMTilesReader(cachedSource);
 ```
 
 ## Requirements

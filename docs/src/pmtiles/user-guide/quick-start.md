@@ -50,7 +50,7 @@ public class QuickStart {
             .build();
 
         // Open the PMTiles archive
-        try (PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel)) {
+        try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
             // Read the header to get metadata
             PMTilesHeader header = reader.getHeader();
             System.out.println("Tile Format: " + header.tileType());
@@ -81,7 +81,7 @@ RangeReader httpReader = HttpRangeReader.builder()
     .uri(URI.create("https://example.com/tiles.pmtiles"))
     .build();
 
-try (PMTilesReader reader = new PMTilesReader(httpReader::asByteChannel)) {
+try (PMTilesReader reader = new PMTilesReader(httpReader)) {
     Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
     // Process tile...
 }
@@ -99,7 +99,7 @@ RangeReader s3Reader = S3RangeReader.builder()
     .region(Region.US_WEST_2)
     .build();
 
-    try (PMTilesReader reader = new PMTilesReader(s3Reader::asByteChannel)) {
+    try (PMTilesReader reader = new PMTilesReader(s3Reader)) {
         Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);    // Process tile...
 }
 ```
@@ -117,7 +117,7 @@ RangeReader cachedReader = CachingRangeReader.builder(s3Reader)
     .withBlockAlignment()  // Optimize reads
     .build();
 
-try (PMTilesReader reader = new PMTilesReader(cachedReader::asByteChannel)) {
+try (PMTilesReader reader = new PMTilesReader(cachedReader)) {
     // Subsequent reads will be cached
     Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
 }
@@ -131,7 +131,7 @@ int zoom = 10;
 int minX = 880, maxX = 890;
 int minY = 410, maxY = 420;
 
-try (PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel)) {
+try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
     for (int x = minX; x <= maxX; x++) {
         for (int y = minY; y <= maxY; y++) {
             Optional<ByteBuffer> tile = reader.getTile(zoom, x, y);

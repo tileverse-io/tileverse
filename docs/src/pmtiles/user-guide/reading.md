@@ -28,7 +28,7 @@ RangeReader s3Reader = S3RangeReader.builder()
 The header contains essential metadata about the tileset:
 
 ```java
-try (PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel)) {
+try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
     PMTilesHeader header = reader.getHeader();
 
     // Tile format (MVT, PNG, JPEG, WEBP, etc.)
@@ -110,7 +110,7 @@ See [Cloud Storage](cloud-storage.md) for detailed performance optimization stra
 ## Error Handling
 
 ```java
-try (PMTilesReader reader = new PMTilesReader(rangeReader::asByteChannel)) {
+try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
     Optional<byte[]> tile = reader.getTile(zoom, x, y);
     // Process tile...
 } catch (UncheckedIOException e) {

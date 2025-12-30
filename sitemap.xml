@@ -2,142 +2,142 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://tileverse.io/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/getting-started/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/developer-guide/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/developer-guide/building/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/developer-guide/contributing/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/developer-guide/testing/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/developer-guide/architecture/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/developer-guide/architecture/dependencies/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/developer-guide/architecture/system-design/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/pmtiles/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/pmtiles/user-guide/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/pmtiles/user-guide/cloud-storage/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/pmtiles/user-guide/quick-start/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/pmtiles/user-guide/reading/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/pmtiles/user-guide/writing/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/rangereader/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/rangereader/developer-guide/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/rangereader/developer-guide/architecture/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/rangereader/developer-guide/performance/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/rangereader/user-guide/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/rangereader/user-guide/authentication/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/rangereader/user-guide/configuration/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/rangereader/user-guide/installation/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/rangereader/user-guide/quick-start/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/rangereader/user-guide/troubleshooting/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/tilematrixset/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/tilematrixset/user-guide/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/tilematrixset/user-guide/quick-start/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/tilematrixset/user-guide/standard-sets/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/tilematrixset/user-guide/tile-pyramids/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/vectortiles/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/vectortiles/user-guide/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/vectortiles/user-guide/decoding/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/vectortiles/user-guide/encoding/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/vectortiles/user-guide/quick-start/</loc>
-         <lastmod>2025-12-04</lastmod>
+         <lastmod>2025-12-30</lastmod>
     </url>
 </urlset>

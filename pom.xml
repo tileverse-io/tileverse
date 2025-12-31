@@ -33,6 +33,7 @@
     <module>tileverse-vectortiles</module>
     <module>tileverse-tilematrixset</module>
     <module>tileverse-pmtiles</module>
+    <module>tileverse-parquet</module>
   </modules>
 
   <scm>
@@ -87,6 +88,10 @@
     <slf4j-api.version>2.0.17</slf4j-api.version>
     <zstd-jni.version>1.5.7-6</zstd-jni.version>
     <lombok.version>1.18.42</lombok.version>
+    <parquet-java.version>1.17.0</parquet-java.version>
+    <!-- hadoop-common required by parquet-java's parquet-hadoop but declared as provided so we need to include it explicitly -->
+    <hadoop.version>3.3.0</hadoop.version>
+    <avro.version>1.11.5</avro.version>
 
     <!-- Test Dependency versions -->
     <assertj.version>3.27.3</assertj.version>

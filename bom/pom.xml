@@ -53,6 +53,11 @@
         <artifactId>tileverse-pmtiles</artifactId>
         <version>${project.version}</version>
       </dependency>
+      <dependency>
+        <groupId>io.tileverse.parquet</groupId>
+        <artifactId>tileverse-parquet</artifactId>
+        <version>${project.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
   <build>

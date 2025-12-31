@@ -34,6 +34,7 @@
     <module>tileverse-vectortiles</module>
     <module>tileverse-tilematrixset</module>
     <module>tileverse-pmtiles</module>
+    <module>tileverse-parquet</module>
   </modules>
 
   <scm>

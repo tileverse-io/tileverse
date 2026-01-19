@@ -27,6 +27,7 @@ import java.util.function.UnaryOperator;
 import org.locationtech.jts.algorithm.Area;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.CoordinateSequence;
+import org.locationtech.jts.geom.CoordinateSequenceFactory;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.LineString;
@@ -151,8 +152,8 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
         final GeomType geomType = feature.getType();
         final IntList commands = (IntList) feature.getGeometryList();
         final int cmdCount = commands.size();
-        final int maxPossibleSize = calculateCoordinateCount(commands);
-        CoordinateSequence allCoords = gf.getCoordinateSequenceFactory().create(maxPossibleSize, 2);
+        final int exactCoordCount = calculateCoordinateCount(commands);
+        CoordinateSequence allCoords = gf.getCoordinateSequenceFactory().create(exactCoordCount, 2);
 
         int coordIndex = 0;
         // unscaled cursor position to compute each deltified ordinate
@@ -246,10 +247,12 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
         }
 
         // Return original sequence if we used exactly the allocated space, otherwise create subsequence
-        if (coordIndex == maxPossibleSize) {
-            return allCoords;
+        if (coordIndex != exactCoordCount) {
+            throw new IllegalStateException(
+                    "number of coordinates (%d) doesn't match calculated number of coordinates (%d)"
+                            .formatted(coordIndex, exactCoordCount));
         }
-        return new SubCoordinateSequence(allCoords, 0, coordIndex, gf.getCoordinateSequenceFactory());
+        return allCoords;
     }
 
     /**
@@ -399,8 +402,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
 
         // Accurate size: (total - command_words) / 2 + ClosePath coordinates
         int ordinateCount = size - commandCount;
-        int coordinateCount = (ordinateCount / 2) + closePathCount;
-        return coordinateCount;
+        return (ordinateCount / 2) + closePathCount;
     }
 
     /**
@@ -410,7 +412,17 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
      * @return coordinate subsequence for the specified part
      */
     private CoordinateSequence createSubSequence(Part part, CoordinateSequence allCoords, GeometryFactory gf) {
-        return new SubCoordinateSequence(allCoords, part.start(), part.length(), gf.getCoordinateSequenceFactory());
+        CoordinateSequenceFactory sequenceFactory = gf.getCoordinateSequenceFactory();
+        int start = part.start();
+        int length = part.length();
+        if (start == 0 && length == allCoords.size()) {
+            return allCoords;
+        }
+        CoordinateSequence subsequence = new SubCoordinateSequence(allCoords, start, length, sequenceFactory);
+        if (gf != DEFAULT_GEOMETRY_FACTORY) {
+            subsequence = subsequence.copy();
+        }
+        return subsequence;
     }
 
     /**

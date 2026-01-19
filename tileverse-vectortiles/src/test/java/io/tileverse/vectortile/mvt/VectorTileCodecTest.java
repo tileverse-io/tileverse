@@ -167,8 +167,14 @@ class VectorTileCodecTest {
 
     @Test
     void testMultiLineString() throws IOException {
-        Geometry geometry = geom("MULTILINESTRING((1 2, 5 6, 7 8), (8 10, 11 12))");
-        testFeatureRoundTrip(geometry, Map.of());
+        Geometry geom = geom("MULTILINESTRING EMPTY");
+        testFeatureRoundTrip(geom, null, Map.of());
+
+        geom = geom("MULTILINESTRING((1 2, 5 6, 7 8))");
+        testFeatureRoundTrip(geom, geom("LINESTRING(1 2, 5 6, 7 8)"), Map.of());
+
+        geom = geom("MULTILINESTRING((1 2, 5 6, 7 8), (8 10, 11 12))");
+        testFeatureRoundTrip(geom, Map.of());
     }
 
     @Test
@@ -394,6 +400,10 @@ class VectorTileCodecTest {
 
         VectorTile decoded = decode(encoded);
 
+        if (expectedGeometry == null) {
+            assertThat(decoded.getLayers().isEmpty());
+            return null;
+        }
         assertEquals(Set.of(layerName), decoded.getLayerNames());
 
         // Apply coordinate transformation if needed for round-trip testing

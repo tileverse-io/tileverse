@@ -111,7 +111,6 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
             throw new IndexOutOfBoundsException("Entry index %d out of bounds [%d,%d]".formatted(index, 0, size));
         }
         return dettached(index);
-        // return ByteBufferEntry.valueOf(index, unpacked);
     }
 
     private PMTilesEntry dettached(int index) {

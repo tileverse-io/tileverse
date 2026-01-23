@@ -282,7 +282,7 @@ class PMTilesReaderTest {
      * Test utility methods for converting E7 encoded coordinates to doubles.
      */
     @Test
-    void testCoordinateUtilityMethods() throws Exception {
+    void testCoordinateUtilityMethods() {
 
         PMTilesHeader header = reader.getHeader();
 

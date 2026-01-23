@@ -19,7 +19,6 @@ import io.tileverse.pmtiles.PMTilesDirectoryImpl.Builder;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -88,62 +87,6 @@ final class DirectoryUtil {
         }
 
         return baos.toByteArray();
-    }
-
-    /**
-     * Deserializes a byte array into a list of PMTilesEntry objects.
-     *
-     * @param packedData the serialized directory data
-     * @return the list of directory entries
-     * @throws IOException if an I/O error occurs or the data is malformed
-     */
-    public static PMTilesDirectoryImpl deserializeDirectory(ByteBuffer packedData) throws IOException {
-
-        // Read number of entries
-        final int numEntries = (int) readVarint(packedData);
-        Builder builder = PMTilesDirectoryImpl.builder(numEntries);
-
-        // Read tile IDs (delta encoded)
-        long lastId = 0;
-        for (int i = 0; i < numEntries; i++) {
-            long tileId = lastId + readVarint(packedData);
-            lastId = tileId;
-            builder.tileId(i, tileId);
-        }
-
-        // Read run lengths
-        for (int i = 0; i < numEntries; i++) {
-            int runLength = (int) readVarint(packedData);
-            builder.runLength(i, runLength);
-        }
-
-        // Read lengths
-        for (int i = 0; i < numEntries; i++) {
-            int length = (int) readVarint(packedData);
-            builder.length(i, length);
-        }
-
-        // Read offsets (with optimization for consecutive entries)
-        for (int i = 0; i < numEntries; i++) {
-            long tmp = readVarint(packedData);
-            long offset;
-
-            if (i > 0 && tmp == 0) {
-                // Consecutive optimization: offset = previous entry's offset + length
-                long previousOffset = builder.getOffset(i - 1);
-                int previousLength = builder.getLength(i - 1);
-                offset = previousOffset + previousLength;
-            } else {
-                offset = tmp - 1;
-            }
-            builder.offset(i, offset);
-        }
-        // Ensure we've consumed the entire buffer
-        if (packedData.hasRemaining()) {
-            throw new IOException("Malformed PMTiles directory: additional data at end of buffer");
-        }
-
-        return builder.build();
     }
 
     public static PMTilesDirectory deserializeDirectory(InputStream packedData) throws IOException {
@@ -281,34 +224,6 @@ final class DirectoryUtil {
             value >>>= 7;
         }
         out.write((int) value);
-    }
-
-    /**
-     * Reads a variable-length integer (varint) from a byte buffer.
-     *
-     * @param buffer the byte buffer to read from
-     * @return the value read
-     * @throws IOException if an I/O error occurs or the varint is malformed
-     */
-    private static long readVarint(ByteBuffer buffer) throws IOException {
-        long value = 0;
-        int shift = 0;
-        byte b;
-
-        do {
-            if (!buffer.hasRemaining()) {
-                throw new IOException("Unexpected end of buffer while reading varint");
-            }
-            if (shift >= 64) {
-                throw new IOException("Varint too long");
-            }
-
-            b = buffer.get();
-            value |= (long) (b & 0x7F) << shift;
-            shift += 7;
-        } while ((b & 0x80) != 0);
-
-        return value;
     }
 
     private static long readVarint(InputStream input) throws IOException {

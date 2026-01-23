@@ -21,12 +21,11 @@ import io.tileverse.jackson.databind.tilejson.v3.VectorLayer;
 import io.tileverse.pmtiles.PMTilesReader;
 import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.matrix.Tile;
-import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.store.TileData;
 import io.tileverse.vectortile.model.VectorTile;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
-import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -77,14 +76,10 @@ public class PMTilesVectorTileStore extends VectorTileStore {
      */
     @Override
     public List<VectorLayer> getVectorLayersMetadata() {
-        try {
-            return getMetadata().vectorLayers();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        return getMetadata().vectorLayers();
     }
 
-    public PMTilesMetadata getMetadata() throws IOException {
+    public PMTilesMetadata getMetadata() {
         return reader.getMetadata();
     }
 
@@ -99,8 +94,8 @@ public class PMTilesVectorTileStore extends VectorTileStore {
     }
 
     /**
-     * Delegates to {@link PMTilesReader#getTile(TileIndex, java.util.function.Function)} with a decoding function to parse the
-     * {@link ByteBuffer}  blob as a {@link VectorTile}.
+     * Delegates to {@link PMTilesReader#getTile(long, io.tileverse.io.IOFunction)} with a decoding function to parse the
+     * {@link InputStream}  blob as a {@link VectorTile}.
      */
     @Override
     public Optional<TileData<VectorTile>> loadTile(Tile tile) {

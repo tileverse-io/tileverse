@@ -63,7 +63,7 @@ class VectorTileCache {
      * {@code CaffeineCache#Builder}'s {@code computeInitialCapacity()} to pre-size
      * internal data structures and minimize GC churn during cache warm-up.
      */
-    private static final int AVERAGE_WEIGHT = 1024 * 400;
+    private static final int AVERAGE_TILE_WEIGHT = 1024 * 400;
 
     private final PMTilesReader reader;
 
@@ -110,7 +110,7 @@ class VectorTileCache {
     private io.tileverse.cache.Cache<TileIndex, Optional<VectorTile>> buildCache() {
         return CaffeineCache.<TileIndex, Optional<VectorTile>>newBuilder()
                 .maxHeapPercent(maxHeapPercent, VectorTileCache::weigh)
-                .averageWeight(AVERAGE_WEIGHT)
+                .averageWeight(AVERAGE_TILE_WEIGHT)
                 .expireAfterAccess(expireAfterAccess)
                 // run eviction tasks when idle to return memory without waiting for cache usage
                 .scheduler(Scheduler.systemScheduler())
@@ -119,6 +119,7 @@ class VectorTileCache {
                 .build();
     }
 
+    @SuppressWarnings("java:S2637") // can't return null
     public Optional<VectorTile> getVectorTile(TileIndex tileIndex) throws IOException {
         try {
             return cache().get(tileIndex, this::loadVectorTile);

@@ -297,9 +297,9 @@ class PMTilesReaderBigFileIT {
     //                tileDataSize.longValue());
     //    }
 
-    private int tileDataSize(PMTilesReader reader, TileIndex tileindex) {
+    private int tileDataSize(PMTilesReader reader, TileIndex tileIndex) {
         try {
-            return reader.getTile(tileindex, ByteBuffer::remaining).orElse(0);
+            return reader.getTile(tileIndex).map(ByteBuffer::remaining).orElse(0);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

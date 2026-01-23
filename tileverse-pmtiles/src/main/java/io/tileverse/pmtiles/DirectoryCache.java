@@ -15,7 +15,7 @@
  */
 package io.tileverse.pmtiles;
 
-import static io.tileverse.pmtiles.CompressionUtil.decompressAndTransform;
+import static io.tileverse.pmtiles.CompressionUtil.*;
 
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.github.benmanes.caffeine.cache.Scheduler;
@@ -24,6 +24,7 @@ import io.tileverse.cache.CacheManager;
 import io.tileverse.cache.CaffeineCache;
 import io.tileverse.io.ByteRange;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.channels.SeekableByteChannel;
 import java.time.Duration;
@@ -114,9 +115,10 @@ class DirectoryCache {
      * {@link #cache} loading function
      */
     PMTilesDirectory readDirectory(ByteRange directoryRange) {
-        try (SeekableByteChannel channel = channelSupplier.get()) {
-            final byte compression = header.internalCompression();
-            return decompressAndTransform(channel, directoryRange, compression, DirectoryUtil::deserializeDirectory);
+        final byte compression = header.internalCompression();
+        try (SeekableByteChannel channel = channelSupplier.get();
+                InputStream in = decompressingInputStream(channel, directoryRange, compression)) {
+            return DirectoryUtil.deserializeDirectory(in);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

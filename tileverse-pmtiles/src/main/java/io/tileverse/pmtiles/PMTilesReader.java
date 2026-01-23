@@ -15,7 +15,6 @@
  */
 package io.tileverse.pmtiles;
 
-import static io.tileverse.pmtiles.CompressionUtil.decompress;
 import static io.tileverse.pmtiles.CompressionUtil.decompressingInputStream;
 import static java.util.Objects.requireNonNull;
 
@@ -39,7 +38,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -200,7 +198,15 @@ public class PMTilesReader implements AutoCloseable {
         return header;
     }
 
+    /**
+     * Computes the tile id for a given tile index
+     *
+     * @param tileIndex the tile coordinates.
+     * @return the scalar PMTiles ID.
+     * @throws IllegalArgumentException if the zoom level > 26 or x/y are out of bounds.
+     */
     public long getTileId(TileIndex tileIndex) {
+        requireNonNull(tileIndex, "tileIndex is null");
         if (tileIndex.z() < 0) throw new IllegalArgumentException("z can't be < 0");
         if (tileIndex.x() < 0) throw new IllegalArgumentException("x can't be < 0");
         if (tileIndex.y() < 0) throw new IllegalArgumentException("y can't be < 0");
@@ -208,10 +214,11 @@ public class PMTilesReader implements AutoCloseable {
     }
 
     /**
+     * Decodes a scalar PMTiles Tile ID into (z, x, y) coordinates.
      *
-     * @param tileId
-     * @return
-     * @throws IllegalArgumentException
+     * @param tileId the global PMTiles identifier (must be positive).
+     * @return the decoded {@link TileIndex}.
+     * @throws IllegalArgumentException if {@code tileId} is negative or exceeds the max zoom limit.
      */
     public TileIndex getTileIndex(long tileId) {
         return hilbertCurve.tileIdToTileIndex(tileId);
@@ -247,6 +254,8 @@ public class PMTilesReader implements AutoCloseable {
 
     /**
      * Gets a tile by its TileIndex.
+     * <p>
+     * This is a shortcut for {@link #getTile(long) getTile(getTileId(tileIndex))}.
      *
      * @param tileIndex the tile coordinates
      * @return an Optional containing the tile data as a ByteBuffer if found, or
@@ -254,60 +263,25 @@ public class PMTilesReader implements AutoCloseable {
      * @throws IOException if an I/O error occurs
      */
     public Optional<ByteBuffer> getTile(TileIndex tileIndex) throws IOException {
-        return getTile(tileIndex, Function.identity());
-    }
-
-    public Optional<ByteBuffer> getTile(final long tileId) throws IOException {
-        return getTile(tileId, Function.identity());
+        return getTile(getTileId(tileIndex));
     }
 
     /**
-     * Gets a tile by its TileIndex and applies a mapping function to the data.
-     * <p>
-     * This method allows efficient transformation of the tile data (e.g., decoding
-     * a VectorTile) immediately after reading, potentially avoiding intermediate
-     * object creation or copies.
-     * <p>
-     * <strong>Note</strong>: prefer {@link #getTile(long, IOFunction)} to reduce
-     * memory usage by avoiding to load the uncompressed tile data into an
-     * intermediary {@link ByteBuffer}.
-     *
-     * @param <D>       the type of the result
-     * @param tileIndex the tile coordinates
-     * @param mapper    a function to transform the ByteBuffer into the desired type
-     * @return an Optional containing the transformed result if the tile was found,
-     *         or empty if not
+     * Gets a tile by its tile id.
+     * @param tileId the scalar PMTiles ID
+     * @return an Optional containing the tile data as a ByteBuffer if found, or
+     *         empty if not
      * @throws IOException if an I/O error occurs
      */
-    public <D> Optional<D> getTile(TileIndex tileIndex, Function<ByteBuffer, D> mapper) throws IOException {
-        if (tileIndex.z() < 0) throw new IllegalArgumentException("z can't be < 0");
-        if (tileIndex.x() < 0) throw new IllegalArgumentException("x can't be < 0");
-        if (tileIndex.y() < 0) throw new IllegalArgumentException("y can't be < 0");
-
-        final long tileId = hilbertCurve.tileIndexToTileId(tileIndex);
-
-        return getTile(tileId, mapper);
-    }
-
-    private <D> Optional<D> getTile(final long tileId, Function<ByteBuffer, D> mapper) throws IOException {
-
-        Optional<ByteRange> tileLocation = findTileLocation(tileId);
-
-        if (tileLocation.isPresent()) {
-            ByteRange tileByteRange = tileLocation.orElseThrow();
-            byte tileCompression = header.tileCompression();
-            try (SeekableByteChannel channel = channel()) {
-                ByteBuffer data = decompress(channel, tileByteRange, tileCompression);
-                return Optional.of(mapper.apply(data));
-            }
-        }
-
-        return Optional.empty();
+    public Optional<ByteBuffer> getTile(final long tileId) throws IOException {
+        IOFunction<InputStream, ByteBuffer> f = in -> ByteBuffer.wrap(in.readAllBytes());
+        return getTile(tileId, f);
     }
 
     public <D> Optional<D> getTile(final long tileId, IOFunction<InputStream, D> mapper) throws IOException {
         try {
-            return findTileLocation(tileId).map(range -> loadTile(range, mapper));
+            Optional<ByteRange> tileLocation = findTileLocation(tileId);
+            return tileLocation.map(range -> loadTile(range, mapper));
         } catch (UncheckedIOException uioe) {
             throw uioe.getCause();
         }

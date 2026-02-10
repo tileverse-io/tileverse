@@ -98,6 +98,8 @@ public record PMTilesHeader(
     public static final byte TILETYPE_PNG = 0x2;
     public static final byte TILETYPE_JPEG = 0x3;
     public static final byte TILETYPE_WEBP = 0x4;
+    public static final byte TILETYPE_AVIF = 0x5;
+    public static final byte TILETYPE_MLT = 0x6;
 
     // Header magic and version
     private static final byte[] MAGIC = "PMTiles".getBytes(StandardCharsets.UTF_8);

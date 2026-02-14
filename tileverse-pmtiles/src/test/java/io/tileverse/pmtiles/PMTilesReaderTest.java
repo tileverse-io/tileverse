@@ -335,16 +335,16 @@ class PMTilesReaderTest {
     void testParseMetadataException() {
         final String rawMetadata =
                 """
-				{
-				  "name": "Shortbread",
-				  "description": "A basic, lean, general-purpose vector tile schema for OpenStreetMap data. See https://shortbread.geofabrik.de/",
-				  "attribution": "<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">&copy; OpenStreetMap contributors</a>",
-				  "type": "baselayer",
-				  "format": "pbf",
-				  "bounds": "-34.49296,29.63555,46.75348,81.47299",
-				  "center": "6.13026,55.55427,2"
-				}
-				""";
+                {
+                  "name": "Shortbread",
+                  "description": "A basic, lean, general-purpose vector tile schema for OpenStreetMap data. See https://shortbread.geofabrik.de/",
+                  "attribution": "<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">&copy; OpenStreetMap contributors</a>",
+                  "type": "baselayer",
+                  "format": "pbf",
+                  "bounds": "-34.49296,29.63555,46.75348,81.47299",
+                  "center": "6.13026,55.55427,2"
+                }
+                """;
 
         IOException e = assertThrows(IOException.class, () -> PMTilesReader.parseMetadata(rawMetadata));
         assertThat(e.getMessage())

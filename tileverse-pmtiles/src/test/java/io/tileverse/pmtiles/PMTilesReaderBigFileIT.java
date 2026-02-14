@@ -200,9 +200,9 @@ class PMTilesReaderBigFileIT {
         long memFinal = runtime.totalMemory() - runtime.freeMemory();
         System.err.printf(
                 """
-				\tDirectories: %,d, Tile entries: %,d, Tile indices: %,d, runLengths: %,d, traversal: %s
-				\tMemory initial: %,dMB, final: %,dMB%n
-				""",
+                \tDirectories: %,d, Tile entries: %,d, Tile indices: %,d, runLengths: %,d, traversal: %s
+                \tMemory initial: %,dMB, final: %,dMB%n
+                """,
                 tileCount.dirEntries(),
                 tileCount.tileEntries(),
                 tileCount.tileIndices(),

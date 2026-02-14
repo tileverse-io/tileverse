@@ -66,25 +66,25 @@ public class HttpRangeReaderBenchmark extends AbstractRangeReaderBenchmark {
                         "sh",
                         "-c",
                         """
-				# Create the HTML directory
-				mkdir -p /usr/share/nginx/html
+                # Create the HTML directory
+                mkdir -p /usr/share/nginx/html
 
-				# Set up Nginx config for range requests
-				cat > /etc/nginx/conf.d/default.conf << 'EOF'
-				server {
-				    listen 80;
-				    server_name localhost;
-				    location / {
-				        root /usr/share/nginx/html;
-				        autoindex on;
-				        add_header Accept-Ranges bytes;
-				    }
-				}
-				EOF
+                # Set up Nginx config for range requests
+                cat > /etc/nginx/conf.d/default.conf << 'EOF'
+                server {
+                    listen 80;
+                    server_name localhost;
+                    location / {
+                        root /usr/share/nginx/html;
+                        autoindex on;
+                        add_header Accept-Ranges bytes;
+                    }
+                }
+                EOF
 
-				# Start Nginx
-				nginx -g 'daemon off;'
-				""")
+                # Start Nginx
+                nginx -g 'daemon off;'
+                """)
                 .withExposedPorts(80)
                 .waitingFor(Wait.forHttp("/"));
 

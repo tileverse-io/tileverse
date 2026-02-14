@@ -518,6 +518,12 @@
             <palantirJavaFormat>
               <version>${palantirJavaFormat.version}</version>
             </palantirJavaFormat>
+            <indent>
+              <spaces>true</spaces>
+              <spacesPerTab>4</spacesPerTab>
+            </indent>
+            <trimTrailingWhitespace></trimTrailingWhitespace>
+            <endWithNewline></endWithNewline>
             <!--
             <licenseHeader>
               <file>${maven.multiModuleProjectDirectory}/license_header.txt</file>

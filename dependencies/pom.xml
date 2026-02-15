@@ -19,7 +19,8 @@
     <caffeine.version>3.2.3</caffeine.version>
     <commons-compress.version>1.28.0</commons-compress.version>
     <google-cloud-storage.version>2.60.0</google-cloud-storage.version>
-    <jackson.version>2.20.1</jackson.version>
+    <jackson.version>3.0.4</jackson.version>
+    <jackson2.version>2.21.0</jackson2.version>
     <jts.version>1.20.0</jts.version>
     <protobuf-java.version>4.33.1</protobuf-java.version>
     <slf4j-api.version>2.0.17</slf4j-api.version>
@@ -29,9 +30,17 @@
   <dependencyManagement>
     <dependencies>
       <dependency>
-        <groupId>com.fasterxml.jackson</groupId>
+        <groupId>tools.jackson</groupId>
         <artifactId>jackson-bom</artifactId>
         <version>${jackson.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <!-- jackson 2 required for dependencyConvergence since azure-storage-blob pulls in 2.18.4 and 2.18.4 -->
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson2.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>

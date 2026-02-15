@@ -297,9 +297,6 @@
                     <version>[${maven.compiler.release}},)</version>
                     <message>Java ${maven.compiler.release} or newer is required to build this project</message>
                   </requireJavaVersion>
-                  <dependencyConvergence>
-                    <excludedScopes>test</excludedScopes>
-                  </dependencyConvergence>
                   <requireMavenVersion>
                     <version>[3.9.0,)</version>
                     <message>Maven 3.9.0 or newer is required</message>
@@ -638,6 +635,43 @@
   </build>
 
   <profiles>
+    <profile>
+      <!--
+      Section to satisfy enforcer-maven-plugin's dependencyConvergence rule
+      and make sure there are no duplicate dependencies with conflicting version numbers
+      Dependency version overrides are defined in the same dependencyConvergence profile of dependencies/pom.xml 
+      -->
+      <id>dependencyConvergence</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+        <property>
+          <name>!skipDependencyConvergence</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>enforce-dependency-convergence</id>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <dependencyConvergence>
+                      <excludedScopes>test</excludedScopes>
+                    </dependencyConvergence>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
     <profile>
       <id>qa</id>
       <activation>

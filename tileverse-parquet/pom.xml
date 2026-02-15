@@ -96,6 +96,10 @@
     </dependency>
 
     <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-annotations</artifactId>
+    </dependency>
+    <dependency>
       <!-- Only needed in tests for ParquetWriter/ExampleParquetWriter to write test files. Declared as 'provided' in parquet-hadoop. -->
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-mapreduce-client-core</artifactId>

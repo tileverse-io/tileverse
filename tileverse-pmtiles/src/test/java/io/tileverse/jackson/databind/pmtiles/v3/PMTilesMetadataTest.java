@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.tileverse.jackson.databind.tilejson.v3.TilesetType;
 import io.tileverse.jackson.databind.tilejson.v3.VectorLayer;
 import io.tileverse.pmtiles.PMTilesReader;
@@ -33,6 +32,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Tests for PMTiles metadata object model following PMTiles v3 specification.

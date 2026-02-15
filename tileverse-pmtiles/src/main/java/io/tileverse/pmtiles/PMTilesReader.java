@@ -18,7 +18,6 @@ package io.tileverse.pmtiles;
 import static io.tileverse.pmtiles.CompressionUtil.decompressingInputStream;
 import static java.util.Objects.requireNonNull;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.tileverse.cache.CacheManager;
 import io.tileverse.io.ByteRange;
 import io.tileverse.io.IOFunction;
@@ -44,6 +43,7 @@ import java.util.stream.Stream;
 import org.apache.commons.io.IOUtils;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Reader for PMTiles files that provides access to tiles and metadata.

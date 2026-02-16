@@ -1,0 +1,58 @@
+message spark_schema {
+  optional binary id (STRING);
+  optional binary geometry;
+  required group bbox {
+    optional float xmin;
+    optional float xmax;
+    optional float ymin;
+    optional float ymax;
+  }
+  required int32 version;
+  optional group sources (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary property (STRING);
+        optional binary dataset (STRING);
+        optional binary record_id (STRING);
+        optional binary update_time (STRING);
+        optional double confidence;
+      }
+    }
+  }
+  optional int32 level;
+  optional binary subtype (STRING);
+  optional binary class (STRING);
+  optional group names {
+    optional binary primary (STRING);
+    optional group common (MAP) {
+      repeated group key_value {
+        required binary key (STRING);
+        optional binary value (STRING);
+      }
+    }
+    optional group rules (LIST) {
+      repeated group list {
+        optional group element {
+          optional binary variant (STRING);
+          optional binary language (STRING);
+          optional binary value (STRING);
+          optional group between (LIST) {
+            repeated group list {
+              optional double element;
+            }
+          }
+          optional binary side (STRING);
+        }
+      }
+    }
+  }
+  optional group source_tags (MAP) {
+    repeated group key_value {
+      required binary key (STRING);
+      optional binary value (STRING);
+    }
+  }
+  optional binary wikidata (STRING);
+  optional boolean is_salt;
+  optional boolean is_intermittent;
+}

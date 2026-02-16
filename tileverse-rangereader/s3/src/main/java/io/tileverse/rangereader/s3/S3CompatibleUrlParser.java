@@ -135,15 +135,15 @@ import java.net.URISyntaxException;
  * <h3>Automatic URL Decoding</h3>
  * <p>The parser automatically decodes percent-encoded characters in object keys:
  * <pre>{@code
- * "file%20with%20spaces.txt" → "file with spaces.txt"
- * "path%2Bwith%26symbols.txt" → "path+with&symbols.txt"
+ * "file%20with%20spaces.txt" -> "file with spaces.txt"
+ * "path%2Bwith%26symbols.txt" -> "path+with&symbols.txt"
  * }</pre>
  *
  * <h3>Empty Keys</h3>
  * <p>URLs pointing to bucket roots return empty string keys:
  * <pre>{@code
- * s3://my-bucket/     → bucket="my-bucket", key=""
- * s3://my-bucket      → bucket="my-bucket", key=""
+ * s3://my-bucket/     -> bucket="my-bucket", key=""
+ * s3://my-bucket      -> bucket="my-bucket", key=""
  * }</pre>
  *
  * <h3>Detection Strategy</h3>

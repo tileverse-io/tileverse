@@ -1,0 +1,302 @@
+message spark_schema {
+  optional binary id (STRING);
+  optional binary geometry;
+  required group bbox {
+    optional float xmin;
+    optional float xmax;
+    optional float ymin;
+    optional float ymax;
+  }
+  required int32 version;
+  optional group sources (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary property (STRING);
+        optional binary dataset (STRING);
+        optional binary record_id (STRING);
+        optional binary update_time (STRING);
+        optional double confidence;
+      }
+    }
+  }
+  optional binary subtype (STRING);
+  optional binary class (STRING);
+  optional group names {
+    optional binary primary (STRING);
+    optional group common (MAP) {
+      repeated group key_value {
+        required binary key (STRING);
+        optional binary value (STRING);
+      }
+    }
+    optional group rules (LIST) {
+      repeated group list {
+        optional group element {
+          optional binary variant (STRING);
+          optional binary language (STRING);
+          optional binary value (STRING);
+          optional group between (LIST) {
+            repeated group list {
+              optional double element;
+            }
+          }
+          optional binary side (STRING);
+        }
+      }
+    }
+  }
+  optional group connectors (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary connector_id (STRING);
+        optional double at;
+      }
+    }
+  }
+  optional group routes (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary name (STRING);
+        optional binary network (STRING);
+        optional binary ref (STRING);
+        optional binary symbol (STRING);
+        optional binary wikidata (STRING);
+        optional group between (LIST) {
+          repeated group list {
+            optional double element;
+          }
+        }
+      }
+    }
+  }
+  optional binary subclass (STRING);
+  optional group subclass_rules (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary value (STRING);
+        optional group between (LIST) {
+          repeated group list {
+            optional double element;
+          }
+        }
+      }
+    }
+  }
+  optional group access_restrictions (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary access_type (STRING);
+        optional group when {
+          optional binary during (STRING);
+          optional binary heading (STRING);
+          optional group using (LIST) {
+            repeated group list {
+              optional binary element (STRING);
+            }
+          }
+          optional group recognized (LIST) {
+            repeated group list {
+              optional binary element (STRING);
+            }
+          }
+          optional group mode (LIST) {
+            repeated group list {
+              optional binary element (STRING);
+            }
+          }
+          optional group vehicle (LIST) {
+            repeated group list {
+              optional group element {
+                optional binary dimension (STRING);
+                optional binary comparison (STRING);
+                optional double value;
+                optional binary unit (STRING);
+              }
+            }
+          }
+        }
+        optional group between (LIST) {
+          repeated group list {
+            optional double element;
+          }
+        }
+      }
+    }
+  }
+  optional group level_rules (LIST) {
+    repeated group list {
+      optional group element {
+        optional int32 value;
+        optional group between (LIST) {
+          repeated group list {
+            optional double element;
+          }
+        }
+      }
+    }
+  }
+  optional group destinations (LIST) {
+    repeated group list {
+      optional group element {
+        optional group labels (LIST) {
+          repeated group list {
+            optional group element {
+              optional binary value (STRING);
+              optional binary type (STRING);
+            }
+          }
+        }
+        optional group symbols (LIST) {
+          repeated group list {
+            optional binary element (STRING);
+          }
+        }
+        optional binary from_connector_id (STRING);
+        optional binary to_segment_id (STRING);
+        optional binary to_connector_id (STRING);
+        optional group when {
+          optional binary heading (STRING);
+        }
+        optional binary final_heading (STRING);
+      }
+    }
+  }
+  optional group prohibited_transitions (LIST) {
+    repeated group list {
+      optional group element {
+        optional group sequence (LIST) {
+          repeated group list {
+            optional group element {
+              optional binary connector_id (STRING);
+              optional binary segment_id (STRING);
+            }
+          }
+        }
+        optional binary final_heading (STRING);
+        optional group when {
+          optional binary heading (STRING);
+          optional binary during (STRING);
+          optional group using (LIST) {
+            repeated group list {
+              optional binary element (STRING);
+            }
+          }
+          optional group recognized (LIST) {
+            repeated group list {
+              optional binary element (STRING);
+            }
+          }
+          optional group mode (LIST) {
+            repeated group list {
+              optional binary element (STRING);
+            }
+          }
+          optional group vehicle (LIST) {
+            repeated group list {
+              optional group element {
+                optional binary dimension (STRING);
+                optional binary comparison (STRING);
+                optional double value;
+                optional binary unit (STRING);
+              }
+            }
+          }
+        }
+        optional group between (LIST) {
+          repeated group list {
+            optional double element;
+          }
+        }
+      }
+    }
+  }
+  optional group road_surface (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary value (STRING);
+        optional group between (LIST) {
+          repeated group list {
+            optional double element;
+          }
+        }
+      }
+    }
+  }
+  optional group road_flags (LIST) {
+    repeated group list {
+      optional group element {
+        optional group values (LIST) {
+          repeated group list {
+            optional binary element (STRING);
+          }
+        }
+        optional group between (LIST) {
+          repeated group list {
+            optional double element;
+          }
+        }
+      }
+    }
+  }
+  optional group speed_limits (LIST) {
+    repeated group list {
+      optional group element {
+        optional group min_speed {
+          optional int32 value;
+          optional binary unit (STRING);
+        }
+        optional group max_speed {
+          optional int32 value;
+          optional binary unit (STRING);
+        }
+        optional boolean is_max_speed_variable;
+        optional group when {
+          optional binary during (STRING);
+          optional binary heading (STRING);
+          optional group using (LIST) {
+            repeated group list {
+              optional binary element (STRING);
+            }
+          }
+          optional group recognized (LIST) {
+            repeated group list {
+              optional binary element (STRING);
+            }
+          }
+          optional group mode (LIST) {
+            repeated group list {
+              optional binary element (STRING);
+            }
+          }
+          optional group vehicle (LIST) {
+            repeated group list {
+              optional group element {
+                optional binary dimension (STRING);
+                optional binary comparison (STRING);
+                optional double value;
+                optional binary unit (STRING);
+              }
+            }
+          }
+        }
+        optional group between (LIST) {
+          repeated group list {
+            optional double element;
+          }
+        }
+      }
+    }
+  }
+  optional group width_rules (LIST) {
+    repeated group list {
+      optional group element {
+        optional double value;
+        optional group between (LIST) {
+          repeated group list {
+            optional double element;
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,102 @@
+message spark_schema {
+  optional binary id (STRING);
+  optional binary geometry;
+  required group bbox {
+    optional float xmin;
+    optional float xmax;
+    optional float ymin;
+    optional float ymax;
+  }
+  optional binary country (STRING);
+  required int32 version;
+  optional group sources (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary property (STRING);
+        optional binary dataset (STRING);
+        optional binary record_id (STRING);
+        optional binary update_time (STRING);
+        optional double confidence;
+      }
+    }
+  }
+  optional group cartography {
+    optional int32 prominence;
+    optional int32 min_zoom;
+    optional int32 max_zoom;
+    optional int32 sort_key;
+  }
+  optional binary subtype (STRING);
+  optional binary class (STRING);
+  optional group names {
+    optional binary primary (STRING);
+    optional group common (MAP) {
+      repeated group key_value {
+        required binary key (STRING);
+        optional binary value (STRING);
+      }
+    }
+    optional group rules (LIST) {
+      repeated group list {
+        optional group element {
+          optional binary variant (STRING);
+          optional binary language (STRING);
+          optional binary value (STRING);
+          optional group between (LIST) {
+            repeated group list {
+              optional double element;
+            }
+          }
+          optional binary side (STRING);
+        }
+      }
+    }
+  }
+  optional binary wikidata (STRING);
+  optional group perspectives {
+    optional binary mode (STRING);
+    optional group countries (LIST) {
+      repeated group list {
+        optional binary element (STRING);
+      }
+    }
+  }
+  optional group local_type (MAP) {
+    repeated group key_value {
+      required binary key (STRING);
+      optional binary value (STRING);
+    }
+  }
+  optional binary region (STRING);
+  optional group hierarchies (LIST) {
+    repeated group list {
+      optional group element (LIST) {
+        repeated group list {
+          optional group element {
+            optional binary division_id (STRING);
+            optional binary subtype (STRING);
+            optional binary name (STRING);
+          }
+        }
+      }
+    }
+  }
+  optional binary parent_division_id (STRING);
+  optional group norms {
+    optional binary driving_side (STRING);
+  }
+  optional int32 population;
+  optional group capital_division_ids (LIST) {
+    repeated group list {
+      optional binary element (STRING);
+    }
+  }
+  optional group capital_of_divisions (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary division_id (STRING);
+        optional binary subtype (STRING);
+      }
+    }
+  }
+}

@@ -1,0 +1,62 @@
+message spark_schema {
+  optional binary id (STRING);
+  optional binary geometry;
+  required group bbox {
+    optional float xmin;
+    optional float xmax;
+    optional float ymin;
+    optional float ymax;
+  }
+  required int32 version;
+  optional group sources (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary property (STRING);
+        optional binary dataset (STRING);
+        optional binary record_id (STRING);
+        optional binary update_time (STRING);
+        optional double confidence;
+      }
+    }
+  }
+  optional int32 level;
+  optional double height;
+  optional group names {
+    optional binary primary (STRING);
+    optional group common (MAP) {
+      repeated group key_value {
+        required binary key (STRING);
+        optional binary value (STRING);
+      }
+    }
+    optional group rules (LIST) {
+      repeated group list {
+        optional group element {
+          optional binary variant (STRING);
+          optional binary language (STRING);
+          optional binary value (STRING);
+          optional group between (LIST) {
+            repeated group list {
+              optional double element;
+            }
+          }
+          optional binary side (STRING);
+        }
+      }
+    }
+  }
+  optional boolean is_underground;
+  optional int32 num_floors;
+  optional int32 num_floors_underground;
+  optional double min_height;
+  optional int32 min_floor;
+  optional binary facade_color (STRING);
+  optional binary facade_material (STRING);
+  optional binary roof_material (STRING);
+  optional binary roof_shape (STRING);
+  optional double roof_direction;
+  optional binary roof_orientation (STRING);
+  optional binary roof_color (STRING);
+  optional double roof_height;
+  optional binary building_id (STRING);
+}

@@ -12,7 +12,9 @@
   <artifactId>tileverse-parquet</artifactId>
   <name>Tileverse Parquet</name>
   <description>Bridges tileverse-rangereader to Apache Parquet's InputFile abstraction, enabling Parquet file reading from local, HTTP, and cloud storage without Hadoop I/O</description>
-
+  <properties>
+    <gt.version>35-SNAPSHOT</gt.version>
+  </properties>
   <dependencyManagement>
     <dependencies>
       <dependency>
@@ -53,6 +55,21 @@
       <artifactId>tileverse-bom</artifactId>
       <version>${project.version}</version>
       <type>pom</type>
+      <scope>provided</scope>
+      <optional>true</optional>
+    </dependency>
+
+    <dependency>
+      <groupId>org.geotools</groupId>
+      <artifactId>gt-main</artifactId>
+      <version>${gt.version}</version>
+      <scope>provided</scope>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>org.geotools</groupId>
+      <artifactId>gt-epsg-hsql</artifactId>
+      <version>${gt.version}</version>
       <scope>provided</scope>
       <optional>true</optional>
     </dependency>
@@ -109,6 +126,10 @@
 
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>

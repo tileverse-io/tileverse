@@ -27,6 +27,8 @@ import java.util.Set;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.parquet.example.data.Group;
 import org.apache.parquet.example.data.simple.SimpleGroupFactory;
+import org.apache.parquet.filter2.predicate.FilterApi;
+import org.apache.parquet.filter2.predicate.FilterPredicate;
 import org.apache.parquet.hadoop.example.ExampleParquetWriter;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.parquet.io.LocalInputFile;
@@ -293,6 +295,62 @@ class ParquetDatasetTest {
         GenericRecord info = (GenericRecord) first.get("info");
         assertThat(info.get("label").toString()).isEqualTo("Label 0");
         assertThat(first.getSchema().getField("value")).isNull();
+    }
+
+    @Test
+    void read_withFilter_returnsOnlyMatchingRecords() throws IOException {
+        ParquetDataset dataset = open(testFile);
+        // id > 50 should match ids 51..99 = 49 records
+        FilterPredicate filter = FilterApi.gt(FilterApi.intColumn("id"), 50);
+        List<GenericRecord> records = readAll(dataset.read(filter));
+        assertThat(records).hasSize(49);
+        assertThat(records).allSatisfy(r -> assertThat((int) r.get("id")).isGreaterThan(50));
+    }
+
+    @Test
+    void read_withFilterAndProjection_combinesCorrectly() throws IOException {
+        ParquetDataset dataset = open(testFile);
+        FilterPredicate filter = FilterApi.ltEq(FilterApi.intColumn("id"), 5);
+        List<GenericRecord> records = readAll(dataset.read(filter, Set.of("id", "name")));
+        // id <= 5 -> ids 0,1,2,3,4,5 = 6 records
+        assertThat(records).hasSize(6);
+        GenericRecord first = records.get(0);
+        assertThat(first.get("id")).isEqualTo(0);
+        assertThat(first.get("name").toString()).isEqualTo("name_0");
+        assertThat(first.getSchema().getField("value")).isNull();
+    }
+
+    @Test
+    void readGroups_withFilter() throws IOException {
+        ParquetDataset dataset = open(testFile);
+        FilterPredicate filter = FilterApi.gt(FilterApi.intColumn("id"), 95);
+        List<Group> records = readAllGroups(dataset.readGroups(filter));
+        // id > 95 -> ids 96,97,98,99 = 4 records
+        assertThat(records).hasSize(4);
+        assertThat(records.get(0).getInteger("id", 0)).isEqualTo(96);
+    }
+
+    @Test
+    void read_withFilter_emptyResult() throws IOException {
+        ParquetDataset dataset = open(testFile);
+        // id > 999 matches nothing
+        FilterPredicate filter = FilterApi.gt(FilterApi.intColumn("id"), 999);
+        List<GenericRecord> records = readAll(dataset.read(filter));
+        assertThat(records).isEmpty();
+    }
+
+    @Test
+    void read_withFilter_compoundPredicate() throws IOException {
+        ParquetDataset dataset = open(testFile);
+        // id >= 10 AND id < 20 -> ids 10..19 = 10 records
+        FilterPredicate filter = FilterApi.and(
+                FilterApi.gtEq(FilterApi.intColumn("id"), 10), FilterApi.lt(FilterApi.intColumn("id"), 20));
+        List<GenericRecord> records = readAll(dataset.read(filter));
+        assertThat(records).hasSize(10);
+        assertThat(records).allSatisfy(r -> {
+            int id = (int) r.get("id");
+            assertThat(id).isBetween(10, 19);
+        });
     }
 
     private static <T> List<T> readAll(CloseableIterator<T> iterator) throws IOException {

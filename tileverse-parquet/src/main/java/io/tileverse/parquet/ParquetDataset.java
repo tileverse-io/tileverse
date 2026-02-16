@@ -25,12 +25,17 @@ import java.util.Set;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.parquet.ParquetReadOptions;
 import org.apache.parquet.example.data.Group;
+import org.apache.parquet.filter2.compat.FilterCompat;
+import org.apache.parquet.filter2.predicate.FilterPredicate;
 import org.apache.parquet.hadoop.ParquetFileReader;
+import org.apache.parquet.hadoop.metadata.BlockMetaData;
+import org.apache.parquet.hadoop.metadata.FileMetaData;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.io.InputFile;
 import org.apache.parquet.io.api.RecordMaterializer;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Type;
+import org.jspecify.annotations.Nullable;
 
 /**
  * High-level, stateless facade for reading a Parquet file's schema, metadata, and records.
@@ -42,12 +47,15 @@ import org.apache.parquet.schema.Type;
  * <p><strong>Default record type:</strong> Avro {@link GenericRecord}, which handles nested
  * schemas natively. Use {@link #readGroups()} for backward-compatible {@link Group}-based reading.
  *
+ * <p><strong>Filtering:</strong> All read methods have overloads accepting a {@link FilterPredicate}
+ * for predicate pushdown (row group skipping, page skipping, and record-level filtering).
+ *
  * <p><strong>Usage example:</strong></p>
  * <pre>{@code
  * InputFile inputFile = new RangeReaderInputFile(reader);
  * ParquetDataset dataset = ParquetDataset.open(inputFile);
- * MessageType schema = dataset.getSchema();
- * try (CloseableIterator<GenericRecord> records = dataset.read(Set.of("name", "geometry"))) {
+ * FilterPredicate filter = FilterApi.gt(FilterApi.intColumn("id"), 50);
+ * try (CloseableIterator<GenericRecord> records = dataset.read(filter, Set.of("id", "name"))) {
  *     while (records.hasNext()) {
  *         GenericRecord record = records.next();
  *         // process record...
@@ -59,19 +67,14 @@ public class ParquetDataset {
 
     private final InputFile inputFile;
     private final ParquetReadOptions readOptions;
-    private final MessageType schema;
-    private final Map<String, String> keyValueMetadata;
-    private final long recordCount;
+
+    private long recordCount = -1L;
+    private ParquetMetadata footer;
 
     private ParquetDataset(InputFile inputFile, ParquetReadOptions readOptions, ParquetMetadata footer) {
         this.inputFile = inputFile;
         this.readOptions = readOptions;
-        this.schema = footer.getFileMetaData().getSchema();
-        this.keyValueMetadata =
-                Collections.unmodifiableMap(footer.getFileMetaData().getKeyValueMetaData());
-        this.recordCount = footer.getBlocks().stream()
-                .mapToLong(block -> block.getRowCount())
-                .sum();
+        this.footer = footer;
     }
 
     /**
@@ -101,7 +104,8 @@ public class ParquetDataset {
         Objects.requireNonNull(inputFile, "inputFile");
         Objects.requireNonNull(options, "options");
         try (ParquetFileReader reader = ParquetFileReader.open(inputFile, options)) {
-            return new ParquetDataset(inputFile, options, reader.getFooter());
+            ParquetMetadata footer = reader.getFooter();
+            return new ParquetDataset(inputFile, options, footer);
         }
     }
 
@@ -109,22 +113,31 @@ public class ParquetDataset {
      * Returns the file's Parquet schema.
      */
     public MessageType getSchema() {
-        return schema;
+        return footer.getFileMetaData().getSchema();
     }
 
     /**
      * Returns the file-level key-value metadata as an unmodifiable map.
      */
     public Map<String, String> getKeyValueMetadata() {
-        return keyValueMetadata;
+        FileMetaData fileMetaData = footer.getFileMetaData();
+        Map<String, String> keyValueMetaData = fileMetaData.getKeyValueMetaData();
+        return Collections.unmodifiableMap(keyValueMetaData);
     }
 
     /**
      * Returns the total number of records in the file.
      */
     public long getRecordCount() {
+        if (this.recordCount < 0) {
+            this.recordCount = footer.getBlocks().stream()
+                    .mapToLong(BlockMetaData::getRowCount)
+                    .sum();
+        }
         return recordCount;
     }
+
+    // ---- Avro GenericRecord read methods ----
 
     /**
      * Returns a lazy iterator over all records as Avro {@link GenericRecord}.
@@ -133,7 +146,7 @@ public class ParquetDataset {
      * @throws IOException if the file cannot be opened for reading
      */
     public CloseableIterator<GenericRecord> read() throws IOException {
-        return read(AvroMaterializerProvider.INSTANCE, Set.of());
+        return doRead(AvroMaterializerProvider.INSTANCE, null, Set.of());
     }
 
     /**
@@ -146,8 +159,35 @@ public class ParquetDataset {
      * @throws IOException if the file cannot be opened for reading
      */
     public CloseableIterator<GenericRecord> read(Set<String> columns) throws IOException {
-        return read(AvroMaterializerProvider.INSTANCE, columns);
+        return doRead(AvroMaterializerProvider.INSTANCE, null, columns);
     }
+
+    /**
+     * Returns a lazy iterator over filtered records as Avro {@link GenericRecord}.
+     *
+     * @param filter the filter predicate for row group, page, and record-level filtering
+     * @return a closeable iterator over filtered records
+     * @throws IOException if the file cannot be opened for reading
+     */
+    public CloseableIterator<GenericRecord> read(FilterPredicate filter) throws IOException {
+        return doRead(AvroMaterializerProvider.INSTANCE, filter, Set.of());
+    }
+
+    /**
+     * Returns a lazy iterator over filtered records as Avro {@link GenericRecord} with
+     * column projection.
+     *
+     * @param filter  the filter predicate
+     * @param columns the set of column names to read
+     * @return a closeable iterator over filtered, projected records
+     * @throws IllegalArgumentException if any column name is not found in the schema
+     * @throws IOException if the file cannot be opened for reading
+     */
+    public CloseableIterator<GenericRecord> read(FilterPredicate filter, Set<String> columns) throws IOException {
+        return doRead(AvroMaterializerProvider.INSTANCE, filter, columns);
+    }
+
+    // ---- Custom materializer read methods ----
 
     /**
      * Returns a lazy iterator over all records using a custom materializer.
@@ -158,7 +198,7 @@ public class ParquetDataset {
      * @throws IOException if the file cannot be opened for reading
      */
     public <T> CloseableIterator<T> read(ParquetMaterializerProvider<T> provider) throws IOException {
-        return read(provider, Set.of());
+        return doRead(provider, null, Set.of());
     }
 
     /**
@@ -173,20 +213,41 @@ public class ParquetDataset {
      */
     public <T> CloseableIterator<T> read(ParquetMaterializerProvider<T> provider, Set<String> columns)
             throws IOException {
-        Objects.requireNonNull(provider, "provider");
-        Objects.requireNonNull(columns, "columns");
-
-        MessageType requestedSchema = columns.isEmpty() ? schema : projectSchema(schema, columns);
-
-        ParquetFileReader reader = ParquetFileReader.open(inputFile, readOptions);
-        if (!columns.isEmpty()) {
-            reader.setRequestedSchema(requestedSchema);
-        }
-
-        RecordMaterializer<T> materializer = provider.createMaterializer(schema, requestedSchema, keyValueMetadata);
-
-        return new ParquetRecordIterator<>(reader, materializer, requestedSchema, schema);
+        return doRead(provider, null, columns);
     }
+
+    /**
+     * Returns a lazy iterator over filtered records using a custom materializer.
+     *
+     * @param provider the materializer provider
+     * @param filter   the filter predicate
+     * @param <T>      the record type
+     * @return a closeable iterator over filtered records
+     * @throws IOException if the file cannot be opened for reading
+     */
+    public <T> CloseableIterator<T> read(ParquetMaterializerProvider<T> provider, FilterPredicate filter)
+            throws IOException {
+        return doRead(provider, filter, Set.of());
+    }
+
+    /**
+     * Returns a lazy iterator over filtered records using a custom materializer with
+     * column projection.
+     *
+     * @param provider the materializer provider
+     * @param filter   the filter predicate
+     * @param columns  the set of column names to read (empty for all columns)
+     * @param <T>      the record type
+     * @return a closeable iterator over filtered, projected records
+     * @throws IllegalArgumentException if any column name is not found in the schema
+     * @throws IOException if the file cannot be opened for reading
+     */
+    public <T> CloseableIterator<T> read(
+            ParquetMaterializerProvider<T> provider, FilterPredicate filter, Set<String> columns) throws IOException {
+        return doRead(provider, filter, columns);
+    }
+
+    // ---- Group read methods ----
 
     /**
      * Returns a lazy iterator over all records as {@link Group}.
@@ -195,7 +256,7 @@ public class ParquetDataset {
      * @throws IOException if the file cannot be opened for reading
      */
     public CloseableIterator<Group> readGroups() throws IOException {
-        return read(GroupMaterializerProvider.INSTANCE, Set.of());
+        return doRead(GroupMaterializerProvider.INSTANCE, null, Set.of());
     }
 
     /**
@@ -208,7 +269,63 @@ public class ParquetDataset {
      * @throws IOException if the file cannot be opened for reading
      */
     public CloseableIterator<Group> readGroups(Set<String> columns) throws IOException {
-        return read(GroupMaterializerProvider.INSTANCE, columns);
+        return doRead(GroupMaterializerProvider.INSTANCE, null, columns);
+    }
+
+    /**
+     * Returns a lazy iterator over filtered records as {@link Group}.
+     *
+     * @param filter the filter predicate
+     * @return a closeable iterator over filtered records
+     * @throws IOException if the file cannot be opened for reading
+     */
+    public CloseableIterator<Group> readGroups(FilterPredicate filter) throws IOException {
+        return doRead(GroupMaterializerProvider.INSTANCE, filter, Set.of());
+    }
+
+    /**
+     * Returns a lazy iterator over filtered records as {@link Group} with column projection.
+     *
+     * @param filter  the filter predicate
+     * @param columns the set of column names to read
+     * @return a closeable iterator over filtered, projected records
+     * @throws IllegalArgumentException if any column name is not found in the schema
+     * @throws IOException if the file cannot be opened for reading
+     */
+    public CloseableIterator<Group> readGroups(FilterPredicate filter, Set<String> columns) throws IOException {
+        return doRead(GroupMaterializerProvider.INSTANCE, filter, columns);
+    }
+
+    // ---- Internal ----
+
+    private <T> CloseableIterator<T> doRead(
+            ParquetMaterializerProvider<T> provider, @Nullable FilterPredicate filter, Set<String> columns)
+            throws IOException {
+        Objects.requireNonNull(provider, "provider");
+        Objects.requireNonNull(columns, "columns");
+
+        MessageType schema = getSchema();
+        MessageType requestedSchema = columns.isEmpty() ? schema : projectSchema(schema, columns);
+
+        ParquetReadOptions options = this.readOptions;
+        FilterCompat.Filter filterCompat = FilterCompat.NOOP;
+        if (filter != null) {
+            filterCompat = FilterCompat.get(filter);
+            options = ParquetReadOptions.builder()
+                    .copy(readOptions)
+                    .withRecordFilter(filterCompat)
+                    .build();
+        }
+
+        ParquetFileReader reader = ParquetFileReader.open(inputFile, options);
+        if (!columns.isEmpty()) {
+            reader.setRequestedSchema(requestedSchema);
+        }
+
+        Map<String, String> keyValueMetadata = getKeyValueMetadata();
+        RecordMaterializer<T> materializer = provider.createMaterializer(schema, requestedSchema, keyValueMetadata);
+
+        return new ParquetRecordIterator<>(reader, materializer, requestedSchema, schema, filterCompat);
     }
 
     /**

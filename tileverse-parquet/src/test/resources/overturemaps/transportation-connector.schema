@@ -1,0 +1,22 @@
+message spark_schema {
+  optional binary id (STRING);
+  optional binary geometry;
+  required group bbox {
+    optional float xmin;
+    optional float xmax;
+    optional float ymin;
+    optional float ymax;
+  }
+  required int32 version;
+  optional group sources (LIST) {
+    repeated group list {
+      optional group element {
+        optional binary property (STRING);
+        optional binary dataset (STRING);
+        optional binary record_id (STRING);
+        optional binary update_time (STRING);
+        optional double confidence;
+      }
+    }
+  }
+}

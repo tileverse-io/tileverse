@@ -24,8 +24,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import org.apache.parquet.ParquetReadOptions;
 import org.apache.parquet.example.data.Group;
 import org.apache.parquet.example.data.simple.SimpleGroupFactory;
+import org.apache.parquet.filter2.compat.FilterCompat;
+import org.apache.parquet.filter2.predicate.FilterApi;
+import org.apache.parquet.filter2.predicate.FilterPredicate;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.example.ExampleParquetWriter;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
@@ -178,6 +182,33 @@ class ParquetRecordIteratorTest {
 
         try (var iterator = openGroupIterator(file)) {
             assertThat(iterator.hasNext()).isFalse();
+        }
+    }
+
+    @Test
+    void filter_skipsNonMatchingRecords() throws IOException {
+        Path file = tempDir.resolve("filter-test.parquet");
+        ParquetDatasetTest.writeTestFile(file, SCHEMA, 20, Map.of());
+
+        FilterPredicate pred = FilterApi.gt(FilterApi.intColumn("id"), 15);
+        FilterCompat.Filter filter = FilterCompat.get(pred);
+
+        ParquetReadOptions options =
+                ParquetReadOptions.builder().withRecordFilter(filter).build();
+
+        try (ParquetFileReader reader = ParquetFileReader.open(new LocalInputFile(file), options)) {
+            MessageType fileSchema = reader.getFooter().getFileMetaData().getSchema();
+            RecordMaterializer<Group> materializer =
+                    GroupMaterializerProvider.INSTANCE.createMaterializer(fileSchema, fileSchema, Map.of());
+            try (var iterator = new ParquetRecordIterator<>(reader, materializer, fileSchema, fileSchema, filter)) {
+                List<Group> records = new ArrayList<>();
+                while (iterator.hasNext()) {
+                    records.add(iterator.next());
+                }
+                // id > 15 -> ids 16,17,18,19 = 4 records
+                assertThat(records).hasSize(4);
+                assertThat(records.get(0).getInteger("id", 0)).isEqualTo(16);
+            }
         }
     }
 

@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.NoSuchElementException;
 import org.apache.parquet.column.page.PageReadStore;
+import org.apache.parquet.filter2.compat.FilterCompat;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.io.ColumnIOFactory;
 import org.apache.parquet.io.MessageColumnIO;
@@ -34,6 +35,13 @@ import org.apache.parquet.schema.MessageType;
  * and the provided {@link RecordMaterializer}. The materializer is reused across all row groups.
  * Records are decoded lazily on demand.
  * <p>
+ * When a {@link FilterCompat.Filter} is provided, filtering is applied at three levels:
+ * <ul>
+ *   <li>Row group skipping (via statistics in {@link ParquetFileReader} constructor)</li>
+ *   <li>Page skipping (via {@link ParquetFileReader#readNextFilteredRowGroup()})</li>
+ *   <li>Record filtering (via {@link MessageColumnIO#getRecordReader(PageReadStore, RecordMaterializer, FilterCompat.Filter)})</li>
+ * </ul>
+ * <p>
  * Closing this iterator closes the underlying {@code ParquetFileReader}.
  * <p>
  * This class is not thread-safe.
@@ -46,6 +54,7 @@ class ParquetRecordIterator<T> implements CloseableIterator<T> {
     private final RecordMaterializer<T> materializer;
     private final MessageType requestedSchema;
     private final MessageType fileSchema;
+    private final FilterCompat.Filter filter;
 
     private RecordReader<T> recordReader;
     private long rowsReadInGroup;
@@ -58,10 +67,20 @@ class ParquetRecordIterator<T> implements CloseableIterator<T> {
             RecordMaterializer<T> materializer,
             MessageType requestedSchema,
             MessageType fileSchema) {
+        this(fileReader, materializer, requestedSchema, fileSchema, FilterCompat.NOOP);
+    }
+
+    ParquetRecordIterator(
+            ParquetFileReader fileReader,
+            RecordMaterializer<T> materializer,
+            MessageType requestedSchema,
+            MessageType fileSchema,
+            FilterCompat.Filter filter) {
         this.fileReader = fileReader;
         this.materializer = materializer;
         this.requestedSchema = requestedSchema;
         this.fileSchema = fileSchema;
+        this.filter = filter;
     }
 
     @Override
@@ -117,7 +136,9 @@ class ParquetRecordIterator<T> implements CloseableIterator<T> {
     }
 
     private boolean loadNextRowGroup() throws IOException {
-        PageReadStore rowGroup = fileReader.readNextRowGroup();
+        PageReadStore rowGroup = FilterCompat.isFilteringRequired(filter)
+                ? fileReader.readNextFilteredRowGroup()
+                : fileReader.readNextRowGroup();
         if (rowGroup == null) {
             return false;
         }
@@ -126,7 +147,7 @@ class ParquetRecordIterator<T> implements CloseableIterator<T> {
 
         ColumnIOFactory columnIOFactory = new ColumnIOFactory();
         MessageColumnIO columnIO = columnIOFactory.getColumnIO(requestedSchema, fileSchema);
-        recordReader = columnIO.getRecordReader(rowGroup, materializer);
+        recordReader = columnIO.getRecordReader(rowGroup, materializer, filter);
         return true;
     }
 }

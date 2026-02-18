@@ -18,8 +18,8 @@
     <azure-storage-blob.version>12.32.0</azure-storage-blob.version>
     <azure-core-http-jdk-httpclient.version>1.1.2</azure-core-http-jdk-httpclient.version>
     <caffeine.version>3.2.3</caffeine.version>
+    <google-cloud-storage.version>2.63.0</google-cloud-storage.version>
     <commons-compress.version>1.28.0</commons-compress.version>
-    <google-cloud-storage.version>2.60.0</google-cloud-storage.version>
     <jackson.version>3.0.4</jackson.version>
     <jackson2.version>2.20.0</jackson2.version>
     <jts.version>1.20.0</jts.version>

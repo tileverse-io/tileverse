@@ -318,7 +318,7 @@
           <configuration>
             <skip>${surefire.skip}</skip>
             <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
-            <argLine>@{argLine} --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
+            <argLine>@{argLine} --enable-native-access=ALL-UNNAMED --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
           </configuration>
         </plugin>
         <plugin>
@@ -329,7 +329,7 @@
           <configuration>
             <skip>${failsafe.skip}</skip>
             <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
-            <argLine>@{argLine} --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
+            <argLine>@{argLine} --enable-native-access=ALL-UNNAMED --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
           </configuration>
           <executions>
             <execution>

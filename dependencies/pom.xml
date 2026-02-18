@@ -13,9 +13,10 @@
 
   <properties>
     <!-- Dependency versions -->
-    <aws-s3.version>2.40.7</aws-s3.version>
+    <aws-s3.version>2.41.31</aws-s3.version>
     <azure-identity.version>1.18.1</azure-identity.version>
     <azure-storage-blob.version>12.32.0</azure-storage-blob.version>
+    <azure-core-http-jdk-httpclient.version>1.1.2</azure-core-http-jdk-httpclient.version>
     <caffeine.version>3.2.3</caffeine.version>
     <commons-compress.version>1.28.0</commons-compress.version>
     <google-cloud-storage.version>2.60.0</google-cloud-storage.version>
@@ -117,7 +118,7 @@
         -->
         <groupId>com.azure</groupId>
         <artifactId>azure-core-http-jdk-httpclient</artifactId>
-        <version>1.1.2</version>
+        <version>${azure-core-http-jdk-httpclient.version}</version>
       </dependency>
       <dependency>
         <groupId>com.azure</groupId>
@@ -140,10 +141,14 @@
           <exclusion>
             <!--
               Exclude netty, we don't want all the transitive dependencies.
-              For the blocking client, use software.amazon.awssdk:apache-client -> org.apache.httpcomponents:httpclient instead
 
-              As a replacement for  the netty software.amazon.awssdk.services.s3.S3AsyncClient implementation use
-              software.amazon.awssdk:aws-crt-client
+              Use software.amazon.awssdk:aws-crt-client instead, which provides sync and async alternative clients
+              AwsCrtHttpClient implements SdkHttpClient
+              AwsCrtAsyncHttpClient implements SdkAsyncHttpClient
+
+              For the blocking client, there's also software.amazon.awssdk:apache-client -> org.apache.httpcomponents:httpclient,
+              but the crt-client provides good alternatives for both.
+
               <quote>
               The AWS CRT-based S3 client improves transfer reliability in case there is a network failure.
               Reliability is improved by retrying individual failed parts of a file transfer without restarting
@@ -160,24 +165,16 @@
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>netty-nio-client</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>apache-client</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
-        <!-- blocking client alternative -->
-        <groupId>software.amazon.awssdk</groupId>
-        <artifactId>apache-client</artifactId>
-        <version>${aws-s3.version}</version>
-      </dependency>
-      <dependency>
-        <!-- Async client alternative -->
         <groupId>software.amazon.awssdk</groupId>
         <artifactId>aws-crt-client</artifactId>
         <version>${aws-s3.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>software.amazon.awssdk.crt</groupId>
-        <artifactId>aws-crt</artifactId>
-        <version>0.41.0</version>
       </dependency>
 
       <dependency>
@@ -193,14 +190,12 @@
         <exclusions>
           <exclusion>
             <!--
-                exclude netty, we don't want all the transitive dependencies, it'll use
-                software.amazon.awssdk:apache-client -> org.apache.httpcomponents:httpclient instead
+                exclude netty, we don't want all the transitive dependencies
             -->
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>netty-nio-client</artifactId>
           </exclusion>
           <exclusion>
-            <!-- let the version be managed by software.amazon.awssdk:s3 -->
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>apache-client</artifactId>
           </exclusion>
@@ -212,15 +207,12 @@
         <version>${aws-s3.version}</version>
         <exclusions>
           <exclusion>
-            <!--
-                exclude netty, we don't want all the transitive dependencies, it'll use
-                software.amazon.awssdk:apache-client -> org.apache.httpcomponents:httpclient instead
-            -->
+            <!-- exclude netty, we don't want all the transitive dependencies, use aws-crt-client instead -->
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>netty-nio-client</artifactId>
           </exclusion>
           <exclusion>
-            <!-- let the version be managed by software.amazon.awssdk:s3 -->
+            <!-- exclude apache-client, we don't want all the transitive dependencies, use aws-crt-client instead -->
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>apache-client</artifactId>
           </exclusion>
@@ -272,38 +264,6 @@
         <groupId>net.java.dev.jna</groupId>
         <artifactId>jna-platform</artifactId>
         <version>5.18.1</version>
-      </dependency>
-      <dependency>
-        <!--
-		[ERROR] Dependency convergence error for commons-codec:commons-codec:jar:1.11 paths to dependency are:
-		[ERROR] +-io.tileverse.rangereader:tileverse-rangereader-s3:jar:1.1-SNAPSHOT
-		[ERROR]   +-software.amazon.awssdk:apache-client:jar:2.39.5:compile
-		[ERROR]     +-org.apache.httpcomponents:httpclient:jar:4.5.13:compile
-		[ERROR]       +-commons-codec:commons-codec:jar:1.11:compile
-		[ERROR] and
-		[ERROR] +-io.tileverse.rangereader:tileverse-rangereader-s3:jar:1.1-SNAPSHOT
-		[ERROR]   +-software.amazon.awssdk:apache-client:jar:2.39.5:compile
-		[ERROR]     +-commons-codec:commons-codec:jar:1.17.1:compile
-        -->
-        <groupId>commons-codec</groupId>
-        <artifactId>commons-codec</artifactId>
-        <version>1.20.0</version>
-      </dependency>
-      <dependency>
-        <!--
-		[ERROR] Dependency convergence error for org.apache.httpcomponents:httpcore:jar:4.4.13 paths to dependency are:
-		[ERROR] +-io.tileverse.rangereader:tileverse-rangereader-s3:jar:1.1-SNAPSHOT
-		[ERROR]   +-software.amazon.awssdk:apache-client:jar:2.39.5:compile
-		[ERROR]     +-org.apache.httpcomponents:httpclient:jar:4.5.13:compile
-		[ERROR]       +-org.apache.httpcomponents:httpcore:jar:4.4.13:compile
-		[ERROR] and
-		[ERROR] +-io.tileverse.rangereader:tileverse-rangereader-s3:jar:1.1-SNAPSHOT
-		[ERROR]   +-software.amazon.awssdk:apache-client:jar:2.39.5:compile
-		[ERROR]     +-org.apache.httpcomponents:httpcore:jar:4.4.16:compile
-	    -->
-        <groupId>org.apache.httpcomponents</groupId>
-        <artifactId>httpclient</artifactId>
-        <version>4.5.14</version>
       </dependency>
       <dependency>
         <!---

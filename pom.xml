@@ -604,7 +604,6 @@
           <autoPublish>true</autoPublish>
           <waitUntil>published</waitUntil>
           <excludeArtifacts>
-            <excludeArtifact>tileverse-rangereader-benchmarks</excludeArtifact>
             <excludeArtifact>tileverse-coverage-report</excludeArtifact>
           </excludeArtifacts>
         </configuration>

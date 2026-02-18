@@ -86,7 +86,7 @@ jobs:
 
     - name: Run unit tests (Windows)
       if: runner.os == 'Windows'
-      run: ./mvnw.cmd test -ntp -T1C -pl "!tileverse-rangereader/benchmarks" "-Dfmt.skip=true"
+      run: ./mvnw.cmd test -ntp -T1C "-Dfmt.skip=true"
 
     - name: Upload test results
       uses: actions/upload-artifact@v4

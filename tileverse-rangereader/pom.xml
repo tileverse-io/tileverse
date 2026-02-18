@@ -19,7 +19,6 @@
     <module>azure</module>
     <module>gcs</module>
     <module>all</module>
-    <module>benchmarks</module>
   </modules>
 
   <dependencyManagement>

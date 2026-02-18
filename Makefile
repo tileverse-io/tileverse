@@ -28,12 +28,6 @@ help:
 	@echo "  test-it       - Run integration tests only (failsafe)"
 	@echo "  perf-test     - Run performance tests"
 	@echo ""
-	@echo "Benchmark targets:"
-	@echo "  build-benchmarks - Build benchmark JAR"
-	@echo "  benchmarks    - Run all benchmarks"
-	@echo "  benchmarks-file - Run file-based benchmarks only"
-	@echo "  benchmarks-gc - Run benchmarks with GC profiling"
-	@echo ""
 	@echo "Development targets:"
 	@echo "  verify        - Run full verification (compile + test + format check)"
 	@echo "  quick-build   - Fast build without tests"
@@ -90,32 +84,11 @@ test-coverage:
 
 .PHONY: test-unit
 test-unit:
-	./mvnw test -ntp -T1C -pl '!tileverse-rangereader/benchmarks' -Dfmt.skip
+	./mvnw test -ntp -T1C -Dfmt.skip
 
 .PHONY: test-it
 test-it:
 	./mvnw verify -Dsurefire.skip=true -ntp -T1C -Dfmt.skip
-
-.PHONY: build-benchmarks
-build-benchmarks:
-	./mvnw package -pl :tileverse-rangereader-benchmarks -ntp
-
-.PHONY: benchmarks
-benchmarks: build-benchmarks
-	java -jar tileverse-rangereader/benchmarks/target/benchmarks.jar
-
-.PHONY: benchmarks-file
-benchmarks-file: build-benchmarks
-	java -jar tileverse-rangereader/benchmarks/target/benchmarks.jar FileRangeReader
-
-.PHONY: benchmarks-gc
-benchmarks-gc: build-benchmarks
-	java -jar tileverse-rangereader/benchmarks/target/benchmarks.jar -prof gc
-
-.PHONY: benchmarks-cloud
-benchmarks-cloud:
-	./mvnw package -pl tileverse-rangereader-benchmarks -Pall-benchmarks -ntp
-	java -jar tileverse-rangereader/benchmarks/target/benchmarks.jar
 
 .PHONY: verify
 verify: lint test
@@ -173,4 +146,3 @@ info:
 	@echo "  - src/azure: Azure Blob Storage implementation"
 	@echo "  - src/gcs: Google Cloud Storage implementation"
 	@echo "  - src/all: Aggregator module"
-	@echo "  - benchmarks: JMH performance benchmarks"

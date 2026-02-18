@@ -89,7 +89,7 @@
     <junit.version>5.13.2</junit.version>
     <logback.version>1.5.18</logback.version>
     <mockito.version>5.18.0</mockito.version>
-    <testcontainers.version>1.21.3</testcontainers.version>
+    <testcontainers.version>1.21.4</testcontainers.version>
     <wiremock.version>3.13.1</wiremock.version>
     <surefire.skip>false</surefire.skip>
     <failsafe.skip>false</failsafe.skip>

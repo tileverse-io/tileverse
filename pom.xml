@@ -28,7 +28,6 @@
   </developers>
 
   <modules>
-    <module>dependencies</module>
     <module>bom</module>
     <module>tileverse-rangereader</module>
     <module>tileverse-vectortiles</module>
@@ -79,7 +78,14 @@
     <palantirJavaFormat.version>2.73.0</palantirJavaFormat.version>
 
     <!-- Dependency versions -->
-    <!-- Runtime dependencies are defined in the dependencies/pom.xml BOM -->
+    <cloud-dependencies-bom.version>1.0-M1</cloud-dependencies-bom.version>
+    <caffeine.version>3.2.3</caffeine.version>
+    <commons-compress.version>1.28.0</commons-compress.version>
+    <jackson.version>3.0.4</jackson.version>
+    <jts.version>1.20.0</jts.version>
+    <protobuf-java.version>4.33.1</protobuf-java.version>
+    <slf4j-api.version>2.0.17</slf4j-api.version>
+    <zstd-jni.version>1.5.7-6</zstd-jni.version>
     <lombok.version>1.18.42</lombok.version>
 
     <!-- Test Dependency versions -->
@@ -103,6 +109,65 @@
 
   <dependencyManagement>
     <dependencies>
+      <!-- Cloud SDK dependencies (AWS, Azure, GCS, Jackson 2, convergence overrides) -->
+      <dependency>
+        <groupId>io.tileverse</groupId>
+        <artifactId>cloud-dependencies-bom</artifactId>
+        <version>${cloud-dependencies-bom.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <!-- Jackson 3 (used by tileverse-pmtiles, not in cloud BOM) -->
+      <dependency>
+        <groupId>tools.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+
+      <!-- Logging -->
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-api</artifactId>
+        <version>${slf4j-api.version}</version>
+      </dependency>
+
+      <!-- Caching -->
+      <dependency>
+        <groupId>com.github.ben-manes.caffeine</groupId>
+        <artifactId>caffeine</artifactId>
+        <version>${caffeine.version}</version>
+      </dependency>
+
+      <!-- JTS Topology Suite -->
+      <dependency>
+        <groupId>org.locationtech.jts</groupId>
+        <artifactId>jts-core</artifactId>
+        <version>${jts.version}</version>
+      </dependency>
+
+      <!-- Protocol Buffers -->
+      <dependency>
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-javalite</artifactId>
+        <version>${protobuf-java.version}</version>
+      </dependency>
+
+      <!-- Compression -->
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-compress</artifactId>
+        <version>${commons-compress.version}</version>
+      </dependency>
+      <dependency>
+        <!-- fulfill the optional dependency from commons-compress:1.28.0 -->
+        <!-- keep it up to date when upgrading commons-compress -->
+        <groupId>com.github.luben</groupId>
+        <artifactId>zstd-jni</artifactId>
+        <version>${zstd-jni.version}</version>
+      </dependency>
+
       <dependency>
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
@@ -638,7 +703,7 @@
       <!--
       Section to satisfy enforcer-maven-plugin's dependencyConvergence rule
       and make sure there are no duplicate dependencies with conflicting version numbers
-      Dependency version overrides are defined in the same dependencyConvergence profile of dependencies/pom.xml 
+      Dependency version overrides are defined in the root pom's dependencyManagement section
       -->
       <id>dependencyConvergence</id>
       <activation>
@@ -647,6 +712,15 @@
           <name>!skipDependencyConvergence</name>
         </property>
       </activation>
+      <dependencyManagement>
+        <dependencies>
+          <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.19.0</version>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
       <build>
         <plugins>
           <plugin>

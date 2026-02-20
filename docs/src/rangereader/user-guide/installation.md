@@ -98,54 +98,6 @@ If you prefer not to use the BOM, specify versions explicitly:
     </dependency>
     ```
 
-### Dependency Management BOMs
-
-The project provides two BOMs for different use cases:
-
-#### Tileverse BOM
-
-Manages versions of all Tileverse Range Reader modules:
-
-```xml
-<dependencyManagement>
-    <dependencies>
-        <dependency>
-            <groupId>io.tileverse</groupId>
-            <artifactId>tileverse-bom</artifactId>
-            <version>1.1.0</version>
-            <type>pom</type>
-            <scope>import</scope>
-        </dependency>
-    </dependencies>
-</dependencyManagement>
-```
-
-#### Dependencies BOM
-
-Manages versions of third-party dependencies (for library developers):
-
-```xml
-<dependencyManagement>
-    <dependencies>
-        <dependency>
-            <groupId>io.tileverse</groupId>
-            <artifactId>tileverse-dependencies</artifactId>
-            <version>1.1.0</version>
-            <type>pom</type>
-            <scope>import</scope>
-        </dependency>
-    </dependencies>
-</dependencyManagement>
-```
-
-This BOM includes managed versions for:
-
-- AWS SDK components
-- Azure Storage SDK components  
-- Google Cloud Storage SDK components
-- Jackson (JSON processing)
-- Caffeine (caching)
-
 ## Gradle Installation
 
 ### Using the BOM (Recommended)

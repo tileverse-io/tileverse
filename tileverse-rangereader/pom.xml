@@ -25,13 +25,6 @@
     <dependencies>
       <dependency>
         <groupId>io.tileverse</groupId>
-        <artifactId>tileverse-dependencies</artifactId>
-        <version>${project.version}</version>
-        <type>pom</type>
-        <scope>import</scope>
-      </dependency>
-      <dependency>
-        <groupId>io.tileverse</groupId>
         <artifactId>tileverse-bom</artifactId>
         <version>${project.version}</version>
         <type>pom</type>
@@ -42,20 +35,12 @@
 
   <dependencies>
     <!--
-     Adding dependencies and bom as dependencies with type=pom and scope=provided here
-     does not change the dependency tree for the submodules at all, but forces the BOMs to be installed
+     Adding bom as a dependency with type=pom and scope=provided here
+     does not change the dependency tree for the submodules at all, but forces the BOM to be installed
      in the local maven repository first, either when building the whole project or when a submodule is
      built independently (e.g. mvn install -pl :<module> -am), hence ensuring any change to the dependencies
      is picked up.
     -->
-    <dependency>
-      <groupId>io.tileverse</groupId>
-      <artifactId>tileverse-dependencies</artifactId>
-      <version>${project.version}</version>
-      <type>pom</type>
-      <scope>provided</scope>
-      <optional>true</optional>
-    </dependency>
     <dependency>
       <groupId>io.tileverse</groupId>
       <artifactId>tileverse-bom</artifactId>

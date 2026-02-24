@@ -16,6 +16,7 @@
 package io.tileverse.geotools.parquet;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -24,6 +25,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.UUID;
+import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.MessageTypeParser;
 import org.apache.parquet.schema.PrimitiveType;
@@ -32,6 +34,7 @@ import org.apache.parquet.schema.Type.Repetition;
 import org.apache.parquet.schema.Types;
 import org.geotools.api.feature.simple.SimpleFeatureType;
 import org.geotools.api.feature.type.AttributeDescriptor;
+import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.junit.jupiter.api.Test;
 import org.locationtech.jts.geom.Geometry;
 
@@ -288,5 +291,37 @@ class SchemaBuilderTest {
         assertThat(sft.getAttributeCount()).isEqualTo(5);
         assertThat(sft.getAttributeDescriptors().stream().map(AttributeDescriptor::getLocalName))
                 .containsExactly("id", "name", "value", "active", "timestamp");
+    }
+
+    @Test
+    void bindingClassVisitor_coversAdditionalLogicalTypesAndUnknownIntWidths() {
+        SchemaBuilder.BindingClassVisitor visitor = new SchemaBuilder.BindingClassVisitor();
+
+        assertThat(LogicalTypeAnnotation.enumType().accept(visitor)).contains(String.class);
+        assertThat(LogicalTypeAnnotation.jsonType().accept(visitor)).contains(String.class);
+        assertThat(LogicalTypeAnnotation.listType().accept(visitor)).contains(java.util.List.class);
+        assertThat(LogicalTypeAnnotation.mapType().accept(visitor)).contains(java.util.Map.class);
+        assertThatThrownBy(() -> LogicalTypeAnnotation.intType(24, true)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> LogicalTypeAnnotation.intType(24, false)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void unknownLogicalType_fallsBackToPrimitiveDefaultBinding() {
+        MessageType schema = MessageTypeParser.parseMessageType(
+                """
+                message test {
+                  required binary doc (BSON);
+                }
+                """);
+        SimpleFeatureType sft = schemaBuilder.build("test", schema);
+        assertThat(sft.getDescriptor("doc").getType().getBinding()).isEqualTo(byte[].class);
+    }
+
+    @Test
+    void decodeCrs_handlesParseAndFallbackPaths() {
+        assertThat(SchemaBuilder.decodeCrs(null)).isEqualTo(DefaultGeographicCRS.WGS84);
+        assertThat(SchemaBuilder.decodeCrs("")).isEqualTo(DefaultGeographicCRS.WGS84);
+        assertThat(SchemaBuilder.decodeCrs("INVALID_CRS")).isEqualTo(DefaultGeographicCRS.WGS84);
+        assertThat(SchemaBuilder.decodeCrs(DefaultGeographicCRS.WGS84.toWKT())).isNotNull();
     }
 }

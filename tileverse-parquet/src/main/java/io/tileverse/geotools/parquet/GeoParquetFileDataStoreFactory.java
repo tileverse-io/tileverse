@@ -16,7 +16,9 @@
 package io.tileverse.geotools.parquet;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Logger;
 import org.geotools.api.data.DataStore;
@@ -27,6 +29,9 @@ import org.geotools.util.logging.Logging;
 public class GeoParquetFileDataStoreFactory implements FileDataStoreFactorySpi {
 
     private static final Logger LOGGER = Logging.getLogger(GeoParquetFileDataStoreFactory.class);
+
+    static final String URL_PARAM = "url";
+    static final Param URLP = new Param(URL_PARAM, URL.class, "GeoParquet URL to read", true, null);
 
     @Override
     public String[] getFileExtensions() {
@@ -45,43 +50,66 @@ public class GeoParquetFileDataStoreFactory implements FileDataStoreFactorySpi {
 
     @Override
     public DataStore createDataStore(Map<String, ?> params) throws IOException {
-        // TODO Auto-generated method stub
-        return null;
+        URL url = toUrl(params.get(URL_PARAM));
+        return createDataStore(url);
     }
 
     @Override
     public DataStore createNewDataStore(Map<String, ?> params) throws IOException {
-        // TODO Auto-generated method stub
-        return null;
+        throw new IOException("GeoParquet datastore is read-only; createNewDataStore is not supported");
     }
 
     @Override
     public Param[] getParametersInfo() {
-        // TODO Auto-generated method stub
-        return null;
+        return new Param[] {URLP};
     }
 
     @Override
     public boolean isAvailable() {
-        // TODO Auto-generated method stub
-        return false;
+        return true;
     }
 
     @Override
     public boolean canProcess(URL url) {
-        // TODO Auto-generated method stub
-        return false;
+        if (url == null) {
+            return false;
+        }
+        String path = url.getPath();
+        if (path == null || path.isEmpty()) {
+            return false;
+        }
+        String lowerPath = path.toLowerCase(Locale.ROOT);
+        return lowerPath.endsWith(".parquet");
     }
 
     @Override
     public FileDataStore createDataStore(URL url) throws IOException {
-        // TODO Auto-generated method stub
-        return null;
+        if (!canProcess(url)) {
+            throw new IOException("Unsupported URL for GeoParquet datastore: " + url);
+        }
+        LOGGER.fine(() -> "GeoParquet FileDataStore requested for URL: " + url);
+        return GeoParquetFileDataStore.open(url);
     }
 
     @Override
     public String getTypeName(URL url) throws IOException {
-        // TODO Auto-generated method stub
-        return null;
+        if (!canProcess(url)) {
+            throw new IOException("Unsupported URL for GeoParquet datastore: " + url);
+        }
+        return GeoParquetFileDataStore.typeNameFrom(url);
+    }
+
+    private static URL toUrl(Object value) throws IOException {
+        if (value instanceof URL url) {
+            return url;
+        }
+        if (value == null) {
+            throw new IOException("Missing required parameter '" + URL_PARAM + "'");
+        }
+        try {
+            return new URL(value.toString());
+        } catch (MalformedURLException e) {
+            throw new IOException("Invalid '" + URL_PARAM + "' parameter value: " + value, e);
+        }
     }
 }

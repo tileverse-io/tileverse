@@ -15,6 +15,12 @@
  */
 package io.tileverse.parquet;
 
+import io.tileverse.parquet.reader.CoreParquetFooter;
+import io.tileverse.parquet.reader.CoreParquetFooterReader;
+import io.tileverse.parquet.reader.CoreParquetReadOptions;
+import io.tileverse.parquet.reader.CoreParquetRowGroupReader;
+import io.tileverse.parquet.reader.ParquetReadOptionsAdapter;
+import io.tileverse.parquet.reader.ParquetRowGroupReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,14 +29,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.apache.avro.generic.GenericRecord;
-import org.apache.parquet.ParquetReadOptions;
 import org.apache.parquet.example.data.Group;
 import org.apache.parquet.filter2.compat.FilterCompat;
 import org.apache.parquet.filter2.predicate.FilterPredicate;
-import org.apache.parquet.hadoop.ParquetFileReader;
-import org.apache.parquet.hadoop.metadata.BlockMetaData;
-import org.apache.parquet.hadoop.metadata.FileMetaData;
-import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.io.InputFile;
 import org.apache.parquet.io.api.RecordMaterializer;
 import org.apache.parquet.schema.MessageType;
@@ -41,7 +42,7 @@ import org.jspecify.annotations.Nullable;
  * High-level, stateless facade for reading a Parquet file's schema, metadata, and records.
  * <p>
  * This class caches file metadata (schema, key-value metadata, record count) from an initial
- * footer read. Each {@link #read()} call opens a fresh {@link ParquetFileReader} internally,
+ * core footer read. Each {@link #read()} call opens a fresh row-group reader internally,
  * allowing multiple concurrent reads from the same {@code ParquetDataset}.
  *
  * <p><strong>Default record type:</strong> Avro {@link GenericRecord}, which handles nested
@@ -66,14 +67,24 @@ import org.jspecify.annotations.Nullable;
 public class ParquetDataset {
 
     private final InputFile inputFile;
-    private final ParquetReadOptions readOptions;
+    private final CoreParquetReadOptions readOptions;
+    private final MessageType schema;
+    private final Map<String, String> keyValueMetadata;
+    private final long recordCount;
+    private final CoreParquetFooter footer;
 
-    private long recordCount = -1L;
-    private ParquetMetadata footer;
-
-    private ParquetDataset(InputFile inputFile, ParquetReadOptions readOptions, ParquetMetadata footer) {
+    private ParquetDataset(
+            InputFile inputFile,
+            CoreParquetReadOptions readOptions,
+            MessageType schema,
+            Map<String, String> keyValueMetadata,
+            long recordCount,
+            CoreParquetFooter footer) {
         this.inputFile = inputFile;
         this.readOptions = readOptions;
+        this.schema = schema;
+        this.keyValueMetadata = keyValueMetadata;
+        this.recordCount = recordCount;
         this.footer = footer;
     }
 
@@ -87,7 +98,7 @@ public class ParquetDataset {
      * @throws IOException if the file cannot be opened or its footer cannot be read
      */
     public static ParquetDataset open(InputFile inputFile) throws IOException {
-        return open(inputFile, ParquetReadOptions.builder().build());
+        return open(inputFile, CoreParquetReadOptions.defaults());
     }
 
     /**
@@ -100,40 +111,33 @@ public class ParquetDataset {
      * @return a new stateless {@code ParquetDataset}
      * @throws IOException if the file cannot be opened or its footer cannot be read
      */
-    public static ParquetDataset open(InputFile inputFile, ParquetReadOptions options) throws IOException {
+    public static ParquetDataset open(InputFile inputFile, Object options) throws IOException {
         Objects.requireNonNull(inputFile, "inputFile");
         Objects.requireNonNull(options, "options");
-        try (ParquetFileReader reader = ParquetFileReader.open(inputFile, options)) {
-            ParquetMetadata footer = reader.getFooter();
-            return new ParquetDataset(inputFile, options, footer);
-        }
+        CoreParquetReadOptions coreOptions = ParquetReadOptionsAdapter.fromObject(options);
+        CoreParquetFooter footer = CoreParquetFooterReader.read(inputFile);
+        return new ParquetDataset(
+                inputFile, coreOptions, footer.schema(), footer.keyValueMetadata(), footer.recordCount(), footer);
     }
 
     /**
      * Returns the file's Parquet schema.
      */
     public MessageType getSchema() {
-        return footer.getFileMetaData().getSchema();
+        return schema;
     }
 
     /**
      * Returns the file-level key-value metadata as an unmodifiable map.
      */
     public Map<String, String> getKeyValueMetadata() {
-        FileMetaData fileMetaData = footer.getFileMetaData();
-        Map<String, String> keyValueMetaData = fileMetaData.getKeyValueMetaData();
-        return Collections.unmodifiableMap(keyValueMetaData);
+        return Collections.unmodifiableMap(keyValueMetadata);
     }
 
     /**
      * Returns the total number of records in the file.
      */
     public long getRecordCount() {
-        if (this.recordCount < 0) {
-            this.recordCount = footer.getBlocks().stream()
-                    .mapToLong(BlockMetaData::getRowCount)
-                    .sum();
-        }
         return recordCount;
     }
 
@@ -307,17 +311,14 @@ public class ParquetDataset {
         MessageType schema = getSchema();
         MessageType requestedSchema = columns.isEmpty() ? schema : projectSchema(schema, columns);
 
-        ParquetReadOptions options = this.readOptions;
+        CoreParquetReadOptions options = this.readOptions;
         FilterCompat.Filter filterCompat = FilterCompat.NOOP;
         if (filter != null) {
             filterCompat = FilterCompat.get(filter);
-            options = ParquetReadOptions.builder()
-                    .copy(readOptions)
-                    .withRecordFilter(filterCompat)
-                    .build();
+            options = readOptions.toBuilder().withRecordFilter(filterCompat).build();
         }
 
-        ParquetFileReader reader = ParquetFileReader.open(inputFile, options);
+        ParquetRowGroupReader reader = new CoreParquetRowGroupReader(inputFile, footer, options, schema);
         if (!columns.isEmpty()) {
             reader.setRequestedSchema(requestedSchema);
         }

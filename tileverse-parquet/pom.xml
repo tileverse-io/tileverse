@@ -311,24 +311,24 @@
       <artifactId>parquet-column</artifactId>
     </dependency>
 
-    <!-- Parquet reader (ParquetFileReader, ParquetReader) - requires hadoop-common at runtime -->
-    <dependency>
-      <groupId>org.apache.parquet</groupId>
-      <artifactId>parquet-hadoop</artifactId>
-    </dependency>
-
     <!-- Parquet Avro support (AvroReadSupport for GenericRecord materialization) -->
     <dependency>
       <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-avro</artifactId>
     </dependency>
-
-    <!-- Required by parquet-hadoop's CodecFactory, HadoopParquetConfiguration, and for
-         the compiler to resolve ParquetFileReader's overloaded method signatures.
-         Declared as 'provided' in parquet-hadoop, so we must bring it in explicitly. -->
+    <dependency>
+      <groupId>org.apache.parquet</groupId>
+      <artifactId>parquet-hadoop</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-core</artifactId>
+      <scope>test</scope>
     </dependency>
 
     <dependency>
@@ -336,10 +336,13 @@
       <artifactId>jackson-annotations</artifactId>
     </dependency>
     <dependency>
-      <!-- Only needed in tests for ParquetWriter/ExampleParquetWriter to write test files. Declared as 'provided' in parquet-hadoop. -->
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-core</artifactId>
-      <scope>test</scope>
+      <groupId>org.xerial.snappy</groupId>
+      <artifactId>snappy-java</artifactId>
+      <version>1.1.10.7</version>
+    </dependency>
+    <dependency>
+      <groupId>com.github.luben</groupId>
+      <artifactId>zstd-jni</artifactId>
     </dependency>
   </dependencies>
 

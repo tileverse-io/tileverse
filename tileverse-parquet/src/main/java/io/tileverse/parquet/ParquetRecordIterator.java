@@ -15,12 +15,12 @@
  */
 package io.tileverse.parquet;
 
+import io.tileverse.parquet.reader.ParquetRowGroupReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.NoSuchElementException;
 import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.filter2.compat.FilterCompat;
-import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.io.ColumnIOFactory;
 import org.apache.parquet.io.MessageColumnIO;
 import org.apache.parquet.io.RecordReader;
@@ -28,7 +28,7 @@ import org.apache.parquet.io.api.RecordMaterializer;
 import org.apache.parquet.schema.MessageType;
 
 /**
- * A {@link CloseableIterator} that reads records of type {@code T} from a {@link ParquetFileReader},
+ * A {@link CloseableIterator} that reads records of type {@code T} from a {@link ParquetRowGroupReader},
  * transparently iterating across row groups.
  * <p>
  * For each row group, a new {@link RecordReader} is created using {@link ColumnIOFactory}
@@ -37,12 +37,12 @@ import org.apache.parquet.schema.MessageType;
  * <p>
  * When a {@link FilterCompat.Filter} is provided, filtering is applied at three levels:
  * <ul>
- *   <li>Row group skipping (via statistics in {@link ParquetFileReader} constructor)</li>
- *   <li>Page skipping (via {@link ParquetFileReader#readNextFilteredRowGroup()})</li>
+ *   <li>Row group skipping (via reader initialization and filter planning)</li>
+ *   <li>Page skipping (via {@link ParquetRowGroupReader#readNextFilteredRowGroup()})</li>
  *   <li>Record filtering (via {@link MessageColumnIO#getRecordReader(PageReadStore, RecordMaterializer, FilterCompat.Filter)})</li>
  * </ul>
  * <p>
- * Closing this iterator closes the underlying {@code ParquetFileReader}.
+ * Closing this iterator closes the underlying row-group reader.
  * <p>
  * This class is not thread-safe.
  *
@@ -50,7 +50,7 @@ import org.apache.parquet.schema.MessageType;
  */
 class ParquetRecordIterator<T> implements CloseableIterator<T> {
 
-    private final ParquetFileReader fileReader;
+    private final ParquetRowGroupReader rowGroupReader;
     private final RecordMaterializer<T> materializer;
     private final MessageType requestedSchema;
     private final MessageType fileSchema;
@@ -63,20 +63,20 @@ class ParquetRecordIterator<T> implements CloseableIterator<T> {
     private boolean finished;
 
     ParquetRecordIterator(
-            ParquetFileReader fileReader,
+            ParquetRowGroupReader rowGroupReader,
             RecordMaterializer<T> materializer,
             MessageType requestedSchema,
             MessageType fileSchema) {
-        this(fileReader, materializer, requestedSchema, fileSchema, FilterCompat.NOOP);
+        this(rowGroupReader, materializer, requestedSchema, fileSchema, FilterCompat.NOOP);
     }
 
     ParquetRecordIterator(
-            ParquetFileReader fileReader,
+            ParquetRowGroupReader rowGroupReader,
             RecordMaterializer<T> materializer,
             MessageType requestedSchema,
             MessageType fileSchema,
             FilterCompat.Filter filter) {
-        this.fileReader = fileReader;
+        this.rowGroupReader = rowGroupReader;
         this.materializer = materializer;
         this.requestedSchema = requestedSchema;
         this.fileSchema = fileSchema;
@@ -109,7 +109,7 @@ class ParquetRecordIterator<T> implements CloseableIterator<T> {
     public void close() throws IOException {
         finished = true;
         next = null;
-        fileReader.close();
+        rowGroupReader.close();
     }
 
     private void advance() {
@@ -137,8 +137,8 @@ class ParquetRecordIterator<T> implements CloseableIterator<T> {
 
     private boolean loadNextRowGroup() throws IOException {
         PageReadStore rowGroup = FilterCompat.isFilteringRequired(filter)
-                ? fileReader.readNextFilteredRowGroup()
-                : fileReader.readNextRowGroup();
+                ? rowGroupReader.readNextFilteredRowGroup()
+                : rowGroupReader.readNextRowGroup();
         if (rowGroup == null) {
             return false;
         }

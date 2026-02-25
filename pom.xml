@@ -78,10 +78,10 @@
     <palantirJavaFormat.version>2.73.0</palantirJavaFormat.version>
 
     <!-- Dependency versions -->
-    <cloud-dependencies-bom.version>1.0.0</cloud-dependencies-bom.version>
+    <cloud-dependencies-bom.version>1.0.1</cloud-dependencies-bom.version>
     <caffeine.version>3.2.3</caffeine.version>
     <commons-compress.version>1.28.0</commons-compress.version>
-    <jackson.version>3.0.4</jackson.version>
+    <jackson.version>3.1.0</jackson.version>
     <jts.version>1.20.0</jts.version>
     <protobuf-java.version>4.33.1</protobuf-java.version>
     <slf4j-api.version>2.0.17</slf4j-api.version>

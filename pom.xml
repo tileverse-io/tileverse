@@ -25,6 +25,12 @@
       <organization>Multiversio LLC</organization>
       <organizationUrl>https://multivers.io</organizationUrl>
     </developer>
+    <developer>
+      <name>Jose Macchi</name>
+      <email>jose.macchi@gmail.com</email>
+      <organization>Multiversio LLC</organization>
+      <organizationUrl>https://multivers.io</organizationUrl>
+    </developer>
   </developers>
 
   <modules>
@@ -235,6 +241,28 @@
     </dependency>
   </dependencies>
   <repositories>
+    <repository>
+      <id>osgeo-releases</id>
+      <name>OSGeo Release Repository</name>
+      <url>https://repo.osgeo.org/repository/release/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>osgeo-snapshots</id>
+      <name>OSGeo Snapshot Repository</name>
+      <url>https://repo.osgeo.org/repository/snapshot/</url>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
     <repository>
       <releases>
         <enabled>false</enabled>

@@ -22,13 +22,17 @@ import io.tileverse.parquet.ParquetDataset;
 import io.tileverse.parquet.RangeReaderInputFile;
 import io.tileverse.rangereader.file.FileRangeReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -52,18 +56,22 @@ import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureIterator;
 import org.geotools.factory.CommonFactoryFinder;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.Point;
 
 class GeoParquetFileDataStoreFactoryTest {
 
     private static final FilterFactory ff = CommonFactoryFinder.getFilterFactory(null);
-    private static final String FIXTURE_RESOURCE = "geoparquet/sample-geoparquet.parquet";
-    private static final String INVALID_GEOM_FIXTURE_RESOURCE = "geoparquet/invalid-geometry-geoparquet.parquet";
-    private static final String OVERTURE_BUILDINGS_FIXTURE_RESOURCE = "geoparquet/rosario-center-buildings.parquet";
-    private static final String DT_FEATURE_BUILDING_FIXTURE_RESOURCE = "geoparquet/dt-feature-building.parquet";
+    private static final String FIXTURE_RESOURCE = "/geoparquet/sample-geoparquet.parquet";
+    private static final String INVALID_GEOM_FIXTURE_RESOURCE = "/geoparquet/invalid-geometry-geoparquet.parquet";
+    private static final String OVERTURE_BUILDINGS_FIXTURE_RESOURCE = "/geoparquet/rosario-center-buildings.parquet";
+    private static final String DT_FEATURE_BUILDING_FIXTURE_RESOURCE = "/geoparquet/dt-feature-building.parquet";
 
     private final GeoParquetFileDataStoreFactory factory = new GeoParquetFileDataStoreFactory();
+
+    @TempDir
+    Path tmpdir;
 
     @Test
     void factoryMetadataAndValidationMethods() throws Exception {
@@ -181,8 +189,7 @@ class GeoParquetFileDataStoreFactoryTest {
 
     @Test
     void geoparquetMetadata_isPresentAndConsistent() throws Exception {
-        try (FileRangeReader rangeReader =
-                FileRangeReader.of(Paths.get(fixtureUrl().toURI()))) {
+        try (FileRangeReader rangeReader = FileRangeReader.of(extractToTempFile(FIXTURE_RESOURCE))) {
             ParquetDataset dataset = ParquetDataset.open(new RangeReaderInputFile(rangeReader));
             Map<String, String> metadata = dataset.getKeyValueMetadata();
             assertThat(metadata).containsKey("geo");
@@ -558,7 +565,8 @@ class GeoParquetFileDataStoreFactoryTest {
             assertThat(schema.getTypeName()).isEqualTo("rosario-center-buildings");
 
             assertThat(schema.getDescriptor("id").getType().getBinding()).isEqualTo(String.class);
-            // This Overture subset has no GeoParquet GEOMETRY annotation, so geometry remains BYTE_ARRAY.
+            // This Overture subset has no GeoParquet GEOMETRY annotation, so geometry
+            // remains BYTE_ARRAY.
             assertThat(schema.getDescriptor("geometry").getType().getBinding()).isEqualTo(byte[].class);
             assertThat(schema.getDescriptor("bbox.xmin").getType().getBinding()).isEqualTo(Float.class);
             assertThat(schema.getDescriptor("bbox.xmax").getType().getBinding()).isEqualTo(Float.class);
@@ -576,7 +584,7 @@ class GeoParquetFileDataStoreFactoryTest {
     @Test
     void overtureBuildings_readsRealFeaturesAndMetadata() throws Exception {
         URL url = overtureBuildingsFixtureUrl();
-        try (FileRangeReader rangeReader = FileRangeReader.of(Paths.get(url.toURI()))) {
+        try (FileRangeReader rangeReader = FileRangeReader.of(extractToTempFile(OVERTURE_BUILDINGS_FIXTURE_RESOURCE))) {
             ParquetDataset dataset = ParquetDataset.open(new RangeReaderInputFile(rangeReader));
             Map<String, String> metadata = dataset.getKeyValueMetadata();
             assertThat(metadata).doesNotContainKey("geo");
@@ -676,7 +684,8 @@ class GeoParquetFileDataStoreFactoryTest {
     @Test
     void dtFeatureBuilding_readsMetadataAndFeatures() throws Exception {
         URL url = dtFeatureBuildingFixtureUrl();
-        try (FileRangeReader rangeReader = FileRangeReader.of(Paths.get(url.toURI()))) {
+        try (FileRangeReader rangeReader =
+                FileRangeReader.of(extractToTempFile(DT_FEATURE_BUILDING_FIXTURE_RESOURCE))) {
             ParquetDataset dataset = ParquetDataset.open(new RangeReaderInputFile(rangeReader));
             Map<String, String> metadata = dataset.getKeyValueMetadata();
             assertThat(metadata).isNotNull();
@@ -783,42 +792,41 @@ class GeoParquetFileDataStoreFactoryTest {
         }
     }
 
-    private static URL fixtureUrl() throws Exception {
-        URL url = GeoParquetFileDataStoreFactoryTest.class.getClassLoader().getResource(FIXTURE_RESOURCE);
-        assertThat(url).as("Missing fixture resource %s", FIXTURE_RESOURCE).isNotNull();
-        assertThat(Files.size(Paths.get(url.toURI()))).isGreaterThan(0L);
-        return url;
+    private URL fixtureUrl() {
+        return extractToUrl(FIXTURE_RESOURCE);
     }
 
-    private static URL invalidFixtureUrl() throws Exception {
-        URL url = GeoParquetFileDataStoreFactoryTest.class.getClassLoader().getResource(INVALID_GEOM_FIXTURE_RESOURCE);
-        assertThat(url)
-                .as("Missing fixture resource %s", INVALID_GEOM_FIXTURE_RESOURCE)
-                .isNotNull();
-        assertThat(Files.size(Paths.get(url.toURI()))).isGreaterThan(0L);
-        return url;
+    private URL invalidFixtureUrl() {
+        return extractToUrl(INVALID_GEOM_FIXTURE_RESOURCE);
     }
 
-    private static URL overtureBuildingsFixtureUrl() throws Exception {
-        URL url = GeoParquetFileDataStoreFactoryTest.class
-                .getClassLoader()
-                .getResource(OVERTURE_BUILDINGS_FIXTURE_RESOURCE);
-        assertThat(url)
-                .as("Missing fixture resource %s", OVERTURE_BUILDINGS_FIXTURE_RESOURCE)
-                .isNotNull();
-        assertThat(Files.size(Paths.get(url.toURI()))).isGreaterThan(0L);
-        return url;
+    private URL overtureBuildingsFixtureUrl() {
+        return extractToUrl(OVERTURE_BUILDINGS_FIXTURE_RESOURCE);
     }
 
-    private static URL dtFeatureBuildingFixtureUrl() throws Exception {
-        URL url = GeoParquetFileDataStoreFactoryTest.class
-                .getClassLoader()
-                .getResource(DT_FEATURE_BUILDING_FIXTURE_RESOURCE);
-        assertThat(url)
-                .as("Missing fixture resource %s", DT_FEATURE_BUILDING_FIXTURE_RESOURCE)
-                .isNotNull();
-        assertThat(Files.size(Paths.get(url.toURI()))).isGreaterThan(0L);
-        return url;
+    private URL dtFeatureBuildingFixtureUrl() {
+        return extractToUrl(DT_FEATURE_BUILDING_FIXTURE_RESOURCE);
+    }
+
+    private URL extractToUrl(String resource) {
+        try {
+            return extractToTempFile(resource).toUri().toURL();
+        } catch (MalformedURLException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private Path extractToTempFile(String resource) {
+        try (InputStream in = getClass().getResourceAsStream(resource)) {
+            assertThat(in).as("Missing fixture resource %s", resource).isNotNull();
+
+            String filename = Paths.get(resource).getFileName().toString();
+            Path tempFile = tmpdir.resolve(filename);
+            Files.copy(in, tempFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            return tempFile;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private static Object unwrapDataStoreImpl(DataStore dataStore) throws Exception {

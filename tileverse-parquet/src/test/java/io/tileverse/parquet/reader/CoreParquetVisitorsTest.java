@@ -5,8 +5,6 @@ package io.tileverse.parquet.reader;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
@@ -29,11 +27,7 @@ class CoreParquetVisitorsTest {
     Path tempDir;
 
     @Test
-    void footerReader_privateEnumMappings_coverAllConvertedTypesAndUnits() throws Exception {
-        Method fromConverted =
-                CoreParquetFooterReader.class.getDeclaredMethod("fromConvertedType", SchemaElement.class);
-        fromConverted.setAccessible(true);
-
+    void footerReader_enumMappings_coverAllConvertedTypesAndUnits() {
         for (ConvertedType type : ConvertedType.values()) {
             SchemaElement se = new SchemaElement("f");
             se.setConverted_type(type);
@@ -41,7 +35,7 @@ class CoreParquetVisitorsTest {
                 se.setScale(2);
                 se.setPrecision(10);
             }
-            Object result = fromConverted.invoke(null, se);
+            Object result = CoreParquetFooterReader.fromConvertedType(se);
             if (type == ConvertedType.MAP_KEY_VALUE) {
                 assertThat(result).isNull();
             } else {
@@ -49,38 +43,27 @@ class CoreParquetVisitorsTest {
             }
         }
 
-        Method fromTimeUnit = CoreParquetFooterReader.class.getDeclaredMethod("fromTimeUnit", TimeUnit.class);
-        fromTimeUnit.setAccessible(true);
-        assertThat(fromTimeUnit.invoke(null, new Object[] {null}).toString()).isEqualTo("MILLIS");
+        assertThat(CoreParquetFooterReader.fromTimeUnit(null).toString()).isEqualTo("MILLIS");
 
         TimeUnit millis = new TimeUnit();
         millis.setMILLIS(new org.apache.parquet.format.MilliSeconds());
-        assertThat(fromTimeUnit.invoke(null, millis).toString()).isEqualTo("MILLIS");
+        assertThat(CoreParquetFooterReader.fromTimeUnit(millis).toString()).isEqualTo("MILLIS");
 
         TimeUnit micros = new TimeUnit();
         micros.setMICROS(new org.apache.parquet.format.MicroSeconds());
-        assertThat(fromTimeUnit.invoke(null, micros).toString()).isEqualTo("MICROS");
+        assertThat(CoreParquetFooterReader.fromTimeUnit(micros).toString()).isEqualTo("MICROS");
 
         TimeUnit nanos = new TimeUnit();
         nanos.setNANOS(new org.apache.parquet.format.NanoSeconds());
-        assertThat(fromTimeUnit.invoke(null, nanos).toString()).isEqualTo("NANOS");
+        assertThat(CoreParquetFooterReader.fromTimeUnit(nanos).toString()).isEqualTo("NANOS");
 
-        Method fromEdge = CoreParquetFooterReader.class.getDeclaredMethod(
-                "fromEdgeInterpolation", org.apache.parquet.format.EdgeInterpolationAlgorithm.class);
-        fromEdge.setAccessible(true);
         for (EdgeInterpolationAlgorithm alg : EdgeInterpolationAlgorithm.values()) {
-            assertThat(fromEdge.invoke(null, alg)).isNotNull();
+            assertThat(CoreParquetFooterReader.fromEdgeInterpolation(alg)).isNotNull();
         }
     }
 
-    @SuppressWarnings("unchecked")
     @Test
-    void statsPruningVisitor_handlesComparisonAndLogicalOperators() throws Exception {
-        Class<?> visitorClass =
-                Class.forName("io.tileverse.parquet.reader.CoreParquetRowGroupReader$StatsPruningVisitor");
-        Constructor<?> ctor = visitorClass.getDeclaredConstructor(Map.class);
-        ctor.setAccessible(true);
-
+    void statsPruningVisitor_handlesComparisonAndLogicalOperators() {
         CoreColumnChunkMeta id = new CoreColumnChunkMeta(
                 "id",
                 java.util.List.of("id"),
@@ -97,8 +80,7 @@ class CoreParquetVisitorsTest {
                 null,
                 null);
 
-        FilterPredicate.Visitor<Boolean> visitor =
-                (FilterPredicate.Visitor<Boolean>) ctor.newInstance(Map.of("id", id));
+        FilterPredicate.Visitor<Boolean> visitor = new CoreParquetRowGroupReader.StatsPruningVisitor(Map.of("id", id));
 
         assertThat(FilterApi.eq(FilterApi.intColumn("id"), 5).accept(visitor)).isTrue();
         assertThat(FilterApi.eq(FilterApi.intColumn("id"), 15).accept(visitor)).isFalse();
@@ -137,7 +119,7 @@ class CoreParquetVisitorsTest {
                 null,
                 null);
         FilterPredicate.Visitor<Boolean> nullVisitor =
-                (FilterPredicate.Visitor<Boolean>) ctor.newInstance(Map.of("id", onlyNulls));
+                new CoreParquetRowGroupReader.StatsPruningVisitor(Map.of("id", onlyNulls));
         assertThat(FilterApi.eq(FilterApi.intColumn("id"), 5).accept(nullVisitor))
                 .isFalse();
         assertThat(FilterApi.eq(FilterApi.intColumn("id"), null).accept(nullVisitor))
@@ -159,21 +141,15 @@ class CoreParquetVisitorsTest {
                 null,
                 null);
         FilterPredicate.Visitor<Boolean> constantVisitor =
-                (FilterPredicate.Visitor<Boolean>) ctor.newInstance(Map.of("id", constant));
+                new CoreParquetRowGroupReader.StatsPruningVisitor(Map.of("id", constant));
         assertThat(FilterApi.notEq(FilterApi.intColumn("id"), 10).accept(constantVisitor))
                 .isTrue();
         assertThat(FilterApi.eq(FilterApi.intColumn("id"), null).accept(constantVisitor))
                 .isTrue();
     }
 
-    @SuppressWarnings("unchecked")
     @Test
-    void statsPruningVisitor_coversTypeDecodingAndNullBranches() throws Exception {
-        Class<?> visitorClass =
-                Class.forName("io.tileverse.parquet.reader.CoreParquetRowGroupReader$StatsPruningVisitor");
-        Constructor<?> ctor = visitorClass.getDeclaredConstructor(Map.class);
-        ctor.setAccessible(true);
-
+    void statsPruningVisitor_coversTypeDecodingAndNullBranches() {
         CoreColumnChunkMeta boolCol = new CoreColumnChunkMeta(
                 "b",
                 java.util.List.of("b"),
@@ -268,7 +244,7 @@ class CoreParquetVisitorsTest {
                 null,
                 null);
 
-        FilterPredicate.Visitor<Boolean> visitor = (FilterPredicate.Visitor<Boolean>) ctor.newInstance(Map.of(
+        FilterPredicate.Visitor<Boolean> visitor = new CoreParquetRowGroupReader.StatsPruningVisitor(Map.of(
                 "b", boolCol,
                 "l", longCol,
                 "f", floatCol,
@@ -417,9 +393,6 @@ class CoreParquetVisitorsTest {
                 .build();
         CoreParquetRowGroupReader reader = new CoreParquetRowGroupReader(
                 new org.apache.parquet.io.LocalInputFile(fakeFile), footer, options, schema);
-        Method method =
-                CoreParquetRowGroupReader.class.getDeclaredMethod("canDropByDictionary", CoreRowGroupMeta.class);
-        method.setAccessible(true);
-        return (Boolean) method.invoke(reader, new CoreRowGroupMeta(10, java.util.List.of(columnMeta)));
+        return reader.canDropByDictionary(new CoreRowGroupMeta(10, java.util.List.of(columnMeta)));
     }
 }

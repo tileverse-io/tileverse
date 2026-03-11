@@ -38,8 +38,14 @@ import org.apache.parquet.io.SeekableInputStream;
  */
 class RangeReaderSeekableInputStream extends SeekableInputStream {
 
+    /** Channel view over the underlying {@link RangeReader}. */
     private final RangeReaderSeekableByteChannel channel;
 
+    /**
+     * Creates a new seekable input stream backed by the given range reader.
+     *
+     * @param rangeReader the range reader to read from
+     */
     RangeReaderSeekableInputStream(RangeReader rangeReader) {
         this.channel = RangeReaderSeekableByteChannel.of(rangeReader);
     }

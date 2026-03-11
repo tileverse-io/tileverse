@@ -142,7 +142,7 @@ class GeoParquetReaderPerformanceIT {
 
     private static Query createQuery(URI uri, String bbox, int maxFeatures) throws Exception {
         Query query = new Query(
-                GeoParquetFileDataStore.typeNameFrom(uri.toURL()), parseBbox(bbox), new String[] {"id", "geometry"});
+                GeoparquetContentDataStore.typeNameFrom(uri), parseBbox(bbox), new String[] {"id", "geometry"});
         query.setMaxFeatures(maxFeatures);
         return query;
     }
@@ -162,7 +162,7 @@ class GeoParquetReaderPerformanceIT {
         var dataStore =
                 switch (backend) {
                     case CORE -> new GeoParquetFileDataStoreFactory().createDataStore(uri.toURL());
-                    case HADOOP -> GeoParquetFileDataStore.open(uri.toURL(), HadoopGeoParquetRecordSource::new);
+                    case HADOOP -> GeoparquetContentDataStore.open(uri.toURL(), HadoopGeoParquetRecordSource::new);
                 };
         try {
             String typeName = dataStore.getTypeNames()[0];

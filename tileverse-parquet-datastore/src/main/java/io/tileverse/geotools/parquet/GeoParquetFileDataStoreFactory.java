@@ -17,6 +17,7 @@ package io.tileverse.geotools.parquet;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.Locale;
 import java.util.Map;
@@ -88,7 +89,7 @@ public class GeoParquetFileDataStoreFactory implements FileDataStoreFactorySpi {
             throw new IOException("Unsupported URL for GeoParquet datastore: " + url);
         }
         LOGGER.fine(() -> "GeoParquet FileDataStore requested for URL: " + url);
-        return GeoParquetFileDataStore.open(url);
+        return GeoparquetContentDataStore.open(url);
     }
 
     @Override
@@ -96,7 +97,11 @@ public class GeoParquetFileDataStoreFactory implements FileDataStoreFactorySpi {
         if (!canProcess(url)) {
             throw new IOException("Unsupported URL for GeoParquet datastore: " + url);
         }
-        return GeoParquetFileDataStore.typeNameFrom(url);
+        try {
+            return GeoparquetContentDataStore.typeNameFrom(url.toURI());
+        } catch (URISyntaxException e) {
+            throw new IOException("Invalid URL: " + url, e);
+        }
     }
 
     private static URL toUrl(Object value) throws IOException {

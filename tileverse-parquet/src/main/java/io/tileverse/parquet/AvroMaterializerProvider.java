@@ -37,10 +37,36 @@ import org.apache.parquet.schema.Type;
 
 /**
  * A {@link ParquetMaterializerProvider} that produces Avro {@link GenericRecord} instances
- * through a local converter pipeline, without delegating to parquet-avro read support.
+ * through a local converter pipeline, without delegating to parquet-avro's
+ * {@code AvroReadSupport}.
+ *
+ * <h2>Why not use {@code AvroReadSupport}?</h2>
+ *
+ * <p>Parquet-avro's {@code AvroReadSupport} directly imports {@code org.apache.hadoop.conf.Configuration}
+ * and {@code org.apache.hadoop.util.ReflectionUtils}, which means {@code hadoop-common} must be on
+ * the classpath at runtime. Although parquet-avro declares {@code hadoop-common} with
+ * {@code <scope>provided</scope>}, any code that actually instantiates {@code AvroReadSupport}
+ * will fail with {@link NoClassDefFoundError} unless hadoop-common is present.
+ *
+ * <p>{@code hadoop-common} brings 47 compile-scoped transitive dependencies (Guava, Protobuf, Jetty,
+ * Jersey, commons-*, Curator, etc.) — a 100 MB+ dependency tree that conflicts with most modern
+ * application stacks and defeats the goal of a Hadoop-free Parquet reader.
+ *
+ * <p>This class reimplements Avro materialization using only:
+ * <ul>
+ *   <li>Avro APIs ({@link org.apache.avro.Schema}, {@link GenericData.Record})</li>
+ *   <li>Parquet column APIs ({@link GroupConverter}, {@link PrimitiveConverter},
+ *       {@link RecordMaterializer})</li>
+ *   <li>{@link AvroSchemaConverter} from parquet-avro (which itself has no Hadoop imports)</li>
+ * </ul>
+ *
+ * <p>The result is a fully functional Avro record materializer that supports nested records,
+ * arrays (LIST), maps (MAP), all primitive types, and nullable unions — with zero Hadoop
+ * classes on the classpath.
  */
 class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRecord> {
 
+    /** Singleton instance. */
     static final AvroMaterializerProvider INSTANCE = new AvroMaterializerProvider();
 
     private AvroMaterializerProvider() {}
@@ -52,6 +78,9 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         return new SimpleAvroRecordMaterializer(requestedSchema, avroSchema);
     }
 
+    /**
+     * Materializer that assembles Avro {@link GenericRecord}s from Parquet column values.
+     */
     private static final class SimpleAvroRecordMaterializer extends RecordMaterializer<GenericRecord> {
         private final RecordGroupConverter rootConverter;
 
@@ -70,11 +99,17 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         }
     }
 
+    /**
+     * Callback that receives a converted column value.
+     */
     @FunctionalInterface
-    private interface ValueConsumer {
+    interface ValueConsumer {
         void accept(Object value);
     }
 
+    /**
+     * Converter for Parquet group types that assembles Avro {@link GenericData.Record}s.
+     */
     private static final class RecordGroupConverter extends GroupConverter {
         private final Schema schema;
         private final ValueConsumer valueConsumer;
@@ -134,7 +169,10 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         return new RecordGroupConverter(parquetField.asGroupType(), schema, consumer);
     }
 
-    private static final class ArrayFieldConverter extends GroupConverter {
+    /**
+     * Converter for Parquet LIST-annotated fields, collecting elements into a {@link java.util.List}.
+     */
+    static final class ArrayFieldConverter extends GroupConverter {
         private final List<Object> elements = new ArrayList<>();
         private final ValueConsumer parentConsumer;
         private final Converter repeatedConverter;
@@ -180,7 +218,10 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         }
     }
 
-    private static final class ListElementGroupConverter extends GroupConverter {
+    /**
+     * Converter for the repeated element group inside a Parquet LIST structure.
+     */
+    static final class ListElementGroupConverter extends GroupConverter {
         private final GroupType elementGroupType;
         private final Schema elementSchema;
         private final ValueConsumer listConsumer;
@@ -233,7 +274,11 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         }
     }
 
-    private static final class RepeatedGroupFieldConverter extends GroupConverter {
+    /**
+     * Converter for bare repeated group fields (not annotated as LIST), collecting records into a
+     * {@link java.util.List}.
+     */
+    static final class RepeatedGroupFieldConverter extends GroupConverter {
         private final GroupType groupType;
         private final Schema schema;
         private final ValueConsumer parentConsumer;
@@ -274,7 +319,10 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         }
     }
 
-    private static final class MapFieldConverter extends GroupConverter {
+    /**
+     * Converter for Parquet MAP-annotated fields, collecting key-value pairs into a {@link java.util.Map}.
+     */
+    static final class MapFieldConverter extends GroupConverter {
         private final Map<String, Object> map = new LinkedHashMap<>();
         private final ValueConsumer parentConsumer;
         private final Converter keyValueConverter;
@@ -310,13 +358,19 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         }
     }
 
-    private static final class MapKeyValueGroupConverter extends GroupConverter {
+    /**
+     * Converter for the repeated key-value group inside a Parquet MAP structure.
+     */
+    static final class MapKeyValueGroupConverter extends GroupConverter {
         private final GroupType groupType;
         private final Converter[] converters;
         private final MapEntryConsumer entryConsumer;
         private String currentKey;
         private Object currentValue;
 
+        /**
+         * Callback that receives a decoded map key-value pair.
+         */
         @FunctionalInterface
         interface MapEntryConsumer {
             void put(String key, Object value);
@@ -359,7 +413,10 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         }
     }
 
-    private static final class PrimitiveValueConverter extends PrimitiveConverter {
+    /**
+     * Converter for Parquet primitive values, translating to the corresponding Avro type.
+     */
+    static final class PrimitiveValueConverter extends PrimitiveConverter {
         private final PrimitiveType primitiveType;
         private final Schema schema;
         private final ValueConsumer consumer;
@@ -417,7 +474,7 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         }
     }
 
-    private static Type findListRepeatedType(GroupType listGroup) {
+    static Type findListRepeatedType(GroupType listGroup) {
         LogicalTypeAnnotation annotation = listGroup.getLogicalTypeAnnotation();
         if (!(annotation instanceof LogicalTypeAnnotation.ListLogicalTypeAnnotation)
                 && !"LIST".equalsIgnoreCase(String.valueOf(annotation))) {
@@ -437,7 +494,7 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         return first;
     }
 
-    private static Type findMapRepeatedType(GroupType mapGroup) {
+    static Type findMapRepeatedType(GroupType mapGroup) {
         LogicalTypeAnnotation annotation = mapGroup.getLogicalTypeAnnotation();
         if (!(annotation instanceof LogicalTypeAnnotation.MapLogicalTypeAnnotation)
                 && !(annotation instanceof LogicalTypeAnnotation.MapKeyValueTypeAnnotation)
@@ -461,7 +518,7 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         return mapGroup.getType(0);
     }
 
-    private static Schema unwrapNullable(Schema schema) {
+    static Schema unwrapNullable(Schema schema) {
         if (schema.getType() != Schema.Type.UNION) {
             return schema;
         }

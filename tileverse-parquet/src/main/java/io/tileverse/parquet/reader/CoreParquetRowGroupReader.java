@@ -15,7 +15,6 @@
  */
 package io.tileverse.parquet.reader;
 
-import com.github.luben.zstd.Zstd;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -28,9 +27,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.PrimitiveIterator;
 import java.util.Queue;
 import java.util.Set;
-import java.util.zip.GZIPInputStream;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.column.Encoding;
@@ -45,7 +45,6 @@ import org.apache.parquet.filter2.compat.FilterCompat;
 import org.apache.parquet.filter2.predicate.FilterPredicate;
 import org.apache.parquet.filter2.predicate.Operators;
 import org.apache.parquet.filter2.predicate.UserDefinedPredicate;
-import org.apache.parquet.format.CompressionCodec;
 import org.apache.parquet.format.DataPageHeader;
 import org.apache.parquet.format.DataPageHeaderV2;
 import org.apache.parquet.format.DictionaryPageHeader;
@@ -53,22 +52,54 @@ import org.apache.parquet.format.PageHeader;
 import org.apache.parquet.format.PageType;
 import org.apache.parquet.format.Type;
 import org.apache.parquet.format.Util;
+import org.apache.parquet.hadoop.metadata.ColumnPath;
+import org.apache.parquet.internal.column.columnindex.OffsetIndex;
+import org.apache.parquet.internal.filter2.columnindex.ColumnIndexFilter;
+import org.apache.parquet.internal.filter2.columnindex.ColumnIndexStore;
+import org.apache.parquet.internal.filter2.columnindex.RowRanges;
 import org.apache.parquet.io.InputFile;
 import org.apache.parquet.io.SeekableInputStream;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType;
-import org.xerial.snappy.Snappy;
 
+/**
+ * Reads and decompresses column chunks from a Parquet file, implementing four-tier filter pushdown:
+ *
+ * <ol>
+ *   <li><strong>Statistics-based pruning</strong> — skips entire row groups whose column min/max
+ *       statistics prove no records can match the filter.</li>
+ *   <li><strong>Dictionary-based pruning</strong> — loads dictionary pages and eliminates row groups
+ *       where the filter value is absent from the dictionary.</li>
+ *   <li><strong>Column-index pushdown (page-level)</strong> — reads page-level {@code ColumnIndex}
+ *       and {@code OffsetIndex} structures to compute matching {@code RowRanges}, then reads only
+ *       the pages that may contain matching records.</li>
+ *   <li><strong>Record-level filtering</strong> — applies the filter predicate during record
+ *       assembly, skipping individual non-matching records.</li>
+ * </ol>
+ *
+ * <p>Each {@link #readRowGroup} call opens a single {@code SeekableInputStream} that is reused
+ * across all column chunks in that row group. Dictionary pages read during the pruning phase are
+ * cached and reused during the column-read phase, avoiding redundant I/O.
+ */
 public final class CoreParquetRowGroupReader implements ParquetRowGroupReader {
     private final InputFile inputFile;
     private final CoreParquetReadOptions options;
     private final List<CoreRowGroupMeta> rowGroups;
     private final MessageType fileSchema;
     private final FilterPredicate filterPredicate;
+    private final Map<String, DictionaryPage> dictionaryCache = new HashMap<>();
     private MessageType requestedSchema;
     private int nextRowGroupIndex;
 
+    /**
+     * Creates a row group reader for the given Parquet file.
+     *
+     * @param inputFile  the Parquet file to read from
+     * @param footer     the parsed file footer
+     * @param options    read options controlling filter pushdown behavior
+     * @param fileSchema the full file schema (used for column descriptors)
+     */
     public CoreParquetRowGroupReader(
             InputFile inputFile, CoreParquetFooter footer, CoreParquetReadOptions options, MessageType fileSchema) {
         this.inputFile = Objects.requireNonNull(inputFile, "inputFile");
@@ -99,6 +130,7 @@ public final class CoreParquetRowGroupReader implements ParquetRowGroupReader {
     @Override
     public PageReadStore readNextFilteredRowGroup() throws IOException {
         while (nextRowGroupIndex < rowGroups.size()) {
+            dictionaryCache.clear();
             CoreRowGroupMeta rowGroup = rowGroups.get(nextRowGroupIndex++);
             if (canDropByStats(rowGroup)) {
                 continue;
@@ -106,7 +138,18 @@ public final class CoreParquetRowGroupReader implements ParquetRowGroupReader {
             if (canDropByDictionary(rowGroup)) {
                 continue;
             }
-            // Column-index pushdown intentionally omitted in hard-decoupled core path.
+            if (filterPredicate != null && options.useColumnIndexFilter()) {
+                Set<ColumnPath> paths = getRequestedColumnPaths();
+                ColumnIndexStore columnIndexStore = CoreColumnIndexStore.create(inputFile, rowGroup, fileSchema, paths);
+                RowRanges rowRanges = ColumnIndexFilter.calculateRowRanges(
+                        options.getRecordFilter(), columnIndexStore, paths, rowGroup.rowCount());
+                if (rowRanges.rowCount() == 0) {
+                    continue;
+                }
+                if (rowRanges.rowCount() < rowGroup.rowCount()) {
+                    return readFilteredRowGroup(rowGroup, rowRanges, columnIndexStore);
+                }
+            }
             return readRowGroup(rowGroup);
         }
         return null;
@@ -115,27 +158,67 @@ public final class CoreParquetRowGroupReader implements ParquetRowGroupReader {
     @Override
     public void close() {}
 
+    // ---- Row group reading ----
+
     private PageReadStore readRowGroup(CoreRowGroupMeta rowGroup) throws IOException {
         Map<ColumnDescriptor, PageReader> pageReaders = new HashMap<>();
-        Map<String, CoreColumnChunkMeta> columnByPath = new HashMap<>();
-        for (CoreColumnChunkMeta column : rowGroup.columns()) {
-            columnByPath.put(column.path(), column);
-        }
+        Map<String, CoreColumnChunkMeta> columnByPath = buildColumnByPathMap(rowGroup);
 
-        for (ColumnDescriptor descriptor : requestedSchema.getColumns()) {
-            String path = String.join(".", descriptor.getPath());
-            CoreColumnChunkMeta columnMeta = columnByPath.get(path);
-            if (columnMeta == null) {
-                continue;
+        try (SeekableInputStream in = inputFile.newStream()) {
+            for (ColumnDescriptor descriptor : requestedSchema.getColumns()) {
+                String path = String.join(".", descriptor.getPath());
+                CoreColumnChunkMeta columnMeta = columnByPath.get(path);
+                if (columnMeta == null) {
+                    continue;
+                }
+                CoreColumnChunk chunk = readColumnChunk(in, columnMeta, descriptor);
+                pageReaders.put(descriptor, new CorePageReader(chunk.valueCount, chunk.pages, chunk.dictionaryPage));
             }
-            CoreColumnChunk chunk = readColumnChunk(columnMeta, descriptor);
-            pageReaders.put(descriptor, new CorePageReader(chunk.valueCount, chunk.pages, chunk.dictionaryPage));
         }
 
         return new CorePageReadStore(rowGroup.rowCount(), pageReaders);
     }
 
-    private CoreColumnChunk readColumnChunk(CoreColumnChunkMeta columnMeta, ColumnDescriptor descriptor)
+    private PageReadStore readFilteredRowGroup(
+            CoreRowGroupMeta rowGroup, RowRanges rowRanges, ColumnIndexStore columnIndexStore) throws IOException {
+        Map<ColumnDescriptor, PageReader> pageReaders = new HashMap<>();
+        Map<String, CoreColumnChunkMeta> columnByPath = buildColumnByPathMap(rowGroup);
+
+        try (SeekableInputStream in = inputFile.newStream()) {
+            for (ColumnDescriptor descriptor : requestedSchema.getColumns()) {
+                String path = String.join(".", descriptor.getPath());
+                CoreColumnChunkMeta columnMeta = columnByPath.get(path);
+                if (columnMeta == null) {
+                    continue;
+                }
+
+                ColumnPath columnPath = ColumnPath.get(descriptor.getPath());
+                OffsetIndex offsetIndex;
+                try {
+                    offsetIndex = columnIndexStore.getOffsetIndex(columnPath);
+                } catch (ColumnIndexStore.MissingOffsetIndexException e) {
+                    CoreColumnChunk chunk = readColumnChunk(in, columnMeta, descriptor);
+                    pageReaders.put(
+                            descriptor, new CorePageReader(chunk.valueCount, chunk.pages, chunk.dictionaryPage));
+                    continue;
+                }
+
+                OffsetIndex filteredOffsetIndex = filterOffsetIndex(offsetIndex, rowRanges, rowGroup.rowCount());
+                if (filteredOffsetIndex.getPageCount() == 0) {
+                    continue;
+                }
+
+                CoreColumnChunk chunk = readFilteredColumnChunk(in, columnMeta, descriptor, filteredOffsetIndex);
+                pageReaders.put(descriptor, new CorePageReader(chunk.valueCount, chunk.pages, chunk.dictionaryPage));
+            }
+        }
+
+        return new CorePageReadStore(rowRanges, pageReaders);
+    }
+
+    // ---- Column chunk reading ----
+
+    CoreColumnChunk readColumnChunk(SeekableInputStream in, CoreColumnChunkMeta columnMeta, ColumnDescriptor descriptor)
             throws IOException {
         long start = columnMeta.startOffset();
         long totalSize = columnMeta.totalCompressedSize();
@@ -143,137 +226,163 @@ public final class CoreParquetRowGroupReader implements ParquetRowGroupReader {
             throw new IOException("Unsupported column chunk size: " + totalSize);
         }
 
-        byte[] chunkBytes = readRange(start, (int) totalSize);
+        byte[] chunkBytes = readRange(in, start, (int) totalSize);
         PrimitiveType primitiveType = descriptor.getPrimitiveType();
 
-        DictionaryPage dictionaryPage = null;
+        DictionaryPage dictionaryPage = dictionaryCache.get(columnMeta.path());
         List<DataPage> dataPages = new ArrayList<>();
-        ByteArrayInputStream in = new ByteArrayInputStream(chunkBytes);
+        ByteArrayInputStream bis = new ByteArrayInputStream(chunkBytes);
 
-        while (in.available() > 0) {
-            PageHeader header = Util.readPageHeader(in);
+        while (bis.available() > 0) {
+            PageHeader header = Util.readPageHeader(bis);
             int payloadSize = header.getCompressed_page_size();
-            byte[] payload = in.readNBytes(payloadSize);
+            byte[] payload = bis.readNBytes(payloadSize);
             if (payload.length != payloadSize) {
                 throw new IOException("Unexpected EOF while reading page payload");
             }
 
             if (header.getType() == PageType.DICTIONARY_PAGE) {
-                DictionaryPageHeader dictionaryHeader = header.getDictionary_page_header();
-                byte[] decompressed = decompress(columnMeta.codec(), payload, header.getUncompressed_page_size());
-                dictionaryPage = new DictionaryPage(
-                        org.apache.parquet.bytes.BytesInput.from(decompressed),
-                        dictionaryHeader.getNum_values(),
-                        toEncoding(dictionaryHeader.getEncoding()));
+                if (dictionaryPage == null) {
+                    DictionaryPageHeader dictionaryHeader = header.getDictionary_page_header();
+                    byte[] decompressed =
+                            CompressionUtil.decompress(columnMeta.codec(), payload, header.getUncompressed_page_size());
+                    dictionaryPage = new DictionaryPage(
+                            org.apache.parquet.bytes.BytesInput.from(decompressed),
+                            dictionaryHeader.getNum_values(),
+                            toEncoding(dictionaryHeader.getEncoding()));
+                }
                 continue;
             }
 
             if (header.getType() == PageType.DATA_PAGE) {
-                DataPageHeader dataHeader = header.getData_page_header();
-                byte[] decompressed = decompress(columnMeta.codec(), payload, header.getUncompressed_page_size());
-                Statistics<?> stats = Statistics.noopStats(primitiveType);
-                DataPageV1 page = new DataPageV1(
-                        org.apache.parquet.bytes.BytesInput.from(decompressed),
-                        dataHeader.getNum_values(),
-                        header.getUncompressed_page_size(),
-                        stats,
-                        toEncoding(dataHeader.getRepetition_level_encoding()),
-                        toEncoding(dataHeader.getDefinition_level_encoding()),
-                        toEncoding(dataHeader.getEncoding()));
-                dataPages.add(page);
+                dataPages.add(parseDataPageV1(header, payload, columnMeta, primitiveType));
                 continue;
             }
 
             if (header.getType() == PageType.DATA_PAGE_V2) {
-                DataPageHeaderV2 dataHeader = header.getData_page_header_v2();
-                int repLen = dataHeader.getRepetition_levels_byte_length();
-                int defLen = dataHeader.getDefinition_levels_byte_length();
-                if (repLen + defLen > payload.length) {
-                    throw new IOException("Invalid DATA_PAGE_V2 level lengths");
-                }
-
-                org.apache.parquet.bytes.BytesInput repetitionLevels =
-                        org.apache.parquet.bytes.BytesInput.from(payload, 0, repLen);
-                org.apache.parquet.bytes.BytesInput definitionLevels =
-                        org.apache.parquet.bytes.BytesInput.from(payload, repLen, defLen);
-
-                int dataOffset = repLen + defLen;
-                byte[] dataPayload = Arrays.copyOfRange(payload, dataOffset, payload.length);
-                byte[] decodedData = dataHeader.isIs_compressed()
-                        ? decompress(
-                                columnMeta.codec(), dataPayload, header.getUncompressed_page_size() - repLen - defLen)
-                        : dataPayload;
-
-                Statistics<?> stats = Statistics.noopStats(primitiveType);
-                DataPageV2 page = DataPageV2.uncompressed(
-                        dataHeader.getNum_rows(),
-                        dataHeader.getNum_nulls(),
-                        dataHeader.getNum_values(),
-                        repetitionLevels,
-                        definitionLevels,
-                        toEncoding(dataHeader.getEncoding()),
-                        org.apache.parquet.bytes.BytesInput.from(decodedData),
-                        stats);
-                dataPages.add(page);
+                dataPages.add(parseDataPageV2(header, payload, columnMeta, primitiveType));
             }
         }
 
         return new CoreColumnChunk(columnMeta.valueCount(), dataPages, dictionaryPage);
     }
 
-    private static byte[] decompress(CompressionCodec codec, byte[] payload, int uncompressedSize) throws IOException {
-        return switch (codec) {
-            case UNCOMPRESSED -> payload;
-            case SNAPPY -> Snappy.uncompress(payload);
-            case GZIP -> readAll(new GZIPInputStream(new ByteArrayInputStream(payload)));
-            case ZSTD -> decompressZstd(payload, uncompressedSize);
-            default -> throw new IOException("Unsupported compression codec in core reader: " + codec);
-        };
-    }
+    private CoreColumnChunk readFilteredColumnChunk(
+            SeekableInputStream in,
+            CoreColumnChunkMeta columnMeta,
+            ColumnDescriptor descriptor,
+            OffsetIndex filteredOffsetIndex)
+            throws IOException {
+        PrimitiveType primitiveType = descriptor.getPrimitiveType();
 
-    private static byte[] decompressZstd(byte[] payload, int uncompressedSize) throws IOException {
-        byte[] out = Zstd.decompress(payload, uncompressedSize);
-        if (out.length != uncompressedSize) {
-            throw new IOException("Unexpected ZSTD decompressed size: " + out.length + " expected " + uncompressedSize);
+        DictionaryPage dictionaryPage = dictionaryCache.get(columnMeta.path());
+        if (dictionaryPage == null && columnMeta.hasDictionaryPage()) {
+            dictionaryPage = readDictionaryPage(columnMeta);
         }
-        return out;
-    }
 
-    private static byte[] readAll(GZIPInputStream in) throws IOException {
-        try (in;
-                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = in.read(buf)) >= 0) {
-                out.write(buf, 0, n);
+        List<DataPage> dataPages = new ArrayList<>();
+        long valueCount = 0;
+
+        for (int i = 0; i < filteredOffsetIndex.getPageCount(); i++) {
+            long pageOffset = filteredOffsetIndex.getOffset(i);
+            int pageSize = filteredOffsetIndex.getCompressedPageSize(i);
+
+            byte[] pageBytes = readRange(in, pageOffset, pageSize);
+            ByteArrayInputStream pageStream = new ByteArrayInputStream(pageBytes);
+            PageHeader header = Util.readPageHeader(pageStream);
+
+            int payloadSize = header.getCompressed_page_size();
+            byte[] payload = pageStream.readNBytes(payloadSize);
+            if (payload.length != payloadSize) {
+                throw new IOException("Unexpected EOF while reading page payload");
             }
-            return out.toByteArray();
+
+            if (header.getType() == PageType.DATA_PAGE) {
+                DataPage page = parseDataPageV1(header, payload, columnMeta, primitiveType);
+                dataPages.add(page);
+                valueCount += page.getValueCount();
+            } else if (header.getType() == PageType.DATA_PAGE_V2) {
+                DataPage page = parseDataPageV2(header, payload, columnMeta, primitiveType);
+                dataPages.add(page);
+                valueCount += page.getValueCount();
+            }
         }
+
+        return new CoreColumnChunk(valueCount, dataPages, dictionaryPage);
+    }
+
+    // ---- Page parsing ----
+
+    private static DataPageV1 parseDataPageV1(
+            PageHeader header, byte[] payload, CoreColumnChunkMeta columnMeta, PrimitiveType primitiveType)
+            throws IOException {
+        DataPageHeader dataHeader = header.getData_page_header();
+        byte[] decompressed =
+                CompressionUtil.decompress(columnMeta.codec(), payload, header.getUncompressed_page_size());
+        Statistics<?> stats = Statistics.noopStats(primitiveType);
+        return new DataPageV1(
+                org.apache.parquet.bytes.BytesInput.from(decompressed),
+                dataHeader.getNum_values(),
+                header.getUncompressed_page_size(),
+                stats,
+                toEncoding(dataHeader.getRepetition_level_encoding()),
+                toEncoding(dataHeader.getDefinition_level_encoding()),
+                toEncoding(dataHeader.getEncoding()));
+    }
+
+    private static DataPageV2 parseDataPageV2(
+            PageHeader header, byte[] payload, CoreColumnChunkMeta columnMeta, PrimitiveType primitiveType)
+            throws IOException {
+        DataPageHeaderV2 dataHeader = header.getData_page_header_v2();
+        int repLen = dataHeader.getRepetition_levels_byte_length();
+        int defLen = dataHeader.getDefinition_levels_byte_length();
+        if (repLen + defLen > payload.length) {
+            throw new IOException("Invalid DATA_PAGE_V2 level lengths");
+        }
+
+        org.apache.parquet.bytes.BytesInput repetitionLevels =
+                org.apache.parquet.bytes.BytesInput.from(payload, 0, repLen);
+        org.apache.parquet.bytes.BytesInput definitionLevels =
+                org.apache.parquet.bytes.BytesInput.from(payload, repLen, defLen);
+
+        int dataOffset = repLen + defLen;
+        byte[] dataPayload = Arrays.copyOfRange(payload, dataOffset, payload.length);
+        byte[] decodedData = dataHeader.isIs_compressed()
+                ? CompressionUtil.decompress(
+                        columnMeta.codec(), dataPayload, header.getUncompressed_page_size() - repLen - defLen)
+                : dataPayload;
+
+        Statistics<?> stats = Statistics.noopStats(primitiveType);
+        return DataPageV2.uncompressed(
+                dataHeader.getNum_rows(),
+                dataHeader.getNum_nulls(),
+                dataHeader.getNum_values(),
+                repetitionLevels,
+                definitionLevels,
+                toEncoding(dataHeader.getEncoding()),
+                org.apache.parquet.bytes.BytesInput.from(decodedData),
+                stats);
     }
 
     private static Encoding toEncoding(org.apache.parquet.format.Encoding encoding) {
         return Encoding.valueOf(encoding.name());
     }
 
+    // ---- Row group pruning ----
+
     private boolean canDropByStats(CoreRowGroupMeta rowGroup) {
         if (filterPredicate == null || !options.useStatsFilter()) {
             return false;
         }
-        Map<String, CoreColumnChunkMeta> byPath = new HashMap<>();
-        for (CoreColumnChunkMeta column : rowGroup.columns()) {
-            byPath.put(column.path(), column);
-        }
+        Map<String, CoreColumnChunkMeta> byPath = buildColumnByPathMap(rowGroup);
         return filterPredicate.accept(new StatsPruningVisitor(byPath));
     }
 
-    private boolean canDropByDictionary(CoreRowGroupMeta rowGroup) {
+    boolean canDropByDictionary(CoreRowGroupMeta rowGroup) {
         if (filterPredicate == null || !options.useDictionaryFilter()) {
             return false;
         }
-        Map<String, CoreColumnChunkMeta> byPath = new HashMap<>();
-        for (CoreColumnChunkMeta column : rowGroup.columns()) {
-            byPath.put(column.path(), column);
-        }
+        Map<String, CoreColumnChunkMeta> byPath = buildColumnByPathMap(rowGroup);
         try {
             return filterPredicate.accept(new DictionaryPruningVisitor(byPath));
         } catch (RuntimeException e) {
@@ -281,7 +390,13 @@ public final class CoreParquetRowGroupReader implements ParquetRowGroupReader {
         }
     }
 
+    // ---- Dictionary reading ----
+
     private DictionaryPage readDictionaryPage(CoreColumnChunkMeta columnMeta) throws IOException {
+        DictionaryPage cached = dictionaryCache.get(columnMeta.path());
+        if (cached != null) {
+            return cached;
+        }
         if (!columnMeta.hasDictionaryPage()) {
             return null;
         }
@@ -312,11 +427,14 @@ public final class CoreParquetRowGroupReader implements ParquetRowGroupReader {
         }
 
         DictionaryPageHeader dictionaryHeader = header.getDictionary_page_header();
-        byte[] decompressed = decompress(columnMeta.codec(), payload, header.getUncompressed_page_size());
-        return new DictionaryPage(
+        byte[] decompressed =
+                CompressionUtil.decompress(columnMeta.codec(), payload, header.getUncompressed_page_size());
+        DictionaryPage result = new DictionaryPage(
                 org.apache.parquet.bytes.BytesInput.from(decompressed),
                 dictionaryHeader.getNum_values(),
                 toEncoding(dictionaryHeader.getEncoding()));
+        dictionaryCache.put(columnMeta.path(), result);
+        return result;
     }
 
     private Set<Object> decodeDictionaryValues(CoreColumnChunkMeta columnMeta) throws IOException {
@@ -344,6 +462,31 @@ public final class CoreParquetRowGroupReader implements ParquetRowGroupReader {
         };
     }
 
+    // ---- Column-index filtering ----
+
+    private Set<ColumnPath> getRequestedColumnPaths() {
+        Set<ColumnPath> paths = new HashSet<>();
+        for (ColumnDescriptor descriptor : requestedSchema.getColumns()) {
+            paths.add(ColumnPath.get(descriptor.getPath()));
+        }
+        return paths;
+    }
+
+    private static OffsetIndex filterOffsetIndex(OffsetIndex offsetIndex, RowRanges rowRanges, long totalRowCount) {
+        List<Integer> indexMap = new ArrayList<>();
+        for (int i = 0; i < offsetIndex.getPageCount(); i++) {
+            long from = offsetIndex.getFirstRowIndex(i);
+            long to = offsetIndex.getLastRowIndex(i, totalRowCount);
+            if (rowRanges.isOverlapping(from, to)) {
+                indexMap.add(i);
+            }
+        }
+        return new FilteredOffsetIndex(
+                offsetIndex, indexMap.stream().mapToInt(Integer::intValue).toArray());
+    }
+
+    // ---- I/O ----
+
     private byte[] readRange(long offset, int length) throws IOException {
         byte[] bytes = new byte[length];
         try (SeekableInputStream in = inputFile.newStream()) {
@@ -353,7 +496,68 @@ public final class CoreParquetRowGroupReader implements ParquetRowGroupReader {
         return bytes;
     }
 
-    private static final class StatsPruningVisitor implements FilterPredicate.Visitor<Boolean> {
+    private static byte[] readRange(SeekableInputStream in, long offset, int length) throws IOException {
+        byte[] bytes = new byte[length];
+        in.seek(offset);
+        in.readFully(bytes);
+        return bytes;
+    }
+
+    // ---- Helpers ----
+
+    private static Map<String, CoreColumnChunkMeta> buildColumnByPathMap(CoreRowGroupMeta rowGroup) {
+        Map<String, CoreColumnChunkMeta> byPath = new HashMap<>();
+        for (CoreColumnChunkMeta column : rowGroup.columns()) {
+            byPath.put(column.path(), column);
+        }
+        return byPath;
+    }
+
+    // ---- Inner classes ----
+
+    private static final class FilteredOffsetIndex implements OffsetIndex {
+        private final OffsetIndex delegate;
+        private final int[] indexMap;
+
+        FilteredOffsetIndex(OffsetIndex delegate, int[] indexMap) {
+            this.delegate = delegate;
+            this.indexMap = indexMap;
+        }
+
+        @Override
+        public int getPageCount() {
+            return indexMap.length;
+        }
+
+        @Override
+        public long getOffset(int pageIndex) {
+            return delegate.getOffset(indexMap[pageIndex]);
+        }
+
+        @Override
+        public int getCompressedPageSize(int pageIndex) {
+            return delegate.getCompressedPageSize(indexMap[pageIndex]);
+        }
+
+        @Override
+        public long getFirstRowIndex(int pageIndex) {
+            return delegate.getFirstRowIndex(indexMap[pageIndex]);
+        }
+
+        @Override
+        public int getPageOrdinal(int pageIndex) {
+            return indexMap[pageIndex];
+        }
+
+        @Override
+        public long getLastRowIndex(int pageIndex, long totalRowCount) {
+            int nextIndex = indexMap[pageIndex] + 1;
+            return (nextIndex >= delegate.getPageCount() ? totalRowCount : delegate.getFirstRowIndex(nextIndex)) - 1;
+        }
+    }
+
+    /** Visitor that evaluates whether a row group can be dropped based on column statistics. */
+    static final class StatsPruningVisitor implements FilterPredicate.Visitor<Boolean> {
         private final Map<String, CoreColumnChunkMeta> columns;
 
         StatsPruningVisitor(Map<String, CoreColumnChunkMeta> columns) {
@@ -654,10 +858,18 @@ public final class CoreParquetRowGroupReader implements ParquetRowGroupReader {
     private static final class CorePageReadStore implements PageReadStore {
         private final long rowCount;
         private final Map<ColumnDescriptor, PageReader> readers;
+        private final RowRanges rowRanges;
 
         CorePageReadStore(long rowCount, Map<ColumnDescriptor, PageReader> readers) {
             this.rowCount = rowCount;
             this.readers = readers;
+            this.rowRanges = null;
+        }
+
+        CorePageReadStore(RowRanges rowRanges, Map<ColumnDescriptor, PageReader> readers) {
+            this.rowCount = rowRanges.rowCount();
+            this.readers = readers;
+            this.rowRanges = rowRanges;
         }
 
         @Override
@@ -668,6 +880,11 @@ public final class CoreParquetRowGroupReader implements ParquetRowGroupReader {
         @Override
         public long getRowCount() {
             return rowCount;
+        }
+
+        @Override
+        public Optional<PrimitiveIterator.OfLong> getRowIndexes() {
+            return rowRanges == null ? Optional.empty() : Optional.of(rowRanges.iterator());
         }
     }
 }

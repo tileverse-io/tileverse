@@ -22,6 +22,12 @@ import org.apache.parquet.format.CompressionCodec;
 import org.apache.parquet.format.Statistics;
 import org.apache.parquet.format.Type;
 
+/**
+ * Immutable metadata for a single column chunk within a Parquet row group.
+ *
+ * <p>Holds the column path, physical type, compression codec, byte offsets, statistics,
+ * and optional column/offset index locations needed for filter pushdown and I/O.
+ */
 final class CoreColumnChunkMeta {
     private final String path;
     private final List<String> pathSegments;
@@ -69,62 +75,77 @@ final class CoreColumnChunkMeta {
         this.offsetIndexLength = offsetIndexLength;
     }
 
+    /** Returns the dot-separated column path (e.g. {@code "address.city"}). */
     String path() {
         return path;
     }
 
+    /** Returns the column path segments as a string array. */
     String[] pathArray() {
         return pathSegments.toArray(String[]::new);
     }
 
+    /** Returns the Parquet physical type of this column. */
     Type type() {
         return type;
     }
 
+    /** Returns the compression codec used for this column chunk. */
     CompressionCodec codec() {
         return codec;
     }
 
+    /** Returns the number of values (including nulls) in this column chunk. */
     long valueCount() {
         return valueCount;
     }
 
+    /** Returns the total compressed size in bytes of this column chunk. */
     long totalCompressedSize() {
         return totalCompressedSize;
     }
 
+    /** Returns the byte offset where this column chunk starts in the file. */
     long startOffset() {
         return startOffset;
     }
 
+    /** Returns the byte offset of the first data page. */
     long firstDataPageOffset() {
         return firstDataPageOffset;
     }
 
+    /** Returns the byte offset of the dictionary page, or {@code -1} if none. */
     long dictionaryPageOffset() {
         return dictionaryPageOffset;
     }
 
+    /** Returns {@code true} if this column chunk has a dictionary page. */
     boolean hasDictionaryPage() {
         return dictionaryPageOffset > 0;
     }
 
+    /** Returns the column statistics from the row group metadata, or {@code null} if absent. */
     Statistics statistics() {
         return statistics;
     }
 
+    /** Returns the byte offset of the column index, or {@code null} if absent. */
     Long columnIndexOffset() {
         return columnIndexOffset;
     }
 
+    /** Returns the length in bytes of the column index, or {@code null} if absent. */
     Integer columnIndexLength() {
         return columnIndexLength;
     }
 
+    /** Returns the byte offset of the offset index, or {@code null} if absent. */
     Long offsetIndexOffset() {
         return offsetIndexOffset;
     }
 
+    /** Returns the length in bytes of the offset index, or {@code null} if absent. */
     Integer offsetIndexLength() {
         return offsetIndexLength;
     }

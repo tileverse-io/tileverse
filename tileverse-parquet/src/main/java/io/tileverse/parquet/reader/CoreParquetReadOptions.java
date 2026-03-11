@@ -17,6 +17,20 @@ package io.tileverse.parquet.reader;
 
 import org.apache.parquet.filter2.compat.FilterCompat;
 
+/**
+ * Immutable configuration for Parquet read behavior.
+ *
+ * <p>Three filter toggles control which pushdown tiers are enabled during reads:
+ * <ul>
+ *   <li>{@code useStatsFilter} — row group pruning via column statistics (default: {@code true})</li>
+ *   <li>{@code useDictionaryFilter} — row group pruning via dictionary pages (default: {@code true})</li>
+ *   <li>{@code useColumnIndexFilter} — page-level skipping via column/offset indexes
+ *       (default: {@code true})</li>
+ * </ul>
+ *
+ * <p>Use {@link #builder()} for customized options or {@link #defaults()} for the default
+ * configuration with all filters enabled.
+ */
 public final class CoreParquetReadOptions {
     private final boolean useStatsFilter;
     private final boolean useDictionaryFilter;
@@ -34,30 +48,37 @@ public final class CoreParquetReadOptions {
         this.recordFilter = recordFilter == null ? FilterCompat.NOOP : recordFilter;
     }
 
+    /** Returns a new builder with all defaults. */
     public static Builder builder() {
         return new Builder();
     }
 
+    /** Returns options with all filter tiers enabled and no record filter. */
     public static CoreParquetReadOptions defaults() {
         return builder().build();
     }
 
+    /** Returns whether statistics-based row group pruning is enabled. */
     public boolean useStatsFilter() {
         return useStatsFilter;
     }
 
+    /** Returns whether dictionary-based row group pruning is enabled. */
     public boolean useDictionaryFilter() {
         return useDictionaryFilter;
     }
 
+    /** Returns whether column-index page-level filtering is enabled. */
     public boolean useColumnIndexFilter() {
         return useColumnIndexFilter;
     }
 
+    /** Returns the record-level filter, or {@link FilterCompat#NOOP} if none. */
     public FilterCompat.Filter getRecordFilter() {
         return recordFilter;
     }
 
+    /** Returns a new builder pre-populated with this instance's values. */
     public Builder toBuilder() {
         return builder()
                 .useStatsFilter(useStatsFilter)
@@ -66,32 +87,38 @@ public final class CoreParquetReadOptions {
                 .withRecordFilter(recordFilter);
     }
 
+    /** Builder for {@link CoreParquetReadOptions}. */
     public static final class Builder {
         private boolean useStatsFilter = true;
         private boolean useDictionaryFilter = true;
         private boolean useColumnIndexFilter = true;
         private FilterCompat.Filter recordFilter = FilterCompat.NOOP;
 
+        /** Enables or disables statistics-based row group pruning. */
         public Builder useStatsFilter(boolean enabled) {
             this.useStatsFilter = enabled;
             return this;
         }
 
+        /** Enables or disables dictionary-based row group pruning. */
         public Builder useDictionaryFilter(boolean enabled) {
             this.useDictionaryFilter = enabled;
             return this;
         }
 
+        /** Enables or disables column-index page-level filtering. */
         public Builder useColumnIndexFilter(boolean enabled) {
             this.useColumnIndexFilter = enabled;
             return this;
         }
 
+        /** Sets the record-level filter applied during assembly. */
         public Builder withRecordFilter(FilterCompat.Filter filter) {
             this.recordFilter = filter == null ? FilterCompat.NOOP : filter;
             return this;
         }
 
+        /** Builds an immutable {@link CoreParquetReadOptions} instance. */
         public CoreParquetReadOptions build() {
             return new CoreParquetReadOptions(useStatsFilter, useDictionaryFilter, useColumnIndexFilter, recordFilter);
         }

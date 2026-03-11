@@ -28,6 +28,7 @@ import org.apache.parquet.schema.MessageType;
  */
 class GroupMaterializerProvider implements ParquetMaterializerProvider<Group> {
 
+    /** Singleton instance. */
     static final GroupMaterializerProvider INSTANCE = new GroupMaterializerProvider();
 
     private GroupMaterializerProvider() {}

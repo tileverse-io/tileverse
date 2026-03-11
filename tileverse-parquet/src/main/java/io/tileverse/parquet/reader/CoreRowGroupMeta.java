@@ -19,6 +19,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Immutable metadata for a single row group in a Parquet file.
+ */
 final class CoreRowGroupMeta {
     private final long rowCount;
     private final List<CoreColumnChunkMeta> columns;
@@ -28,10 +31,12 @@ final class CoreRowGroupMeta {
         this.columns = Collections.unmodifiableList(List.copyOf(Objects.requireNonNull(columns, "columns")));
     }
 
+    /** Returns the number of rows in this row group. */
     long rowCount() {
         return rowCount;
     }
 
+    /** Returns an unmodifiable list of column chunk metadata for this row group. */
     List<CoreColumnChunkMeta> columns() {
         return columns;
     }

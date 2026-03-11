@@ -7,8 +7,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -23,7 +21,6 @@ import org.apache.parquet.format.LogicalType;
 import org.apache.parquet.format.SchemaElement;
 import org.apache.parquet.format.TimeUnit;
 import org.apache.parquet.io.LocalInputFile;
-import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -85,14 +82,10 @@ class CoreParquetFooterReaderTest {
     }
 
     @Test
-    void privateLogicalConversionMethods_coverBranches() throws Exception {
-        Method fromLogicalType = CoreParquetFooterReader.class.getDeclaredMethod("fromLogicalType", LogicalType.class);
-        fromLogicalType.setAccessible(true);
-
+    void logicalConversionMethods_coverBranches() {
         LogicalType stringLt = new LogicalType();
         stringLt.setSTRING(new org.apache.parquet.format.StringType());
-        assertThat(((LogicalTypeAnnotation) fromLogicalType.invoke(null, stringLt)).toString())
-                .contains("STRING");
+        assertThat(CoreParquetFooterReader.fromLogicalType(stringLt).toString()).contains("STRING");
 
         LogicalType timeLt = new LogicalType();
         org.apache.parquet.format.TimeType time = new org.apache.parquet.format.TimeType();
@@ -101,157 +94,156 @@ class CoreParquetFooterReaderTest {
         unit.setMICROS(new org.apache.parquet.format.MicroSeconds());
         time.setUnit(unit);
         timeLt.setTIME(time);
-        assertThat(((LogicalTypeAnnotation) fromLogicalType.invoke(null, timeLt)).toString())
-                .contains("TIME");
+        assertThat(CoreParquetFooterReader.fromLogicalType(timeLt).toString()).contains("TIME");
 
         LogicalType geographyLt = new LogicalType();
         org.apache.parquet.format.GeographyType geography = new org.apache.parquet.format.GeographyType();
         geography.setCrs("EPSG:4326");
         geography.setAlgorithm(EdgeInterpolationAlgorithm.SPHERICAL);
         geographyLt.setGEOGRAPHY(geography);
-        assertThat(((LogicalTypeAnnotation) fromLogicalType.invoke(null, geographyLt)).toString())
+        assertThat(CoreParquetFooterReader.fromLogicalType(geographyLt).toString())
                 .contains("GEOGRAPHY");
-
-        Method fromConverted =
-                CoreParquetFooterReader.class.getDeclaredMethod("fromConvertedType", SchemaElement.class);
-        fromConverted.setAccessible(true);
 
         SchemaElement utf8 = new SchemaElement("name");
         utf8.setConverted_type(ConvertedType.UTF8);
-        assertThat(((LogicalTypeAnnotation) fromConverted.invoke(null, utf8)).toString())
-                .contains("STRING");
+        assertThat(CoreParquetFooterReader.fromConvertedType(utf8).toString()).contains("STRING");
 
         SchemaElement decimal = new SchemaElement("d");
         decimal.setConverted_type(ConvertedType.DECIMAL);
         decimal.setScale(2);
         decimal.setPrecision(10);
-        assertThat(((LogicalTypeAnnotation) fromConverted.invoke(null, decimal)).toString())
+        assertThat(CoreParquetFooterReader.fromConvertedType(decimal).toString())
                 .contains("DECIMAL");
 
         SchemaElement mapKeyValue = new SchemaElement("mkv");
         mapKeyValue.setConverted_type(ConvertedType.MAP_KEY_VALUE);
-        assertThat(fromConverted.invoke(null, mapKeyValue)).isNull();
+        assertThat(CoreParquetFooterReader.fromConvertedType(mapKeyValue)).isNull();
     }
 
     @Test
-    void privateFromLogicalType_coversAllLogicalVariants() throws Exception {
-        Method fromLogicalType = CoreParquetFooterReader.class.getDeclaredMethod("fromLogicalType", LogicalType.class);
-        fromLogicalType.setAccessible(true);
+    void fromLogicalType_coversAllLogicalVariants() {
+        LogicalType lt;
 
-        assertThat(fromLogicalType.invoke(null, logical("STRING", new org.apache.parquet.format.StringType())))
-                .isNotNull();
-        assertThat(fromLogicalType.invoke(null, logical("MAP", new org.apache.parquet.format.MapType())))
-                .isNotNull();
-        assertThat(fromLogicalType.invoke(null, logical("LIST", new org.apache.parquet.format.ListType())))
-                .isNotNull();
-        assertThat(fromLogicalType.invoke(null, logical("ENUM", new org.apache.parquet.format.EnumType())))
-                .isNotNull();
+        lt = new LogicalType();
+        lt.setSTRING(new org.apache.parquet.format.StringType());
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
 
-        org.apache.parquet.format.DecimalType decimal = new org.apache.parquet.format.DecimalType();
-        decimal.setScale(2);
-        decimal.setPrecision(9);
-        assertThat(fromLogicalType.invoke(null, logical("DECIMAL", decimal))).isNotNull();
-        assertThat(fromLogicalType.invoke(null, logical("DATE", new org.apache.parquet.format.DateType())))
-                .isNotNull();
+        lt = new LogicalType();
+        lt.setMAP(new org.apache.parquet.format.MapType());
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
+
+        lt = new LogicalType();
+        lt.setLIST(new org.apache.parquet.format.ListType());
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
+
+        lt = new LogicalType();
+        lt.setENUM(new org.apache.parquet.format.EnumType());
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
+
+        org.apache.parquet.format.DecimalType decimalType = new org.apache.parquet.format.DecimalType();
+        decimalType.setScale(2);
+        decimalType.setPrecision(9);
+        lt = new LogicalType();
+        lt.setDECIMAL(decimalType);
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
+
+        lt = new LogicalType();
+        lt.setDATE(new org.apache.parquet.format.DateType());
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
 
         org.apache.parquet.format.TimeType time = new org.apache.parquet.format.TimeType();
         time.setIsAdjustedToUTC(true);
         TimeUnit micros = new TimeUnit();
         micros.setMICROS(new org.apache.parquet.format.MicroSeconds());
         time.setUnit(micros);
-        assertThat(fromLogicalType.invoke(null, logical("TIME", time))).isNotNull();
+        lt = new LogicalType();
+        lt.setTIME(time);
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
 
         org.apache.parquet.format.TimestampType ts = new org.apache.parquet.format.TimestampType();
         ts.setIsAdjustedToUTC(false);
         TimeUnit nanos = new TimeUnit();
         nanos.setNANOS(new org.apache.parquet.format.NanoSeconds());
         ts.setUnit(nanos);
-        assertThat(fromLogicalType.invoke(null, logical("TIMESTAMP", ts))).isNotNull();
+        lt = new LogicalType();
+        lt.setTIMESTAMP(ts);
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
 
         org.apache.parquet.format.IntType intType = new org.apache.parquet.format.IntType();
         intType.setBitWidth((byte) 32);
         intType.setIsSigned(true);
-        assertThat(fromLogicalType.invoke(null, logical("INTEGER", intType))).isNotNull();
+        lt = new LogicalType();
+        lt.setINTEGER(intType);
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
 
-        assertThat(fromLogicalType.invoke(null, logical("UNKNOWN", new org.apache.parquet.format.NullType())))
-                .isNotNull();
-        assertThat(fromLogicalType.invoke(null, logical("JSON", new org.apache.parquet.format.JsonType())))
-                .isNotNull();
-        assertThat(fromLogicalType.invoke(null, logical("BSON", new org.apache.parquet.format.BsonType())))
-                .isNotNull();
-        assertThat(fromLogicalType.invoke(null, logical("UUID", new org.apache.parquet.format.UUIDType())))
-                .isNotNull();
-        assertThat(fromLogicalType.invoke(null, logical("FLOAT16", new org.apache.parquet.format.Float16Type())))
-                .isNotNull();
+        lt = new LogicalType();
+        lt.setUNKNOWN(new org.apache.parquet.format.NullType());
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
+
+        lt = new LogicalType();
+        lt.setJSON(new org.apache.parquet.format.JsonType());
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
+
+        lt = new LogicalType();
+        lt.setBSON(new org.apache.parquet.format.BsonType());
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
+
+        lt = new LogicalType();
+        lt.setUUID(new org.apache.parquet.format.UUIDType());
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
+
+        lt = new LogicalType();
+        lt.setFLOAT16(new org.apache.parquet.format.Float16Type());
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
 
         org.apache.parquet.format.VariantType variant = new org.apache.parquet.format.VariantType();
         variant.setSpecification_version((byte) 1);
-        assertThat(fromLogicalType.invoke(null, logical("VARIANT", variant))).isNotNull();
+        lt = new LogicalType();
+        lt.setVARIANT(variant);
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
 
         org.apache.parquet.format.GeometryType geom = new org.apache.parquet.format.GeometryType();
         geom.setCrs("EPSG:4326");
-        assertThat(fromLogicalType.invoke(null, logical("GEOMETRY", geom))).isNotNull();
+        lt = new LogicalType();
+        lt.setGEOMETRY(geom);
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
 
         org.apache.parquet.format.GeographyType geog = new org.apache.parquet.format.GeographyType();
         geog.setCrs("EPSG:4326");
         geog.setAlgorithm(EdgeInterpolationAlgorithm.KARNEY);
-        assertThat(fromLogicalType.invoke(null, logical("GEOGRAPHY", geog))).isNotNull();
-    }
-
-    private static LogicalType logical(String setterName, Object value) throws Exception {
-        LogicalType logicalType = new LogicalType();
-        Method setter = LogicalType.class.getMethod("set" + setterName, value.getClass());
-        setter.invoke(logicalType, value);
-        return logicalType;
+        lt = new LogicalType();
+        lt.setGEOGRAPHY(geog);
+        assertThat(CoreParquetFooterReader.fromLogicalType(lt)).isNotNull();
     }
 
     @Test
-    void privateSchemaAndMetadataHelpers_coverInvalidAndEdgeCases() throws Exception {
-        Method readRecordCount = CoreParquetFooterReader.class.getDeclaredMethod("readRecordCount", List.class);
-        readRecordCount.setAccessible(true);
-        assertThat((Long) readRecordCount.invoke(null, new Object[] {null})).isZero();
-        assertThat((Long) readRecordCount.invoke(null, List.of())).isZero();
+    void schemaAndMetadataHelpers_coverInvalidAndEdgeCases() {
+        assertThat(CoreParquetFooterReader.readRecordCount(null)).isZero();
+        assertThat(CoreParquetFooterReader.readRecordCount(List.of())).isZero();
 
-        Method readKvs = CoreParquetFooterReader.class.getDeclaredMethod("readKeyValueMetadata", List.class);
-        readKvs.setAccessible(true);
-        assertThat((Map<?, ?>) readKvs.invoke(null, new Object[] {null})).isEmpty();
+        assertThat(CoreParquetFooterReader.readKeyValueMetadata(null)).isEmpty();
         org.apache.parquet.format.KeyValue noKey = new org.apache.parquet.format.KeyValue();
         org.apache.parquet.format.KeyValue nullValue = new org.apache.parquet.format.KeyValue("k");
-        @SuppressWarnings("unchecked")
-        Map<String, String> kvMap = (Map<String, String>) readKvs.invoke(null, List.of(noKey, nullValue));
+        Map<String, String> kvMap = CoreParquetFooterReader.readKeyValueMetadata(List.of(noKey, nullValue));
         assertThat(kvMap).containsEntry("k", null);
 
-        Method fromSchema = CoreParquetFooterReader.class.getDeclaredMethod("fromParquetSchema", List.class);
-        fromSchema.setAccessible(true);
-        assertThatThrownBy(() -> fromSchema.invoke(null, List.of()))
-                .isInstanceOf(InvocationTargetException.class)
-                .satisfies(e -> {
-                    Throwable cause = e.getCause();
-                    assertThat(cause).isInstanceOf(IllegalArgumentException.class);
-                    assertThat(cause).hasMessageContaining("empty");
-                });
+        assertThatThrownBy(() -> CoreParquetFooterReader.fromParquetSchema(List.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("empty");
 
         SchemaElement rootNoChildren = new SchemaElement("root");
-        assertThatThrownBy(() -> fromSchema.invoke(null, List.of(rootNoChildren)))
-                .isInstanceOf(InvocationTargetException.class)
-                .satisfies(e -> {
-                    Throwable cause = e.getCause();
-                    assertThat(cause).isInstanceOf(IllegalArgumentException.class);
-                    assertThat(cause).hasMessageContaining("no children");
-                });
+        assertThatThrownBy(() -> CoreParquetFooterReader.fromParquetSchema(List.of(rootNoChildren)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("no children");
 
         SchemaElement root = new SchemaElement("root");
         root.setNum_children(1);
         SchemaElement unnamed = new SchemaElement();
         unnamed.setType(org.apache.parquet.format.Type.INT32);
         unnamed.setRepetition_type(FieldRepetitionType.REQUIRED);
-        assertThatThrownBy(() -> fromSchema.invoke(null, List.of(root, unnamed)))
-                .isInstanceOf(InvocationTargetException.class)
-                .satisfies(e -> {
-                    Throwable cause = e.getCause();
-                    assertThat(cause).isInstanceOf(IllegalArgumentException.class);
-                    assertThat(cause).hasMessageContaining("unnamed field");
-                });
+        assertThatThrownBy(() -> CoreParquetFooterReader.fromParquetSchema(List.of(root, unnamed)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unnamed field");
 
         SchemaElement root2 = new SchemaElement("root");
         root2.setNum_children(1);
@@ -261,37 +253,27 @@ class CoreParquetFooterReaderTest {
         SchemaElement trailing = new SchemaElement("extra");
         trailing.setType(org.apache.parquet.format.Type.INT32);
         trailing.setRepetition_type(FieldRepetitionType.REQUIRED);
-        assertThatThrownBy(() -> fromSchema.invoke(null, List.of(root2, field, trailing)))
-                .isInstanceOf(InvocationTargetException.class)
-                .satisfies(e -> {
-                    Throwable cause = e.getCause();
-                    assertThat(cause).isInstanceOf(IllegalArgumentException.class);
-                    assertThat(cause).hasMessageContaining("trailing schema elements");
-                });
+        assertThatThrownBy(() -> CoreParquetFooterReader.fromParquetSchema(List.of(root2, field, trailing)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("trailing schema elements");
 
         SchemaElement root3 = new SchemaElement("root");
         root3.setNum_children(1);
         SchemaElement groupWithoutChildren = new SchemaElement("grp");
         groupWithoutChildren.setRepetition_type(FieldRepetitionType.REQUIRED);
-        assertThatThrownBy(() -> fromSchema.invoke(null, List.of(root3, groupWithoutChildren)))
-                .isInstanceOf(InvocationTargetException.class)
-                .satisfies(e -> {
-                    Throwable cause = e.getCause();
-                    assertThat(cause).isInstanceOf(IllegalArgumentException.class);
-                    assertThat(cause).hasMessageContaining("has no children");
-                });
+        assertThatThrownBy(() -> CoreParquetFooterReader.fromParquetSchema(List.of(root3, groupWithoutChildren)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("has no children");
 
         SchemaElement validRoot = new SchemaElement("schema");
         validRoot.setNum_children(1);
         SchemaElement validId = new SchemaElement("id");
         validId.setType(org.apache.parquet.format.Type.INT32);
         validId.setRepetition_type(FieldRepetitionType.REQUIRED);
-        MessageType parsed = (MessageType) fromSchema.invoke(null, List.of(validRoot, validId));
+        MessageType parsed = CoreParquetFooterReader.fromParquetSchema(List.of(validRoot, validId));
         assertThat(parsed.getFieldCount()).isEqualTo(1);
 
-        Method fromLogicalType = CoreParquetFooterReader.class.getDeclaredMethod("fromLogicalType", LogicalType.class);
-        fromLogicalType.setAccessible(true);
-        assertThat(fromLogicalType.invoke(null, new Object[] {null})).isNull();
-        assertThat(fromLogicalType.invoke(null, new LogicalType())).isNull();
+        assertThat(CoreParquetFooterReader.fromLogicalType(null)).isNull();
+        assertThat(CoreParquetFooterReader.fromLogicalType(new LogicalType())).isNull();
     }
 }

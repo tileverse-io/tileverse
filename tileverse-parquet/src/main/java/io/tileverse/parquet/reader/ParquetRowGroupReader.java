@@ -20,10 +20,33 @@ import java.io.IOException;
 import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.schema.MessageType;
 
+/**
+ * Reads row groups from a Parquet file, returning page data for column assembly.
+ *
+ * <p>Implementations may apply filter pushdown to skip row groups or pages that cannot
+ * match the configured predicate.
+ */
 public interface ParquetRowGroupReader extends Closeable {
+    /**
+     * Sets the projected schema, restricting which columns are read.
+     *
+     * @param requestedSchema the schema containing only the requested columns
+     */
     void setRequestedSchema(MessageType requestedSchema);
 
+    /**
+     * Reads the next row group without filter pushdown.
+     *
+     * @return the page store for the next row group, or {@code null} if no more row groups
+     * @throws IOException if an I/O error occurs
+     */
     PageReadStore readNextRowGroup() throws IOException;
 
+    /**
+     * Reads the next row group, skipping groups eliminated by filter pushdown.
+     *
+     * @return the page store for the next matching row group, or {@code null} if no more match
+     * @throws IOException if an I/O error occurs
+     */
     PageReadStore readNextFilteredRowGroup() throws IOException;
 }

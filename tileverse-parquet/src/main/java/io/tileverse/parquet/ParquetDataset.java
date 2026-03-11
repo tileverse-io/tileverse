@@ -19,7 +19,6 @@ import io.tileverse.parquet.reader.CoreParquetFooter;
 import io.tileverse.parquet.reader.CoreParquetFooterReader;
 import io.tileverse.parquet.reader.CoreParquetReadOptions;
 import io.tileverse.parquet.reader.CoreParquetRowGroupReader;
-import io.tileverse.parquet.reader.ParquetReadOptionsAdapter;
 import io.tileverse.parquet.reader.ParquetRowGroupReader;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -49,7 +48,8 @@ import org.jspecify.annotations.Nullable;
  * schemas natively. Use {@link #readGroups()} for backward-compatible {@link Group}-based reading.
  *
  * <p><strong>Filtering:</strong> All read methods have overloads accepting a {@link FilterPredicate}
- * for predicate pushdown (row group skipping, page skipping, and record-level filtering).
+ * for four-tier predicate pushdown: statistics-based row group pruning, dictionary-based row group
+ * pruning, column-index page-level skipping, and record-level filtering.
  *
  * <p><strong>Usage example:</strong></p>
  * <pre>{@code
@@ -111,13 +111,12 @@ public class ParquetDataset {
      * @return a new stateless {@code ParquetDataset}
      * @throws IOException if the file cannot be opened or its footer cannot be read
      */
-    public static ParquetDataset open(InputFile inputFile, Object options) throws IOException {
+    public static ParquetDataset open(InputFile inputFile, CoreParquetReadOptions options) throws IOException {
         Objects.requireNonNull(inputFile, "inputFile");
         Objects.requireNonNull(options, "options");
-        CoreParquetReadOptions coreOptions = ParquetReadOptionsAdapter.fromObject(options);
         CoreParquetFooter footer = CoreParquetFooterReader.read(inputFile);
         return new ParquetDataset(
-                inputFile, coreOptions, footer.schema(), footer.keyValueMetadata(), footer.recordCount(), footer);
+                inputFile, options, footer.schema(), footer.keyValueMetadata(), footer.recordCount(), footer);
     }
 
     /**

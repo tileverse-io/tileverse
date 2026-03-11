@@ -11,8 +11,6 @@ import io.tileverse.parquet.CloseableIterator;
 import io.tileverse.parquet.ParquetDataset;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -37,6 +35,7 @@ import org.apache.parquet.format.Statistics;
 import org.apache.parquet.format.Type;
 import org.apache.parquet.format.Util;
 import org.apache.parquet.io.LocalInputFile;
+import org.apache.parquet.io.SeekableInputStream;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.MessageTypeParser;
 import org.junit.jupiter.api.BeforeEach;
@@ -74,26 +73,18 @@ class CoreParquetRowGroupReaderTest {
     }
 
     @Test
-    void privateDecompress_throwsForUnsupportedCodec() throws Exception {
-        Method decompress = CoreParquetRowGroupReader.class.getDeclaredMethod(
-                "decompress", CompressionCodec.class, byte[].class, int.class);
-        decompress.setAccessible(true);
-
-        assertThatThrownBy(() -> decompress.invoke(null, CompressionCodec.BROTLI, new byte[] {1, 2, 3}, 3))
-                .hasRootCauseInstanceOf(java.io.IOException.class)
-                .hasRootCauseMessage("Unsupported compression codec in core reader: BROTLI");
+    void decompress_throwsForUnsupportedCodec() {
+        assertThatThrownBy(() -> CompressionUtil.decompress(CompressionCodec.LZO, new byte[] {1, 2, 3}, 3))
+                .isInstanceOf(java.io.IOException.class)
+                .hasMessage("Unsupported compression codec in core reader: LZO");
     }
 
     @Test
-    void privateDecompress_supportsZstd() throws Exception {
+    void decompress_supportsZstd() throws Exception {
         byte[] original = "tileverse-zstd".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         byte[] compressed = Zstd.compress(original);
 
-        Method decompress = CoreParquetRowGroupReader.class.getDeclaredMethod(
-                "decompress", CompressionCodec.class, byte[].class, int.class);
-        decompress.setAccessible(true);
-
-        byte[] out = (byte[]) decompress.invoke(null, CompressionCodec.ZSTD, compressed, original.length);
+        byte[] out = CompressionUtil.decompress(CompressionCodec.ZSTD, compressed, original.length);
         assertThat(out).isEqualTo(original);
     }
 
@@ -209,7 +200,7 @@ class CoreParquetRowGroupReaderTest {
     }
 
     @Test
-    void privateReadColumnChunk_throwsForInvalidChunkSize() throws Exception {
+    void readColumnChunk_throwsForInvalidChunkSize() throws Exception {
         MessageType schema = MessageTypeParser.parseMessageType("message test { optional int32 id; }");
         Path file = writeTempFile(new byte[] {1, 2, 3});
         CoreParquetRowGroupReader reader = new CoreParquetRowGroupReader(
@@ -234,28 +225,24 @@ class CoreParquetRowGroupReaderTest {
                 null,
                 null);
 
-        Method readColumnChunk = CoreParquetRowGroupReader.class.getDeclaredMethod(
-                "readColumnChunk", CoreColumnChunkMeta.class, ColumnDescriptor.class);
-        readColumnChunk.setAccessible(true);
         ColumnDescriptor descriptor = schema.getColumns().get(0);
 
-        assertThatThrownBy(() -> readColumnChunk.invoke(reader, invalid, descriptor))
-                .isInstanceOf(InvocationTargetException.class)
-                .hasRootCauseInstanceOf(IOException.class)
-                .hasRootCauseMessage("Unsupported column chunk size: 2147483648");
+        try (SeekableInputStream in = new LocalInputFile(file).newStream()) {
+            assertThatThrownBy(() -> reader.readColumnChunk(in, invalid, descriptor))
+                    .isInstanceOf(IOException.class)
+                    .hasMessage("Unsupported column chunk size: 2147483648");
+        }
     }
 
     @Test
-    void privateReadColumnChunk_throwsForMalformedPages() throws Exception {
+    void readColumnChunk_throwsForMalformedPages() throws Exception {
         MessageType schema = MessageTypeParser.parseMessageType("message test { optional int32 id; }");
-        Method readColumnChunk = CoreParquetRowGroupReader.class.getDeclaredMethod(
-                "readColumnChunk", CoreColumnChunkMeta.class, ColumnDescriptor.class);
-        readColumnChunk.setAccessible(true);
         ColumnDescriptor descriptor = schema.getColumns().get(0);
 
         byte[] truncatedPayloadChunk = truncatedPayloadChunk();
+        Path truncatedFile = writeTempFile(truncatedPayloadChunk);
         CoreParquetRowGroupReader truncatedReader = new CoreParquetRowGroupReader(
-                new LocalInputFile(writeTempFile(truncatedPayloadChunk)),
+                new LocalInputFile(truncatedFile),
                 new CoreParquetFooter(schema, java.util.Map.of(), 0, List.of()),
                 CoreParquetReadOptions.defaults(),
                 schema);
@@ -274,14 +261,16 @@ class CoreParquetRowGroupReaderTest {
                 null,
                 null,
                 null);
-        assertThatThrownBy(() -> readColumnChunk.invoke(truncatedReader, truncatedMeta, descriptor))
-                .isInstanceOf(InvocationTargetException.class)
-                .hasRootCauseInstanceOf(IOException.class)
-                .hasRootCauseMessage("Unexpected EOF while reading page payload");
+        try (SeekableInputStream in = new LocalInputFile(truncatedFile).newStream()) {
+            assertThatThrownBy(() -> truncatedReader.readColumnChunk(in, truncatedMeta, descriptor))
+                    .isInstanceOf(IOException.class)
+                    .hasMessage("Unexpected EOF while reading page payload");
+        }
 
         byte[] invalidV2Chunk = invalidDataPageV2Chunk();
+        Path invalidV2File = writeTempFile(invalidV2Chunk);
         CoreParquetRowGroupReader invalidV2Reader = new CoreParquetRowGroupReader(
-                new LocalInputFile(writeTempFile(invalidV2Chunk)),
+                new LocalInputFile(invalidV2File),
                 new CoreParquetFooter(schema, java.util.Map.of(), 0, List.of()),
                 CoreParquetReadOptions.defaults(),
                 schema);
@@ -300,10 +289,11 @@ class CoreParquetRowGroupReaderTest {
                 null,
                 null,
                 null);
-        assertThatThrownBy(() -> readColumnChunk.invoke(invalidV2Reader, invalidV2Meta, descriptor))
-                .isInstanceOf(InvocationTargetException.class)
-                .hasRootCauseInstanceOf(IOException.class)
-                .hasRootCauseMessage("Invalid DATA_PAGE_V2 level lengths");
+        try (SeekableInputStream in = new LocalInputFile(invalidV2File).newStream()) {
+            assertThatThrownBy(() -> invalidV2Reader.readColumnChunk(in, invalidV2Meta, descriptor))
+                    .isInstanceOf(IOException.class)
+                    .hasMessage("Invalid DATA_PAGE_V2 level lengths");
+        }
     }
 
     @Test

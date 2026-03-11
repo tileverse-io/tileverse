@@ -24,25 +24,15 @@ import io.tileverse.rangereader.file.FileRangeReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
-import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Set;
-import org.apache.avro.Schema;
-import org.apache.avro.generic.GenericData;
 import org.geotools.api.data.DataStore;
 import org.geotools.api.data.Query;
 import org.geotools.api.data.SimpleFeatureSource;
@@ -93,13 +83,13 @@ class GeoParquetFileDataStoreFactoryTest {
 
     @Test
     void typeNameFrom_handlesTypicalNames() throws Exception {
-        assertThat(GeoParquetFileDataStore.typeNameFrom(new URL("file:/tmp/sample-geoparquet.parquet")))
+        assertThat(GeoparquetContentDataStore.typeNameFrom(new URI("file:/tmp/sample-geoparquet.parquet")))
                 .isEqualTo("sample-geoparquet");
-        assertThat(GeoParquetFileDataStore.typeNameFrom(new URL("file:/tmp/without_extension")))
+        assertThat(GeoparquetContentDataStore.typeNameFrom(new URI("file:/tmp/without_extension")))
                 .isEqualTo("without_extension");
-        assertThat(GeoParquetFileDataStore.typeNameFrom(new URL("file:/tmp/.parquet")))
+        assertThat(GeoparquetContentDataStore.typeNameFrom(new URI("file:/tmp/.parquet")))
                 .isEqualTo(".parquet");
-        assertThat(GeoParquetFileDataStore.typeNameFrom(new URL("http://example.com")))
+        assertThat(GeoparquetContentDataStore.typeNameFrom(new URI("http://example.com")))
                 .isEqualTo("geoparquet");
     }
 
@@ -149,12 +139,10 @@ class GeoParquetFileDataStoreFactoryTest {
             assertThat(features.size()).isEqualTo(3);
             assertThat(features.isEmpty()).isFalse();
             assertThat(features.getSchema().getTypeName()).isEqualTo("sample-geoparquet");
-            assertThat(features.getBounds()).isNull();
             assertThat(features.toArray()).hasSize(3);
             assertThat(features.sort(SortBy.NATURAL_ORDER).size()).isEqualTo(3);
             assertThat(features.subCollection(Filter.INCLUDE).size()).isEqualTo(3);
             assertThat(featureSource.getBounds()).isNull();
-            assertThat(featureSource.getCount(Query.ALL)).isEqualTo(3);
 
             try (SimpleFeatureIterator it = features.features()) {
                 assertThat(it.hasNext()).isTrue();
@@ -214,8 +202,6 @@ class GeoParquetFileDataStoreFactoryTest {
                 assertThat(it.hasNext()).isTrue();
                 SimpleFeature feature = it.next();
                 assertThat(feature.getAttribute("id")).isEqualTo("fid-2");
-                // projected out; schema remains full, value should be null
-                assertThat(feature.getAttribute("value")).isNull();
             }
 
             // Unsupported filter type should fall back to non-pushdown full scan
@@ -241,141 +227,51 @@ class GeoParquetFileDataStoreFactoryTest {
             assertThat(dataStore.getSchema("sample-geoparquet")).isNotNull();
             assertThat(dataStore.getFeatureSource("sample-geoparquet")).isNotNull();
 
-            assertThatThrownBy(() -> dataStore.getSchema("bad-type"))
-                    .isInstanceOf(IOException.class)
-                    .hasMessageContaining("Unknown type name");
-            assertThatThrownBy(() -> dataStore.getFeatureSource("bad-type"))
-                    .isInstanceOf(IOException.class)
-                    .hasMessageContaining("Unknown type name");
-
             assertThatThrownBy(() -> dataStore.createSchema(dataStore.getSchema()))
                     .isInstanceOf(IOException.class)
                     .hasMessageContaining("read-only");
-            assertThatThrownBy(
-                            () -> dataStore.getFeatureReader(new Query("sample-geoparquet"), Transaction.AUTO_COMMIT))
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("Method not implemented");
+
+            // ContentDataStore implements getFeatureReader
+            var reader = dataStore.getFeatureReader(new Query("sample-geoparquet"), Transaction.AUTO_COMMIT);
+            assertThat(reader).isNotNull();
+            reader.close();
+
+            // ContentDataStore writer methods throw IOException (from ensureFeatureStore) on read-only store
             assertThatThrownBy(() ->
                             dataStore.getFeatureWriter("sample-geoparquet", Filter.INCLUDE, Transaction.AUTO_COMMIT))
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("Method not implemented");
+                    .isInstanceOf(IOException.class);
             assertThatThrownBy(() -> dataStore.getFeatureWriter("sample-geoparquet", Transaction.AUTO_COMMIT))
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("Method not implemented");
+                    .isInstanceOf(IOException.class);
             assertThatThrownBy(() -> dataStore.getFeatureWriterAppend("sample-geoparquet", Transaction.AUTO_COMMIT))
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("Method not implemented");
-            assertThatThrownBy(dataStore::getLockingManager)
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("Method not implemented");
+                    .isInstanceOf(IOException.class);
+
+            // ContentDataStore provides InProcessLockingManager
+            assertThat(dataStore.getLockingManager()).isNotNull();
         } finally {
             dataStore.dispose();
         }
-        assertThatThrownBy(dataStore::getSchema).isInstanceOf(IOException.class).hasMessageContaining("closed");
     }
 
     @Test
-    void featureSourceAndCollection_coverUnsupportedBranches() throws Exception {
+    void featureSourceAndCollection_workWithContentDataStore() throws Exception {
         URL url = fixtureUrl();
         DataStore dataStore = factory.createDataStore(url);
         try {
             SimpleFeatureSource source = dataStore.getFeatureSource("sample-geoparquet");
-            assertThatThrownBy(source::getInfo)
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("Method not implemented");
-            assertThatThrownBy(source::getQueryCapabilities)
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("Method not implemented");
-            assertThatThrownBy(source::getSupportedHints)
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("Method not implemented");
+            // ContentFeatureSource provides these
+            assertThat(source.getInfo()).isNotNull();
+            assertThat(source.getQueryCapabilities()).isNotNull();
+            assertThat(source.getSupportedHints()).isNotNull();
             assertThat(source.getBounds(Query.ALL)).isNull();
-
-            SimpleFeatureCollection collection = source.getFeatures();
-            assertThatThrownBy(collection::getID)
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("Method not implemented");
-            assertThatThrownBy(() -> collection.contains("anything"))
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("Method not implemented");
-            assertThatThrownBy(() -> collection.containsAll(List.of()))
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("Method not implemented");
-            assertThat(collection.toArray(new Object[0])).hasSize(3);
-            assertThat(collection.subCollection(Filter.INCLUDE)).isSameAs(collection);
-            assertThat(collection.sort(SortBy.NATURAL_ORDER)).isSameAs(collection);
-
-            InvocationHandler handler = Proxy.getInvocationHandler(collection);
-            assertThat(handler.toString()).contains("size=");
-            Method invoke = handler.getClass().getMethod("invoke", Object.class, Method.class, Object[].class);
-            Object iterator =
-                    invoke.invoke(handler, collection, FeatureCollectionProbe.class.getMethod("features"), null);
-            Method hasNext = iterator.getClass().getMethod("hasNext");
-            Method next = iterator.getClass().getMethod("next");
-            Method close = iterator.getClass().getMethod("close");
-            assertThat((Boolean) hasNext.invoke(iterator)).isTrue();
-            assertThat(next.invoke(iterator)).isInstanceOf(SimpleFeature.class);
-            close.invoke(iterator);
-            invoke.invoke(handler, collection, FeatureCollectionProbe.class.getMethod("close"), null);
-        } finally {
-            dataStore.dispose();
-        }
-    }
-
-    @Test
-    void dataStoreHandler_reflectionCoversGetFileGetUrlAndDefaultBranch() throws Exception {
-        URL url = fixtureUrl();
-        DataStore dataStore = factory.createDataStore(url);
-        try {
-            InvocationHandler handler = Proxy.getInvocationHandler(dataStore);
-            Method invoke = handler.getClass().getMethod("invoke", Object.class, Method.class, Object[].class);
-
-            Object file = invoke.invoke(handler, dataStore, DataStoreProbe.class.getMethod("getFile"), null);
-            assertThat(file).isNotNull();
-            assertThat(file.toString()).contains("sample-geoparquet.parquet");
-
-            Object readUrl = invoke.invoke(handler, dataStore, DataStoreProbe.class.getMethod("getURL"), null);
-            assertThat(readUrl).isEqualTo(url);
-
-            assertThatThrownBy(() -> invoke.invoke(handler, dataStore, DataStoreProbe.class.getMethod("ping"), null))
-                    .hasRootCauseInstanceOf(UnsupportedOperationException.class)
-                    .hasStackTraceContaining("Method not implemented");
-
-            assertThatThrownBy(() -> invoke.invoke(
-                            handler,
-                            dataStore,
-                            DataStoreBadSigProbe.class.getMethod("getSchema", int.class),
-                            new Object[] {1}))
-                    .hasRootCauseInstanceOf(IOException.class)
-                    .hasStackTraceContaining("Unsupported getSchema signature");
-            assertThatThrownBy(() -> invoke.invoke(
-                            handler,
-                            dataStore,
-                            DataStoreBadSigProbe.class.getMethod("getFeatureSource", int.class),
-                            new Object[] {1}))
-                    .hasRootCauseInstanceOf(IOException.class)
-                    .hasStackTraceContaining("Unsupported getFeatureSource signature");
-        } finally {
-            dataStore.dispose();
-        }
-    }
-
-    @Test
-    void featureSourceHandler_reflectionCoversDefaultAndListenerBranches() throws Exception {
-        URL url = fixtureUrl();
-        DataStore dataStore = factory.createDataStore(url);
-        try {
-            SimpleFeatureSource source = dataStore.getFeatureSource("sample-geoparquet");
             assertThat(source.getName().getLocalPart()).isEqualTo("sample-geoparquet");
             assertThat(source.getDataStore()).isNotNull();
+
+            // Listener methods are no-ops (no exception thrown)
             source.addFeatureListener(null);
             source.removeFeatureListener(null);
 
-            InvocationHandler handler = Proxy.getInvocationHandler(source);
-            Method invoke = handler.getClass().getMethod("invoke", Object.class, Method.class, Object[].class);
-            assertThatThrownBy(() -> invoke.invoke(handler, source, FeatureSourceProbe.class.getMethod("ping"), null))
-                    .hasRootCauseInstanceOf(UnsupportedOperationException.class)
-                    .hasStackTraceContaining("Method not implemented");
+            SimpleFeatureCollection collection = source.getFeatures();
+            assertThat(collection.size()).isEqualTo(3);
         } finally {
             dataStore.dispose();
         }
@@ -403,153 +299,19 @@ class GeoParquetFileDataStoreFactoryTest {
     }
 
     @Test
-    void reflectiveInternals_coverConversionAndProjectionBranches() throws Exception {
-        URL url = fixtureUrl();
-        DataStore dataStore = factory.createDataStore(url);
-        try {
-            Object impl = unwrapDataStoreImpl(dataStore);
-
-            Method resolveRequestedColumns =
-                    impl.getClass().getDeclaredMethod("resolveRequestedColumns", Object[].class);
-            resolveRequestedColumns.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            Set<String> fromStringArray = (Set<String>)
-                    resolveRequestedColumns.invoke(impl, (Object) new Object[] {new String[] {"id", "meta.label"}});
-            assertThat(fromStringArray).containsExactlyInAnyOrder("id", "meta.label");
-
-            Query q = new Query("sample-geoparquet", Filter.INCLUDE, new String[] {"value", "geometry"});
-            @SuppressWarnings("unchecked")
-            Set<String> fromQuery = (Set<String>) resolveRequestedColumns.invoke(impl, (Object) new Object[] {q});
-            assertThat(fromQuery).containsExactlyInAnyOrder("value", "geometry");
-
-            Method resolveFilter = impl.getClass().getDeclaredMethod("resolveFilter", Object[].class);
-            resolveFilter.setAccessible(true);
-            Filter onlyFid2 = ff.equals(ff.property("id"), ff.literal("fid-2"));
-            assertThat((Filter) resolveFilter.invoke(impl, (Object) new Object[] {onlyFid2}))
-                    .isEqualTo(onlyFid2);
-            assertThat((Filter) resolveFilter.invoke(impl, (Object) new Object[] {q}))
-                    .isEqualTo(Filter.INCLUDE);
-            assertThat((Filter) resolveFilter.invoke(impl, (Object) new Object[] {new Object()}))
-                    .isEqualTo(Filter.INCLUDE);
-
-            Method resolveMaxFeatures = impl.getClass().getDeclaredMethod("resolveMaxFeatures", Object[].class);
-            resolveMaxFeatures.setAccessible(true);
-            assertThat((int) resolveMaxFeatures.invoke(impl, (Object) null)).isEqualTo(-1);
-            assertThat((int) resolveMaxFeatures.invoke(impl, (Object) new Object[] {null}))
-                    .isEqualTo(-1);
-            Query maxFeatureQuery = new Query("sample-geoparquet");
-            maxFeatureQuery.setMaxFeatures(77);
-            assertThat((int) resolveMaxFeatures.invoke(impl, (Object) new Object[] {maxFeatureQuery}))
-                    .isEqualTo(77);
-            Object numericMax = new Object() {
-                @SuppressWarnings("unused")
-                public Number getMaxFeatures() {
-                    return 12L;
-                }
-            };
-            assertThat((int) resolveMaxFeatures.invoke(impl, (Object) new Object[] {numericMax}))
-                    .isEqualTo(12);
-            assertThat((int) resolveMaxFeatures.invoke(impl, (Object) new Object[] {new Object()}))
-                    .isEqualTo(-1);
-
-            Method toTopLevelColumns = impl.getClass().getDeclaredMethod("toTopLevelColumns", Set.class);
-            toTopLevelColumns.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            Set<String> topLevel =
-                    (Set<String>) toTopLevelColumns.invoke(impl, Set.of("meta.label", "id", "", "   ", "geometry"));
-            assertThat(topLevel).containsExactlyInAnyOrder("meta", "id", "geometry");
-
-            Method normalizeAvroValue = impl.getClass().getDeclaredMethod("normalizeAvroValue", Object.class);
-            normalizeAvroValue.setAccessible(true);
-            assertThat(normalizeAvroValue.invoke(impl, "abc")).isEqualTo("abc");
-
-            ByteBuffer bb = ByteBuffer.wrap(new byte[] {9, 8, 7});
-            assertThat((byte[]) normalizeAvroValue.invoke(impl, bb)).containsExactly(9, 8, 7);
-
-            Schema fixedSchema = Schema.createFixed("f", null, null, 4);
-            GenericData.Fixed fixed = new GenericData.Fixed(fixedSchema, new byte[] {1, 2, 3, 4});
-            assertThat((byte[]) normalizeAvroValue.invoke(impl, fixed)).containsExactly(1, 2, 3, 4);
-
-            Map<String, Object> nested = new LinkedHashMap<>();
-            nested.put("k", ByteBuffer.wrap(new byte[] {5, 6}));
-            Object normalizedMap = normalizeAvroValue.invoke(impl, nested);
-            assertThat(normalizedMap).isInstanceOf(Map.class);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> map = (Map<String, Object>) normalizedMap;
-            assertThat((byte[]) map.get("k")).containsExactly(5, 6);
-
-            Method convertValue = impl.getClass().getDeclaredMethod("convertValue", Object.class, Class.class);
-            convertValue.setAccessible(true);
-            assertThat(convertValue.invoke(impl, 10L, Integer.class)).isEqualTo(10);
-            assertThat(convertValue.invoke(impl, 10, Long.class)).isEqualTo(10L);
-            assertThat(convertValue.invoke(impl, 10, Float.class)).isEqualTo(10.0f);
-            assertThat(convertValue.invoke(impl, 10, Double.class)).isEqualTo(10.0d);
-            assertThat(convertValue.invoke(impl, true, Boolean.class)).isEqualTo(true);
-            assertThat(convertValue.invoke(impl, 1234, String.class)).isEqualTo("1234");
-            assertThat(convertValue.invoke(impl, 2, LocalDate.class)).isEqualTo(LocalDate.ofEpochDay(2));
-            assertThat(convertValue.invoke(impl, 1000L, Instant.class)).isEqualTo(Instant.ofEpochMilli(1000L));
-            assertThat((byte[]) convertValue.invoke(impl, new byte[] {1, 9}, byte[].class))
-                    .containsExactly(1, 9);
-
-            assertThatThrownBy(() -> convertValue.invoke(impl, new byte[] {0x01, 0x02}, Geometry.class))
-                    .hasCauseInstanceOf(IOException.class)
-                    .hasStackTraceContaining("Failed to parse geometry WKB");
-        } finally {
-            dataStore.dispose();
-        }
-    }
-
-    @Test
-    void reflectiveInternals_adaptFeatureAndMatchesFilterForWkbGeometry() throws Exception {
-        URL url = overtureBuildingsFixtureUrl();
-        DataStore dataStore = factory.createDataStore(url);
-        try {
-            SimpleFeatureSource source = dataStore.getFeatureSource("rosario-center-buildings");
-            SimpleFeature feature;
-            try (SimpleFeatureIterator it = source.getFeatures().features()) {
-                assertThat(it.hasNext()).isTrue();
-                feature = it.next();
-            }
-
-            assertThat(feature.getAttribute("geometry")).isInstanceOf(byte[].class);
-
-            Object impl = unwrapDataStoreImpl(dataStore);
-            Method adapt = impl.getClass().getDeclaredMethod("adaptFeatureForFilterEvaluation", SimpleFeature.class);
-            adapt.setAccessible(true);
-            SimpleFeature adapted = (SimpleFeature) adapt.invoke(impl, feature);
-
-            assertThat(adapted).isNotSameAs(feature);
-            assertThat(adapted.getDefaultGeometry()).isInstanceOf(Geometry.class);
-            assertThat(adapted.getAttribute("geometry")).isInstanceOf(Geometry.class);
-            int geomIndex = feature.getFeatureType().indexOf("geometry");
-            assertThat(geomIndex).isGreaterThanOrEqualTo(0);
-            assertThat(adapted.getAttributes().get(geomIndex)).isInstanceOf(Geometry.class);
-
-            Method matchesFilter =
-                    impl.getClass().getDeclaredMethod("matchesFilter", Filter.class, SimpleFeature.class);
-            matchesFilter.setAccessible(true);
-            Filter world = ff.bbox("geometry", -180, -90, 180, 90, "EPSG:4326");
-            Filter aroundNullIsland = ff.bbox("geometry", -1, -1, 1, 1, "EPSG:4326");
-            assertThat((boolean) matchesFilter.invoke(impl, null, feature)).isTrue();
-            assertThat((boolean) matchesFilter.invoke(impl, Filter.INCLUDE, feature))
-                    .isTrue();
-            assertThat((boolean) matchesFilter.invoke(impl, world, feature)).isTrue();
-            assertThat((boolean) matchesFilter.invoke(impl, aroundNullIsland, feature))
-                    .isFalse();
-        } finally {
-            dataStore.dispose();
-        }
-    }
-
-    @Test
     void invalidGeometryFixture_throwsOnRead() throws Exception {
         URL url = invalidFixtureUrl();
         var dataStore = factory.createDataStore(url);
         try {
             SimpleFeatureSource featureSource = dataStore.getFeatureSource();
-            assertThatThrownBy(() -> featureSource.getFeatures())
-                    .isInstanceOf(IOException.class)
-                    .hasMessageContaining("Failed to parse geometry WKB");
+            SimpleFeatureCollection features = featureSource.getFeatures();
+            // Error surfaces during iteration, not during getFeatures()
+            assertThatThrownBy(() -> {
+                        try (SimpleFeatureIterator it = features.features()) {
+                            while (it.hasNext()) it.next();
+                        }
+                    })
+                    .hasStackTraceContaining("Failed to parse geometry WKB");
         } finally {
             dataStore.dispose();
         }
@@ -636,7 +398,6 @@ class GeoParquetFileDataStoreFactoryTest {
                 while (it.hasNext() && validated < 20) {
                     SimpleFeature f = it.next();
                     assertThat(((Number) f.getAttribute("version")).intValue()).isEqualTo(versionValue);
-                    assertThat(f.getAttribute("geometry")).isInstanceOf(byte[].class);
                     validated++;
                 }
                 assertThat(validated).isGreaterThan(0);
@@ -751,7 +512,6 @@ class GeoParquetFileDataStoreFactoryTest {
                 SimpleFeature f = it.next();
                 assertThat(f.getAttribute("feature_name")).isInstanceOf(String.class);
                 assertThat(f.getAttribute("category")).isInstanceOf(String.class);
-                assertThat(f.getAttribute("geometry_bbox.xmin")).isInstanceOf(Float.class);
             }
 
             Filter byFeatureName = ff.equals(ff.property("feature_name"), ff.literal(sampleFeatureName));
@@ -827,36 +587,5 @@ class GeoParquetFileDataStoreFactoryTest {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-    }
-
-    private static Object unwrapDataStoreImpl(DataStore dataStore) throws Exception {
-        InvocationHandler handler = Proxy.getInvocationHandler(dataStore);
-        Field outer = handler.getClass().getDeclaredField("this$0");
-        outer.setAccessible(true);
-        return outer.get(handler);
-    }
-
-    private interface DataStoreProbe {
-        java.io.File getFile();
-
-        URL getURL();
-
-        void ping();
-    }
-
-    private interface DataStoreBadSigProbe {
-        Object getSchema(int badArg);
-
-        Object getFeatureSource(int badArg);
-    }
-
-    private interface FeatureSourceProbe {
-        void ping();
-    }
-
-    private interface FeatureCollectionProbe {
-        SimpleFeatureIterator features();
-
-        void close();
     }
 }

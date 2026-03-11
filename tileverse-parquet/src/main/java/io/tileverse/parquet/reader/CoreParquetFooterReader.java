@@ -46,12 +46,26 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 import org.apache.parquet.schema.Type;
 import org.apache.parquet.schema.Types;
 
+/**
+ * Reads and parses the Parquet file footer directly from an {@link InputFile}, without Hadoop.
+ *
+ * <p>Validates the PAR1 magic bytes, reads the Thrift-encoded {@code FileMetaData}, and
+ * reconstructs the {@link MessageType} schema including all logical types (GeoParquet
+ * {@code GEOMETRY}/{@code GEOGRAPHY}, timestamps, decimals, etc.).
+ */
 public final class CoreParquetFooterReader {
     private static final int TAIL_SIZE = 8;
     private static final String PARQUET_MAGIC = "PAR1";
 
     private CoreParquetFooterReader() {}
 
+    /**
+     * Reads and parses the footer from the given Parquet file.
+     *
+     * @param inputFile the Parquet file to read
+     * @return the parsed footer containing schema, metadata, and row group information
+     * @throws IOException if the file is too small, has invalid magic bytes, or the footer cannot be parsed
+     */
     public static CoreParquetFooter read(InputFile inputFile) throws IOException {
         Objects.requireNonNull(inputFile, "inputFile");
         long fileLength = inputFile.getLength();
@@ -91,7 +105,7 @@ public final class CoreParquetFooterReader {
         return new CoreParquetFooter(schema, keyValueMetadata, recordCount, rowGroups);
     }
 
-    private static long readRecordCount(List<RowGroup> rowGroups) {
+    static long readRecordCount(List<RowGroup> rowGroups) {
         if (rowGroups == null || rowGroups.isEmpty()) {
             return 0L;
         }
@@ -102,7 +116,7 @@ public final class CoreParquetFooterReader {
         return total;
     }
 
-    private static Map<String, String> readKeyValueMetadata(List<KeyValue> keyValues) {
+    static Map<String, String> readKeyValueMetadata(List<KeyValue> keyValues) {
         Map<String, String> map = new LinkedHashMap<>();
         if (keyValues == null) {
             return map;
@@ -170,7 +184,7 @@ public final class CoreParquetFooterReader {
         return groups;
     }
 
-    private static MessageType fromParquetSchema(List<SchemaElement> schema) {
+    static MessageType fromParquetSchema(List<SchemaElement> schema) {
         if (schema == null || schema.isEmpty()) {
             throw new IllegalArgumentException("Invalid Parquet schema: empty");
         }
@@ -281,7 +295,7 @@ public final class CoreParquetFooterReader {
         return null;
     }
 
-    private static LogicalTypeAnnotation fromLogicalType(LogicalType logicalType) {
+    static LogicalTypeAnnotation fromLogicalType(LogicalType logicalType) {
         if (logicalType == null || !logicalType.isSet()) {
             return null;
         }
@@ -336,7 +350,7 @@ public final class CoreParquetFooterReader {
         };
     }
 
-    private static LogicalTypeAnnotation fromConvertedType(SchemaElement element) {
+    static LogicalTypeAnnotation fromConvertedType(SchemaElement element) {
         ConvertedType convertedType = element.getConverted_type();
         return switch (convertedType) {
             case UTF8 -> LogicalTypeAnnotation.stringType();
@@ -364,7 +378,7 @@ public final class CoreParquetFooterReader {
         };
     }
 
-    private static LogicalTypeAnnotation.TimeUnit fromTimeUnit(TimeUnit timeUnit) {
+    static LogicalTypeAnnotation.TimeUnit fromTimeUnit(TimeUnit timeUnit) {
         if (timeUnit == null || !timeUnit.isSet()) {
             return LogicalTypeAnnotation.TimeUnit.MILLIS;
         }
@@ -375,7 +389,7 @@ public final class CoreParquetFooterReader {
         };
     }
 
-    private static EdgeInterpolationAlgorithm fromEdgeInterpolation(
+    static EdgeInterpolationAlgorithm fromEdgeInterpolation(
             org.apache.parquet.format.EdgeInterpolationAlgorithm algorithm) {
         return EdgeInterpolationAlgorithm.findByValue(algorithm.getValue());
     }

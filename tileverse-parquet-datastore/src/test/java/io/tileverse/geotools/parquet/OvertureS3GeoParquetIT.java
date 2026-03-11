@@ -28,6 +28,7 @@ import org.geotools.api.filter.FilterFactory;
 import org.geotools.data.simple.SimpleFeatureIterator;
 import org.geotools.factory.CommonFactoryFinder;
 import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
@@ -114,6 +115,7 @@ class OvertureS3GeoParquetIT {
     }
 
     @Test
+    @Disabled("temporarily disabled due to high network latency, revisit for a better approach")
     void datastore_brazilCoastBbox_matchesSampleGeoJson() throws Exception {
         URI readableUri = toReadableUri(BATHYMETRY_PART0);
         GeoParquetFileDataStoreFactory factory = new GeoParquetFileDataStoreFactory();

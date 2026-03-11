@@ -66,8 +66,7 @@ class OvertureS3GeoParquetIT {
     private static final String MAX_FEATURES_PROPERTY = "overture.s3.maxFeatures";
     private static final String BRAZIL_COAST_BBOX = "-33.85,-39.2,-27.79,-27.7";
     private static final String BATHYMETRY_PART0 =
-            "s3://overturemaps-us-west-2/release/2026-02-18.0/theme=base/type=bathymetry/"
-                    + "part-00000-78f26a81-6a8f-4536-b468-fdc24c8fab33-c000.zstd.parquet";
+            "s3://overturemaps-us-west-2/release/2026-02-18.0/theme=base/type=bathymetry/part-00000-78f26a81-6a8f-4536-b468-fdc24c8fab33-c000.zstd.parquet";
     private static final String BBOX_SAMPLE_RESOURCE = "geojson/bathymetry-overturemaps-bboxsample.geojson";
     private static final FilterFactory FF = CommonFactoryFinder.getFilterFactory();
     private static final WKBReader WKB_READER = new WKBReader();
@@ -348,6 +347,9 @@ class OvertureS3GeoParquetIT {
         String configured = System.getProperty(URLS_PROPERTY);
         if (configured == null || configured.isBlank()) {
             configured = System.getenv(URLS_ENV);
+        }
+        if (configured == null || configured.isEmpty()) {
+            configured = BATHYMETRY_PART0;
         }
         Assumptions.assumeTrue(
                 configured != null && !configured.isBlank(), () -> "Missing " + URLS_PROPERTY + " or " + URLS_ENV);

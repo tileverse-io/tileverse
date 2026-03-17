@@ -481,7 +481,7 @@
         <plugin>
           <groupId>org.sonatype.central</groupId>
           <artifactId>central-publishing-maven-plugin</artifactId>
-          <version>0.8.0</version>
+          <version>0.10.0</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -668,6 +668,7 @@
           <deploymentName>Tileverse</deploymentName>
           <autoPublish>true</autoPublish>
           <waitUntil>published</waitUntil>
+          <waitMaxTime>3600</waitMaxTime>
           <excludeArtifacts>
             <excludeArtifact>tileverse-coverage-report</excludeArtifact>
           </excludeArtifacts>

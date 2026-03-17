@@ -1,0 +1,3 @@
+# Map contributor aliases from git history to a canonical display name.
+# Format: alias=Canonical Name
+groldan=Gabriel Roldan

@@ -9,6 +9,20 @@
 
 ---
 
+## Supporters
+
+This project is made possible through the collaboration and support of the following organizations and individuals.
+
+A **supporter** is anyone who contributes to the project in any way, through code, ideas, time, or funding, while a **sponsor** specifically contributes financially. The current sponsors list is maintained in [SPONSORS.md](SPONSORS.md).
+
+### Organizations
+
+[![Multivers.io](docs/src/assets/images/supporters/logo-multiversio-readme.png)](https://www.multivers.io/)
+
+### Individuals
+
+The complete list of individual supporters, including repository contributors and other supporters, is maintained in [SUPPORTERS.md](SUPPORTERS.md).
+
 ## Overview
 
 **Tileverse** is a collection of loosely coupled Java libraries designed to solve the challenges of modern, cloud-centric geospatial applications. It provides the foundational blocks—efficient I/O, standardized tiling schemes, and robust format parsers—needed to build tile servers, ETL pipelines, and analytical tools.

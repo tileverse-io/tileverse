@@ -32,8 +32,13 @@ docs/
 ├── build.sh              # Main build script (sets up venv, generates diagrams, builds docs)
 ├── serve.sh              # Development server script
 ├── clean.sh              # Clean build artifacts script
+├── update-supporters.sh  # Regenerates the root SUPPORTERS.md file
 ├── requirements.txt      # Python dependencies for MkDocs
 ├── mkdocs.yml            # MkDocs configuration for the entire monorepo
+├── resources/            # Supporters maintenance inputs
+│   ├── additional-individual-supporters.txt
+│   ├── contributor-aliases.txt
+│   └── ignored-contributors.txt
 │
 ├── src/                  # Documentation source files (Markdown)
 │   ├── index.md          # Monorepo homepage
@@ -51,6 +56,7 @@ docs/
 │   ├── tilematrixset/    # Tile Matrix Set module documentation
 │   └── assets/           # Static assets (images, CSS, JS)
 │       └── images/
+│           ├── supporters/   # Supporters logos used by the repository README
 │           └── rangereader/  # Generated SVG diagrams for Range Reader
 │               └── .gitkeep  # Preserves directory in git
 │
@@ -103,3 +109,19 @@ When contributing to documentation:
 3. Test with `./serve.sh` before submitting
 4. Ensure all links work with `./build.sh`
 5. Include relevant architectural updates in C4 diagrams if needed
+
+## Supporters Maintenance
+
+The supporters list published in the repository root at `SUPPORTERS.md` is maintained from the documentation tree.
+
+- The generator script lives at `docs/update-supporters.sh`.
+- Additional individual supporters are maintained in `docs/resources/additional-individual-supporters.txt`.
+- Contributor aliases can be normalized in `docs/resources/contributor-aliases.txt`.
+- Entries that should not appear as individual supporters can be excluded in `docs/resources/ignored-contributors.txt`.
+- The sponsors list published in the repository root at `SPONSORS.md` is maintained manually.
+
+Run:
+
+```bash
+bash docs/update-supporters.sh
+```

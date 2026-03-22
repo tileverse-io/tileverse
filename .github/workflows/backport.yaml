@@ -16,10 +16,10 @@ jobs:
       issues: write
     runs-on: ubuntu-24.04
     name: Backport
+    if: github.event.pull_request.merged && contains( join( github.event.pull_request.labels.*.name, ' ' ), 'backport-' )
     steps:
       - name: Backport Bot
-        id: backport
-        if: github.event.pull_request.merged && ( ( github.event.action == 'closed' && contains( join( github.event.pull_request.labels.*.name ), 'backport') ) || contains( github.event.label.name, 'backport' ) )
-        uses: m-kuhn/backport@v1.2.7
+        uses: korthout/backport-action@v3
         with:
           github_token: ${{ secrets.GH_TOKEN_BOT }}
+          label_pattern: "^backport-(?<target>.+)$"

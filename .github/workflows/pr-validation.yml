@@ -2,12 +2,12 @@ name: Pull Request Validation
 
 on:
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, develop, '*.x' ]
     paths-ignore:
       - 'docs/**'
       - '**.md'
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, '*.x' ]
     paths-ignore:
       - 'docs/**'
       - '**.md'

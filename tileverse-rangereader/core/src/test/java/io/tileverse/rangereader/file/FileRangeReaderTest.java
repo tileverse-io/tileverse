@@ -16,20 +16,26 @@
 package io.tileverse.rangereader.file;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystemNotFoundException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -41,6 +47,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -72,7 +79,7 @@ class FileRangeReaderTest {
     }
 
     @AfterEach
-    void tearDown() throws IOException {
+    void tearDown() {
         // Close the reader after each test
         if (reader != null) {
             reader.close();
@@ -343,7 +350,7 @@ class FileRangeReaderTest {
     }
 
     @Test
-    void testCloseAndReuseAttempt() throws IOException {
+    void testCloseAndReuseAttempt() {
         // Test closing and attempting to use after close
         reader.close();
 
@@ -485,14 +492,9 @@ class FileRangeReaderTest {
                 }));
             }
 
-            // Start all threads simultaneously
             startLatch.countDown();
-
-            // Wait for all threads to complete and check results
             executor.shutdown();
             executor.awaitTermination(10, TimeUnit.SECONDS);
-
-            // Verify all threads succeeded
             for (Future<Boolean> future : futures) {
                 assertTrue(future.get(), "One or more threads failed to read correctly");
             }
@@ -503,20 +505,14 @@ class FileRangeReaderTest {
 
     @Test
     void of_convenienceMethod_equivalentToBuilder() throws IOException {
-        // Create test file
-        Path testFile = tempDir.resolve("convenience-test.txt");
         String content = "Test content for convenience method";
         Files.write(testFile, content.getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE);
 
-        // Test convenience method
         try (FileRangeReader reader1 = FileRangeReader.of(testFile);
                 FileRangeReader reader2 =
                         FileRangeReader.builder().path(testFile).build()) {
 
-            // Both should have same size
             assertEquals(reader1.size(), reader2.size());
-
-            // Both should have same source identifier
             assertEquals(reader1.getSourceIdentifier(), reader2.getSourceIdentifier());
 
             // Both should read the same content
@@ -546,5 +542,465 @@ class FileRangeReaderTest {
     @Test
     void of_withNullPath_throwsNullPointerException() {
         assertThrows(NullPointerException.class, () -> FileRangeReader.of(null));
+    }
+
+    @Nested
+    class NfsResilienceTests {
+
+        @Test
+        void idleTimeoutClosesChannel() throws Exception {
+            Duration idleTimeout = Duration.ofMillis(200);
+            try (FileRangeReader r = FileRangeReader.builder()
+                    .path(testFile)
+                    .idleTimeout(idleTimeout)
+                    .build()) {
+
+                // Trigger a read to open the channel
+                ByteBuffer buf = r.readRange(0, 10).flip();
+                assertThat(buf.remaining()).isEqualTo(10);
+
+                // Channel should be open after the read
+                assertThat(getChannel(r)).isNotNull();
+                assertThat(getChannel(r).isOpen()).isTrue();
+
+                // Wait for idle timeout to close the channel
+                await().atMost(Duration.ofSeconds(2))
+                        .pollInterval(Duration.ofMillis(50))
+                        .untilAsserted(() -> {
+                            FileChannel ch = getChannel(r);
+                            assertThat(ch).isNull();
+                        });
+            }
+        }
+
+        @Test
+        void readReopensAfterIdleClose() throws Exception {
+            Duration idleTimeout = Duration.ofMillis(200);
+            try (FileRangeReader r = FileRangeReader.builder()
+                    .path(testFile)
+                    .idleTimeout(idleTimeout)
+                    .build()) {
+
+                // First read
+                String firstRead = readAsString(r, 0, textContent.length());
+                assertThat(firstRead).isEqualTo(textContent);
+
+                // Wait for idle close
+                await().atMost(Duration.ofSeconds(2))
+                        .pollInterval(Duration.ofMillis(50))
+                        .untilAsserted(() -> assertThat(getChannel(r)).isNull());
+
+                // Read again - should transparently reopen
+                String secondRead = readAsString(r, 0, textContent.length());
+                assertThat(secondRead).isEqualTo(textContent);
+
+                // Channel should be open again
+                assertThat(getChannel(r)).isNotNull();
+                assertThat(getChannel(r).isOpen()).isTrue();
+            }
+        }
+
+        @Test
+        void retryOnClosedChannel() throws Exception {
+            // Use no idle timeout so we control the channel lifecycle
+            try (FileRangeReader r = FileRangeReader.builder()
+                    .path(testFile)
+                    .idleTimeout(Duration.ZERO)
+                    .build()) {
+
+                // First read opens the channel
+                String firstRead = readAsString(r, 0, 10);
+                assertThat(firstRead).isEqualTo(textContent.substring(0, 10));
+
+                // Simulate stale channel by closing it directly
+                FileChannel ch = getChannel(r);
+                assertThat(ch).isNotNull();
+                ch.close();
+
+                // Next read should detect the closed channel and retry with a fresh one
+                String retryRead = readAsString(r, 0, textContent.length());
+                assertThat(retryRead).isEqualTo(textContent);
+            }
+        }
+
+        @Test
+        void retryOnNulledChannel() throws Exception {
+            // Simulate the idle closer having nulled the channel between ensureOpen and read
+            try (FileRangeReader r = FileRangeReader.builder()
+                    .path(testFile)
+                    .idleTimeout(Duration.ZERO)
+                    .build()) {
+
+                // First read opens the channel
+                readAsString(r, 0, 10);
+
+                // Close and null the channel via reflection (simulating idleClose)
+                FileChannel ch = getChannel(r);
+                setChannel(r, null);
+                ch.close();
+
+                // Next read should reopen
+                String result = readAsString(r, 0, textContent.length());
+                assertThat(result).isEqualTo(textContent);
+            }
+        }
+
+        @Test
+        void retryOnStaleFileHandle() throws Exception {
+            // Subclass that returns a channel throwing "Stale file handle" on the first openChannel() call, then a real
+            // channel on the second (retry) call.
+            var callCount = new java.util.concurrent.atomic.AtomicInteger();
+            FileRangeReader r = new FileRangeReader(testFile, Duration.ZERO) {
+                @Override
+                FileChannel openChannel(Path path) throws IOException {
+                    if (callCount.incrementAndGet() == 1) {
+                        // close immediately so read() throws ClosedChannelException (a recoverable error), simulating a
+                        // stale handle.
+                        // we can't throw "Stale file handle" from FileChannel.open itself because ensureOpen would
+                        // propagate it before doRead runs. Instead, return a closed channel so ch.read() inside doRead
+                        // throws.
+                        FileChannel ch = super.openChannel(path);
+                        ch.close();
+                        return ch;
+                    }
+                    return super.openChannel(path);
+                }
+            };
+            try (r) {
+                // triggers openChannel twice: first returns closed channel (doRead throws ClosedChannelException),
+                // retry path calls closeStaleChannel() then ensureOpen() again which calls openChannel() a second time
+                // with a real channel.
+                String result = readAsString(r, 0, textContent.length());
+                assertThat(result).isEqualTo(textContent);
+                assertThat(callCount.get()).isEqualTo(2);
+            }
+        }
+
+        @Test
+        void retryOnStaleFileHandleIOException() throws Exception {
+            // Same as above but uses a proxy channel that throws IOException("Stale file handle") on read(), exercising
+            // the message-based detection path.
+            var callCount = new java.util.concurrent.atomic.AtomicInteger();
+            FileRangeReader r = new FileRangeReader(testFile, Duration.ZERO) {
+                @Override
+                FileChannel openChannel(Path path) throws IOException {
+                    FileChannel real = super.openChannel(path);
+                    if (callCount.incrementAndGet() == 1) {
+                        return new ForwardingFileChannel(real) {
+                            @Override
+                            public int read(ByteBuffer dst, long position) throws IOException {
+                                throw new IOException("Stale file handle");
+                            }
+                        };
+                    }
+                    return real;
+                }
+            };
+            try (r) {
+                String result = readAsString(r, 0, textContent.length());
+                assertThat(result).isEqualTo(textContent);
+                assertThat(callCount.get()).isEqualTo(2);
+            }
+        }
+
+        @Test
+        void nonRecoverableErrorIsNotRetried() throws Exception {
+            var callCount = new java.util.concurrent.atomic.AtomicInteger();
+            FileRangeReader r = new FileRangeReader(testFile, Duration.ZERO) {
+                @Override
+                FileChannel openChannel(Path path) throws IOException {
+                    FileChannel real = super.openChannel(path);
+                    callCount.incrementAndGet();
+                    return new ForwardingFileChannel(real) {
+                        @Override
+                        public int read(ByteBuffer dst, long position) throws IOException {
+                            throw new IOException("Permission denied");
+                        }
+                    };
+                }
+            };
+            try (r) {
+                assertThrows(IOException.class, () -> r.readRange(0, 10));
+                // Should NOT have retried — only one openChannel call
+                assertThat(callCount.get()).isEqualTo(1);
+            }
+        }
+
+        @Test
+        void permanentCloseSkipsRetryOnRecoverableError() throws Exception {
+            // after close(), a ClosedChannelException from ensureOpen is NOT retried because permanentlyClosed is true
+            try (FileRangeReader r = FileRangeReader.builder()
+                    .path(testFile)
+                    .idleTimeout(Duration.ZERO)
+                    .build()) {
+
+                r.readRange(0, 10);
+                // permanently close
+                r.close();
+
+                // readRange calls readRangeNoFlip which calls ensureOpen() which throws ClosedChannelException. Even
+                // though it's "recoverable", permanentlyClosed prevents retry.
+                ClosedChannelException ex = assertThrows(ClosedChannelException.class, () -> r.readRange(0, 10));
+                assertThat(ex).isNotNull();
+            }
+        }
+
+        @Test
+        void sizeWorksAfterIdleClose() throws Exception {
+            Duration idleTimeout = Duration.ofMillis(200);
+            try (FileRangeReader r = FileRangeReader.builder()
+                    .path(testFile)
+                    .idleTimeout(idleTimeout)
+                    .build()) {
+
+                // trigger a read to open channel
+                r.readRange(0, 1);
+
+                // wait for idle close
+                await().atMost(Duration.ofSeconds(2))
+                        .pollInterval(Duration.ofMillis(50))
+                        .untilAsserted(() -> assertThat(getChannel(r)).isNull());
+
+                // size() should still work even with channel closed
+                assertThat(r.size()).hasValue(textContent.length());
+            }
+        }
+
+        @Test
+        void sizeThrowsAfterPermanentClose() {
+            reader.close();
+            assertThrows(ClosedChannelException.class, () -> reader.size());
+        }
+
+        @Test
+        void closeIsIdempotent() {
+            assertThatNoException().isThrownBy(() -> {
+                reader.close();
+                reader.close();
+                reader.close();
+            });
+        }
+
+        @Test
+        void permanentClosePreventChannelReopen() throws IOException {
+            reader.readRange(0, 10);
+            reader.close();
+            // Should not retry/reopen, should throw immediately
+            assertThrows(ClosedChannelException.class, () -> reader.readRange(0, 10));
+        }
+
+        @Test
+        void isRecoverableError_staleFileHandle() {
+            assertThat(FileRangeReader.isRecoverableError(new IOException("Stale file handle")))
+                    .isTrue();
+            assertThat(FileRangeReader.isRecoverableError(new IOException("stale file handle")))
+                    .isTrue();
+            assertThat(FileRangeReader.isRecoverableError(new IOException("NFS: Stale file handle (errno 116)")))
+                    .isTrue();
+            assertThat(FileRangeReader.isRecoverableError(new ClosedChannelException()))
+                    .isTrue();
+            assertThat(FileRangeReader.isRecoverableError(new IOException("Permission denied")))
+                    .isFalse();
+            assertThat(FileRangeReader.isRecoverableError(new IOException((String) null)))
+                    .isFalse();
+        }
+
+        @Test
+        void builderIdleTimeoutValidation() {
+            assertThatNoException().isThrownBy(() -> FileRangeReader.builder().idleTimeout(Duration.ofSeconds(30)));
+            assertThatNoException().isThrownBy(() -> FileRangeReader.builder().idleTimeout(Duration.ZERO));
+            assertThrows(IllegalArgumentException.class, () -> FileRangeReader.builder()
+                    .idleTimeout(Duration.ofSeconds(-1)));
+            assertThrows(
+                    NullPointerException.class, () -> FileRangeReader.builder().idleTimeout(null));
+        }
+
+        @Test
+        void disabledIdleTimeoutKeepsChannelOpen() throws Exception {
+            try (FileRangeReader r = FileRangeReader.builder()
+                    .path(testFile)
+                    .idleTimeout(Duration.ZERO)
+                    .build()) {
+
+                // read to open channel
+                r.readRange(0, 10);
+                FileChannel ch = getChannel(r);
+                assertThat(ch).isNotNull();
+
+                // wait a bit, channel should remain open
+                Thread.sleep(300);
+                assertThat(getChannel(r)).isSameAs(ch);
+                assertThat(ch.isOpen()).isTrue();
+            }
+        }
+
+        @Test
+        void concurrentReadsWithIdleTimeout() throws Exception {
+            Path concurrentFile = tempDir.resolve("concurrent-idle-test.bin");
+            int fileSize = 100_000;
+            byte[] data = new byte[fileSize];
+            for (int i = 0; i < fileSize; i++) {
+                data[i] = (byte) (i % 256);
+            }
+            Files.write(concurrentFile, data, StandardOpenOption.CREATE);
+
+            try (FileRangeReader r = FileRangeReader.builder()
+                    .path(concurrentFile)
+                    .idleTimeout(Duration.ofMillis(300))
+                    .build()) {
+
+                int numThreads = 10;
+                int regionSize = fileSize / numThreads;
+                CountDownLatch startLatch = new CountDownLatch(1);
+                ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+                List<Future<Boolean>> futures = new ArrayList<>();
+
+                for (int i = 0; i < numThreads; i++) {
+                    final int regionStart = i * regionSize;
+                    futures.add(executor.submit(() -> {
+                        try {
+                            startLatch.await();
+                            ByteBuffer buffer = r.readRange(regionStart, regionSize);
+                            byte[] readData = new byte[buffer.remaining()];
+                            buffer.get(readData);
+                            for (int j = 0; j < readData.length; j++) {
+                                if (readData[j] != (byte) ((regionStart + j) % 256)) {
+                                    return false;
+                                }
+                            }
+                            return true;
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            return false;
+                        }
+                    }));
+                }
+
+                startLatch.countDown();
+                executor.shutdown();
+                executor.awaitTermination(10, TimeUnit.SECONDS);
+
+                for (Future<Boolean> future : futures) {
+                    assertTrue(future.get(), "One or more threads failed to read correctly");
+                }
+            }
+        }
+
+        private String readAsString(FileRangeReader r, int offset, int length) throws IOException {
+            ByteBuffer buf = r.readRange(offset, length).flip();
+            byte[] bytes = new byte[buf.remaining()];
+            buf.get(bytes);
+            return new String(bytes, StandardCharsets.UTF_8);
+        }
+
+        private FileChannel getChannel(FileRangeReader r) throws Exception {
+            Field f = FileRangeReader.class.getDeclaredField("channel");
+            f.setAccessible(true);
+            return (FileChannel) f.get(r);
+        }
+
+        private void setChannel(FileRangeReader r, FileChannel ch) throws Exception {
+            Field f = FileRangeReader.class.getDeclaredField("channel");
+            f.setAccessible(true);
+            f.set(r, ch);
+        }
+
+        /**
+         * FileChannel wrapper that delegates all operations to a real channel. Tests override specific methods to inject failures.
+         */
+        private static class ForwardingFileChannel extends FileChannel {
+            private final FileChannel delegate;
+
+            ForwardingFileChannel(FileChannel delegate) {
+                this.delegate = delegate;
+            }
+
+            @Override
+            public int read(ByteBuffer dst) throws IOException {
+                return delegate.read(dst);
+            }
+
+            @Override
+            public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
+                return delegate.read(dsts, offset, length);
+            }
+
+            @Override
+            public int write(ByteBuffer src) throws IOException {
+                return delegate.write(src);
+            }
+
+            @Override
+            public long write(ByteBuffer[] srcs, int offset, int length) throws IOException {
+                return delegate.write(srcs, offset, length);
+            }
+
+            @Override
+            public long position() throws IOException {
+                return delegate.position();
+            }
+
+            @Override
+            public FileChannel position(long newPosition) throws IOException {
+                return delegate.position(newPosition);
+            }
+
+            @Override
+            public long size() throws IOException {
+                return delegate.size();
+            }
+
+            @Override
+            public FileChannel truncate(long size) throws IOException {
+                return delegate.truncate(size);
+            }
+
+            @Override
+            public void force(boolean metaData) throws IOException {
+                delegate.force(metaData);
+            }
+
+            @Override
+            public long transferTo(long position, long count, java.nio.channels.WritableByteChannel target)
+                    throws IOException {
+                return delegate.transferTo(position, count, target);
+            }
+
+            @Override
+            public long transferFrom(java.nio.channels.ReadableByteChannel src, long position, long count)
+                    throws IOException {
+                return delegate.transferFrom(src, position, count);
+            }
+
+            @Override
+            public int read(ByteBuffer dst, long position) throws IOException {
+                return delegate.read(dst, position);
+            }
+
+            @Override
+            public int write(ByteBuffer src, long position) throws IOException {
+                return delegate.write(src, position);
+            }
+
+            @Override
+            public java.nio.MappedByteBuffer map(MapMode mode, long position, long size) throws IOException {
+                return delegate.map(mode, position, size);
+            }
+
+            @Override
+            public java.nio.channels.FileLock lock(long position, long size, boolean shared) throws IOException {
+                return delegate.lock(position, size, shared);
+            }
+
+            @Override
+            public java.nio.channels.FileLock tryLock(long position, long size, boolean shared) throws IOException {
+                return delegate.tryLock(position, size, shared);
+            }
+
+            @Override
+            protected void implCloseChannel() throws IOException {
+                delegate.close();
+            }
+        }
     }
 }

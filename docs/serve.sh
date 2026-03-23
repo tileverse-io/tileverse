@@ -7,6 +7,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="${SCRIPT_DIR}/.venv"
 
+# Change to the directory where the script is located
+cd "${SCRIPT_DIR}"
+
 echo "🌐 Starting Tileverse Range Reader Documentation Server"
 echo "===================================================="
 

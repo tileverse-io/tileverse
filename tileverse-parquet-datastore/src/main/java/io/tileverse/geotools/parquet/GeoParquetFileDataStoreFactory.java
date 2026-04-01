@@ -21,12 +21,22 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Properties;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 import org.geotools.api.data.DataStore;
 import org.geotools.api.data.FileDataStore;
 import org.geotools.api.data.FileDataStoreFactorySpi;
 import org.geotools.util.logging.Logging;
 
+/**
+ * Read-only GeoParquet datastore factory backed by Tileverse {@code RangeReader}s.
+ *
+ * <p>Besides the mandatory {@value #URL_PARAM} parameter, this factory exposes the same
+ * cloud/backend/authentication parameters used by the PMTiles datastore so GeoParquet can be
+ * opened consistently from local files, HTTP, S3-compatible storage, Azure Blob Storage, and
+ * Google Cloud Storage.
+ */
 public class GeoParquetFileDataStoreFactory implements FileDataStoreFactorySpi {
 
     private static final Logger LOGGER = Logging.getLogger(GeoParquetFileDataStoreFactory.class);
@@ -46,13 +56,14 @@ public class GeoParquetFileDataStoreFactory implements FileDataStoreFactorySpi {
 
     @Override
     public String getDescription() {
-        return "GeoParquet pure java";
+        return "GeoParquet backed by Tileverse RangeReader";
     }
 
     @Override
     public DataStore createDataStore(Map<String, ?> params) throws IOException {
         URL url = toUrl(params.get(URL_PARAM));
-        return createDataStore(url);
+        Properties rangeReaderConfig = GeoParquetRangeReaderParams.toProperties(params);
+        return GeoparquetContentDataStore.open(url, rangeReaderConfig);
     }
 
     @Override
@@ -62,7 +73,9 @@ public class GeoParquetFileDataStoreFactory implements FileDataStoreFactorySpi {
 
     @Override
     public Param[] getParametersInfo() {
-        return new Param[] {URLP};
+        // Keep the GeoParquet URL first, then expose the provider-backed RangeReader connection/auth params.
+        return Stream.concat(Stream.of(URLP), Stream.of(GeoParquetRangeReaderParams.getParameters()))
+                .toArray(Param[]::new);
     }
 
     @Override

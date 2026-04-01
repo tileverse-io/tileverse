@@ -257,4 +257,51 @@ class AvroMaterializerProviderTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Unsupported LIST field index");
     }
+
+    @Test
+    void arrayFieldConverter_collectsPrimitiveAndNestedRecordElements() {
+        Type primitiveRepeated = Types.primitive(PrimitiveTypeName.INT32, Type.Repetition.REPEATED)
+                .named("items");
+        Schema intArraySchema = Schema.createArray(Schema.create(Schema.Type.INT));
+        AtomicReference<Object> primitiveOut = new AtomicReference<>();
+        GroupConverter primitiveArray = new AvroMaterializerProvider.ArrayFieldConverter(
+                primitiveRepeated, intArraySchema, (AvroMaterializerProvider.ValueConsumer) primitiveOut::set);
+
+        primitiveArray.start();
+        ((PrimitiveConverter) primitiveArray.getConverter(0)).addInt(1);
+        ((PrimitiveConverter) primitiveArray.getConverter(0)).addInt(2);
+        primitiveArray.end();
+        assertThat(primitiveOut.get()).isEqualTo(List.of(1, 2));
+
+        GroupType structGroup = Types.buildGroup(Type.Repetition.OPTIONAL)
+                .required(PrimitiveTypeName.BINARY)
+                .as(LogicalTypeAnnotation.stringType())
+                .named("name")
+                .optional(PrimitiveTypeName.INT32)
+                .named("age")
+                .named("struct_items");
+        Schema recordSchema = Schema.createRecord("Item", null, null, false);
+        recordSchema.setFields(List.of(
+                new Schema.Field("name", Schema.create(Schema.Type.STRING), null, (Object) null),
+                new Schema.Field("age", Schema.create(Schema.Type.INT), null, (Object) null)));
+        Schema recordArraySchema = Schema.createArray(recordSchema);
+        AtomicReference<Object> recordOut = new AtomicReference<>();
+        GroupConverter recordArray = new AvroMaterializerProvider.ArrayFieldConverter(
+                structGroup, recordArraySchema, (AvroMaterializerProvider.ValueConsumer) recordOut::set);
+
+        recordArray.start();
+        GroupConverter element = (GroupConverter) recordArray.getConverter(0);
+        element.start();
+        ((PrimitiveConverter) element.getConverter(0)).addBinary(Binary.fromString("alice"));
+        ((PrimitiveConverter) element.getConverter(1)).addInt(33);
+        element.end();
+        recordArray.end();
+
+        assertThat(recordOut.get()).isInstanceOf(List.class);
+        assertThat((List<?>) recordOut.get()).hasSize(1);
+        assertThat(((GenericData.Record) ((List<?>) recordOut.get()).get(0))
+                        .get("name")
+                        .toString())
+                .isEqualTo("alice");
+    }
 }

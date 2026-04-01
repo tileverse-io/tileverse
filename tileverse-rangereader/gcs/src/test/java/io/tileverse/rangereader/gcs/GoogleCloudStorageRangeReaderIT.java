@@ -15,6 +15,7 @@
  */
 package io.tileverse.rangereader.gcs;
 
+import com.google.auth.Credentials;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.BucketInfo;
@@ -25,9 +26,11 @@ import io.tileverse.rangereader.RangeReader;
 import io.tileverse.rangereader.it.AbstractRangeReaderIT;
 import io.tileverse.rangereader.it.TestUtil;
 import java.io.IOException;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeAll;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -43,6 +46,32 @@ public class GoogleCloudStorageRangeReaderIT extends AbstractRangeReaderIT {
     private static final String BUCKET_NAME = "test-bucket";
     private static final String OBJECT_NAME = "test.bin";
     private static final String PROJECT_ID = "test-project";
+    private static final Credentials NO_CREDENTIALS = new Credentials() {
+        @Override
+        public String getAuthenticationType() {
+            return "None";
+        }
+
+        @Override
+        public Map<String, List<String>> getRequestMetadata(java.net.URI uri) {
+            return Collections.emptyMap();
+        }
+
+        @Override
+        public boolean hasRequestMetadata() {
+            return false;
+        }
+
+        @Override
+        public boolean hasRequestMetadataOnly() {
+            return false;
+        }
+
+        @Override
+        public void refresh() {
+            // no-op for emulator access
+        }
+    };
 
     private static Path testFile;
     private static Storage storage;
@@ -66,6 +95,7 @@ public class GoogleCloudStorageRangeReaderIT extends AbstractRangeReaderIT {
         storage = StorageOptions.newBuilder()
                 .setProjectId(PROJECT_ID)
                 .setHost(emulatorEndpoint)
+                .setCredentials(NO_CREDENTIALS)
                 .build()
                 .getService();
 
@@ -87,44 +117,22 @@ public class GoogleCloudStorageRangeReaderIT extends AbstractRangeReaderIT {
 
     @Override
     protected RangeReader createBaseReader() throws IOException {
-        // Create a new Storage client for each test to avoid connection issues
+        // Use explicit no-op credentials so local ADC state does not interfere with emulator tests.
         String emulatorHost = gcsEmulator.getHost();
         Integer emulatorPort = gcsEmulator.getFirstMappedPort();
+        String emulatorEndpoint = "http://" + emulatorHost + ":" + emulatorPort;
 
-        // e.g.: http://localhost:59542/storage/v1/b/testbucket/o/testfile.bin?alt=media"
-        /*
-         * The alt=media parameter is important for GCS API calls when you want to download the actual file content rather than metadata.
-         * Otherwise we'll get metadata like
-         * {
-         * "kind": "storage#object",
-         *   "name": "testfile.bin",
-         *   "id": "testbucket/testfile.bin",
-         *   "bucket": "testbucket",
-         *   "size": "1048576",
-         *   "contentType": "application/octet-stream",
-         *   "crc32c": "l4iVSw==",
-         *   "acl": [
-         *     {
-         *       "bucket": "testbucket",
-         *       "entity": "projectOwner-test-project",
-         *       "object": "testfile.bin",
-         *       "projectTeam": {},
-         *       "role": "OWNER"
-         *     }
-         *   ],
-         *   "md5Hash": "Fq8tADubC1Fqxqio4nuD4w==",
-         *   "etag": "\"Fq8tADubC1Fqxqio4nuD4w==\"",
-         *   "timeCreated": "2025-09-07T01:41:48.638109Z",
-         *   "updated": "2025-09-07T01:41:48.638112Z",
-         *   "generation": "1757209308638113"
-         * }
-         *
-         * Alternatively we could set the STORAGE_EMULATOR_HOST environment variable to "localhost:"+gcsEmulator.getFirstMappedPort()
-         * and use an URI like gs://testbucket/testfile.bin
-         */
-        String gcsURL = "http://%s:%d/storage/v1/b/%s/o/%s?alt=media"
-                .formatted(emulatorHost, emulatorPort, BUCKET_NAME, OBJECT_NAME);
-        URI uri = URI.create(gcsURL);
-        return GoogleCloudStorageRangeReader.builder().uri(uri).build();
+        Storage storage = StorageOptions.newBuilder()
+                .setProjectId(PROJECT_ID)
+                .setHost(emulatorEndpoint)
+                .setCredentials(NO_CREDENTIALS)
+                .build()
+                .getService();
+
+        return GoogleCloudStorageRangeReader.builder()
+                .storage(storage)
+                .bucket(BUCKET_NAME)
+                .objectName(OBJECT_NAME)
+                .build();
     }
 }

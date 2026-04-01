@@ -172,20 +172,42 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
 
     @Override
     public boolean canProcess(RangeReaderConfig config) {
-        return RangeReaderConfig.matches(config, getId(), "gs", "http", "https");
+        URI uri = config.uri();
+        String scheme = uri.getScheme();
+        if ("gs".equalsIgnoreCase(scheme)) {
+            return RangeReaderConfig.matches(config, getId(), "gs");
+        }
+        if (!RangeReaderConfig.matches(config, getId(), "http", "https")) {
+            return false;
+        }
+        return isRecognizedGcsHttpUri(uri);
     }
 
     @Override
     public boolean canProcessHeaders(URI uri, Map<String, List<String>> headers) {
-        // Check for any "x-goog-" prefixed header, which is a strong signal for GCS.
-        Set<String> headerNames = headers.keySet();
-        boolean hasCustomHeaders =
-                headerNames.stream().anyMatch(h -> h.toLowerCase().startsWith("x-goog-"));
-        if (hasCustomHeaders) {
+        if (isRecognizedGcsHttpUri(uri)) {
             return true;
         }
+        // Accept x-goog-* headers only for explicit emulator-style endpoints.
+        Set<String> headerNames = headers.keySet();
+        boolean hasGoogHeaders =
+                headerNames.stream().anyMatch(h -> h.toLowerCase().startsWith("x-goog-"));
+        return hasGoogHeaders && isEmulatorApiUri(uri);
+    }
+
+    private static boolean isRecognizedGcsHttpUri(URI uri) {
         String host = uri.getHost();
-        return "storage.googleapis.com".equals(host) || "storage.cloud.google.com".equals(host);
+        if (host == null) {
+            return false;
+        }
+        return "storage.googleapis.com".equals(host)
+                || "storage.cloud.google.com".equals(host)
+                || isEmulatorApiUri(uri);
+    }
+
+    private static boolean isEmulatorApiUri(URI uri) {
+        String path = uri.getPath();
+        return path != null && path.startsWith("/storage/v1/b/");
     }
 
     /**
@@ -194,6 +216,11 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
     @Override
     protected RangeReader createInternal(RangeReaderConfig opts) throws IOException {
         URI uri = opts.uri();
-        return GoogleCloudStorageRangeReader.builder().uri(uri).build();
+        GoogleCloudStorageRangeReader.Builder builder =
+                GoogleCloudStorageRangeReader.builder().uri(uri);
+        opts.getParameter(GCS_PROJECT_ID).ifPresent(builder::projectId);
+        opts.getParameter(GCS_QUOTA_PROJECT_ID).ifPresent(builder::quotaProjectId);
+        opts.getParameter(GCS_USE_DEFAULT_APPLICTION_CREDENTIALS).ifPresent(builder::defaultCredentialsChain);
+        return builder.build();
     }
 }

@@ -15,7 +15,6 @@
  */
 package io.tileverse.rangereader.it;
 
-import static io.tileverse.rangereader.it.RangeReaderFactoryIT.testAzureBlob;
 import static io.tileverse.rangereader.it.RangeReaderFactoryIT.testCreate;
 import static io.tileverse.rangereader.it.RangeReaderFactoryIT.testFindBestProvider;
 import static io.tileverse.rangereader.it.RangeReaderFactoryIT.testS3;
@@ -23,6 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tileverse.rangereader.RangeReader;
 import io.tileverse.rangereader.RangeReaderFactory;
+import io.tileverse.rangereader.azure.AzureBlobRangeReader;
+import io.tileverse.rangereader.azure.AzureBlobRangeReaderProvider;
 import io.tileverse.rangereader.gcs.GoogleCloudStorageRangeReader;
 import io.tileverse.rangereader.gcs.GoogleCloudStorageRangeReaderProvider;
 import io.tileverse.rangereader.http.HttpRangeReader;
@@ -75,7 +76,10 @@ class RangeReaderFactoryOnlineIT {
         String onlineURI =
                 "https://overturemapswestus2.dfs.core.windows.net/release/2025-08-20.1/theme=places/type=place/part-00006-b7285365-b50a-436a-bfa5-bb55d76c79b3-c000.zstd.parquet";
         try {
-            testAzureBlob(onlineURI, null);
+            RangeReaderConfig config =
+                    new RangeReaderConfig().uri(URI.create(onlineURI)).providerId(AzureBlobRangeReaderProvider.ID);
+            testFindBestProvider(config, AzureBlobRangeReaderProvider.class);
+            testCreate(config, AzureBlobRangeReader.class);
         } catch (IOException ioe) {
             if (ioe.getMessage().contains("Blob does not exist")) {
                 return;

@@ -46,6 +46,13 @@
       <groupId>io.tileverse.parquet</groupId>
       <artifactId>tileverse-parquet</artifactId>
     </dependency>
+    <!-- Required at compile and Javadoc time because the datastore uses Avro GenericRecord
+         types in its production code, not only through transitive parquet-avro internals. -->
+    <dependency>
+      <groupId>org.apache.avro</groupId>
+      <artifactId>avro</artifactId>
+      <version>1.11.5</version>
+    </dependency>
     <dependency>
       <groupId>org.geotools</groupId>
       <artifactId>gt-main</artifactId>
@@ -63,6 +70,27 @@
       <groupId>io.tileverse.rangereader</groupId>
       <artifactId>tileverse-rangereader-core</artifactId>
     </dependency>
+    <!-- Required at compile time because GeoParquet exposes the same datastore parameters
+         as the RangeReader-backed providers and references their parameter definitions. -->
+    <dependency>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-s3</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <!-- Required at compile time because GeoParquet exposes the same datastore parameters
+         as the RangeReader-backed providers and references their parameter definitions. -->
+    <dependency>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-azure</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <!-- Required at compile time because GeoParquet exposes the same datastore parameters
+         as the RangeReader-backed providers and references their parameter definitions. -->
+    <dependency>
+      <groupId>io.tileverse.rangereader</groupId>
+      <artifactId>tileverse-rangereader-gcs</artifactId>
+      <optional>true</optional>
+    </dependency>
 
     <dependency>
       <groupId>io.tileverse.parquet</groupId>
@@ -74,6 +102,44 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-common</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Needed only for the Hadoop-backed performance IT that exercises parquet-hadoop readers. -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Needed only for the fake-GCS-backed integration test because the Google Storage client uses
+         the full protobuf runtime (e.g. com.google.protobuf.Any), not protobuf-javalite. -->
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>${protobuf-java.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- Needed only for integration tests that use Testcontainers with JUnit 5. -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Needed only for the MinIO-backed integration test that verifies parameterized S3 access. -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>minio</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Needed only for the Azurite-backed integration test that verifies parameterized Azure Blob access. -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>azure</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Needed only for the fake-GCS-backed integration test that verifies parameterized Google Cloud Storage access. -->
+    <dependency>
+      <groupId>io.aiven</groupId>
+      <artifactId>testcontainers-fake-gcs-server</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

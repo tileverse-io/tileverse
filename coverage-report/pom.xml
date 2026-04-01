@@ -60,6 +60,16 @@
       <groupId>io.tileverse.pmtiles</groupId>
       <artifactId>tileverse-pmtiles</artifactId>
     </dependency>
+
+    <!-- Parquet modules -->
+    <dependency>
+      <groupId>io.tileverse.parquet</groupId>
+      <artifactId>tileverse-parquet</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.parquet</groupId>
+      <artifactId>tileverse-parquet-datastore</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

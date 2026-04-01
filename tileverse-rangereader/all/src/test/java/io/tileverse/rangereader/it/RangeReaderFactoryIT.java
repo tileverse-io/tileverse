@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
+import com.google.auth.Credentials;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.BucketInfo;
@@ -44,6 +45,9 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -68,6 +72,32 @@ class RangeReaderFactoryIT {
     private static final String BUCKET_NAME = "testbucket";
     private static final String FILE_NAME = "testfile.bin";
     private static final int FILE_SIZE = 1024 * 1024 + 1;
+    private static final Credentials NO_CREDENTIALS = new Credentials() {
+        @Override
+        public String getAuthenticationType() {
+            return "None";
+        }
+
+        @Override
+        public Map<String, List<String>> getRequestMetadata(URI uri) {
+            return Collections.emptyMap();
+        }
+
+        @Override
+        public boolean hasRequestMetadata() {
+            return false;
+        }
+
+        @Override
+        public boolean hasRequestMetadataOnly() {
+            return false;
+        }
+
+        @Override
+        public void refresh() {
+            // no-op for emulator access
+        }
+    };
 
     private static Path fileURI;
 
@@ -154,6 +184,7 @@ class RangeReaderFactoryIT {
         Storage storage = StorageOptions.newBuilder()
                 .setProjectId("test-project")
                 .setHost(emulatorEndpoint)
+                .setCredentials(NO_CREDENTIALS)
                 .build()
                 .getService();
 

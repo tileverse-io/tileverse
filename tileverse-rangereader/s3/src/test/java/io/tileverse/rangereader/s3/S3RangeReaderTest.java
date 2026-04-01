@@ -18,6 +18,7 @@ package io.tileverse.rangereader.s3;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.lenient;
@@ -29,6 +30,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,8 +40,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
@@ -260,5 +271,94 @@ class S3RangeReaderTest {
         when(getObjectResponse.contentLength()).thenReturn(50L); // Wrong content length
 
         assertThrows(IOException.class, () -> reader.readRange(0, 100));
+    }
+
+    @Test
+    void testGetSourceIdentifier() {
+        assertEquals("s3://%s/%s".formatted(BUCKET, KEY), reader.getSourceIdentifier());
+    }
+
+    @Test
+    void testBuilderUriParsesCustomEndpoint() throws Exception {
+        S3RangeReader.Builder builder =
+                S3RangeReader.builder().uri(URI.create("http://localhost:9000/my-bucket/path/file.pmtiles"));
+
+        S3Reference location = getField(builder, "s3Location", S3Reference.class);
+        assertEquals(URI.create("http://localhost:9000"), location.endpoint());
+        assertEquals("my-bucket", location.bucket());
+        assertEquals("path/file.pmtiles", location.key());
+        assertTrue(location.requiresPathStyle());
+    }
+
+    @Test
+    void testBuilderEndpointBucketAndKeySetters() throws Exception {
+        S3RangeReader.Builder builder = S3RangeReader.builder()
+                .endpoint(URI.create("https://minio.example.com"))
+                .bucket("bucket")
+                .key("folder/data.bin")
+                .forcePathStyle();
+
+        S3Reference location = getField(builder, "s3Location", S3Reference.class);
+        assertEquals(URI.create("https://minio.example.com"), location.endpoint());
+        assertEquals("bucket", location.bucket());
+        assertEquals("folder/data.bin", location.key());
+        assertTrue(getField(builder, "forcePathStyle", Boolean.class));
+    }
+
+    @Test
+    void testResolveCredentialsProviderPrecedence() throws Exception {
+        AwsCredentialsProvider explicitProvider = () -> AwsBasicCredentials.create("explicit", "secret");
+        S3RangeReader.Builder explicitBuilder = S3RangeReader.builder()
+                .credentialsProvider(explicitProvider)
+                .awsAccessKeyId("ignored")
+                .awsSecretAccessKey("ignored");
+        assertEquals(explicitProvider, invokeResolveCredentialsProvider(explicitBuilder));
+
+        S3RangeReader.Builder staticBuilder =
+                S3RangeReader.builder().awsAccessKeyId("access").awsSecretAccessKey("secret");
+        AwsCredentialsProvider staticProvider = invokeResolveCredentialsProvider(staticBuilder);
+        assertTrue(staticProvider instanceof StaticCredentialsProvider);
+        AwsBasicCredentials staticCredentials = (AwsBasicCredentials) staticProvider.resolveCredentials();
+        assertEquals("access", staticCredentials.accessKeyId());
+        assertEquals("secret", staticCredentials.secretAccessKey());
+
+        S3RangeReader.Builder defaultChainBuilder =
+                S3RangeReader.builder().useDefaultCredentialsProvider(true).defaultCredentialsProfile("test-profile");
+        assertTrue(invokeResolveCredentialsProvider(defaultChainBuilder) instanceof DefaultCredentialsProvider);
+
+        S3RangeReader.Builder profileBuilder = S3RangeReader.builder().defaultCredentialsProfile("test-profile");
+        assertTrue(invokeResolveCredentialsProvider(profileBuilder) instanceof ProfileCredentialsProvider);
+
+        assertTrue(invokeResolveCredentialsProvider(S3RangeReader.builder()) instanceof AnonymousCredentialsProvider);
+    }
+
+    @Test
+    void testResolveRegionUsesExplicitAndParsedValues() throws Exception {
+        S3RangeReader.Builder explicitRegionBuilder = S3RangeReader.builder().region(Region.US_EAST_1);
+        assertEquals(Region.US_EAST_1, invokeResolveRegion(explicitRegionBuilder));
+
+        S3RangeReader.Builder parsedRegionBuilder =
+                S3RangeReader.builder().uri(URI.create("https://bucket.s3.us-west-2.amazonaws.com/file.txt"));
+        assertEquals(Region.US_WEST_2, invokeResolveRegion(parsedRegionBuilder));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return (T) field.get(target);
+    }
+
+    private static AwsCredentialsProvider invokeResolveCredentialsProvider(S3RangeReader.Builder builder)
+            throws Exception {
+        Method method = builder.getClass().getDeclaredMethod("resolveCredentialsProvider");
+        method.setAccessible(true);
+        return (AwsCredentialsProvider) method.invoke(builder);
+    }
+
+    private static Region invokeResolveRegion(S3RangeReader.Builder builder) throws Exception {
+        Method method = builder.getClass().getDeclaredMethod("resolveRegion");
+        method.setAccessible(true);
+        return ((java.util.Optional<Region>) method.invoke(builder)).orElse(null);
     }
 }

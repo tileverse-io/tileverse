@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Properties;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -88,10 +89,20 @@ public class GeoparquetContentDataStore extends ContentDataStore implements File
     }
 
     public static GeoparquetContentDataStore open(URL url) throws IOException {
-        return open(url, TileverseParquetRecordSource::new);
+        return open(url, new Properties());
+    }
+
+    public static GeoparquetContentDataStore open(URL url, Properties rangeReaderConfig) throws IOException {
+        return open(url, rangeReaderConfig, TileverseParquetRecordSource::new);
     }
 
     public static GeoparquetContentDataStore open(URL url, GeoParquetRecordSourceFactory recordSourceFactory)
+            throws IOException {
+        return open(url, new Properties(), recordSourceFactory);
+    }
+
+    static GeoparquetContentDataStore open(
+            URL url, Properties rangeReaderConfig, GeoParquetRecordSourceFactory recordSourceFactory)
             throws IOException {
         Objects.requireNonNull(recordSourceFactory, "recordSourceFactory");
         URI uri;
@@ -100,7 +111,8 @@ public class GeoparquetContentDataStore extends ContentDataStore implements File
         } catch (URISyntaxException e) {
             throw new IOException(e);
         }
-        RangeReader rangeReader = RangeReaderFactory.create(uri);
+        Properties config = rangeReaderConfig == null ? new Properties() : rangeReaderConfig;
+        RangeReader rangeReader = RangeReaderFactory.create(uri, config);
         try {
             GeoParquetRecordSource recordSource = recordSourceFactory.create(rangeReader);
             return new GeoparquetContentDataStore(uri, rangeReader, recordSource);

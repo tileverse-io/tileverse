@@ -33,6 +33,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Properties;
 import org.geotools.api.data.DataStore;
 import org.geotools.api.data.Query;
 import org.geotools.api.data.SimpleFeatureSource;
@@ -67,7 +68,16 @@ class GeoParquetFileDataStoreFactoryTest {
     void factoryMetadataAndValidationMethods() throws Exception {
         assertThat(factory.isAvailable()).isTrue();
         assertThat(factory.getFileExtensions()).containsExactly(".parquet");
-        assertThat(factory.getParametersInfo()).hasSize(1);
+        assertThat(factory.getParametersInfo())
+                .extracting(p -> p.key)
+                .contains(
+                        "url",
+                        "io.tileverse.rangereader.provider",
+                        "io.tileverse.rangereader.caching.enabled",
+                        "io.tileverse.rangereader.http.timeout-millis",
+                        "io.tileverse.rangereader.azure.account-key",
+                        "io.tileverse.rangereader.s3.region",
+                        "io.tileverse.rangereader.gcs.project-id");
         assertThat(factory.getParametersInfo()[0].key).isEqualTo("url");
 
         assertThat(factory.canProcess((URL) null)).isFalse();
@@ -108,6 +118,30 @@ class GeoParquetFileDataStoreFactoryTest {
         assertThatThrownBy(() -> factory.createDataStore(Map.of("url", "not-a-url")))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("Invalid 'url' parameter");
+    }
+
+    @Test
+    void createDataStoreFromMap_acceptsRangeReaderConfiguration() throws Exception {
+        Path path = extractToTempFile(FIXTURE_RESOURCE);
+        Properties expected = new Properties();
+        expected.setProperty("io.tileverse.rangereader.caching.enabled", "true");
+        expected.setProperty("io.tileverse.rangereader.caching.blocksize", "4096");
+        Map<String, Object> params = Map.of(
+                "url",
+                path.toUri().toURL(),
+                "io.tileverse.rangereader.caching.enabled",
+                true,
+                "io.tileverse.rangereader.caching.blocksize",
+                4096);
+
+        assertThat(GeoParquetRangeReaderParams.toProperties(params)).isEqualTo(expected);
+
+        DataStore store = factory.createDataStore(params);
+        try {
+            assertThat(store.getTypeNames()).containsExactly("sample-geoparquet");
+        } finally {
+            store.dispose();
+        }
     }
 
     @Test

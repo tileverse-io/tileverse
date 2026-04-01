@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -276,17 +277,16 @@ class GoogleCloudStorageRangeReaderTest {
 
     @Test
     void testBuilderWithProjectId() throws IOException {
-        // Test builder with project ID (will use default storage)
-        // This test would fail in a real environment without credentials,
-        // but it tests the builder logic
+        // Exercise the projectId builder path without asserting on provider-specific
+        // auth/network failures coming from the external GCS environment.
 
         Builder builder = GoogleCloudStorageRangeReader.builder()
                 .projectId("test-project")
                 .bucket(BUCKET)
                 .objectName(OBJECT_NAME);
-        StorageException e = assertThrows(StorageException.class, builder::build);
-        // Expected in test environment - just verify we got past validation
-        assertThat(e.getMessage()).contains("Permission 'storage.objects.get' denied on resource");
+        Throwable e = assertThrows(Throwable.class, builder::build);
+        assertThat(e).isNotInstanceOf(IllegalStateException.class);
+        assertThat(e.getMessage()).isNotBlank();
     }
 
     @Test
@@ -299,6 +299,39 @@ class GoogleCloudStorageRangeReaderTest {
                 .build();
 
         assertEquals(CONTENT_LENGTH, builtReader.size().getAsLong());
+    }
+
+    @Test
+    void testBuilderWithPublicGcsHttpUri() throws IOException {
+        URI uri = URI.create("https://storage.googleapis.com/" + BUCKET + "/" + OBJECT_NAME);
+        clearInvocations(storage);
+
+        GoogleCloudStorageRangeReader builtReader = GoogleCloudStorageRangeReader.builder()
+                .storage(storage)
+                .uri(uri)
+                .build();
+
+        assertEquals(CONTENT_LENGTH, builtReader.size().getAsLong());
+        verify(storage).get(BlobId.of(BUCKET, OBJECT_NAME));
+    }
+
+    @Test
+    void testBuilderWithGcsApiHttpUri() throws IOException {
+        String objectName = "path/to/" + OBJECT_NAME;
+        BlobId blobId = BlobId.of(BUCKET, objectName);
+        when(storage.get(blobId)).thenReturn(blob);
+        clearInvocations(storage);
+
+        URI uri = URI.create(
+                "http://localhost:4443/storage/v1/b/%s/o/%s?alt=media".formatted(BUCKET, "path%2Fto%2F" + OBJECT_NAME));
+
+        GoogleCloudStorageRangeReader builtReader = GoogleCloudStorageRangeReader.builder()
+                .storage(storage)
+                .uri(uri)
+                .build();
+
+        assertEquals(CONTENT_LENGTH, builtReader.size().getAsLong());
+        verify(storage).get(blobId);
     }
 
     @Test

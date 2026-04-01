@@ -29,6 +29,8 @@ import static org.mockito.Mockito.when;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.models.BlobProperties;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.OptionalLong;
@@ -223,5 +225,43 @@ class AzureBlobRangeReaderTest {
         when(blobClient.exists()).thenThrow(new RuntimeException("Failed to check blob existence"));
 
         assertThrows(IOException.class, () -> AzureBlobRangeReader.of(blobClient));
+    }
+
+    @Test
+    void testBuilderValidation() {
+        assertThrows(IllegalArgumentException.class, () -> AzureBlobRangeReader.builder()
+                .endpoint(URI.create("s3://bucket/file")));
+
+        assertThrows(IllegalStateException.class, () -> AzureBlobRangeReader.builder()
+                .build());
+
+        assertThrows(IllegalStateException.class, () -> AzureBlobRangeReader.builder()
+                .connectionString("UseDevelopmentStorage=true")
+                .build());
+    }
+
+    @Test
+    void testBuilderSettersPopulateFields() throws Exception {
+        AzureBlobRangeReader.Builder builder = AzureBlobRangeReader.builder()
+                .endpoint(URI.create("http://127.0.0.1:10000/devstoreaccount1/container/file.pmtiles"))
+                .accountCredentials("devstoreaccount1", "secret")
+                .blobName("file.pmtiles")
+                .containerName("container")
+                .sasToken("sig=123");
+
+        assertEquals("devstoreaccount1", getField(builder, "accountName"));
+        assertEquals("secret", getField(builder, "accountKey"));
+        assertEquals("container", getField(builder, "containerName"));
+        assertEquals("file.pmtiles", getField(builder, "blobName"));
+        assertEquals("sig=123", getField(builder, "sasToken"));
+        assertEquals(
+                URI.create("http://127.0.0.1:10000/devstoreaccount1/container/file.pmtiles"),
+                getField(builder, "endpoint"));
+    }
+
+    private static Object getField(Object target, String name) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(target);
     }
 }

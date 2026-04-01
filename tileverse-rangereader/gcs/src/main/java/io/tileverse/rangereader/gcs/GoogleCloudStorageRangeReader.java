@@ -31,6 +31,9 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.OptionalLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -44,6 +47,32 @@ import java.util.logging.Logger;
 public class GoogleCloudStorageRangeReader extends AbstractRangeReader implements RangeReader {
 
     private static final Logger LOGGER = Logger.getLogger(GoogleCloudStorageRangeReader.class.getName());
+    private static final Credentials ANONYMOUS_CREDENTIALS = new Credentials() {
+        @Override
+        public String getAuthenticationType() {
+            return "Anonymous";
+        }
+
+        @Override
+        public Map<String, List<String>> getRequestMetadata(URI uri) {
+            return Collections.emptyMap();
+        }
+
+        @Override
+        public boolean hasRequestMetadata() {
+            return false;
+        }
+
+        @Override
+        public boolean hasRequestMetadataOnly() {
+            return false;
+        }
+
+        @Override
+        public void refresh() {
+            // no-op
+        }
+    };
 
     @SuppressWarnings("unused")
     private final Storage storage;
@@ -384,9 +413,12 @@ public class GoogleCloudStorageRangeReader extends AbstractRangeReader implement
                 throw new IllegalStateException("Bucket and object name must be set");
             }
 
-            Credentials credentials = this.credentials; // GoogleCredentials.getApplicationDefault();
+            Credentials credentials = this.credentials;
             if (credentials == null && this.defaultCredentialsChain) {
                 credentials = GoogleCredentials.getApplicationDefault();
+            }
+            if (credentials == null) {
+                credentials = ANONYMOUS_CREDENTIALS;
             }
 
             Storage storageClient = this.storage;

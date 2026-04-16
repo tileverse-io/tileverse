@@ -54,7 +54,8 @@ class GeoParquetFileDataStoreFactoryAzuriteIT {
     void createDataStore_requiresAzureConnectionParametersForAzuriteHttpUrl() {
         assertThatThrownBy(() ->
                         GeoParquetDatastoreCloudITSupport.FACTORY.createDataStore(Map.of("url", azuriteFixtureUrl)))
-                .isInstanceOf(IOException.class);
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("AuthorizationFailure");
     }
 
     @Test

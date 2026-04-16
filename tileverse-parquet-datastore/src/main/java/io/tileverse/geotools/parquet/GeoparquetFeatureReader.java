@@ -50,24 +50,18 @@ class GeoparquetFeatureReader implements SimpleFeatureReader {
 
     private final SimpleFeatureType featureType;
     private final CloseableIterator<GenericRecord> records;
-    private final WKBReader wkbReader;
     private final Set<String> wkbGeometryColumns;
     private final String typeName;
     private int featureId;
 
-    GeoparquetFeatureReader(
-            SimpleFeatureType featureType, CloseableIterator<GenericRecord> records, WKBReader wkbReader) {
-        this(featureType, records, wkbReader, Set.of());
+    GeoparquetFeatureReader(SimpleFeatureType featureType, CloseableIterator<GenericRecord> records) {
+        this(featureType, records, Set.of());
     }
 
     GeoparquetFeatureReader(
-            SimpleFeatureType featureType,
-            CloseableIterator<GenericRecord> records,
-            WKBReader wkbReader,
-            Set<String> wkbGeometryColumns) {
+            SimpleFeatureType featureType, CloseableIterator<GenericRecord> records, Set<String> wkbGeometryColumns) {
         this.featureType = featureType;
         this.records = records;
-        this.wkbReader = wkbReader;
         this.wkbGeometryColumns = wkbGeometryColumns;
         this.typeName = featureType.getTypeName();
     }
@@ -117,7 +111,7 @@ class GeoparquetFeatureReader implements SimpleFeatureReader {
 
     private Object tryDecodeWkb(byte[] bytes) {
         try {
-            return wkbReader.read(bytes);
+            return new WKBReader().read(bytes);
         } catch (ParseException e) {
             LOGGER.log(Level.FINE, "WKB decode failed for GeoParquet geometry column, keeping raw bytes", e);
             return bytes;
@@ -162,7 +156,7 @@ class GeoparquetFeatureReader implements SimpleFeatureReader {
         if (Geometry.class.isAssignableFrom(binding)) {
             if (value instanceof byte[] bytes) {
                 try {
-                    return wkbReader.read(bytes);
+                    return new WKBReader().read(bytes);
                 } catch (ParseException e) {
                     throw new IOException("Failed to parse geometry WKB", e);
                 }

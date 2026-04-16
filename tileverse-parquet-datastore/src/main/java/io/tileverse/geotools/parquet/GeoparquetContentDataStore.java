@@ -44,7 +44,6 @@ import org.geotools.data.store.ContentEntry;
 import org.geotools.data.store.ContentFeatureSource;
 import org.geotools.feature.NameImpl;
 import org.geotools.util.logging.Logging;
-import org.locationtech.jts.io.WKBReader;
 
 /**
  * Read-only {@link ContentDataStore} backed by a single GeoParquet file.
@@ -59,7 +58,6 @@ public class GeoparquetContentDataStore extends ContentDataStore implements File
     private final URI uri;
     private final String typeName;
     private final FilterPredicateBuilder filterPredicateBuilder = new FilterPredicateBuilder();
-    private final WKBReader wkbReader = new WKBReader();
 
     private final RangeReader rangeReader;
     private final GeoParquetRecordSource recordSource;
@@ -203,10 +201,6 @@ public class GeoparquetContentDataStore extends ContentDataStore implements File
 
     FilterPredicateBuilder getFilterPredicateBuilder() {
         return filterPredicateBuilder;
-    }
-
-    WKBReader getWkbReader() {
-        return wkbReader;
     }
 
     URI getUri() {

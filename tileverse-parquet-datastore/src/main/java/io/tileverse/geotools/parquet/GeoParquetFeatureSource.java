@@ -87,8 +87,7 @@ class GeoParquetFeatureSource extends ContentFeatureSource {
 
         Set<String> projectedColumns = resolveProjectedColumns(query);
         CloseableIterator<GenericRecord> records = openRecordIterator(filterPredicate, projectedColumns);
-        return new GeoparquetFeatureReader(
-                store.getFeatureType(), records, store.getWkbReader(), store.getWkbGeometryColumns());
+        return new GeoparquetFeatureReader(store.getFeatureType(), records, store.getWkbGeometryColumns());
     }
 
     private Set<String> resolveProjectedColumns(Query query) {

@@ -15,7 +15,7 @@
  */
 package io.tileverse.rangereader.s3;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tileverse.rangereader.RangeReader;
 import io.tileverse.rangereader.block.BlockAlignedRangeReader;
@@ -61,14 +61,11 @@ class MinIORangeReaderIT extends AbstractRangeReaderIT {
 
     @BeforeAll
     static void setupMinio() throws IOException {
-        // Create a test file
         testFile = TestUtil.createTempTestFile(TEST_FILE_SIZE);
 
-        // Create credentials provider
         credentialsProvider =
                 StaticCredentialsProvider.create(AwsBasicCredentials.create(minio.getUserName(), minio.getPassword()));
 
-        // Initialize S3 client with explicit endpoint configuration for MinIO
         s3Client = S3Client.builder()
                 .endpointOverride(URI.create(minio.getS3URL()))
                 .region(Region.US_EAST_1) // MinIO doesn't care about region, but it's required by the SDK
@@ -76,12 +73,11 @@ class MinIORangeReaderIT extends AbstractRangeReaderIT {
                 .forcePathStyle(true) // Important for S3 compatibility with MinIO
                 .build();
 
-        // Create a bucket
         s3Client.createBucket(CreateBucketRequest.builder().bucket(BUCKET_NAME).build());
-
-        // Upload the test file
-        s3Client.putObject(
-                PutObjectRequest.builder().bucket(BUCKET_NAME).key(KEY_NAME).build(), RequestBody.fromFile(testFile));
+        PutObjectRequest putObjectRequest =
+                PutObjectRequest.builder().bucket(BUCKET_NAME).key(KEY_NAME).build();
+        RequestBody body = RequestBody.fromFile(testFile);
+        s3Client.putObject(putObjectRequest, body);
     }
 
     @AfterAll
@@ -89,11 +85,6 @@ class MinIORangeReaderIT extends AbstractRangeReaderIT {
         if (s3Client != null) {
             s3Client.close();
         }
-    }
-
-    @Override
-    protected void setUp() throws IOException {
-        // Nothing needed here since all setup is done in @BeforeAll
     }
 
     @Override
@@ -113,7 +104,7 @@ class MinIORangeReaderIT extends AbstractRangeReaderIT {
      */
     @Test
     void testMinioSpecificConfiguration() throws IOException {
-        // Create RangeReader using builder with explicit endpoint override and force path style
+        // use explicit endpoint override and force path style
         try (RangeReader reader = S3RangeReader.builder()
                 .uri(URI.create("s3://" + BUCKET_NAME + "/" + KEY_NAME))
                 .credentialsProvider(credentialsProvider)
@@ -122,8 +113,7 @@ class MinIORangeReaderIT extends AbstractRangeReaderIT {
                 .forcePathStyle()
                 .build()) {
 
-            // Verify it's the right implementation
-            assertTrue(reader instanceof S3RangeReader, "Should be an S3RangeReader instance");
+            assertThat(reader).isInstanceOf(S3RangeReader.class);
         }
     }
 
@@ -144,7 +134,7 @@ class MinIORangeReaderIT extends AbstractRangeReaderIT {
             // This test relies on the base test cases from AbstractRangeReaderIT
             // to verify the basic functionality, and we're just testing that
             // this configuration can be created without errors
-            assertTrue(reader != null, "Reader with dual block sizes should be created");
+            assertThat(reader).isNotNull();
         }
     }
 }

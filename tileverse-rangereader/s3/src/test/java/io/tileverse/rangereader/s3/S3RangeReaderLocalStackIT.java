@@ -15,7 +15,7 @@
  */
 package io.tileverse.rangereader.s3;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tileverse.rangereader.RangeReader;
 import io.tileverse.rangereader.it.AbstractRangeReaderIT;
@@ -62,10 +62,7 @@ class S3RangeReaderLocalStackIT extends AbstractRangeReaderIT {
 
     @BeforeAll
     static void setupS3() throws IOException {
-        // Create a test file
         testFile = TestUtil.createTempTestFile(TEST_FILE_SIZE);
-
-        // Initialize S3 client with explicit endpoint configuration for LocalStack
         credentialsProvider = StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(localstack.getAccessKey(), localstack.getSecretKey()));
 
@@ -76,12 +73,12 @@ class S3RangeReaderLocalStackIT extends AbstractRangeReaderIT {
                 .forcePathStyle(true) // Important for S3 compatibility with LocalStack
                 .build();
 
-        // Create a bucket
         s3Client.createBucket(CreateBucketRequest.builder().bucket(BUCKET_NAME).build());
 
-        // Upload the test file
-        s3Client.putObject(
-                PutObjectRequest.builder().bucket(BUCKET_NAME).key(KEY_NAME).build(), RequestBody.fromFile(testFile));
+        PutObjectRequest putObjectRequest =
+                PutObjectRequest.builder().bucket(BUCKET_NAME).key(KEY_NAME).build();
+        RequestBody body = RequestBody.fromFile(testFile);
+        s3Client.putObject(putObjectRequest, body);
     }
 
     @AfterAll
@@ -89,11 +86,6 @@ class S3RangeReaderLocalStackIT extends AbstractRangeReaderIT {
         if (s3Client != null) {
             s3Client.close();
         }
-    }
-
-    @Override
-    protected void setUp() throws IOException {
-        // Nothing needed here since all setup is done in @BeforeAll
     }
 
     @Override
@@ -117,10 +109,9 @@ class S3RangeReaderLocalStackIT extends AbstractRangeReaderIT {
      */
     @Test
     void testS3SpecificBuilder() throws IOException {
-        // Create S3 URI
+
         URI s3Uri = URI.create("s3://" + BUCKET_NAME + "/" + KEY_NAME);
 
-        // Create RangeReader using builder with explicit endpoint override and force path style
         try (RangeReader reader = S3RangeReader.builder()
                 .uri(s3Uri)
                 .credentialsProvider(credentialsProvider)
@@ -129,8 +120,7 @@ class S3RangeReaderLocalStackIT extends AbstractRangeReaderIT {
                 .forcePathStyle()
                 .build()) {
 
-            // Verify it's the right implementation
-            assertTrue(reader instanceof S3RangeReader, "Should be an S3RangeReader instance");
+            assertThat(reader).isInstanceOf(S3RangeReader.class);
         }
     }
 }

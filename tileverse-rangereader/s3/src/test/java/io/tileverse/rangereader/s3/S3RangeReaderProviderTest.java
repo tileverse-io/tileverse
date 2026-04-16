@@ -34,6 +34,8 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import software.amazon.awssdk.regions.Region;
@@ -46,6 +48,7 @@ class S3RangeReaderProviderTest {
     private S3RangeReaderProvider provider = new S3RangeReaderProvider();
 
     @Test
+    @ResourceLock(Resources.SYSTEM_PROPERTIES)
     void testFactoryLookup() {
         assertThat(RangeReaderProvider.getProviders().stream().anyMatch(S3RangeReaderProvider.class::isInstance))
                 .isTrue();
@@ -74,6 +77,7 @@ class S3RangeReaderProviderTest {
     }
 
     @Test
+    @ResourceLock(Resources.SYSTEM_PROPERTIES)
     void isAvailable() {
         assertThat(provider.isAvailable()).isTrue();
         System.setProperty(S3RangeReaderProvider.ENABLED_KEY, "false");

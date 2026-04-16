@@ -47,13 +47,12 @@ import org.junit.jupiter.api.io.TempDir;
  */
 class RangeReaderFactoryTest {
 
-    private static final int TEST_PORT = 8090;
     private static final String HTTP_TEST_PATH = "/test-data.bin";
     private static final byte[] TEST_DATA = createTestData(1024);
 
     @RegisterExtension
-    static WireMockExtension wm = WireMockExtension.newInstance()
-            .options(wireMockConfig().port(TEST_PORT))
+    WireMockExtension wm = WireMockExtension.newInstance()
+            .options(wireMockConfig().dynamicPort())
             .build();
 
     @TempDir
@@ -82,7 +81,7 @@ class RangeReaderFactoryTest {
         Files.writeString(testFile, testContent, StandardOpenOption.CREATE);
 
         // Set up HTTP mock server
-        httpUri = URI.create("http://localhost:" + TEST_PORT + HTTP_TEST_PATH);
+        httpUri = URI.create("http://localhost:" + wm.getPort() + HTTP_TEST_PATH);
 
         wm.stubFor(head(urlEqualTo(HTTP_TEST_PATH))
                 .willReturn(aResponse()
@@ -99,12 +98,8 @@ class RangeReaderFactoryTest {
         wm.resetAll();
     }
 
-    // =========================================================================
-    // File RangeReader Tests
-    // =========================================================================
-
     @Test
-    void testCreateFileReaderFromURI() throws IOException {
+    void fileReaderCreateFromURI() throws IOException {
         Properties props = new Properties();
         props.put(RangeReaderConfig.URI_KEY, testFile.toUri());
 
@@ -116,9 +111,9 @@ class RangeReaderFactoryTest {
     }
 
     @Test
-    void testCreateFileReaderFromString() throws IOException {
+    void fileReaderCreateFromString() throws IOException {
         Properties props = new Properties();
-        // Use file:// URI string for cross-platform compatibility
+
         props.put(RangeReaderConfig.URI_KEY, testFile.toUri().toString());
 
         try (RangeReader reader = RangeReaderFactory.create(props)) {
@@ -128,10 +123,10 @@ class RangeReaderFactoryTest {
     }
 
     @Test
-    void testCreateFileReaderFromURL() throws IOException {
+    void fileReaderCreateFromURL() throws IOException {
         Properties props = new Properties();
         URL url = testFile.toUri().toURL();
-        // Put URL object directly - RangeReaderConfig should handle conversion
+
         props.put(RangeReaderConfig.URI_KEY, url);
 
         try (RangeReader reader = RangeReaderFactory.create(props)) {
@@ -141,9 +136,9 @@ class RangeReaderFactoryTest {
     }
 
     @Test
-    void testCreateFileReaderFromPath() throws IOException {
+    void fileReaderCreateFromPath() throws IOException {
         Properties props = new Properties();
-        // Put Path object directly - RangeReaderConfig should handle conversion
+
         props.put(RangeReaderConfig.URI_KEY, testFile);
 
         try (RangeReader reader = RangeReaderFactory.create(props)) {
@@ -153,9 +148,9 @@ class RangeReaderFactoryTest {
     }
 
     @Test
-    void testCreateFileReaderFromPathToString() throws IOException {
+    void fileReaderCreateFromPathToString() throws IOException {
         Properties props = new Properties();
-        // Use Path.toString() - should work on both Unix and Windows
+
         String pathString = testFile.toString();
         props.put(RangeReaderConfig.URI_KEY, pathString);
 
@@ -166,9 +161,9 @@ class RangeReaderFactoryTest {
     }
 
     @Test
-    void testCreateFileReaderFromAbsolutePathString() throws IOException {
+    void fileReaderCreateFromAbsolutePathString() throws IOException {
         Properties props = new Properties();
-        // Use absolute path string - should work on both Unix and Windows
+
         String absolutePath = testFile.toAbsolutePath().toString();
         props.put(RangeReaderConfig.URI_KEY, absolutePath);
 
@@ -179,22 +174,16 @@ class RangeReaderFactoryTest {
     }
 
     @Test
-    void testCreateFileReaderWithURIAndProperties() throws IOException {
+    void fileReaderCreateWithURIAndProperties() throws IOException {
         Properties props = new Properties();
-        // Additional properties can be added here if needed
-
         try (RangeReader reader = RangeReaderFactory.create(testFile.toUri(), props)) {
             assertThat(reader).isInstanceOf(FileRangeReader.class);
             assertThat(reader.size()).hasValue(testContent.length());
         }
     }
 
-    // =========================================================================
-    // HTTP RangeReader Tests
-    // =========================================================================
-
     @Test
-    void testCreateHttpReaderFromURI() throws IOException {
+    void httpReaderCreateFromURI() throws IOException {
         Properties props = new Properties();
         props.put(RangeReaderConfig.URI_KEY, httpUri);
 
@@ -206,7 +195,7 @@ class RangeReaderFactoryTest {
     }
 
     @Test
-    void testCreateHttpReaderFromString() throws IOException {
+    void httpReaderCreateFromString() throws IOException {
         Properties props = new Properties();
         props.put(RangeReaderConfig.URI_KEY, httpUri.toString());
 
@@ -217,7 +206,7 @@ class RangeReaderFactoryTest {
     }
 
     @Test
-    void testCreateHttpReaderFromURL() throws IOException {
+    void httpReaderCreateFromURL() throws IOException {
         Properties props = new Properties();
         URL url = httpUri.toURL();
         props.put(RangeReaderConfig.URI_KEY, url);
@@ -229,7 +218,7 @@ class RangeReaderFactoryTest {
     }
 
     @Test
-    void testCreateHttpReaderWithAuthentication() throws IOException {
+    void httpReaderCreateWithAuthentication() throws IOException {
         Properties props = new Properties();
         props.put(RangeReaderConfig.URI_KEY, httpUri);
         props.setProperty("io.tileverse.rangereader.http.bearer-token", "test-token");
@@ -241,7 +230,7 @@ class RangeReaderFactoryTest {
     }
 
     @Test
-    void testCreateHttpReaderWithURIAndProperties() throws IOException {
+    void httpReaderCreateWithURIAndProperties() throws IOException {
         Properties props = new Properties();
         props.setProperty("io.tileverse.rangereader.http.timeout-millis", "10000");
 
@@ -251,12 +240,9 @@ class RangeReaderFactoryTest {
         }
     }
 
-    // =========================================================================
-    // Provider Selection Tests
-    // =========================================================================
-
     @Test
     void testExplicitProviderSelection() throws IOException {
+
         Properties props = new Properties();
         props.put(RangeReaderConfig.URI_KEY, testFile.toUri());
         props.setProperty(RangeReaderConfig.PROVIDER_ID_KEY, "file");
@@ -268,7 +254,7 @@ class RangeReaderFactoryTest {
 
     @Test
     void testAutoProviderSelectionForFile() throws IOException {
-        // No explicit provider ID - factory should auto-select FileRangeReader
+
         Properties props = new Properties();
         props.put(RangeReaderConfig.URI_KEY, testFile.toUri());
 
@@ -279,7 +265,6 @@ class RangeReaderFactoryTest {
 
     @Test
     void testAutoProviderSelectionForHttp() throws IOException {
-        // No explicit provider ID - factory should auto-select HttpRangeReader
         Properties props = new Properties();
         props.put(RangeReaderConfig.URI_KEY, httpUri);
 

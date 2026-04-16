@@ -66,7 +66,9 @@ public class DigestAuthentication implements HttpAuthentication {
 
     @Override
     public HttpRequest.Builder authenticate(HttpClient httpClient, HttpRequest.Builder requestBuilder) {
-        URI uri = requestBuilder.build().uri();
+        HttpRequest request = requestBuilder.build();
+        URI uri = request.uri();
+        String method = request.method();
 
         // Try to get cached digest parameters for this URI
         DigestParams params = digestParamsCache.get(uri);
@@ -88,8 +90,8 @@ public class DigestAuthentication implements HttpAuthentication {
             }
         }
 
-        // Generate the digest response
-        String digestHeader = generateDigestHeader(uri, "GET", params);
+        // Generate the digest response using the actual HTTP method
+        String digestHeader = generateDigestHeader(uri, method, params);
 
         // Add the Authorization header
         return requestBuilder.header("Authorization", digestHeader);

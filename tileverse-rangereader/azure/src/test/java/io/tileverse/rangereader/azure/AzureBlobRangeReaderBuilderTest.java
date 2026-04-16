@@ -25,6 +25,8 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.URI;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
 
 class AzureBlobRangeReaderBuilderTest {
 
@@ -99,6 +101,7 @@ class AzureBlobRangeReaderBuilderTest {
     }
 
     @Test
+    @ResourceLock(Resources.SYSTEM_PROPERTIES)
     void testProviderAvailabilityToggle() {
         AzureBlobRangeReaderProvider provider = new AzureBlobRangeReaderProvider();
         assertTrue(provider.isAvailable());

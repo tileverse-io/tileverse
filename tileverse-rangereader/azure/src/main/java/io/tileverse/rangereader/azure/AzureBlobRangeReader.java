@@ -20,7 +20,6 @@ import static java.util.Objects.requireNonNull;
 import com.azure.core.credential.TokenCredential;
 import com.azure.core.http.rest.Response;
 import com.azure.core.util.logging.ClientLogger;
-import com.azure.identity.DefaultAzureCredential;
 import com.azure.identity.DefaultAzureCredentialBuilder;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobClientBuilder;
@@ -331,7 +330,7 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
             requireNonNull(uri, "URI cannot be null");
             String scheme = uri.getScheme().toLowerCase();
             if (!("https".equals(scheme) || "http".equals(scheme))) {
-                throw new IllegalArgumentException("URI must have azure, https, or blob scheme: " + uri);
+                throw new IllegalArgumentException("URI must have https, or blob scheme: " + uri);
             }
             this.endpoint = uri;
             return this;
@@ -393,14 +392,25 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
 
                 blobClientBuilder.credential(tokenCredential);
             } else if (endpointUrl.startsWith("https://%s.blob.core.windows.net".formatted(accountName))) {
-                // Use default Azure credential. REVISIT: should this be made a flag and AzureBlobRangeReaderProvider
-                // parameter instead?
-                DefaultAzureCredential defaultAzureCredential = new DefaultAzureCredentialBuilder().build();
-                blobClientBuilder.credential(defaultAzureCredential);
+                // Try anonymous access first to support public blobs
+                try {
+                    return new AzureBlobRangeReader(blobClientBuilder.buildClient());
+                } catch (IOException e) {
+                    if (!isAuthorizationFailure(e)) {
+                        throw e;
+                    }
+                    // Anonymous access denied, fall back to DefaultAzureCredential
+                    blobClientBuilder.credential(new DefaultAzureCredentialBuilder().build());
+                }
             }
 
             BlobClient client = blobClientBuilder.buildClient();
             return new AzureBlobRangeReader(client);
+        }
+
+        private static boolean isAuthorizationFailure(IOException e) {
+            return e.getCause() instanceof BlobStorageException bse
+                    && (bse.getStatusCode() == 403 || bse.getStatusCode() == 401);
         }
     }
 }

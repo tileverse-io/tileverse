@@ -384,6 +384,14 @@
             <skip>${surefire.skip}</skip>
             <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
             <argLine>@{argLine} --enable-native-access=ALL-UNNAMED --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
+            <systemPropertyVariables>
+              <junit.jupiter.execution.parallel.enabled>true</junit.jupiter.execution.parallel.enabled>
+              <junit.jupiter.execution.parallel.mode.default>concurrent</junit.jupiter.execution.parallel.mode.default>
+              <junit.jupiter.execution.parallel.mode.classes.default>concurrent</junit.jupiter.execution.parallel.mode.classes.default>
+              <junit.jupiter.execution.parallel.config.strategy>dynamic</junit.jupiter.execution.parallel.config.strategy>
+              <junit.jupiter.execution.parallel.config.dynamic.factor>1</junit.jupiter.execution.parallel.config.dynamic.factor>
+            </systemPropertyVariables>
+
           </configuration>
         </plugin>
         <plugin>
@@ -395,6 +403,14 @@
             <skip>${failsafe.skip}</skip>
             <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
             <argLine>@{argLine} --enable-native-access=ALL-UNNAMED --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
+            <systemPropertyVariables>
+              <junit.jupiter.execution.parallel.enabled>true</junit.jupiter.execution.parallel.enabled>
+              <junit.jupiter.execution.parallel.mode.default>concurrent</junit.jupiter.execution.parallel.mode.default>
+              <junit.jupiter.execution.parallel.mode.classes.default>concurrent</junit.jupiter.execution.parallel.mode.classes.default>
+              <junit.jupiter.execution.parallel.config.strategy>dynamic</junit.jupiter.execution.parallel.config.strategy>
+              <junit.jupiter.execution.parallel.config.dynamic.factor>1</junit.jupiter.execution.parallel.config.dynamic.factor>
+            </systemPropertyVariables>
+
           </configuration>
           <executions>
             <execution>

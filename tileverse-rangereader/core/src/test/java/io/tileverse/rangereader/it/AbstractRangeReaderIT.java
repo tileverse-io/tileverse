@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Random;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -120,15 +119,6 @@ public abstract class AbstractRangeReaderIT {
                 CachingRangeReader.builder(createBaseReader()).build();
         return new BlockAlignedRangeReader(cachingReader, blockSize);
     }
-
-    /**
-     * Setup that happens before each test.
-     * Subclasses should implement this method to set up any necessary resources.
-     *
-     * @throws IOException If an I/O error occurs
-     */
-    @BeforeEach
-    protected abstract void setUp() throws IOException;
 
     /**
      * Tests basic read operations of the base RangeReader.

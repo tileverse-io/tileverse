@@ -15,6 +15,7 @@
  */
 package io.tileverse.rangereader.http;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,6 +29,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.testcontainers.containers.NginxContainer;
@@ -55,7 +57,7 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
 
     @BeforeAll
     @SuppressWarnings("resource")
-    static void setupNginx(@TempDir Path tempDir) throws IOException, InterruptedException {
+    static void setupNginx(@TempDir Path tempDir) throws IOException {
         System.out.println("Setting up Nginx container for HTTP Range Reader tests...");
 
         // Create local placeholder file for the abstract test class
@@ -79,10 +81,9 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
         }
     }
 
-    @Override
-    protected void setUp() throws IOException {
-        // Make the test file accessible to the abstract test class
-        testFile = testFilePath;
+    @BeforeEach
+    void setUp() {
+        super.testFile = testFilePath;
     }
 
     @Override
@@ -95,15 +96,11 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
      */
     @Test
     void testHttpRangeReaderBuilder() throws IOException {
-        // Create RangeReader using builder
         try (RangeReader reader = HttpRangeReader.builder().uri(testFileUri).build()) {
-            // Verify it's the right implementation
-            assertTrue(reader instanceof HttpRangeReader, "Should be an HttpRangeReader instance");
+            assertThat(reader).isInstanceOf(HttpRangeReader.class);
 
-            // Verify size matches
             assertEquals(TEST_FILE_SIZE, reader.size().getAsLong(), "File size should match");
 
-            // Read some data to verify it works correctly
             ByteBuffer buffer = reader.readRange(0, 10).flip();
             assertEquals(10, buffer.remaining(), "Should read 10 bytes");
         }
@@ -126,32 +123,25 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
     }
 
     @Test
-    void testHttpRangeReaderWithInvalidUrl() throws IOException {
-        // We'll use the testFileUri but append a nonexistent path to ensure it 404s
+    void testHttpRangeReaderWithInvalidUrl() {
         URI invalidUri = URI.create(testFileUri.toString() + ".does-not-exist");
 
-        // Constructor should succeed (lazy initialization)
         HttpRangeReader reader = HttpRangeReader.of(invalidUri);
 
-        // But calling size() should throw an IOException due to the invalid URL
         assertThrows(IOException.class, reader::size, "Calling size() with a nonexistent URL should throw IOException");
     }
 
     @Test
     void testMultipleConsecutiveRangeRequests() throws IOException {
-        // Test making multiple consecutive range requests to verify connection handling
         try (RangeReader reader = createBaseReader()) {
-            // Verify size as sanity check
             assertEquals(TEST_FILE_SIZE, reader.size().getAsLong(), "File size should match");
 
-            // Make multiple consecutive range requests
             for (int i = 0; i < 5; i++) {
                 int offset = i * 1000;
                 ByteBuffer buffer = reader.readRange(offset, 100).flip();
                 assertEquals(100, buffer.remaining(), "Range request " + i + " should return 100 bytes");
             }
 
-            // Make a request at the end of the file
             ByteBuffer endBuffer = reader.readRange(TEST_FILE_SIZE - 50, 100).flip();
             assertEquals(50, endBuffer.remaining(), "Range request at end of file should be truncated");
         }
@@ -159,21 +149,18 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
 
     @Test
     void testSmallAndLargeRangeRequests() throws IOException {
-        // Test a mix of small and large range requests
+
         try (RangeReader reader = createBaseReader()) {
-            // Small range request (10 bytes)
+
             ByteBuffer smallBuffer = reader.readRange(100, 10).flip();
             assertEquals(10, smallBuffer.remaining(), "Small range request should return 10 bytes");
 
-            // Medium range request (1KB)
             ByteBuffer mediumBuffer = reader.readRange(5000, 1024).flip();
             assertEquals(1024, mediumBuffer.remaining(), "Medium range request should return 1024 bytes");
 
-            // Large range request (10KB)
             ByteBuffer largeBuffer = reader.readRange(10000, 10240).flip();
             assertEquals(10240, largeBuffer.remaining(), "Large range request should return 10240 bytes");
 
-            // Very large range request (50KB)
             ByteBuffer veryLargeBuffer = reader.readRange(20000, 51200).flip();
             assertEquals(51200, veryLargeBuffer.remaining(), "Very large range request should return 51200 bytes");
         }
@@ -181,11 +168,9 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
 
     @Test
     void testReadingAcrossChunkBoundaries() throws IOException {
-        // Test reading across potential chunk boundaries in HTTP responses
+
         try (RangeReader reader = createBaseReader()) {
-            // Read a range that spans typical chunk boundaries (4KB, 8KB, 16KB)
             for (int chunkSize : new int[] {4096, 8192, 16384}) {
-                // Read range that starts before chunk boundary and ends after it
                 int startOffset = chunkSize - 100;
                 int length = 200;
 

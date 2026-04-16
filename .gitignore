@@ -1,3 +1,5 @@
+# all dot files, use git add --force if one is actually needed
+.*
 # Maven
 target/
 !.mvn/wrapper/maven-wrapper.jar

@@ -111,11 +111,6 @@ public class GoogleCloudStorageRangeReaderIT extends AbstractRangeReaderIT {
     }
 
     @Override
-    protected void setUp() throws IOException {
-        // Nothing needed here since all setup is done in @BeforeAll
-    }
-
-    @Override
     protected RangeReader createBaseReader() throws IOException {
         // Use explicit no-op credentials so local ADC state does not interfere with emulator tests.
         String emulatorHost = gcsEmulator.getHost();

@@ -30,7 +30,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
-import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -48,16 +47,14 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 /**
  * Comprehensive tests for HttpRangeReader using WireMock.
  */
-@WireMockTest
 class HttpRangeReaderTest {
 
     private static final String TEST_PATH = "/test-pmtiles";
     private static final byte[] TEST_DATA = createTestData(100_000); // 100KB of test data
-    private static final int TEST_PORT = 8089;
 
     @RegisterExtension
-    static WireMockExtension wm = WireMockExtension.newInstance()
-            .options(wireMockConfig().port(TEST_PORT))
+    WireMockExtension wm = WireMockExtension.newInstance()
+            .options(wireMockConfig().dynamicPort())
             .build();
 
     private URI testUri;
@@ -75,8 +72,8 @@ class HttpRangeReaderTest {
     }
 
     @BeforeEach
-    void setUp() throws IOException {
-        testUri = URI.create("http://localhost:" + TEST_PORT + TEST_PATH);
+    void setUp() {
+        testUri = URI.create("http://localhost:" + wm.getPort() + TEST_PATH);
 
         // Set up WireMock stubs
         // HEAD request to get content length
@@ -279,7 +276,7 @@ class HttpRangeReaderTest {
     }
 
     @Test
-    void testServerWithoutRangeSupport() throws IOException {
+    void testServerWithoutRangeSupport() {
         // Create a stub for a server that doesn't support range requests
         wm.stubFor(head(urlEqualTo("/no-range"))
                 .willReturn(aResponse()
@@ -287,7 +284,7 @@ class HttpRangeReaderTest {
                         .withHeader("Content-Length", String.valueOf(TEST_DATA.length))
                         .withHeader("Accept-Ranges", "none")));
 
-        URI noRangeUri = URI.create("http://localhost:" + TEST_PORT + "/no-range");
+        URI noRangeUri = URI.create("http://localhost:" + wm.getPort() + "/no-range");
 
         // Should throw when readRange() is called (triggering range support initialization)
         HttpRangeReader reader = HttpRangeReader.of(noRangeUri);
@@ -295,7 +292,7 @@ class HttpRangeReaderTest {
     }
 
     @Test
-    void testServerReturningEntireFileForRangeRequest() throws IOException {
+    void testServerReturningEntireFileForRangeRequest() {
         // Request parameters
         int offset = 1000;
         int length = 200;
@@ -315,7 +312,7 @@ class HttpRangeReaderTest {
                         .withHeader("Content-Length", String.valueOf(TEST_DATA.length))
                         .withHeader("Accept-Ranges", "bytes")));
 
-        URI ignoreRangeUri = URI.create("http://localhost:" + TEST_PORT + "/ignore-range");
+        URI ignoreRangeUri = URI.create("http://localhost:" + wm.getPort() + "/ignore-range");
 
         // Should throw IOException when server doesn't support range requests (returns 200 instead of 206)
         try (HttpRangeReader ignoreRangeReader = HttpRangeReader.of(ignoreRangeUri)) {
@@ -344,7 +341,7 @@ class HttpRangeReaderTest {
                         .withHeader("Content-Length", String.valueOf(TEST_DATA.length))
                         .withHeader("Accept-Ranges", "bytes")));
 
-        URI errorUri = URI.create("http://localhost:" + TEST_PORT + "/error");
+        URI errorUri = URI.create("http://localhost:" + wm.getPort() + "/error");
 
         // Should be able to create the reader
         try (HttpRangeReader errorReader = HttpRangeReader.of(errorUri)) {
@@ -453,7 +450,7 @@ class HttpRangeReaderTest {
                         // No Content-Length header
                         ));
 
-        URI noContentLengthUri = URI.create("http://localhost:" + TEST_PORT + "/no-content-length");
+        URI noContentLengthUri = URI.create("http://localhost:" + wm.getPort() + "/no-content-length");
 
         try (HttpRangeReader reader =
                 HttpRangeReader.builder(noContentLengthUri).build()) {
@@ -473,7 +470,7 @@ class HttpRangeReaderTest {
                         .withHeader("Accept-Ranges", "bytes")
                         .withHeader("Content-Length", "-1")));
 
-        URI invalidContentLengthUri = URI.create("http://localhost:" + TEST_PORT + "/invalid-content-length");
+        URI invalidContentLengthUri = URI.create("http://localhost:" + wm.getPort() + "/invalid-content-length");
 
         HttpRangeReader reader =
                 HttpRangeReader.builder(invalidContentLengthUri).build();
@@ -482,7 +479,7 @@ class HttpRangeReaderTest {
     }
 
     @Test
-    void testConnectionFailure() throws IOException {
+    void testConnectionFailure() {
         // Test behavior when connection fails
         URI nonExistentUri = URI.create("http://non-existent-host.example/test.pmtiles");
 
@@ -492,12 +489,12 @@ class HttpRangeReaderTest {
     }
 
     @Test
-    void testServerErrorOnHead() throws IOException {
+    void testServerErrorOnHead() {
         // Test behavior when server returns error on HEAD
         wm.stubFor(head(urlEqualTo("/server-error"))
                 .willReturn(aResponse().withStatus(500).withBody("Internal Server Error")));
 
-        URI serverErrorUri = URI.create("http://localhost:" + TEST_PORT + "/server-error");
+        URI serverErrorUri = URI.create("http://localhost:" + wm.getPort() + "/server-error");
 
         // Should throw when size() is called (triggering initialization)
         HttpRangeReader reader = HttpRangeReader.of(serverErrorUri);

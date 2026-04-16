@@ -15,8 +15,9 @@
  */
 package io.tileverse.rangereader.azure;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
@@ -45,7 +46,8 @@ class AzureBlobRangeReaderIT extends AbstractRangeReaderIT {
 
     private static final String CONTAINER_NAME = "test-container";
     private static final String BLOB_NAME = "test.bin";
-    // These are the default account name and key used by Azurite
+
+    // default account name and key used by Azurite
     private static final String ACCOUNT_NAME = "devstoreaccount1";
     private static final String ACCOUNT_KEY =
             "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==";
@@ -64,22 +66,13 @@ class AzureBlobRangeReaderIT extends AbstractRangeReaderIT {
 
     @BeforeAll
     static void setupAzure() throws IOException {
-        // Create a test file
         testFile = TestUtil.createTempTestFile(TEST_FILE_SIZE);
-
-        // Configure connection string to Azurite
         connectionString = azurite.getConnectionString();
-
-        // Initialize Blob Service client with client options that disable API version validation
-        // Use a lower API version that's compatible with Azurite
         blobServiceClient = new BlobServiceClientBuilder()
                 .connectionString(azurite.getConnectionString())
                 .buildClient();
 
-        // Create container
         containerClient = blobServiceClient.createBlobContainer(CONTAINER_NAME);
-
-        // Upload the test file
         containerClient.getBlobClient(BLOB_NAME).uploadFromFile(testFile.toString(), true);
     }
 
@@ -94,14 +87,11 @@ class AzureBlobRangeReaderIT extends AbstractRangeReaderIT {
         }
     }
 
-    @Override
-    protected void setUp() throws IOException {
-        // Nothing needed here since all setup is done in @BeforeAll
-    }
-
+    /**
+     * Creates AzureBlobRangeReader using the factory method with connection string
+     */
     @Override
     protected RangeReader createBaseReader() throws IOException {
-        // Create AzureBlobRangeReader using the factory method with connection string
 
         Integer port = azurite.getMappedPort(10000);
         URI uri = URI.create("http://localhost:%d/%s/%s/%s".formatted(port, ACCOUNT_NAME, CONTAINER_NAME, BLOB_NAME));
@@ -122,26 +112,23 @@ class AzureBlobRangeReaderIT extends AbstractRangeReaderIT {
      */
     @Test
     void testAzureBlobRangeReaderImplementation() throws IOException {
-        // Create RangeReader directly to verify implementation
         try (RangeReader reader = AzureBlobRangeReader.builder()
                 .connectionString(connectionString)
                 .containerName(CONTAINER_NAME)
                 .blobName(BLOB_NAME)
                 .build()) {
 
-            // Verify it's the right implementation
-            assertTrue(reader instanceof AzureBlobRangeReader, "Should be an AzureBlobRangeReader instance");
+            assertThat(reader).isInstanceOf(AzureBlobRangeReader.class);
         }
     }
 
     @Test
     void testAzureBlobWithAccountCredentials() throws IOException {
-        // Get the Azurite blob endpoint
+
         String azuriteHost = azurite.getHost();
         Integer azuritePort = azurite.getMappedPort(10000);
         String blobEndpoint = String.format("http://%s:%d/%s", azuriteHost, azuritePort, ACCOUNT_NAME);
 
-        // Create StorageSharedKeyCredential
         StorageSharedKeyCredential credential = new StorageSharedKeyCredential(ACCOUNT_NAME, ACCOUNT_KEY);
 
         BlobServiceClient blobServiceClient = new BlobServiceClientBuilder()
@@ -150,12 +137,12 @@ class AzureBlobRangeReaderIT extends AbstractRangeReaderIT {
                 // .serviceVersion(com.azure.storage.blob.BlobServiceVersion.V2019_12_12)
                 .buildClient();
 
-        // Create RangeReader directly
-        try (AzureBlobRangeReader reader = new AzureBlobRangeReader(
-                blobServiceClient.getBlobContainerClient(CONTAINER_NAME).getBlobClient(BLOB_NAME))) {
-
-            // Verify this alternative construction method works
-            assertTrue(reader != null, "Should create reader with account credentials");
+        BlobClient blobClient =
+                blobServiceClient.getBlobContainerClient(CONTAINER_NAME).getBlobClient(BLOB_NAME);
+        try (AzureBlobRangeReader reader = new AzureBlobRangeReader(blobClient)) {
+            assertThat(reader)
+                    .as("Should create reader with account credentials")
+                    .isNotNull();
         }
     }
 }

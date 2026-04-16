@@ -169,14 +169,14 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
 
     @Override
     public boolean canProcess(RangeReaderConfig config) {
-        if (!RangeReaderConfig.matches(config, getId(), "http", "https")) {
+        if (!RangeReaderConfig.matches(config, getId(), "https", "http")) {
             return false;
         }
         URI endpointUrl = config.uri();
         BlobUrlParts parts;
         try {
-            parts = BlobUrlParts.parse(endpointUrl.toString());
-        } catch (Exception e) {
+            parts = parseBlobUrlParts(endpointUrl);
+        } catch (RuntimeException e) {
             return false;
         }
         if (parts.getHost() == null || parts.getBlobContainerName() == null) {
@@ -187,6 +187,15 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
             return config.getParameter(AZURE_BLOB_NAME).isPresent();
         }
         return true;
+    }
+
+    static BlobUrlParts parseBlobUrlParts(URI endpointUrl) {
+        String scheme = endpointUrl.getScheme();
+        if (!("https".equals(scheme) || "http".equals(scheme))) {
+            throw new IllegalArgumentException("URI must have https, or blob scheme: " + endpointUrl);
+        }
+        String url = endpointUrl.toString();
+        return BlobUrlParts.parse(url);
     }
 
     @Override

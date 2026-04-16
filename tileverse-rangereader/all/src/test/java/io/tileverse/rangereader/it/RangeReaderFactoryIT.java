@@ -350,9 +350,10 @@ class RangeReaderFactoryIT {
                 .isInstanceOf(expected);
     }
 
-    static RangeReader testCreate(RangeReaderConfig config, Class<? extends RangeReader> expected) throws IOException {
+    static RangeReader testCreate(RangeReaderConfig config, Class<? extends RangeReader> expectedRangeReaderType)
+            throws IOException {
         RangeReader reader = RangeReaderFactory.create(config);
-        assertThat(reader).isInstanceOf(expected);
+        assertThat(reader).isInstanceOf(expectedRangeReaderType);
         ByteBuffer range = reader.readRange(0, 100);
         assertThat(range.limit()).isEqualTo(100);
         return reader;

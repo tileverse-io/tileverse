@@ -33,7 +33,6 @@ import org.apache.avro.generic.GenericRecord;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.junit.jupiter.api.Test;
 import org.locationtech.jts.geom.Geometry;
-import org.locationtech.jts.io.WKBReader;
 
 class GeoparquetFeatureReaderTest {
 
@@ -41,7 +40,7 @@ class GeoparquetFeatureReaderTest {
         SimpleFeatureTypeBuilder b = new SimpleFeatureTypeBuilder();
         b.setName("test");
         b.add("id", String.class);
-        return new GeoparquetFeatureReader(b.buildFeatureType(), emptyIterator(), new WKBReader());
+        return new GeoparquetFeatureReader(b.buildFeatureType(), emptyIterator());
     }
 
     @Test

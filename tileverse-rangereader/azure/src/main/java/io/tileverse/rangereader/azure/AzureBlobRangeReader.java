@@ -19,7 +19,6 @@ import static java.util.Objects.requireNonNull;
 
 import com.azure.core.credential.TokenCredential;
 import com.azure.core.http.rest.Response;
-import com.azure.core.util.logging.ClientLogger;
 import com.azure.identity.DefaultAzureCredentialBuilder;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobClientBuilder;
@@ -30,7 +29,7 @@ import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.models.DownloadRetryOptions;
 import com.azure.storage.common.StorageSharedKeyCredential;
-import com.azure.storage.common.implementation.connectionstring.StorageConnectionString;
+import com.azure.storage.common.policy.RequestRetryOptions;
 import io.tileverse.rangereader.AbstractRangeReader;
 import io.tileverse.rangereader.RangeReader;
 import java.io.ByteArrayOutputStream;
@@ -65,7 +64,7 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
 
         // Check if the blob exists and get its content length
         try {
-            if (!blobClient.exists()) {
+            if (!blobClient.exists().booleanValue()) {
                 throw new IOException("Blob does not exist: " + blobClient.getBlobUrl());
             }
 
@@ -227,6 +226,8 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
          */
         private URI endpoint;
 
+        private RequestRetryOptions retryOptions;
+
         private Builder() {}
 
         /**
@@ -320,6 +321,22 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
         }
 
         /**
+         * Sets the retry options for the underlying Azure Storage client.
+         *
+         * <p>Controls how failed requests are retried (number of attempts, delay between retries,
+         * timeout per attempt, etc.). If not set, the Azure SDK defaults apply (4 tries,
+         * exponential backoff starting at 4 seconds).
+         *
+         * @param retryOptions the retry options
+         * @return this builder
+         * @see RequestRetryOptions
+         */
+        public Builder retryOptions(RequestRetryOptions retryOptions) {
+            this.retryOptions = requireNonNull(retryOptions, "Retry options cannot be null");
+            return this;
+        }
+
+        /**
          * Sets the blob information from an Azure URI.
          *
          * @param uri the Azure URI (https://account.blob.core.windows.net/container/blob or https://...)
@@ -345,22 +362,48 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
         public AzureBlobRangeReader build() throws IOException {
 
             BlobClientBuilder blobClientBuilder = new BlobClientBuilder();
-
-            String accountName = this.accountName;
-            String accountKey = this.accountKey;
-            String endpointUrl;
+            if (retryOptions != null) {
+                blobClientBuilder.retryOptions(retryOptions);
+            }
 
             if (endpoint != null) {
-                endpointUrl = endpoint.toString();
+                String endpointUrl = endpoint.toString();
+                String accountName = this.accountName;
+
                 // sets accountName, endpoint, containerName, and blobName from the URI
                 // also extracts the sasToken if present in the query string
                 blobClientBuilder.endpoint(endpointUrl);
                 if (accountName == null) {
-                    // but does not provide accessors, parse accountName
+                    // BlobClientBuilder does not provide accessors, parse accountName
                     BlobUrlParts parts = BlobUrlParts.parse(endpointUrl);
                     accountName = parts.getAccountName();
                 }
+
+                // Configure authentication for endpoint-based access
+                if (accountName != null && accountKey != null) {
+                    StorageSharedKeyCredential credential = new StorageSharedKeyCredential(accountName, accountKey);
+                    blobClientBuilder.credential(credential);
+                } else if (accountName != null && sasToken != null) {
+                    String sasTokenWithQuestion = sasToken.startsWith("?") ? sasToken : "?" + sasToken;
+                    blobClientBuilder.sasToken(sasTokenWithQuestion);
+                } else if (tokenCredential != null) {
+                    blobClientBuilder.credential(tokenCredential);
+                } else if (endpointUrl.startsWith("https://%s.blob.core.windows.net".formatted(accountName))) {
+                    try {
+                        return new AzureBlobRangeReader(blobClientBuilder.buildClient());
+                    } catch (IOException e) {
+                        if (!isAuthorizationFailure(e)) {
+                            throw e;
+                        }
+                        LOGGER.fine("Anonymous access denied, fall back to DefaultAzureCredential");
+                        blobClientBuilder.credential(new DefaultAzureCredentialBuilder().build());
+                    }
+                }
             } else if (connectionString != null) {
+                // BlobClientBuilder.connectionString() configures both the endpoint and authentication (AccountKey,
+                // SharedAccessSignature, etc.) from the string.
+                // No additional credential routing is needed — adding it would be redundant and risks slow failures
+                // from DefaultAzureCredential probing (IMDS timeouts, Azure CLI credential checks, etc.)
                 if (containerName == null || blobName == null) {
                     throw new IllegalStateException("Container name and blob path are required with connection string");
                 }
@@ -368,40 +411,9 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
                         .connectionString(connectionString)
                         .containerName(containerName)
                         .blobName(blobName);
-                StorageConnectionString storageConnectionString =
-                        StorageConnectionString.create(connectionString, new ClientLogger(AzureBlobRangeReader.class));
-                accountName = storageConnectionString.getAccountName();
-                endpointUrl = storageConnectionString.getBlobEndpoint().getPrimaryUri();
             } else {
                 throw new IllegalStateException(
                         "Either provide the endpoint URI or connectionString, containerName, and blobName");
-            }
-
-            // authentication
-            if (accountName != null && accountKey != null) {
-
-                StorageSharedKeyCredential credential = new StorageSharedKeyCredential(accountName, accountKey);
-                blobClientBuilder.credential(credential);
-
-            } else if (accountName != null && sasToken != null) {
-
-                String sasTokenWithQuestion = sasToken.startsWith("?") ? sasToken : "?" + sasToken;
-                blobClientBuilder.sasToken(sasTokenWithQuestion);
-
-            } else if (tokenCredential != null) {
-
-                blobClientBuilder.credential(tokenCredential);
-            } else if (endpointUrl.startsWith("https://%s.blob.core.windows.net".formatted(accountName))) {
-                // Try anonymous access first to support public blobs
-                try {
-                    return new AzureBlobRangeReader(blobClientBuilder.buildClient());
-                } catch (IOException e) {
-                    if (!isAuthorizationFailure(e)) {
-                        throw e;
-                    }
-                    // Anonymous access denied, fall back to DefaultAzureCredential
-                    blobClientBuilder.credential(new DefaultAzureCredentialBuilder().build());
-                }
             }
 
             BlobClient client = blobClientBuilder.buildClient();

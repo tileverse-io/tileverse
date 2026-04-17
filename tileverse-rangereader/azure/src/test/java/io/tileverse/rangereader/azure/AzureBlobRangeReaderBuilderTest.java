@@ -20,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.azure.storage.common.policy.RequestRetryOptions;
+import com.azure.storage.common.policy.RetryPolicyType;
 import io.tileverse.rangereader.spi.RangeReaderProvider;
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -91,11 +93,15 @@ class AzureBlobRangeReaderBuilderTest {
 
     @Test
     void testBuildWithIncompleteConnectionStringFailsFast() {
+        // Point to localhost:1 (instant connection refused, no DNS or TCP timeout)
+        // and disable retries so the test completes in under a second.
         IOException ex = assertThrows(IOException.class, () -> AzureBlobRangeReader.builder()
-                .connectionString(
-                        "DefaultEndpointsProtocol=https;AccountName=test;AccountKey=secret;EndpointSuffix=core.windows.net")
+                .connectionString("DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;"
+                        + "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;"
+                        + "BlobEndpoint=http://127.0.0.1:1/devstoreaccount1")
                 .containerName("container")
                 .blobName("blob.pmtiles")
+                .retryOptions(new RequestRetryOptions(RetryPolicyType.FIXED, 1, (Integer) null, null, null, null))
                 .build());
         assertNotNull(ex.getMessage());
     }

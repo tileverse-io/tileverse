@@ -15,6 +15,8 @@
  */
 package io.tileverse.parquet;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -24,6 +26,7 @@ import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.parquet.avro.AvroSchemaConverter;
+import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.io.api.Converter;
 import org.apache.parquet.io.api.GroupConverter;
@@ -31,8 +34,11 @@ import org.apache.parquet.io.api.PrimitiveConverter;
 import org.apache.parquet.io.api.RecordMaterializer;
 import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.UUIDLogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType;
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 import org.apache.parquet.schema.Type;
 
 /**
@@ -415,26 +421,69 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
 
     /**
      * Converter for Parquet primitive values, translating to the corresponding Avro type.
+     *
+     * <p>Handles logical type conversions (DECIMAL, UUID, ENUM) and dictionary optimization
+     * for binary-backed types.
      */
     static final class PrimitiveValueConverter extends PrimitiveConverter {
+
+        private enum ConversionMode {
+            DEFAULT,
+            DECIMAL_INT,
+            DECIMAL_LONG,
+            DECIMAL_BINARY,
+            UUID,
+            ENUM
+        }
+
         private final PrimitiveType primitiveType;
         private final Schema schema;
         private final ValueConsumer consumer;
+        private final ConversionMode mode;
+        private final int decimalScale;
+        private Object[] dict;
 
         PrimitiveValueConverter(PrimitiveType primitiveType, Schema schema, ValueConsumer consumer) {
             this.primitiveType = primitiveType;
             this.schema = unwrapNullable(schema);
             this.consumer = consumer;
+
+            LogicalTypeAnnotation annotation = primitiveType.getLogicalTypeAnnotation();
+            if (annotation instanceof DecimalLogicalTypeAnnotation decimal) {
+                this.decimalScale = decimal.getScale();
+                this.mode = switch (primitiveType.getPrimitiveTypeName()) {
+                    case INT32 -> ConversionMode.DECIMAL_INT;
+                    case INT64 -> ConversionMode.DECIMAL_LONG;
+                    default -> ConversionMode.DECIMAL_BINARY;
+                };
+            } else if (annotation instanceof UUIDLogicalTypeAnnotation) {
+                this.decimalScale = 0;
+                this.mode = ConversionMode.UUID;
+            } else if (this.schema.getType() == Schema.Type.ENUM) {
+                this.decimalScale = 0;
+                this.mode = ConversionMode.ENUM;
+            } else {
+                this.decimalScale = 0;
+                this.mode = ConversionMode.DEFAULT;
+            }
         }
 
         @Override
         public void addInt(int value) {
-            consumer.accept(value);
+            if (mode == ConversionMode.DECIMAL_INT) {
+                consumer.accept(new BigDecimal(BigInteger.valueOf(value), decimalScale));
+            } else {
+                consumer.accept(value);
+            }
         }
 
         @Override
         public void addLong(long value) {
-            consumer.accept(value);
+            if (mode == ConversionMode.DECIMAL_LONG) {
+                consumer.accept(new BigDecimal(BigInteger.valueOf(value), decimalScale));
+            } else {
+                consumer.accept(value);
+            }
         }
 
         @Override
@@ -457,7 +506,36 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
             consumer.accept(convertBinary(value));
         }
 
+        @Override
+        public boolean hasDictionarySupport() {
+            PrimitiveTypeName typeName = primitiveType.getPrimitiveTypeName();
+            return typeName == PrimitiveTypeName.BINARY || typeName == PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY;
+        }
+
+        @Override
+        public void setDictionary(Dictionary dictionary) {
+            dict = new Object[dictionary.getMaxId() + 1];
+            for (int i = 0; i <= dictionary.getMaxId(); i++) {
+                dict[i] = convertBinary(dictionary.decodeToBinary(i));
+            }
+        }
+
+        @Override
+        public void addValueFromDictionary(int dictionaryId) {
+            Object value = dict[dictionaryId];
+            consumer.accept(value instanceof ByteBuffer bb ? bb.duplicate() : value);
+        }
+
         private Object convertBinary(Binary value) {
+            if (mode == ConversionMode.DECIMAL_BINARY) {
+                return new BigDecimal(new BigInteger(value.getBytes()), decimalScale);
+            }
+            if (mode == ConversionMode.UUID) {
+                return primitiveType.stringifier().stringify(value);
+            }
+            if (mode == ConversionMode.ENUM) {
+                return new GenericData.EnumSymbol(schema, value.toStringUsingUTF8());
+            }
             Schema.Type avroType = schema.getType();
             if (avroType == Schema.Type.STRING) {
                 return value.toStringUsingUTF8();

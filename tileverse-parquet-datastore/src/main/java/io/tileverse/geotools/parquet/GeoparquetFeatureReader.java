@@ -17,17 +17,23 @@ package io.tileverse.geotools.parquet;
 
 import io.tileverse.parquet.CloseableIterator;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericFixed;
 import org.apache.avro.generic.GenericRecord;
 import org.geotools.api.data.SimpleFeatureReader;
@@ -133,6 +139,7 @@ class GeoparquetFeatureReader implements SimpleFeatureReader {
 
     Object normalizeAvroValue(Object value) {
         if (value == null) return null;
+        if (value instanceof GenericData.EnumSymbol e) return e.toString();
         if (value instanceof CharSequence chars) return chars.toString();
         if (value instanceof ByteBuffer buf) {
             ByteBuffer copy = buf.duplicate();
@@ -170,8 +177,15 @@ class GeoparquetFeatureReader implements SimpleFeatureReader {
         if (binding == Float.class && value instanceof Number n) return n.floatValue();
         if (binding == Double.class && value instanceof Number n) return n.doubleValue();
         if (binding == Boolean.class && value instanceof Boolean b) return b;
+        if (binding == BigDecimal.class && value instanceof BigDecimal bd) return bd;
+        if (binding == UUID.class && value instanceof String s) return UUID.fromString(s);
         if (binding == LocalDate.class && value instanceof Number n) return LocalDate.ofEpochDay(n.longValue());
+        if (binding == LocalTime.class && value instanceof Integer n)
+            return LocalTime.ofNanoOfDay(n.longValue() * 1_000_000L);
+        if (binding == LocalTime.class && value instanceof Long n) return LocalTime.ofNanoOfDay(n * 1000L);
         if (binding == Instant.class && value instanceof Number n) return Instant.ofEpochMilli(n.longValue());
+        if (binding == LocalDateTime.class && value instanceof Number n)
+            return Instant.ofEpochMilli(n.longValue()).atOffset(ZoneOffset.UTC).toLocalDateTime();
         return value;
     }
 

@@ -20,13 +20,19 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tileverse.parquet.CloseableIterator;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.UUID;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
@@ -130,6 +136,63 @@ class GeoparquetFeatureReaderTest {
     void convertValue_nullReturnsNull() throws IOException {
         GeoparquetFeatureReader reader = createReader();
         assertThat(reader.convertValue(null, String.class)).isNull();
+    }
+
+    // --- P6: Datastore type conversion tests ---
+
+    @Test
+    void normalizeAvroValue_handlesEnumSymbol() {
+        GeoparquetFeatureReader reader = createReader();
+        Schema enumSchema = Schema.createEnum("Color", null, null, List.of("RED", "GREEN", "BLUE"));
+        GenericData.EnumSymbol sym = new GenericData.EnumSymbol(enumSchema, "GREEN");
+        assertThat(reader.normalizeAvroValue(sym)).isEqualTo("GREEN");
+    }
+
+    @Test
+    void convertValue_bigDecimal_passesThrough() throws IOException {
+        GeoparquetFeatureReader reader = createReader();
+        BigDecimal bd = new BigDecimal("42.00");
+        assertThat(reader.convertValue(bd, BigDecimal.class)).isEqualTo(bd);
+    }
+
+    @Test
+    void convertValue_enumSymbol_toString() throws IOException {
+        GeoparquetFeatureReader reader = createReader();
+        Schema enumSchema = Schema.createEnum("Color", null, null, List.of("RED", "GREEN", "BLUE"));
+        GenericData.EnumSymbol sym = new GenericData.EnumSymbol(enumSchema, "RED");
+        assertThat(reader.convertValue(sym, String.class)).isEqualTo("RED");
+    }
+
+    @Test
+    void convertValue_uuidString_toJavaUUID() throws IOException {
+        GeoparquetFeatureReader reader = createReader();
+        String uuidStr = "550e8400-e29b-41d4-a827-446655440000";
+        assertThat(reader.convertValue(uuidStr, UUID.class)).isEqualTo(UUID.fromString(uuidStr));
+    }
+
+    @Test
+    void convertValue_intMillis_toLocalTime() throws IOException {
+        GeoparquetFeatureReader reader = createReader();
+        // 1 hour = 3_600_000 millis
+        int millis = 3_600_000;
+        assertThat(reader.convertValue(millis, LocalTime.class)).isEqualTo(LocalTime.of(1, 0));
+    }
+
+    @Test
+    void convertValue_longMicros_toLocalTime() throws IOException {
+        GeoparquetFeatureReader reader = createReader();
+        // 1 hour = 3_600_000_000 micros
+        long micros = 3_600_000_000L;
+        assertThat(reader.convertValue(micros, LocalTime.class)).isEqualTo(LocalTime.of(1, 0));
+    }
+
+    @Test
+    void convertValue_longMillis_toLocalDateTime() throws IOException {
+        GeoparquetFeatureReader reader = createReader();
+        long millis = 1700000000000L;
+        LocalDateTime expected =
+                Instant.ofEpochMilli(millis).atOffset(ZoneOffset.UTC).toLocalDateTime();
+        assertThat(reader.convertValue(millis, LocalDateTime.class)).isEqualTo(expected);
     }
 
     private static CloseableIterator<GenericRecord> emptyIterator() {

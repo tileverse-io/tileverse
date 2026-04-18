@@ -6,14 +6,19 @@ package io.tileverse.parquet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
+import org.apache.parquet.column.Dictionary;
+import org.apache.parquet.column.Encoding;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.io.api.GroupConverter;
 import org.apache.parquet.io.api.PrimitiveConverter;
@@ -243,6 +248,220 @@ class AvroMaterializerProviderTest {
         ((PrimitiveConverter) repeated.getConverter(1)).addInt(2);
         repeated.end();
         assertThat((List<?>) emitted.get()).hasSize(2);
+    }
+
+    // --- P0: Logical Type Conversion Tests ---
+
+    @Test
+    void addInt_decimal_producesBigDecimal() {
+        org.apache.parquet.schema.PrimitiveType decimalInt32 = Types.primitive(
+                        PrimitiveTypeName.INT32, Type.Repetition.REQUIRED)
+                .as(LogicalTypeAnnotation.decimalType(2, 9))
+                .named("price");
+        AtomicReference<Object> out = new AtomicReference<>();
+        PrimitiveConverter converter = new AvroMaterializerProvider.PrimitiveValueConverter(
+                decimalInt32, Schema.create(Schema.Type.INT), out::set);
+
+        converter.addInt(4200);
+        assertThat(out.get()).isEqualTo(new BigDecimal("42.00"));
+    }
+
+    @Test
+    void addLong_decimal_producesBigDecimal() {
+        org.apache.parquet.schema.PrimitiveType decimalInt64 = Types.primitive(
+                        PrimitiveTypeName.INT64, Type.Repetition.REQUIRED)
+                .as(LogicalTypeAnnotation.decimalType(6, 18))
+                .named("amount");
+        AtomicReference<Object> out = new AtomicReference<>();
+        PrimitiveConverter converter = new AvroMaterializerProvider.PrimitiveValueConverter(
+                decimalInt64, Schema.create(Schema.Type.LONG), out::set);
+
+        converter.addLong(1234567890L);
+        assertThat(out.get()).isEqualTo(new BigDecimal("1234.567890"));
+    }
+
+    @Test
+    void addBinary_decimal_producesBigDecimal() {
+        org.apache.parquet.schema.PrimitiveType decimalBinary = Types.primitive(
+                        PrimitiveTypeName.BINARY, Type.Repetition.REQUIRED)
+                .as(LogicalTypeAnnotation.decimalType(2, 10))
+                .named("val");
+        AtomicReference<Object> out = new AtomicReference<>();
+        PrimitiveConverter converter = new AvroMaterializerProvider.PrimitiveValueConverter(
+                decimalBinary, Schema.create(Schema.Type.BYTES), out::set);
+
+        // 4200 as big-endian bytes
+        byte[] bytes = java.math.BigInteger.valueOf(4200).toByteArray();
+        converter.addBinary(Binary.fromConstantByteArray(bytes));
+        assertThat(out.get()).isEqualTo(new BigDecimal("42.00"));
+    }
+
+    @Test
+    void addBinary_uuid_producesUUIDString() {
+        org.apache.parquet.schema.PrimitiveType uuidType = Types.primitive(
+                        PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY, Type.Repetition.REQUIRED)
+                .length(16)
+                .as(LogicalTypeAnnotation.uuidType())
+                .named("id");
+        AtomicReference<Object> out = new AtomicReference<>();
+        Schema fixedSchema = Schema.createFixed("uuid_fixed", null, null, 16);
+        PrimitiveConverter converter =
+                new AvroMaterializerProvider.PrimitiveValueConverter(uuidType, fixedSchema, out::set);
+
+        UUID expected = UUID.fromString("550e8400-e29b-41d4-a827-446655440000");
+        ByteBuffer bb = ByteBuffer.allocate(16).order(ByteOrder.BIG_ENDIAN);
+        bb.putLong(expected.getMostSignificantBits());
+        bb.putLong(expected.getLeastSignificantBits());
+
+        converter.addBinary(Binary.fromConstantByteArray(bb.array()));
+        assertThat(out.get()).isEqualTo("550e8400-e29b-41d4-a827-446655440000");
+    }
+
+    @Test
+    void addBinary_enum_producesEnumSymbol() {
+        org.apache.parquet.schema.PrimitiveType binType = Types.primitive(
+                        PrimitiveTypeName.BINARY, Type.Repetition.REQUIRED)
+                .named("color");
+        Schema enumSchema = Schema.createEnum("Color", null, null, List.of("RED", "GREEN", "BLUE"));
+        AtomicReference<Object> out = new AtomicReference<>();
+        PrimitiveConverter converter =
+                new AvroMaterializerProvider.PrimitiveValueConverter(binType, enumSchema, out::set);
+
+        converter.addBinary(Binary.fromString("RED"));
+        assertThat(out.get()).isInstanceOf(GenericData.EnumSymbol.class);
+        assertThat(out.get().toString()).isEqualTo("RED");
+    }
+
+    @Test
+    void addInt_date_passesThrough() {
+        org.apache.parquet.schema.PrimitiveType dateType = Types.primitive(
+                        PrimitiveTypeName.INT32, Type.Repetition.REQUIRED)
+                .as(LogicalTypeAnnotation.dateType())
+                .named("dt");
+        AtomicReference<Object> out = new AtomicReference<>();
+        PrimitiveConverter converter = new AvroMaterializerProvider.PrimitiveValueConverter(
+                dateType, Schema.create(Schema.Type.INT), out::set);
+
+        converter.addInt(19000);
+        assertThat(out.get()).isEqualTo(19000);
+    }
+
+    @Test
+    void addLong_timestampMillis_passesThrough() {
+        org.apache.parquet.schema.PrimitiveType tsType = Types.primitive(
+                        PrimitiveTypeName.INT64, Type.Repetition.REQUIRED)
+                .as(LogicalTypeAnnotation.timestampType(true, LogicalTypeAnnotation.TimeUnit.MILLIS))
+                .named("ts");
+        AtomicReference<Object> out = new AtomicReference<>();
+        PrimitiveConverter converter =
+                new AvroMaterializerProvider.PrimitiveValueConverter(tsType, Schema.create(Schema.Type.LONG), out::set);
+
+        converter.addLong(1700000000000L);
+        assertThat(out.get()).isEqualTo(1700000000000L);
+    }
+
+    @Test
+    void addInt_noAnnotation_passesThrough() {
+        org.apache.parquet.schema.PrimitiveType plainInt = Types.primitive(
+                        PrimitiveTypeName.INT32, Type.Repetition.REQUIRED)
+                .named("n");
+        AtomicReference<Object> out = new AtomicReference<>();
+        PrimitiveConverter converter = new AvroMaterializerProvider.PrimitiveValueConverter(
+                plainInt, Schema.create(Schema.Type.INT), out::set);
+
+        converter.addInt(42);
+        assertThat(out.get()).isEqualTo(42);
+    }
+
+    // --- P1: Dictionary Support Tests ---
+
+    @Test
+    void hasDictionarySupport_trueForBinary() {
+        org.apache.parquet.schema.PrimitiveType binType = Types.primitive(
+                        PrimitiveTypeName.BINARY, Type.Repetition.REQUIRED)
+                .named("s");
+        AvroMaterializerProvider.PrimitiveValueConverter converter =
+                new AvroMaterializerProvider.PrimitiveValueConverter(
+                        binType, Schema.create(Schema.Type.STRING), v -> {});
+        assertThat(converter.hasDictionarySupport()).isTrue();
+    }
+
+    @Test
+    void hasDictionarySupport_falseForInt32() {
+        org.apache.parquet.schema.PrimitiveType intType = Types.primitive(
+                        PrimitiveTypeName.INT32, Type.Repetition.REQUIRED)
+                .named("n");
+        AvroMaterializerProvider.PrimitiveValueConverter converter =
+                new AvroMaterializerProvider.PrimitiveValueConverter(intType, Schema.create(Schema.Type.INT), v -> {});
+        assertThat(converter.hasDictionarySupport()).isFalse();
+    }
+
+    @Test
+    void setDictionary_preConvertsEntries() {
+        org.apache.parquet.schema.PrimitiveType binType = Types.primitive(
+                        PrimitiveTypeName.BINARY, Type.Repetition.REQUIRED)
+                .named("s");
+        AtomicReference<Object> out = new AtomicReference<>();
+        AvroMaterializerProvider.PrimitiveValueConverter converter =
+                new AvroMaterializerProvider.PrimitiveValueConverter(
+                        binType, Schema.create(Schema.Type.STRING), out::set);
+
+        Binary[] entries = {Binary.fromString("hello"), Binary.fromString("world")};
+        Dictionary dict = new Dictionary(Encoding.RLE_DICTIONARY) {
+            @Override
+            public int getMaxId() {
+                return entries.length - 1;
+            }
+
+            @Override
+            public Binary decodeToBinary(int id) {
+                return entries[id];
+            }
+        };
+
+        converter.setDictionary(dict);
+        converter.addValueFromDictionary(0);
+        assertThat(out.get()).isEqualTo("hello");
+        converter.addValueFromDictionary(1);
+        assertThat(out.get()).isEqualTo("world");
+    }
+
+    @Test
+    void addValueFromDictionary_duplicatesByteBuffer() {
+        org.apache.parquet.schema.PrimitiveType binType = Types.primitive(
+                        PrimitiveTypeName.BINARY, Type.Repetition.REQUIRED)
+                .named("b");
+        List<Object> results = new ArrayList<>();
+        AvroMaterializerProvider.PrimitiveValueConverter converter =
+                new AvroMaterializerProvider.PrimitiveValueConverter(
+                        binType, Schema.create(Schema.Type.BYTES), results::add);
+
+        Binary[] entries = {Binary.fromConstantByteArray(new byte[] {1, 2, 3})};
+        Dictionary dict = new Dictionary(Encoding.RLE_DICTIONARY) {
+            @Override
+            public int getMaxId() {
+                return entries.length - 1;
+            }
+
+            @Override
+            public Binary decodeToBinary(int id) {
+                return entries[id];
+            }
+        };
+
+        converter.setDictionary(dict);
+        converter.addValueFromDictionary(0);
+        converter.addValueFromDictionary(0);
+
+        assertThat(results).hasSize(2);
+        ByteBuffer bb1 = (ByteBuffer) results.get(0);
+        ByteBuffer bb2 = (ByteBuffer) results.get(1);
+        // Both should be readable independently
+        assertThat(bb1.remaining()).isEqualTo(3);
+        assertThat(bb2.remaining()).isEqualTo(3);
+        // Reading one should not affect the other
+        bb1.get();
+        assertThat(bb2.remaining()).isEqualTo(3);
     }
 
     @Test

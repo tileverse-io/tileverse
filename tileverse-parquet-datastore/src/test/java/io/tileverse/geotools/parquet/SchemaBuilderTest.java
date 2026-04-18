@@ -324,4 +324,21 @@ class SchemaBuilderTest {
         assertThat(SchemaBuilder.decodeCrs("INVALID_CRS")).isEqualTo(DefaultGeographicCRS.WGS84);
         assertThat(SchemaBuilder.decodeCrs(DefaultGeographicCRS.WGS84.toWKT())).isNotNull();
     }
+
+    @Test
+    void variantGroup_bindsToMap() {
+        MessageType schema = Types.buildMessage()
+                .addField(Types.buildGroup(org.apache.parquet.schema.Type.Repetition.OPTIONAL)
+                        .as(LogicalTypeAnnotation.variantType((byte) 1))
+                        .required(org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.BINARY)
+                        .named("metadata")
+                        .required(org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.BINARY)
+                        .named("value")
+                        .named("payload"))
+                .named("test");
+        SimpleFeatureType sft = schemaBuilder.build("test", schema);
+        assertThat(sft.getDescriptor("payload")).isNotNull();
+        assertThat(sft.getDescriptor("payload").getType().getBinding()).isEqualTo(java.util.Map.class);
+        assertThat(sft.getDescriptor("payload").isNillable()).isTrue();
+    }
 }

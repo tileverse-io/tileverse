@@ -45,6 +45,7 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.StringLogicalTypeAnnotati
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimeLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.UUIDLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.VariantLogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
@@ -140,6 +141,9 @@ class SchemaBuilder {
                 builder.nillable(nillable);
                 builder.add(name, List.class);
             } else if (annotation instanceof MapLogicalTypeAnnotation) {
+                builder.nillable(nillable);
+                builder.add(name, Map.class);
+            } else if (annotation instanceof VariantLogicalTypeAnnotation) {
                 builder.nillable(nillable);
                 builder.add(name, Map.class);
             } else {

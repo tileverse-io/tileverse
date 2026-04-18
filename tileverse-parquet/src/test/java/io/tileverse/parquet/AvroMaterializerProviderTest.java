@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,6 +28,9 @@ import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 import org.apache.parquet.schema.Type;
 import org.apache.parquet.schema.Types;
+import org.apache.parquet.variant.Variant;
+import org.apache.parquet.variant.VariantBuilder;
+import org.apache.parquet.variant.VariantObjectBuilder;
 import org.junit.jupiter.api.Test;
 
 class AvroMaterializerProviderTest {
@@ -250,7 +254,7 @@ class AvroMaterializerProviderTest {
         assertThat((List<?>) emitted.get()).hasSize(2);
     }
 
-    // --- P0: Logical Type Conversion Tests ---
+    // --- Logical Type Conversion Tests ---
 
     @Test
     void addInt_decimal_producesBigDecimal() {
@@ -373,7 +377,7 @@ class AvroMaterializerProviderTest {
         assertThat(out.get()).isEqualTo(42);
     }
 
-    // --- P1: Dictionary Support Tests ---
+    // --- Dictionary Support Tests ---
 
     @Test
     void hasDictionarySupport_trueForBinary() {
@@ -522,5 +526,182 @@ class AvroMaterializerProviderTest {
                         .get("name")
                         .toString())
                 .isEqualTo("alice");
+    }
+
+    // --- Multi-Branch Union Tests ---
+
+    @Test
+    void unionGroupConverter_stringBranch_emitsString() {
+        GroupType unionGroup = Types.buildGroup(Type.Repetition.OPTIONAL)
+                .optional(PrimitiveTypeName.BINARY)
+                .as(LogicalTypeAnnotation.stringType())
+                .named("member0")
+                .optional(PrimitiveTypeName.INT64)
+                .named("member1")
+                .named("union_field");
+        Schema unionSchema = Schema.createUnion(
+                Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.STRING), Schema.create(Schema.Type.LONG));
+
+        AtomicReference<Object> out = new AtomicReference<>();
+        GroupConverter converter = new AvroMaterializerProvider.UnionGroupConverter(
+                unionGroup, unionSchema, (AvroMaterializerProvider.ValueConsumer) out::set);
+
+        converter.start();
+        ((PrimitiveConverter) converter.getConverter(0)).addBinary(Binary.fromString("hello"));
+        converter.end();
+        assertThat(out.get()).isEqualTo("hello");
+    }
+
+    @Test
+    void unionGroupConverter_longBranch_emitsLong() {
+        GroupType unionGroup = Types.buildGroup(Type.Repetition.OPTIONAL)
+                .optional(PrimitiveTypeName.BINARY)
+                .as(LogicalTypeAnnotation.stringType())
+                .named("member0")
+                .optional(PrimitiveTypeName.INT64)
+                .named("member1")
+                .named("union_field");
+        Schema unionSchema = Schema.createUnion(
+                Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.STRING), Schema.create(Schema.Type.LONG));
+
+        AtomicReference<Object> out = new AtomicReference<>();
+        GroupConverter converter = new AvroMaterializerProvider.UnionGroupConverter(
+                unionGroup, unionSchema, (AvroMaterializerProvider.ValueConsumer) out::set);
+
+        converter.start();
+        ((PrimitiveConverter) converter.getConverter(1)).addLong(42L);
+        converter.end();
+        assertThat(out.get()).isEqualTo(42L);
+    }
+
+    @Test
+    void unionGroupConverter_nullRow_emitsNull() {
+        GroupType unionGroup = Types.buildGroup(Type.Repetition.OPTIONAL)
+                .optional(PrimitiveTypeName.BINARY)
+                .as(LogicalTypeAnnotation.stringType())
+                .named("member0")
+                .optional(PrimitiveTypeName.INT64)
+                .named("member1")
+                .named("union_field");
+        Schema unionSchema = Schema.createUnion(
+                Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.STRING), Schema.create(Schema.Type.LONG));
+
+        AtomicReference<Object> out = new AtomicReference<>();
+        out.set("sentinel");
+        GroupConverter converter = new AvroMaterializerProvider.UnionGroupConverter(
+                unionGroup, unionSchema, (AvroMaterializerProvider.ValueConsumer) out::set);
+
+        converter.start();
+        converter.end();
+        assertThat(out.get()).isNull();
+    }
+
+    @Test
+    void unionGroupConverter_resetsStateBetweenRecords() {
+        GroupType unionGroup = Types.buildGroup(Type.Repetition.OPTIONAL)
+                .optional(PrimitiveTypeName.BINARY)
+                .as(LogicalTypeAnnotation.stringType())
+                .named("member0")
+                .optional(PrimitiveTypeName.INT64)
+                .named("member1")
+                .named("union_field");
+        Schema unionSchema = Schema.createUnion(
+                Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.STRING), Schema.create(Schema.Type.LONG));
+
+        List<Object> emitted = new ArrayList<>();
+        GroupConverter converter = new AvroMaterializerProvider.UnionGroupConverter(
+                unionGroup, unionSchema, (AvroMaterializerProvider.ValueConsumer) emitted::add);
+
+        converter.start();
+        ((PrimitiveConverter) converter.getConverter(0)).addBinary(Binary.fromString("first"));
+        converter.end();
+        converter.start();
+        converter.end();
+        converter.start();
+        ((PrimitiveConverter) converter.getConverter(1)).addLong(7L);
+        converter.end();
+
+        assertThat(emitted).containsExactly("first", null, 7L);
+    }
+
+    // --- VARIANT as java.util.Map Tests ---
+
+    @Test
+    void variantToJavaValue_primitiveString() {
+        VariantBuilder b = new VariantBuilder();
+        b.appendString("hello");
+        Variant v = b.build();
+
+        Object out = AvroMaterializerProvider.AvroVariantGroupConverter.toJavaValue(v);
+        assertThat(out).isEqualTo("hello");
+    }
+
+    @Test
+    void variantToJavaValue_primitivesCoverAllScalarTypes() {
+        assertThat(toJavaValueOf(b -> b.appendBoolean(true))).isEqualTo(Boolean.TRUE);
+        assertThat(toJavaValueOf(b -> b.appendLong(42L))).isEqualTo(42L);
+        assertThat(toJavaValueOf(b -> b.appendDouble(3.5))).isEqualTo(3.5);
+        assertThat(toJavaValueOf(b -> b.appendFloat(1.25f))).isEqualTo(1.25f);
+        assertThat(toJavaValueOf(b -> b.appendDecimal(new BigDecimal("12.34")))).isEqualTo(new BigDecimal("12.34"));
+        assertThat(toJavaValueOf(b -> b.appendDate(19723))).isEqualTo(LocalDate.ofEpochDay(19723));
+        assertThat(toJavaValueOf(b -> b.appendNull())).isNull();
+    }
+
+    @Test
+    void variantToJavaValue_arrayProducesList() {
+        Variant v = buildVariant(b -> {
+            var arr = b.startArray();
+            arr.appendLong(1L);
+            arr.appendLong(2L);
+            arr.appendLong(3L);
+            b.endArray();
+        });
+
+        Object out = AvroMaterializerProvider.AvroVariantGroupConverter.toJavaValue(v);
+        assertThat(out).isEqualTo(List.of(1L, 2L, 3L));
+    }
+
+    @Test
+    void variantToJavaValue_objectProducesLinkedHashMap() {
+        Variant v = buildVariant(b -> {
+            VariantObjectBuilder obj = b.startObject();
+            obj.appendKey("a");
+            obj.appendLong(1L);
+            obj.appendKey("b");
+            obj.appendString("hello");
+            b.endObject();
+        });
+
+        Object out = AvroMaterializerProvider.AvroVariantGroupConverter.toJavaValue(v);
+        assertThat(out).isInstanceOf(LinkedHashMap.class).isEqualTo(Map.of("a", 1L, "b", "hello"));
+    }
+
+    @Test
+    void variantToJavaValue_nestedObjectAndArray() {
+        Variant v = buildVariant(b -> {
+            VariantObjectBuilder obj = b.startObject();
+            obj.appendKey("outer");
+            VariantObjectBuilder inner = obj.startObject();
+            inner.appendKey("nums");
+            var arr = inner.startArray();
+            arr.appendLong(10L);
+            arr.appendLong(20L);
+            inner.endArray();
+            obj.endObject();
+            b.endObject();
+        });
+
+        Object out = AvroMaterializerProvider.AvroVariantGroupConverter.toJavaValue(v);
+        assertThat(out).isEqualTo(Map.of("outer", Map.of("nums", List.of(10L, 20L))));
+    }
+
+    private static Variant buildVariant(java.util.function.Consumer<VariantBuilder> consumer) {
+        VariantBuilder b = new VariantBuilder();
+        consumer.accept(b);
+        return b.build();
+    }
+
+    private static Object toJavaValueOf(java.util.function.Consumer<VariantBuilder> consumer) {
+        return AvroMaterializerProvider.AvroVariantGroupConverter.toJavaValue(buildVariant(consumer));
     }
 }

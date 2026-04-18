@@ -18,10 +18,16 @@ package io.tileverse.parquet;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
@@ -36,10 +42,15 @@ import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.UUIDLogicalTypeAnnotation;
+import org.apache.parquet.schema.LogicalTypeAnnotation.VariantLogicalTypeAnnotation;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 import org.apache.parquet.schema.Type;
+import org.apache.parquet.variant.ImmutableMetadata;
+import org.apache.parquet.variant.Variant;
+import org.apache.parquet.variant.VariantBuilder;
+import org.apache.parquet.variant.VariantConverters;
 
 /**
  * A {@link ParquetMaterializerProvider} that produces Avro {@link GenericRecord} instances
@@ -155,6 +166,20 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
     }
 
     private static Converter buildFieldConverter(Type parquetField, Schema avroFieldSchema, ValueConsumer consumer) {
+        if (!parquetField.isPrimitive()
+                && parquetField.asGroupType().getLogicalTypeAnnotation() instanceof VariantLogicalTypeAnnotation) {
+            return new AvroVariantGroupConverter(parquetField.asGroupType(), consumer);
+        }
+
+        if (avroFieldSchema.getType() == Schema.Type.UNION && !parquetField.isPrimitive()) {
+            long nonNullCount = avroFieldSchema.getTypes().stream()
+                    .filter(s -> s.getType() != Schema.Type.NULL)
+                    .count();
+            if (nonNullCount > 1) {
+                return new UnionGroupConverter(parquetField.asGroupType(), avroFieldSchema, consumer);
+            }
+        }
+
         Schema schema = unwrapNullable(avroFieldSchema);
 
         if (schema.getType() == Schema.Type.ARRAY) {
@@ -606,5 +631,162 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
             }
         }
         return Schema.create(Schema.Type.NULL);
+    }
+
+    /**
+     * Converter for Parquet groups that represent Avro unions with more than one non-null branch.
+     *
+     * <p>Parquet-avro encodes a multi-branch union as a group with one optional child per non-null
+     * branch; at most one child is populated per record. This converter wires one sub-converter per
+     * Parquet child (paired with its matching Avro branch) and emits whichever value arrives to the
+     * parent consumer.
+     */
+    static final class UnionGroupConverter extends GroupConverter {
+        private final Converter[] memberConverters;
+        private final ValueConsumer parentConsumer;
+        private Object memberValue;
+
+        UnionGroupConverter(GroupType parquetGroup, Schema unionSchema, ValueConsumer consumer) {
+            this.parentConsumer = consumer;
+            this.memberConverters = new Converter[parquetGroup.getFieldCount()];
+            int parquetIndex = 0;
+            for (Schema branch : unionSchema.getTypes()) {
+                if (branch.getType() == Schema.Type.NULL) {
+                    continue;
+                }
+                if (parquetIndex >= parquetGroup.getFieldCount()) {
+                    break;
+                }
+                Type memberType = parquetGroup.getType(parquetIndex);
+                memberConverters[parquetIndex] = buildFieldConverter(memberType, branch, value -> memberValue = value);
+                parquetIndex++;
+            }
+        }
+
+        @Override
+        public Converter getConverter(int fieldIndex) {
+            return memberConverters[fieldIndex];
+        }
+
+        @Override
+        public void start() {
+            memberValue = null;
+        }
+
+        @Override
+        public void end() {
+            parentConsumer.accept(memberValue);
+        }
+    }
+
+    /**
+     * Converter for Parquet groups carrying the {@link VariantLogicalTypeAnnotation}.
+     *
+     * <p>Delegates the low-level Variant decoding to {@link VariantConverters} and, on {@code end()},
+     * materializes the resulting {@link Variant} as a Java value tree composed of
+     * {@link java.util.LinkedHashMap}, {@link java.util.ArrayList}, boxed primitives,
+     * {@link BigDecimal}, {@link LocalDate}, {@link LocalTime}, {@link Instant},
+     * {@link LocalDateTime}, {@link java.util.UUID}, {@code byte[]}, or {@code null}.
+     *
+     * <p>Going through {@code Map}/{@code List} rather than exposing the {@code Variant} object
+     * keeps downstream consumers (e.g. the GeoTools datastore) free of any parquet-variant type.
+     */
+    static final class AvroVariantGroupConverter extends GroupConverter
+            implements VariantConverters.ParentConverter<VariantBuilder> {
+        private final GroupConverter delegate;
+        private final ValueConsumer consumer;
+        private VariantBuilder builder;
+        private ImmutableMetadata metadata;
+
+        AvroVariantGroupConverter(GroupType variantGroup, ValueConsumer consumer) {
+            this.consumer = consumer;
+            this.delegate = VariantConverters.newVariantConverter(variantGroup, this::setMetadata, this);
+        }
+
+        private void setMetadata(ByteBuffer metadataBuffer) {
+            if (metadata == null || metadata.getEncodedBuffer() != metadataBuffer) {
+                this.metadata = new ImmutableMetadata(metadataBuffer);
+            }
+            this.builder = new VariantBuilder(metadata);
+        }
+
+        @Override
+        public void build(Consumer<VariantBuilder> buildConsumer) {
+            buildConsumer.accept(builder);
+        }
+
+        @Override
+        public Converter getConverter(int fieldIndex) {
+            return delegate.getConverter(fieldIndex);
+        }
+
+        @Override
+        public void start() {
+            delegate.start();
+        }
+
+        @Override
+        public void end() {
+            delegate.end();
+            if (metadata == null || builder == null) {
+                consumer.accept(null);
+                return;
+            }
+            builder.appendNullIfEmpty();
+            Variant variant = new Variant(builder.encodedValue(), metadata.getEncodedBuffer());
+            consumer.accept(toJavaValue(variant));
+            this.builder = null;
+        }
+
+        static Object toJavaValue(Variant v) {
+            return switch (v.getType()) {
+                case NULL -> null;
+                case BOOLEAN -> v.getBoolean();
+                case BYTE -> (int) v.getByte();
+                case SHORT -> (int) v.getShort();
+                case INT -> v.getInt();
+                case LONG -> v.getLong();
+                case FLOAT -> v.getFloat();
+                case DOUBLE -> v.getDouble();
+                case DECIMAL4, DECIMAL8, DECIMAL16 -> v.getDecimal();
+                case STRING -> v.getString();
+                case DATE -> LocalDate.ofEpochDay(v.getInt());
+                case TIMESTAMP_TZ -> Instant.ofEpochSecond(0, v.getLong() * 1_000L);
+                case TIMESTAMP_NTZ ->
+                    Instant.ofEpochSecond(0, v.getLong() * 1_000L)
+                            .atOffset(ZoneOffset.UTC)
+                            .toLocalDateTime();
+                case TIMESTAMP_NANOS_TZ -> Instant.ofEpochSecond(0, v.getLong());
+                case TIMESTAMP_NANOS_NTZ ->
+                    Instant.ofEpochSecond(0, v.getLong())
+                            .atOffset(ZoneOffset.UTC)
+                            .toLocalDateTime();
+                case TIME -> LocalTime.ofNanoOfDay(v.getLong() * 1_000L);
+                case UUID -> v.getUUID();
+                case BINARY -> {
+                    ByteBuffer bb = v.getBinary();
+                    byte[] bytes = new byte[bb.remaining()];
+                    bb.duplicate().get(bytes);
+                    yield bytes;
+                }
+                case ARRAY -> {
+                    int n = v.numArrayElements();
+                    List<Object> list = new ArrayList<>(n);
+                    for (int i = 0; i < n; i++) {
+                        list.add(toJavaValue(v.getElementAtIndex(i)));
+                    }
+                    yield list;
+                }
+                case OBJECT -> {
+                    int n = v.numObjectElements();
+                    Map<String, Object> map = new LinkedHashMap<>(n);
+                    for (int i = 0; i < n; i++) {
+                        Variant.ObjectField field = v.getFieldAtIndex(i);
+                        map.put(field.key, toJavaValue(field.value));
+                    }
+                    yield map;
+                }
+            };
+        }
     }
 }

@@ -23,6 +23,7 @@ import java.net.URL;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,15 +37,36 @@ import java.util.Properties;
 public class RangeReaderConfig {
 
     /**
-     * The key used in {@link Properties} to specify the URI of the resource.
+     * Canonical prefix for parameter keys in the 1.3.x series (e.g.
+     * {@code io.tileverse.rangereader.s3.region}).
      */
-    public static final String URI_KEY = "io.tileverse.rangereader.uri";
+    public static final String KEY_PREFIX = "io.tileverse.rangereader.";
 
     /**
-     * The key used in {@link Properties} to specify the ID of a {@link RangeReaderProvider}.
+     * Forward-compatibility prefix: parameter keys shaped as {@code storage.<group>.<name>}
+     * are introduced in the 1.4.x series. 1.3.x accepts them on input so a data directory
+     * written by a 1.4 range reader (e.g. a catalog touched by GeoServer 3.1) can still be
+     * read by a 1.3 range reader (e.g. GeoServer 3.0). Keys are silently rewritten to the
+     * {@link #KEY_PREFIX canonical} form on the way in.
+     */
+    public static final String STORAGE_KEY_PREFIX = "storage.";
+
+    /**
+     * The canonical key used in {@link Properties} to specify the URI of the resource.
+     */
+    public static final String URI_KEY = KEY_PREFIX + "uri";
+
+    /**
+     * The canonical key used in {@link Properties} to specify the ID of a {@link RangeReaderProvider}.
      * This can be used to force the use of a specific provider when URI-based disambiguation is not sufficient.
      */
-    public static final String PROVIDER_ID_KEY = "io.tileverse.rangereader.provider";
+    public static final String PROVIDER_ID_KEY = KEY_PREFIX + "provider";
+
+    /** Forward-compat URI key (1.4.x form), still accepted as input for data-directory interop. */
+    static final String STORAGE_URI_KEY = STORAGE_KEY_PREFIX + "uri";
+
+    /** Forward-compat provider-id key (1.4.x form), still accepted as input for data-directory interop. */
+    static final String STORAGE_PROVIDER_ID_KEY = STORAGE_KEY_PREFIX + "provider";
 
     /**
      * A parameter that can be used by client code to force a given {@link #providerId(String) provider id}
@@ -146,10 +168,11 @@ public class RangeReaderConfig {
      * @return This {@code RangeReaderConfig} instance for method chaining.
      */
     public RangeReaderConfig setParameter(String key, Object value) {
-        if (FORCE_PROVIDER_ID.key().equals(key)) {
+        String normalized = normalizeKey(requireNonNull(key, "key"));
+        if (FORCE_PROVIDER_ID.key().equals(normalized)) {
             this.providerId = value == null ? null : String.valueOf(value);
         }
-        this.parameterValues.put(requireNonNull(key, "key"), value);
+        this.parameterValues.put(normalized, value);
         return this;
     }
 
@@ -203,8 +226,9 @@ public class RangeReaderConfig {
      * @throws IllegalArgumentException if the value cannot be converted to the specified type.
      */
     public <T> Optional<T> getParameter(String key, Class<T> type) {
-        Object value = parameterValues.get(requireNonNull(key, "key"));
+        String normalized = normalizeKey(requireNonNull(key, "key"));
         requireNonNull(type, "type");
+        Object value = parameterValues.get(normalized);
         if (value == null) {
             return Optional.empty();
         }
@@ -275,10 +299,17 @@ public class RangeReaderConfig {
      */
     public static RangeReaderConfig fromProperties(Properties properties) {
         requireNonNull(properties);
-        Object urip = requireNonNull(properties.get(URI_KEY), "Properties must include " + URI_KEY);
+        Object urip = properties.get(URI_KEY);
+        if (urip == null) {
+            urip = properties.get(STORAGE_URI_KEY);
+        }
+        requireNonNull(urip, "Properties must include " + URI_KEY);
 
         URI uri = convertToURI(urip);
-        String providerId = properties.getProperty(FORCE_PROVIDER_ID.key());
+        String providerId = properties.getProperty(PROVIDER_ID_KEY);
+        if (providerId == null) {
+            providerId = properties.getProperty(STORAGE_PROVIDER_ID_KEY);
+        }
 
         RangeReaderConfig config = new RangeReaderConfig().uri(uri);
         config.providerId(providerId);
@@ -286,9 +317,39 @@ public class RangeReaderConfig {
         Properties copy = new Properties();
         copy.putAll(properties);
         copy.remove(URI_KEY);
+        copy.remove(STORAGE_URI_KEY);
         copy.remove(PROVIDER_ID_KEY);
+        copy.remove(STORAGE_PROVIDER_ID_KEY);
         copy.forEach((k, v) -> config.setParameter(String.valueOf(k), v));
         return config;
+    }
+
+    /**
+     * Normalizes a parameter key by rewriting the forward-compat {@value #STORAGE_KEY_PREFIX}
+     * prefix (introduced in the 1.4 series) to the 1.3.x canonical {@value #KEY_PREFIX} prefix.
+     *
+     * @param key the parameter key, possibly {@code null}.
+     * @return the normalized key, or {@code key} unchanged if it does not use the forward-compat prefix.
+     */
+    public static String normalizeKey(String key) {
+        if (key != null && key.startsWith(STORAGE_KEY_PREFIX)) {
+            return KEY_PREFIX + key.substring(STORAGE_KEY_PREFIX.length());
+        }
+        return key;
+    }
+
+    /**
+     * Returns a copy of the given map with every key passed through {@link #normalizeKey(String)}.
+     * Iteration order is preserved.
+     *
+     * @param in source map, must not be {@code null}.
+     * @return a new {@link LinkedHashMap} with normalized keys.
+     */
+    public static Map<String, Object> normalizeKeys(Map<String, ?> in) {
+        requireNonNull(in, "in");
+        Map<String, Object> out = new LinkedHashMap<>(in.size());
+        in.forEach((k, v) -> out.put(normalizeKey(k), v));
+        return out;
     }
 
     /**

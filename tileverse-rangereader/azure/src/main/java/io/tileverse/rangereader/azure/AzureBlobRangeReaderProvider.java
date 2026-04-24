@@ -82,7 +82,7 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
      * @see BlobClientBuilder#blobName(String)
      */
     public static final RangeReaderParameter<String> AZURE_BLOB_NAME = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.azure.blob-name")
+            .key("storage.azure.blob-name")
             .title("Set the blob name if the endpoint points to the account url")
             .description(
                     """
@@ -104,7 +104,7 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
      * @see StorageSharedKeyCredential
      */
     public static final RangeReaderParameter<String> AZURE_ACCOUNT_KEY = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.azure.account-key")
+            .key("storage.azure.account-key")
             .title("Account access key")
             .description(
                     """
@@ -124,7 +124,7 @@ public class AzureBlobRangeReaderProvider extends AbstractRangeReaderProvider {
      * SAS token to use for authenticating requests
      */
     public static final RangeReaderParameter<String> AZURE_SAS_TOKEN = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.azure.sas-token")
+            .key("storage.azure.sas-token")
             .title("SAS token to use for authenticating requests")
             .description(
                     """

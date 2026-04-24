@@ -83,7 +83,7 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
      * Project ID is a unique, user-defined identifier for a Google Cloud project.
      */
     public static final RangeReaderParameter<String> GCS_PROJECT_ID = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.gcs.project-id")
+            .key("storage.gcs.project-id")
             .title("Google Cloud project ID")
             .description(
                     """
@@ -108,7 +108,7 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
      * Quota ProjectId that specifies the project used for quota and billing purposes.
      */
     public static final RangeReaderParameter<String> GCS_QUOTA_PROJECT_ID = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.gcs.quota-project-id")
+            .key("storage.gcs.quota-project-id")
             .title("Quota Project ID")
             .description(
                     """
@@ -125,7 +125,7 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
      */
     public static final RangeReaderParameter<Boolean> GCS_USE_DEFAULT_APPLICTION_CREDENTIALS =
             RangeReaderParameter.builder()
-                    .key("io.tileverse.rangereader.gcs.default-credentials-chain")
+                    .key("storage.gcs.default-credentials-chain")
                     .title("Use the default application credentials chain")
                     .description(
                             """

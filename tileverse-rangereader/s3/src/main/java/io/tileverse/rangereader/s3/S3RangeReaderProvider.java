@@ -94,7 +94,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
      * compatibility with S3-compatible storage systems that do not support virtual-hosted-style requests.
      */
     public static final RangeReaderParameter<Boolean> S3_FORCE_PATH_STYLE = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.s3.force-path-style")
+            .key("storage.s3.force-path-style")
             .title("Enable S3 path style access")
             .description(
                     """
@@ -117,7 +117,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
 
     /** Configuration parameter for AWS S3 region. */
     public static final RangeReaderParameter<String> S3_REGION = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.s3.region")
+            .key("storage.s3.region")
             .title("Region")
             .description(
                     """
@@ -150,7 +150,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
      * The AWS access key ID to use for authentication when both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are provided.
      */
     public static final RangeReaderParameter<String> S3_AWS_ACCESS_KEY_ID = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.s3.aws-access-key-id")
+            .key("storage.s3.aws-access-key-id")
             .title("AWS Access Key ID")
             .description(
                     """
@@ -171,7 +171,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
      * The AWS secret access key to use for authentication when both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are provided.
      */
     public static final RangeReaderParameter<String> S3_AWS_SECRET_ACCESS_KEY = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.s3.aws-secret-access-key")
+            .key("storage.s3.aws-secret-access-key")
             .title("AWS Secret Access Key")
             .description(
                     """
@@ -192,7 +192,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
     /** Configuration parameter to control whether to use the default AWS credentials provider chain. */
     public static final RangeReaderParameter<Boolean> S3_USE_DEFAULT_CREDENTIALS_PROVIDER =
             RangeReaderParameter.builder()
-                    .key("io.tileverse.rangereader.s3.use-default-credentials-provider")
+                    .key("storage.s3.use-default-credentials-provider")
                     .title("Use Default Credentials Provider")
                     .description(
                             """
@@ -215,7 +215,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
 
     /** Configuration parameter to specify a custom AWS credentials profile name. */
     public static final RangeReaderParameter<String> S3_DEFAULT_CREDENTIALS_PROFILE = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.s3.default-credentials-profile")
+            .key("storage.s3.default-credentials-profile")
             .title("Default Credentials Profile")
             .description(
                     """

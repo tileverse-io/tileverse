@@ -35,7 +35,7 @@ class CachingProviderHelper {
      * When enabled, a {@link CachingRangeReader} will wrap the underlying {@link RangeReader}.
      */
     static final RangeReaderParameter<Boolean> MEMORY_CACHE_ENABLED = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.caching.enabled")
+            .key("storage.caching.enabled")
             .title("Enable memory cache for raw byte data")
             .description(
                     """
@@ -58,7 +58,7 @@ class CachingProviderHelper {
      * Block alignment can improve performance for certain storage types by optimizing read patterns.
      */
     static final RangeReaderParameter<Boolean> MEMORY_CACHE_BLOCK_ALIGNED = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.caching.blockaligned")
+            .key("storage.caching.blockaligned")
             .title("Apply block alignment for cached byte ranges")
             .description(
                     """
@@ -83,7 +83,7 @@ class CachingProviderHelper {
      * The block size should be a power of 2 for optimal performance.
      */
     static final RangeReaderParameter<Integer> MEMORY_CACHE_BLOCK_SIZE = RangeReaderParameter.builder()
-            .key("io.tileverse.rangereader.caching.blocksize")
+            .key("storage.caching.blocksize")
             .title("Cache block size in bytes (power of 2)")
             .description(
                     """

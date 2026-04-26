@@ -48,8 +48,8 @@ import java.util.Optional;
  *
  * <pre>{@code
  * Properties config = new Properties();
- * config.setProperty("storage.http.username", "myuser");
- * config.setProperty("storage.http.password", "mypassword");
+ * config.setProperty("io.tileverse.rangereader.http.username", "myuser");
+ * config.setProperty("io.tileverse.rangereader.http.password", "mypassword");
  * RangeReader reader = RangeReaderFactory.create(uri, config);
  * }</pre>
  *
@@ -59,7 +59,7 @@ import java.util.Optional;
  *
  * <pre>{@code
  * Properties config = new Properties();
- * config.setProperty("storage.http.bearer-token", "eyJhbGciOi...");
+ * config.setProperty("io.tileverse.rangereader.http.bearer-token", "eyJhbGciOi...");
  * RangeReader reader = RangeReaderFactory.create(uri, config);
  * }</pre>
  *
@@ -70,8 +70,8 @@ import java.util.Optional;
  *
  * <pre>{@code
  * Properties config = new Properties();
- * config.setProperty("storage.http.api-key-headername", "X-API-Key");
- * config.setProperty("storage.http.api-key", "abc123xyz");
+ * config.setProperty("io.tileverse.rangereader.http.api-key-headername", "X-API-Key");
+ * config.setProperty("io.tileverse.rangereader.http.api-key", "abc123xyz");
  * RangeReader reader = RangeReaderFactory.create(uri, config);
  * }</pre>
  *
@@ -90,7 +90,7 @@ import java.util.Optional;
  * recognized as cloud provider endpoints (S3, Azure, GCS). For ambiguous cases,
  * this provider can be explicitly selected using:
  * <pre>{@code
- * config.setProperty("storage.provider", "http");
+ * config.setProperty("io.tileverse.rangereader.provider", "http");
  * }</pre>
  *
  * @see HttpRangeReader
@@ -114,10 +114,10 @@ public class HttpRangeReaderProvider extends AbstractRangeReaderProvider {
      * HTTP connection timeout in milliseconds.
      * <p>Specifies the maximum time to wait when establishing a connection to the HTTP server.
      * Default is 5000ms (5 seconds).
-     * <p><b>Key:</b> {@code storage.http.timeout-millis}
+     * <p><b>Key:</b> {@code io.tileverse.rangereader.http.timeout-millis}
      */
     public static final RangeReaderParameter<Integer> HTTP_CONNECTION_TIMEOUT_MILLIS = RangeReaderParameter.builder()
-            .key("storage.http.timeout-millis")
+            .key("io.tileverse.rangereader.http.timeout-millis")
             .title("HTTP connection timeout in milliseconds")
             .description(
                     """
@@ -133,10 +133,10 @@ public class HttpRangeReaderProvider extends AbstractRangeReaderProvider {
      * Trust all SSL/TLS certificates, including self-signed certificates.
      * <p><b>WARNING:</b> This disables certificate validation and should only be used in
      * development/testing environments. In production, use properly signed certificates.
-     * <p><b>Key:</b> {@code storage.http.trust-all-certificates}
+     * <p><b>Key:</b> {@code io.tileverse.rangereader.http.trust-all-certificates}
      */
     public static final RangeReaderParameter<Boolean> HTTP_TRUST_ALL_SSL_CERTIFICATES = RangeReaderParameter.builder()
-            .key("storage.http.trust-all-certificates")
+            .key("io.tileverse.rangereader.http.trust-all-certificates")
             .title("Trust all SSL/TLS certificates")
             .description(
                     """
@@ -153,10 +153,10 @@ public class HttpRangeReaderProvider extends AbstractRangeReaderProvider {
      * <p>Used in combination with {@link #HTTP_AUTH_PASSWORD} to authenticate with servers
      * that require HTTP Basic Authentication. The credentials are sent with each request
      * using the {@code Authorization: Basic} header.
-     * <p><b>Key:</b> {@code storage.http.username}
+     * <p><b>Key:</b> {@code io.tileverse.rangereader.http.username}
      */
     public static final RangeReaderParameter<String> HTTP_AUTH_USERNAME = RangeReaderParameter.builder()
-            .key("storage.http.username")
+            .key("io.tileverse.rangereader.http.username")
             .title("HTTP Basic Auth username")
             .description(
                     """
@@ -172,10 +172,10 @@ public class HttpRangeReaderProvider extends AbstractRangeReaderProvider {
      * <p>Used in combination with {@link #HTTP_AUTH_USERNAME} to authenticate with servers
      * that require HTTP Basic Authentication. The credentials are sent with each request
      * using the {@code Authorization: Basic} header.
-     * <p><b>Key:</b> {@code storage.http.password}
+     * <p><b>Key:</b> {@code io.tileverse.rangereader.http.password}
      */
     public static final RangeReaderParameter<String> HTTP_AUTH_PASSWORD = RangeReaderParameter.builder()
-            .key("storage.http.password")
+            .key("io.tileverse.rangereader.http.password")
             .title("HTTP Basic Auth password")
             .description(
                     """
@@ -192,10 +192,10 @@ public class HttpRangeReaderProvider extends AbstractRangeReaderProvider {
      * <p>Provides a bearer token that will be sent with each request using the
      * {@code Authorization: Bearer <token>} header. Commonly used for OAuth 2.0 and JWT-based
      * authentication schemes.
-     * <p><b>Key:</b> {@code storage.http.bearer-token}
+     * <p><b>Key:</b> {@code io.tileverse.rangereader.http.bearer-token}
      */
     public static final RangeReaderParameter<String> HTTP_AUTH_BEARER_TOKEN = RangeReaderParameter.builder()
-            .key("storage.http.bearer-token")
+            .key("io.tileverse.rangereader.http.bearer-token")
             .title("HTTP Bearer Token")
             .description(
                     """
@@ -215,10 +215,10 @@ public class HttpRangeReaderProvider extends AbstractRangeReaderProvider {
      * <p>Specifies the HTTP header name to use for API key authentication. Common values include
      * {@code X-API-Key}, {@code Authorization}, {@code api-key}, etc. Must be used together with
      * {@link #HTTP_AUTH_API_KEY}.
-     * <p><b>Key:</b> {@code storage.http.api-key-headername}
+     * <p><b>Key:</b> {@code io.tileverse.rangereader.http.api-key-headername}
      */
     public static final RangeReaderParameter<String> HTTP_AUTH_API_KEY_HEADERNAME = RangeReaderParameter.builder()
-            .key("storage.http.api-key-headername")
+            .key("io.tileverse.rangereader.http.api-key-headername")
             .title("API-Key header name")
             .description(
                     """
@@ -236,10 +236,10 @@ public class HttpRangeReaderProvider extends AbstractRangeReaderProvider {
      * API key value for custom header authentication.
      * <p>The actual API key to send in the custom header specified by {@link #HTTP_AUTH_API_KEY_HEADERNAME}.
      * Optionally, a prefix can be specified using {@link #HTTP_AUTH_API_KEY_VALUE_PREFIX}.
-     * <p><b>Key:</b> {@code storage.http.api-key}
+     * <p><b>Key:</b> {@code io.tileverse.rangereader.http.api-key}
      */
     public static final RangeReaderParameter<String> HTTP_AUTH_API_KEY = RangeReaderParameter.builder()
-            .key("storage.http.api-key")
+            .key("io.tileverse.rangereader.http.api-key")
             .title("API key value")
             .description(
                     """
@@ -258,12 +258,12 @@ public class HttpRangeReaderProvider extends AbstractRangeReaderProvider {
      * <p>Some APIs require a prefix before the API key value (e.g., {@code ApiKey }, {@code Token }).
      * This parameter specifies that prefix, which will be prepended to the {@link #HTTP_AUTH_API_KEY}
      * value before sending.
-     * <p><b>Key:</b> {@code storage.http.api-key-value-prefix}
+     * <p><b>Key:</b> {@code io.tileverse.rangereader.http.api-key-value-prefix}
      * <p><b>Example:</b> If prefix is {@code "ApiKey "} and key is {@code "abc123"}, the header
      * value will be {@code "ApiKey abc123"}.
      */
     public static final RangeReaderParameter<String> HTTP_AUTH_API_KEY_VALUE_PREFIX = RangeReaderParameter.builder()
-            .key("storage.http.api-key-value-prefix")
+            .key("io.tileverse.rangereader.http.api-key-value-prefix")
             .title("API key value prefix")
             .description(
                     """

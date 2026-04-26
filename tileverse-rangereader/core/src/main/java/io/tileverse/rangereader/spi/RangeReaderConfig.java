@@ -23,15 +23,10 @@ import java.net.URL;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Represents the configuration for creating a {@link io.tileverse.rangereader.RangeReader} instance.
@@ -40,37 +35,16 @@ import org.slf4j.LoggerFactory;
  */
 public class RangeReaderConfig {
 
-    private static final Logger log = LoggerFactory.getLogger(RangeReaderConfig.class);
-
     /**
-     * Prefix used on all canonical parameter keys going forward (e.g. {@code storage.s3.region}).
+     * The key used in {@link Properties} to specify the URI of the resource.
      */
-    public static final String KEY_PREFIX = "storage.";
+    public static final String URI_KEY = "io.tileverse.rangereader.uri";
 
     /**
-     * Prefix used by legacy (pre-{@code storage.*}) parameter keys. Legacy keys remain accepted
-     * on input for backwards compatibility with existing GeoServer catalogs.
-     */
-    public static final String LEGACY_KEY_PREFIX = "io.tileverse.rangereader.";
-
-    private static final Set<String> warnedLegacyKeys = ConcurrentHashMap.newKeySet();
-
-    /**
-     * The canonical key used in {@link Properties} to specify the URI of the resource.
-     */
-    public static final String URI_KEY = KEY_PREFIX + "uri";
-
-    /**
-     * The canonical key used in {@link Properties} to specify the ID of a {@link RangeReaderProvider}.
+     * The key used in {@link Properties} to specify the ID of a {@link RangeReaderProvider}.
      * This can be used to force the use of a specific provider when URI-based disambiguation is not sufficient.
      */
-    public static final String PROVIDER_ID_KEY = KEY_PREFIX + "provider";
-
-    /** Legacy URI key, still accepted as input for backwards compatibility. */
-    static final String LEGACY_URI_KEY = LEGACY_KEY_PREFIX + "uri";
-
-    /** Legacy provider-id key, still accepted as input for backwards compatibility. */
-    static final String LEGACY_PROVIDER_ID_KEY = LEGACY_KEY_PREFIX + "provider";
+    public static final String PROVIDER_ID_KEY = "io.tileverse.rangereader.provider";
 
     /**
      * A parameter that can be used by client code to force a given {@link #providerId(String) provider id}
@@ -172,11 +146,10 @@ public class RangeReaderConfig {
      * @return This {@code RangeReaderConfig} instance for method chaining.
      */
     public RangeReaderConfig setParameter(String key, Object value) {
-        String normalized = normalizeKey(requireNonNull(key, "key"));
-        if (FORCE_PROVIDER_ID.key().equals(normalized)) {
+        if (FORCE_PROVIDER_ID.key().equals(key)) {
             this.providerId = value == null ? null : String.valueOf(value);
         }
-        this.parameterValues.put(normalized, value);
+        this.parameterValues.put(requireNonNull(key, "key"), value);
         return this;
     }
 
@@ -230,9 +203,8 @@ public class RangeReaderConfig {
      * @throws IllegalArgumentException if the value cannot be converted to the specified type.
      */
     public <T> Optional<T> getParameter(String key, Class<T> type) {
-        String normalized = normalizeKey(requireNonNull(key, "key"));
+        Object value = parameterValues.get(requireNonNull(key, "key"));
         requireNonNull(type, "type");
-        Object value = parameterValues.get(normalized);
         if (value == null) {
             return Optional.empty();
         }
@@ -303,17 +275,10 @@ public class RangeReaderConfig {
      */
     public static RangeReaderConfig fromProperties(Properties properties) {
         requireNonNull(properties);
-        Object urip = properties.get(URI_KEY);
-        if (urip == null) {
-            urip = properties.get(LEGACY_URI_KEY);
-        }
-        requireNonNull(urip, "Properties must include " + URI_KEY);
+        Object urip = requireNonNull(properties.get(URI_KEY), "Properties must include " + URI_KEY);
 
         URI uri = convertToURI(urip);
-        String providerId = properties.getProperty(PROVIDER_ID_KEY);
-        if (providerId == null) {
-            providerId = properties.getProperty(LEGACY_PROVIDER_ID_KEY);
-        }
+        String providerId = properties.getProperty(FORCE_PROVIDER_ID.key());
 
         RangeReaderConfig config = new RangeReaderConfig().uri(uri);
         config.providerId(providerId);
@@ -321,9 +286,7 @@ public class RangeReaderConfig {
         Properties copy = new Properties();
         copy.putAll(properties);
         copy.remove(URI_KEY);
-        copy.remove(LEGACY_URI_KEY);
         copy.remove(PROVIDER_ID_KEY);
-        copy.remove(LEGACY_PROVIDER_ID_KEY);
         copy.forEach((k, v) -> config.setParameter(String.valueOf(k), v));
         return config;
     }
@@ -378,42 +341,6 @@ public class RangeReaderConfig {
             }
             throw new IllegalArgumentException("Invalid URI: " + uriString, e);
         }
-    }
-
-    /**
-     * Normalizes a parameter key by rewriting the legacy {@value #LEGACY_KEY_PREFIX} prefix to
-     * the canonical {@value #KEY_PREFIX} prefix. Logs a one-time WARN per distinct legacy key.
-     *
-     * @param key The parameter key, possibly {@code null}.
-     * @return The normalized key, or {@code key} unchanged if it does not use the legacy prefix.
-     */
-    public static String normalizeKey(String key) {
-        if (key != null && key.startsWith(LEGACY_KEY_PREFIX)) {
-            String normalized = KEY_PREFIX + key.substring(LEGACY_KEY_PREFIX.length());
-            if (warnedLegacyKeys.add(key)) {
-                log.warn(
-                        "Legacy parameter key '{}' — use '{}'. Legacy keys remain accepted for backwards compatibility; new configurations should use the '{}*' form.",
-                        key,
-                        normalized,
-                        KEY_PREFIX);
-            }
-            return normalized;
-        }
-        return key;
-    }
-
-    /**
-     * Returns a copy of the given map with every key normalized via {@link #normalizeKey(String)}.
-     * Iteration order is preserved.
-     *
-     * @param in source map, must not be {@code null}.
-     * @return a new {@link LinkedHashMap} with normalized keys.
-     */
-    public static Map<String, Object> normalizeKeys(Map<String, ?> in) {
-        requireNonNull(in, "in");
-        Map<String, Object> out = new LinkedHashMap<>(in.size());
-        in.forEach((k, v) -> out.put(normalizeKey(k), v));
-        return out;
     }
 
     /**

@@ -1,0 +1,140 @@
+# Downstream integration build for tileverse consumers.
+#
+# Builds the current tileverse branch and exercises it through GeoTools'
+# gt-pmtiles module and GeoServer's gs-pmtiles-store community module to
+# catch breaking changes that pure unit/integration tests in this repo
+# would miss.
+#
+# Sequence (single job):
+#   1. Build and install tileverse (`make install`).
+#   2. Checkout GeoTools, build gt-pmtiles with `-Dtileverse.version=<this PR>` and run `verify`.
+#   3. Checkout GeoServer, run `verify` on src/community/pmtiles-store.
+#      No `-Dtileverse.version` override here: gs-pmtiles-store does not
+#      declare tileverse directly, it inherits the version transitively from
+#      the gt-pmtiles install in step 2.
+#
+# Triggers:
+#   - pull_request to `main` only. Backport branches (`*.x`) typically run
+#     against an older GeoTools/GeoServer state and would fail against
+#     `main`, so those go through workflow_dispatch with explicit refs.
+#   - workflow_dispatch with optional overrides for tileverse version,
+#     geotools ref, and geoserver ref.
+
+name: Downstream Integration (GeoTools and GeoServer)
+
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+  workflow_dispatch:
+    inputs:
+      tileverse_version:
+        description: 'Tileverse version to test (auto-detected from project.version if empty)'
+        required: false
+        default: ''
+      geotools_ref:
+        description: 'GeoTools git ref (branch, tag, or SHA)'
+        required: false
+        default: 'main'
+      geoserver_ref:
+        description: 'GeoServer git ref (branch, tag, or SHA)'
+        required: false
+        default: 'main'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_OPTS: -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.http.retryHandler.class=standard -Dmaven.wagon.http.retryHandler.count=2
+
+jobs:
+  downstream:
+    name: Build tileverse and verify downstream consumers
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout tileverse
+        uses: actions/checkout@v4
+        with:
+          path: tileverse
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Determine tileverse version
+        id: version
+        working-directory: tileverse
+        run: |
+          INPUT_VERSION='${{ github.event.inputs.tileverse_version }}'
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+            echo "Using tileverse version from workflow input: $VERSION"
+          else
+            VERSION=$(./mvnw -q help:evaluate -Dexpression=project.version -DforceStdout)
+            echo "Detected tileverse version: $VERSION"
+          fi
+          echo "tileverse_version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build and install tileverse
+        working-directory: tileverse
+        run: make install
+
+      - name: Checkout GeoTools
+        uses: actions/checkout@v4
+        with:
+          repository: geotools/geotools
+          ref: ${{ github.event.inputs.geotools_ref || 'main' }}
+          path: geotools
+          fetch-depth: 1
+
+      - name: GeoTools dependency:tree (verify tileverse coordinates)
+        working-directory: geotools
+        env:
+          TILEVERSE_VERSION: ${{ steps.version.outputs.tileverse_version }}
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B -ntp -nsu -pl modules/unsupported/pmtiles/ -Dtileverse.version="$TILEVERSE_VERSION" dependency:tree | grep tileverse
+
+      - name: Build and install gt-pmtiles
+        working-directory: geotools
+        env:
+          TILEVERSE_VERSION: ${{ steps.version.outputs.tileverse_version }}
+        run: mvn -B -ntp -nsu -pl modules/unsupported/pmtiles/ -Dtileverse.version="$TILEVERSE_VERSION" -DskipTests -am -T1C clean install
+
+      - name: Verify gt-pmtiles
+        working-directory: geotools
+        env:
+          TILEVERSE_VERSION: ${{ steps.version.outputs.tileverse_version }}
+        run: mvn -B -ntp -nsu -pl modules/unsupported/pmtiles/ -Dtileverse.version="$TILEVERSE_VERSION" -T1C verify
+
+      - name: Checkout GeoServer
+        uses: actions/checkout@v4
+        with:
+          repository: geoserver/geoserver
+          ref: ${{ github.event.inputs.geoserver_ref || 'main' }}
+          path: geoserver
+          fetch-depth: 1
+
+      - name: GeoServer dependency:tree (verify tileverse coordinates)
+        working-directory: geoserver
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B -ntp -nsu -f src/community/pmtiles-store/ dependency:tree | grep tileverse
+
+      - name: Verify gs-pmtiles-store
+        working-directory: geoserver
+        run: mvn -B -ntp -nsu -f src/community/pmtiles-store/ -T1C clean verify
+
+      - name: Remove SNAPSHOT jars from repository
+        if: always()
+        run: find ~/.m2/repository -name "*SNAPSHOT*" -type d -prune -exec rm -rf {} +

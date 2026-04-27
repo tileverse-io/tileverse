@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.tileverse.cache.CacheManager;
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
-import io.tileverse.rangereader.RangeReader;
+import io.tileverse.storage.RangeReader;
 import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
 import java.nio.ByteBuffer;

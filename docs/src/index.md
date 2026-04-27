@@ -8,44 +8,43 @@ These libraries are designed to be **composable**: pick the ones you need for yo
 
 | Library | Artifact | Role |
 | :--- | :--- | :--- |
-| **[Range Reader](rangereader/index.md)** | `tileverse-rangereader-all` | **I/O Abstraction**: Unified API for efficient byte-range access across S3, Azure, GCS, HTTP, and local files. |
-| **[PMTiles](pmtiles/index.md)** | `tileverse-pmtiles` | **Archive Format**: Read/write support for PMTiles v3, leveraging Range Reader for cloud access. |
+| **[Storage](storage/index.md)** | `tileverse-storage-all` | **Object Storage Abstraction**: Full container API (list, range/streaming reads, atomic writes, deletes, server-side copy, presigned URLs) across local files, HTTP, S3 (GP + Express), Azure (Blob + Data Lake Gen2), and GCS (flat + HNS). Includes the byte-range [`RangeReader`](storage/rangereader/index.md) API used by PMTiles, COG, and single-file Parquet. |
+| **[PMTiles](pmtiles/index.md)** | `tileverse-pmtiles` | **Archive Format**: Read/write support for PMTiles v3, leveraging Storage / RangeReader for cloud access. |
 | **[Vector Tiles](vectortiles/index.md)** | `tileverse-vectortiles` | **Codec**: High-performance encoding and decoding of Mapbox Vector Tiles (MVT) to/from JTS Geometries. |
 | **[Tile Matrix Set](tilematrixset/index.md)** | `tileverse-tilematrixset` | **Math & Logic**: Implementation of the OGC Tile Matrix Set standard for calculating tile pyramids and grids. |
 
 ## Ecosystem
 
-While `tileverse-pmtiles` naturally uses the other libraries, **Range Reader**, **Vector Tiles**, and **Tile Matrix Set** are completely standalone. 
+While `tileverse-pmtiles` naturally uses the other libraries, **Storage**, **Vector Tiles**, and **Tile Matrix Set** are completely standalone.
 
-
-
+*   Building a GeoParquet datastore that needs to list and read partitioned files in S3 / Azure / GCS? Use **Storage**.
+*   Reading COGs (Cloud Optimized GeoTIFFs) with byte-range requests? Use **Storage** (its `RangeReader` API) directly.
 *   Building a tile server from PostGIS? Use **Vector Tiles** and **Tile Matrix Set**.
-*   Reading COGs (Cloud Optimized GeoTIFFs)? Use **Range Reader**.
 *   Need a standard grid definition? Use **Tile Matrix Set**.
 
 ```mermaid
 graph TD
     App[Your App]
-    
+
     subgraph "I/O"
-        RR[Range Reader]
+        ST[Storage<br/>+ RangeReader API]
     end
-    
+
     subgraph "Formats"
         VT[Vector Tiles]
         PMT[PMTiles]
     end
-    
+
     subgraph "Spatial"
         TMS[Tile Matrix Set]
     end
-    
-    App --> RR
+
+    App --> ST
     App --> VT
     App --> PMT
     App --> TMS
-    
-    PMT -.-> RR
+
+    PMT -.-> ST
     PMT -.-> VT
     PMT -.-> TMS
 ```

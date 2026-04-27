@@ -1,4 +1,5 @@
 # Documentation build artifacts
 .venv/
-src/assets/images/rangereader/*svg
+src/assets/images/storage/structurizr-*.svg
 structurizr/exports/
+superpowers

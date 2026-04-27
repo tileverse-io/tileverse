@@ -25,22 +25,22 @@
     </dependencies>
   </dependencyManagement>
   <dependencies>
-    <!-- All Tileverse Range Reader modules -->
+    <!-- All Tileverse Storage modules -->
     <dependency>
-      <groupId>io.tileverse.rangereader</groupId>
-      <artifactId>tileverse-rangereader-core</artifactId>
+      <groupId>io.tileverse.storage</groupId>
+      <artifactId>tileverse-storage-core</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.tileverse.rangereader</groupId>
-      <artifactId>tileverse-rangereader-s3</artifactId>
+      <groupId>io.tileverse.storage</groupId>
+      <artifactId>tileverse-storage-s3</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.tileverse.rangereader</groupId>
-      <artifactId>tileverse-rangereader-azure</artifactId>
+      <groupId>io.tileverse.storage</groupId>
+      <artifactId>tileverse-storage-azure</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.tileverse.rangereader</groupId>
-      <artifactId>tileverse-rangereader-gcs</artifactId>
+      <groupId>io.tileverse.storage</groupId>
+      <artifactId>tileverse-storage-gcs</artifactId>
     </dependency>
 
     <!-- Vector Tiles module -->

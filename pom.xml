@@ -7,7 +7,7 @@
   <version>${revision}</version>
   <packaging>pom</packaging>
   <name>Tileverse</name>
-  <description>Cloud-optimized Java libraries for efficient access to tiled geospatial data from local files, HTTP servers, and cloud storage (S3, Azure, GCS). Includes Range Reader for byte-range access, PMTiles format support, Mapbox Vector Tiles encoding/decoding, and OGC Tile Matrix Set implementation.</description>
+  <description>Cloud-optimized Java libraries for efficient access to tiled geospatial data from local files, HTTP servers, and cloud storage (S3, Azure, GCS).</description>
   <url>https://tileverse.io</url>
 
   <licenses>
@@ -29,7 +29,7 @@
 
   <modules>
     <module>bom</module>
-    <module>tileverse-rangereader</module>
+    <module>tileverse-storage</module>
     <module>tileverse-vectortiles</module>
     <module>tileverse-tilematrixset</module>
     <module>tileverse-pmtiles</module>
@@ -126,6 +126,12 @@
         <scope>import</scope>
       </dependency>
 
+      <dependency>
+        <groupId>org.jspecify</groupId>
+        <artifactId>jspecify</artifactId>
+        <version>1.0.0</version>
+      </dependency>
+
       <!-- Logging -->
       <dependency>
         <groupId>org.slf4j</groupId>
@@ -172,8 +178,6 @@
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <version>${lombok.version}</version>
-        <scope>provided</scope>
-        <optional>true</optional>
       </dependency>
 
       <!-- Testing -->
@@ -251,6 +255,21 @@
     </dependencies>
   </dependencyManagement>
   <dependencies>
+    <!-- Common dependencies for all modules -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <scope>provided</scope>
+      <optional>true</optional>
+    </dependency>
     <!-- Testing -->
     <dependency>
       <groupId>org.junit.jupiter</groupId>

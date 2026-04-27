@@ -37,7 +37,7 @@ make test-it
 ./mvnw test -pl tileverse-pmtiles
 
 # Run S3 integration tests
-./mvnw verify -pl tileverse-rangereader/s3
+./mvnw verify -pl tileverse-storage/s3
 ```
 
 ## Test Infrastructure
@@ -53,7 +53,7 @@ We use specific images to emulate cloud environments:
 
 ### Performance Benchmarks
 
-Benchmarks are located in the `tileverse-rangereader/benchmarks` module.
+Benchmarks are located in the `tileverse-storage/benchmarks` module.
 
 ```bash
 # Build benchmarks

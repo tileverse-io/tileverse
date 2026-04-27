@@ -30,15 +30,13 @@ import java.nio.channels.SeekableByteChannel;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.function.Supplier;
+import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+@Slf4j
 @NullMarked
 class DirectoryCache {
-
-    private static final Logger log = LoggerFactory.getLogger("io.tileverse.pmtiles");
 
     private static final String SHARED_CACHE_NAME = "tileverse-pmtiles-directory-cache";
 

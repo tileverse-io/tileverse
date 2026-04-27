@@ -1,4 +1,4 @@
-workspace "Tileverse Range Reader" "Architecture documentation for Tileverse Range Reader library" {
+workspace "Tileverse Storage" "Architecture documentation for the Tileverse Storage library (I/O abstraction over object storage)" {
 
     model {
         properties {
@@ -6,7 +6,7 @@ workspace "Tileverse Range Reader" "Architecture documentation for Tileverse Ran
         }
 
         # People and external systems
-        developer = person "Developer" "A developer using the Tileverse Range Reader library" {
+        developer = person "Developer" "A developer using the Tileverse Storage library" {
             tags "Person"
         }
         
@@ -36,151 +36,159 @@ workspace "Tileverse Range Reader" "Architecture documentation for Tileverse Ran
         }
 
         # Main system
-        rangeReaderLibrary = softwareSystem "Tileverse Range Reader" "Java library for reading byte ranges from various data sources" {
+        storageLibrary = softwareSystem "Tileverse Storage" "Java I/O abstraction over object storage (local files, HTTP, S3, Azure Blob, GCS). Exposes a container Storage API (list, range/streaming reads, atomic writes, deletes, server-side copy, presigned URLs) and a byte-range RangeReader API used by single-file consumers like PMTiles, COG, and single-file Parquet." {
             tags "TileverseSystem"
-            
+
             # Core module
-            coreModule = container "Core Module" "Core interfaces and base implementations" "Java 17, Maven" {
+            coreModule = container "Core Module" "Storage API, RangeReader API, SPI (StorageProvider/StorageConfig), decorators, File and HTTP backends" "Java 17, Maven" {
                 tags "Module,Core"
-                
-                # Core components
-                rangeReaderInterface = component "RangeReader Interface" "Main interface for reading byte ranges" "Java Interface" {
+
+                # Top-level Storage API
+                storageInterface = component "Storage Interface" "Container API: stat, list, openRangeReader, read, put, delete, copy/move, presign" "Java Interface" {
                     tags "Interface"
                 }
-                
+
+                rangeReaderInterface = component "RangeReader Interface" "Byte-range read API for a single known blob" "Java Interface" {
+                    tags "Interface"
+                }
+
                 abstractRangeReader = component "AbstractRangeReader" "Base implementation with common functionality" "Java Abstract Class" {
                     tags "Abstract"
                 }
-                
-                fileRangeReader = component "FileRangeReader" "Reads ranges from local files" "Java Class" {
+
+                fileStorage = component "FileStorage / FileRangeReader" "Local filesystem backend (io.tileverse.storage.file)" "Java Class" {
                     tags "Implementation"
                 }
-                
-                httpRangeReader = component "HttpRangeReader" "Reads ranges from HTTP servers" "Java Class" {
+
+                httpStorage = component "HttpStorage / HttpRangeReader" "Read-only HTTP/HTTPS backend (io.tileverse.storage.http)" "Java Class" {
                     tags "Implementation"
                 }
-                
+
                 # Decorators
                 cachingRangeReader = component "CachingRangeReader" "In-memory caching decorator" "Java Class" {
                     tags "Decorator"
                 }
-                
+
                 diskCachingRangeReader = component "DiskCachingRangeReader" "Disk-based caching decorator" "Java Class" {
                     tags "Decorator"
                 }
-                
-                
+
+                # SPI
+                storageProvider = component "StorageProvider SPI" "ServiceLoader-based provider SPI (StorageProvider, StorageConfig, StorageParameter)" "Java Interface" {
+                    tags "Interface"
+                }
+
+                # Top-level entry point
+                storageFactory = component "StorageFactory" "Resolves a StorageProvider for a URI/Properties and opens a Storage; per-key range reads via Storage.openRangeReader(String)" "Java Class" {
+                    tags "Factory"
+                }
+
                 # Authentication
                 authenticationSystem = component "Authentication System" "HTTP authentication implementations" "Java Package" {
                     tags "Authentication"
                 }
             }
-            
+
             # Cloud provider modules
-            s3Module = container "S3 Module" "Amazon S3 and S3-compatible storage support" "Java 17, AWS SDK v2" {
+            s3Module = container "S3 Module" "Amazon S3 and S3-compatible storage support (io.tileverse.storage.s3)" "Java 17, AWS SDK v2" {
                 tags "Module,Cloud"
-                
-                s3RangeReader = component "S3RangeReader" "Reads ranges from S3 storage" "Java Class" {
+
+                s3Storage = component "S3Storage / S3RangeReader" "S3 backend (general-purpose buckets and S3 Express One Zone)" "Java Class" {
                     tags "Implementation"
                 }
             }
-            
-            azureModule = container "Azure Module" "Azure Blob Storage support" "Java 17, Azure SDK" {
+
+            azureModule = container "Azure Module" "Azure Blob Storage and Data Lake Gen2 support (io.tileverse.storage.azure)" "Java 17, Azure SDK" {
                 tags "Module,Cloud"
-                
-                azureBlobRangeReader = component "AzureBlobRangeReader" "Reads ranges from Azure Blob Storage" "Java Class" {
+
+                azureBlobStorage = component "AzureBlobStorage / AzureBlobRangeReader" "Azure Blob backend (flat keyspace + virtual directories)" "Java Class" {
+                    tags "Implementation"
+                }
+
+                azureDataLakeStorage = component "AzureDataLakeStorage" "Azure Data Lake Gen2 backend (HNS, real directories, atomic rename)" "Java Class" {
                     tags "Implementation"
                 }
             }
-            
-            gcsModule = container "GCS Module" "Google Cloud Storage support" "Java 17, Google Cloud SDK" {
+
+            gcsModule = container "GCS Module" "Google Cloud Storage support (io.tileverse.storage.gcs)" "Java 17, Google Cloud SDK" {
                 tags "Module,Cloud"
-                
-                gcsRangeReader = component "GoogleCloudStorageRangeReader" "Reads ranges from Google Cloud Storage" "Java Class" {
+
+                gcsStorage = component "GoogleCloudStorage / GoogleCloudStorageRangeReader" "GCS backend (flat or Hierarchical Namespace; HNS auto-detected)" "Java Class" {
                     tags "Implementation"
                 }
             }
-            
+
             # Aggregation module
-            allModule = container "All Module" "Aggregates all functionality" "Java 17, Maven" {
+            allModule = container "All Module" "Aggregates all providers into a single dependency" "Java 17, Maven" {
                 tags "Module,Aggregation"
-                
-                rangeReaderBuilder = component "RangeReaderBuilder" "Fluent API for creating readers" "Java Class" {
-                    tags "Builder"
-                }
-                
-                rangeReaderFactory = component "RangeReaderFactory" "Factory for creating readers from URIs" "Java Class" {
-                    tags "Factory"
-                }
-            }
-            
-            # Benchmarks
-            benchmarksModule = container "Benchmarks Module" "JMH performance benchmarks" "Java 17, JMH, TestContainers" {
-                tags "Module,Benchmarks"
             }
         }
 
         # Relationships - External to system
-        developer -> rangeReaderLibrary "Uses library to build applications"
-        application -> rangeReaderLibrary "Uses to read data ranges"
+        developer -> storageLibrary "Uses library to build applications"
+        application -> storageLibrary "Uses to read data ranges"
         
         # Relationships - System to external
-        rangeReaderLibrary -> localFileSystem "Reads from local files"
-        rangeReaderLibrary -> httpServer "Makes HTTP range requests"
-        rangeReaderLibrary -> awsS3 "Makes S3 range requests"
-        rangeReaderLibrary -> azureBlob "Makes Azure Blob range requests"
-        rangeReaderLibrary -> googleCloud "Makes GCS range requests"
+        storageLibrary -> localFileSystem "Reads from local files"
+        storageLibrary -> httpServer "Makes HTTP range requests"
+        storageLibrary -> awsS3 "Makes S3 range requests"
+        storageLibrary -> azureBlob "Makes Azure Blob range requests"
+        storageLibrary -> googleCloud "Makes GCS range requests"
         
         # Container relationships
-        coreModule -> localFileSystem "Reads via FileRangeReader"
-        coreModule -> httpServer "Reads via HttpRangeReader"
-        s3Module -> awsS3 "Reads via S3RangeReader"
-        azureModule -> azureBlob "Reads via AzureBlobRangeReader"
-        gcsModule -> googleCloud "Reads via GoogleCloudStorageRangeReader"
-        
+        coreModule -> localFileSystem "Reads / writes via FileStorage"
+        coreModule -> httpServer "Reads via HttpStorage"
+        s3Module -> awsS3 "Reads / writes via S3Storage"
+        azureModule -> azureBlob "Reads / writes via AzureBlobStorage / AzureDataLakeStorage"
+        gcsModule -> googleCloud "Reads / writes via GoogleCloudStorage"
+
         allModule -> coreModule "Depends on"
         allModule -> s3Module "Depends on"
         allModule -> azureModule "Depends on"
         allModule -> gcsModule "Depends on"
-        
-        benchmarksModule -> allModule "Benchmarks"
-        
+
         # Component relationships - Core
         abstractRangeReader -> rangeReaderInterface "Implements"
-        fileRangeReader -> abstractRangeReader "Extends"
-        httpRangeReader -> abstractRangeReader "Extends"
-        
+        fileStorage -> storageInterface "Implements"
+        httpStorage -> storageInterface "Implements"
+        fileStorage -> abstractRangeReader "Provides RangeReader via"
+        httpStorage -> abstractRangeReader "Provides RangeReader via"
+
         cachingRangeReader -> rangeReaderInterface "Implements (decorator)"
         diskCachingRangeReader -> rangeReaderInterface "Implements (decorator)"
-        
-        httpRangeReader -> authenticationSystem "Uses for authentication"
-        
+
+        httpStorage -> authenticationSystem "Uses for authentication"
+
         # Component relationships - Cloud modules
-        s3RangeReader -> abstractRangeReader "Extends"
-        azureBlobRangeReader -> abstractRangeReader "Extends"
-        gcsRangeReader -> abstractRangeReader "Extends"
-        
-        # Component relationships - All module
-        rangeReaderBuilder -> coreModule "Creates readers from"
-        rangeReaderBuilder -> s3Module "Creates readers from"
-        rangeReaderBuilder -> azureModule "Creates readers from"
-        rangeReaderBuilder -> gcsModule "Creates readers from"
-        
-        rangeReaderFactory -> rangeReaderBuilder "Uses"
+        s3Storage -> storageInterface "Implements"
+        azureBlobStorage -> storageInterface "Implements"
+        azureDataLakeStorage -> storageInterface "Implements"
+        gcsStorage -> storageInterface "Implements"
+        s3Storage -> abstractRangeReader "Provides RangeReader via"
+        azureBlobStorage -> abstractRangeReader "Provides RangeReader via"
+        azureDataLakeStorage -> abstractRangeReader "Provides RangeReader via"
+        gcsStorage -> abstractRangeReader "Provides RangeReader via"
+
+        # Component relationships - StorageFactory
+        storageFactory -> storageProvider "Discovers providers via ServiceLoader"
+        storageFactory -> storageInterface "Returns instances of"
+        storageFactory -> s3Module "Opens Storage backed by"
+        storageFactory -> azureModule "Opens Storage backed by"
+        storageFactory -> gcsModule "Opens Storage backed by"
     }
 
     views {
-        systemContext rangeReaderLibrary "SystemContext" {
+        systemContext storageLibrary "SystemContext" {
             include *
             autoLayout
-            title "System Context - Tileverse Range Reader"
-            description "Shows how the Tileverse Range Reader library fits into the overall ecosystem, connecting applications to various data sources."
+            title "System Context - Tileverse Storage"
+            description "Shows how the Tileverse Storage library fits into the overall ecosystem, connecting applications to various data sources."
         }
 
-        container rangeReaderLibrary "Containers" {
+        container storageLibrary "Containers" {
             include *
             autoLayout
-            title "Container View - Tileverse Range Reader Modules"
+            title "Container View - Tileverse Storage Modules"
             description "Shows the modular structure of the library with core functionality and cloud provider extensions."
         }
 
@@ -188,14 +196,14 @@ workspace "Tileverse Range Reader" "Architecture documentation for Tileverse Ran
             include *
             autoLayout
             title "Component View - Core Module"
-            description "Shows the internal structure of the core module including the decorator pattern implementation."
+            description "Shows the internal structure of the core module including the StorageProvider SPI and the decorator pattern implementation."
         }
 
         component allModule "AllModuleComponents" {
             include *
             autoLayout
             title "Component View - All Module"
-            description "Shows the builder and factory components that provide the fluent API."
+            description "Shows the All module aggregating the per-backend providers; consumers reach the providers through StorageFactory in core."
         }
 
         styles {
@@ -244,12 +252,7 @@ workspace "Tileverse Range Reader" "Architecture documentation for Tileverse Ran
                 background #9C27B0
                 color #ffffff
             }
-            
-            element "Module,Benchmarks" {
-                background #607D8B
-                color #ffffff
-            }
-            
+
             element "Interface" {
                 shape Component
                 background #4CAF50
@@ -279,13 +282,7 @@ workspace "Tileverse Range Reader" "Architecture documentation for Tileverse Ran
                 background #E91E63
                 color #ffffff
             }
-            
-            element "Builder" {
-                shape Component
-                background #9C27B0
-                color #ffffff
-            }
-            
+
             element "Factory" {
                 shape Component
                 background #673AB7

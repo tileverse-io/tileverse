@@ -4,23 +4,17 @@ This guide covers advanced topics for reading PMTiles archives.
 
 ## Opening PMTiles Archives
 
-PMTiles archives can be opened from any data source supported by Range Reader:
+PMTiles archives can be opened from any data source supported by `tileverse-storage`'s [`RangeReader`](../../storage/rangereader/index.md):
 
 ```java
 // Local file
-RangeReader fileReader = FileRangeReader.builder()
-    .path(Path.of("tiles.pmtiles"))
-    .build();
+RangeReader fileReader = StorageFactory.openRangeReader(Path.of("tiles.pmtiles").toUri());
 
 // HTTP
-RangeReader httpReader = HttpRangeReader.builder()
-    .uri(URI.create("https://example.com/tiles.pmtiles"))
-    .build();
+RangeReader httpReader = StorageFactory.openRangeReader(URI.create("https://example.com/tiles.pmtiles"));
 
-// S3
-RangeReader s3Reader = S3RangeReader.builder()
-    .uri(URI.create("s3://bucket/tiles.pmtiles"))
-    .build();
+// S3 (with optional Properties for region/credentials)
+RangeReader s3Reader = StorageFactory.openRangeReader(URI.create("s3://bucket/tiles.pmtiles"));
 ```
 
 ## Reading Header Information

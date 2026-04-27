@@ -22,12 +22,14 @@ import io.tileverse.cache.CacheManager;
 import io.tileverse.io.ByteRange;
 import io.tileverse.io.IOFunction;
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
-import io.tileverse.rangereader.RangeReader;
-import io.tileverse.rangereader.file.FileRangeReader;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
 import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SeekableByteChannel;
@@ -66,8 +68,9 @@ import tools.jackson.databind.ObjectMapper;
  * // Create a RangeReader for the desired source
  * RangeReader reader = new FileRangeReader(Path.of("/path/to/tiles.pmtiles"));
  *
- * // For cloud storage or HTTP, create the appropriate RangeReader
- * // RangeReader reader = RangeReaderFactory.create(URI.create("s3://bucket/tiles.pmtiles"));
+ * // Or open the parent Storage and request a key:
+ * // Storage storage = StorageFactory.open(URI.create("s3://bucket/"));
+ * // RangeReader reader = storage.openRangeReader("tiles.pmtiles");
  *
  * // Create the PMTilesReader with the RangeReader
  * try (PMTilesReader pmtiles = new PMTilesReader(reader)) {
@@ -105,7 +108,7 @@ public class PMTilesReader implements AutoCloseable {
      * @throws InvalidHeaderException if the file has an invalid header
      */
     public PMTilesReader(Path path) throws IOException {
-        this(FileRangeReader.of(path));
+        this(StorageFactory.openRangeReader(path.toUri()));
     }
 
     /**
@@ -124,6 +127,66 @@ public class PMTilesReader implements AutoCloseable {
     public PMTilesReader(RangeReader rangeReader) throws IOException {
         this(rangeReader.getSourceIdentifier(), rangeReader::asByteChannel);
         this.rangeReader = rangeReader;
+    }
+
+    /**
+     * Opens a PMTiles file at the given URI using the {@link Storage} API. Splits the URI into (parent, key), opens a
+     * {@link Storage} at the parent via {@link StorageFactory#open(URI)}, and uses
+     * {@link Storage#openRangeReader(String)} for the tail key. The returned {@code PMTilesReader} owns both the
+     * {@code RangeReader} and the parent {@code Storage}; closing the {@code PMTilesReader} closes both.
+     *
+     * @param uri the PMTiles URI; e.g. {@code s3://bucket/tiles.pmtiles},
+     *     {@code https://acct.blob.core.windows.net/container/tiles.pmtiles}, {@code gs://bucket/tiles.pmtiles},
+     *     {@code file:///path/to/tiles.pmtiles}
+     * @return a new {@code PMTilesReader}
+     * @throws IllegalArgumentException if the URI does not include a key
+     * @throws IOException if the URI cannot be opened
+     */
+    public static PMTilesReader open(URI uri) throws IOException {
+        String full = uri.toString();
+        int lastSlash = full.lastIndexOf('/');
+        if (lastSlash < 0 || lastSlash == full.length() - 1) {
+            throw new IllegalArgumentException("PMTiles URI must include a key: " + uri);
+        }
+        String key = full.substring(lastSlash + 1);
+        URI rootUri = URI.create(full.substring(0, lastSlash + 1));
+        Storage storage = StorageFactory.open(rootUri);
+        try {
+            RangeReader inner = storage.openRangeReader(key);
+            // Wrap so closing the PMTilesReader also closes the parent Storage.
+            return new PMTilesReader(new RangeReader() {
+                @Override
+                public java.util.OptionalLong size() {
+                    return inner.size();
+                }
+
+                @Override
+                public String getSourceIdentifier() {
+                    return inner.getSourceIdentifier();
+                }
+
+                @Override
+                public int readRange(long offset, int length, ByteBuffer target) {
+                    return inner.readRange(offset, length, target);
+                }
+
+                @Override
+                public void close() throws IOException {
+                    try {
+                        inner.close();
+                    } finally {
+                        storage.close();
+                    }
+                }
+            });
+        } catch (RuntimeException e) {
+            try {
+                storage.close();
+            } catch (IOException ignored) {
+                // best-effort
+            }
+            throw e;
+        }
     }
 
     /**

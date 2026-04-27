@@ -13,12 +13,12 @@ First, add the dependencies:
       <dependency>
         <groupId>io.tileverse.pmtiles</groupId>
         <artifactId>tileverse-pmtiles</artifactId>
-        <version>1.1.0</version>
+        <version>2.0.0</version>
       </dependency>
       <dependency>
-        <groupId>io.tileverse.rangereader</groupId>
-        <artifactId>tileverse-rangereader-all</artifactId>
-        <version>1.1.0</version>
+        <groupId>io.tileverse.storage</groupId>
+        <artifactId>tileverse-storage-all</artifactId>
+        <version>2.0.0</version>
       </dependency>
     </dependencies>
     ```
@@ -27,8 +27,8 @@ First, add the dependencies:
 
     ```gradle
     dependencies {
-        implementation 'io.tileverse.pmtiles:tileverse-pmtiles:1.1.0'
-        implementation 'io.tileverse.rangereader:tileverse-rangereader-all:1.1.0'
+        implementation 'io.tileverse.pmtiles:tileverse-pmtiles:2.0.0'
+        implementation 'io.tileverse.storage:tileverse-storage-all:2.0.0'
     }
     ```
 
@@ -37,20 +37,15 @@ First, add the dependencies:
 ```java
 import io.tileverse.pmtiles.PMTilesReader;
 import io.tileverse.pmtiles.PMTilesHeader;
-import io.tileverse.rangereader.RangeReader;
-import io.tileverse.rangereader.file.FileRangeReader;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.StorageFactory;
 import java.nio.file.Path;
 import java.util.Optional;
 
 public class QuickStart {
     public static void main(String[] args) throws Exception {
-        // Create a range reader for the PMTiles file
-        RangeReader rangeReader = FileRangeReader.builder()
-            .path(Path.of("world.pmtiles"))
-            .build();
-
-        // Open the PMTiles archive
-        try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
+        try (RangeReader rangeReader = StorageFactory.openRangeReader(Path.of("world.pmtiles").toUri());
+                PMTilesReader reader = new PMTilesReader(rangeReader)) {
             // Read the header to get metadata
             PMTilesHeader header = reader.getHeader();
             System.out.println("Tile Format: " + header.tileType());
@@ -61,8 +56,7 @@ public class QuickStart {
             Optional<ByteBuffer> tileData = reader.getTile(10, 885, 412);
 
             if (tileData.isPresent()) {
-                System.out.printf("Tile found! Size: %d bytes%n",
-                    tileData.get().remaining());
+                System.out.printf("Tile found! Size: %d bytes%n", tileData.get().remaining());
             } else {
                 System.out.println("Tile not found");
             }
@@ -74,14 +68,8 @@ public class QuickStart {
 ## Reading from HTTP
 
 ```java
-import io.tileverse.rangereader.http.HttpRangeReader;
-
-// Create HTTP range reader
-RangeReader httpReader = HttpRangeReader.builder()
-    .uri(URI.create("https://example.com/tiles.pmtiles"))
-    .build();
-
-try (PMTilesReader reader = new PMTilesReader(httpReader)) {
+try (RangeReader httpReader = StorageFactory.openRangeReader(URI.create("https://example.com/tiles.pmtiles"));
+        PMTilesReader reader = new PMTilesReader(httpReader)) {
     Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
     // Process tile...
 }
@@ -90,17 +78,16 @@ try (PMTilesReader reader = new PMTilesReader(httpReader)) {
 ## Reading from S3
 
 ```java
-import io.tileverse.rangereader.s3.S3RangeReader;
-import software.amazon.awssdk.regions.Region;
+import java.util.Properties;
 
-// Create S3 range reader
-RangeReader s3Reader = S3RangeReader.builder()
-    .uri(URI.create("s3://my-bucket/world.pmtiles"))
-    .region(Region.US_WEST_2)
-    .build();
+Properties props = new Properties();
+props.setProperty("storage.s3.region", "us-west-2");
 
-    try (PMTilesReader reader = new PMTilesReader(s3Reader)) {
-        Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);    // Process tile...
+try (RangeReader s3Reader = StorageFactory.openRangeReader(
+            URI.create("s3://my-bucket/world.pmtiles"), props);
+        PMTilesReader reader = new PMTilesReader(s3Reader)) {
+    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
+    // Process tile...
 }
 ```
 
@@ -109,16 +96,16 @@ RangeReader s3Reader = S3RangeReader.builder()
 For better performance, especially with cloud storage, add caching:
 
 ```java
-import io.tileverse.rangereader.cache.CachingRangeReader;
+import io.tileverse.storage.cache.CachingRangeReader;
 
-// Wrap the base reader with caching
-RangeReader cachedReader = CachingRangeReader.builder(s3Reader)
-    .maximumSize(1000)  // Cache up to 1000 ranges
-    .withBlockAlignment()  // Optimize reads
-    .build();
-
-try (PMTilesReader reader = new PMTilesReader(cachedReader)) {
-    // Subsequent reads will be cached
+try (RangeReader baseReader = StorageFactory.openRangeReader(
+            URI.create("s3://my-bucket/world.pmtiles"), props);
+        // Wrap the base reader with caching
+        RangeReader cachedReader = CachingRangeReader.builder(baseReader)
+            .maximumSize(1000)        // Cache up to 1000 ranges
+            .withBlockAlignment()     // Optimize reads
+            .build();
+        PMTilesReader reader = new PMTilesReader(cachedReader)) {
     Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
 }
 ```
@@ -149,4 +136,4 @@ try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
 - **[Reading PMTiles](reading.md)**: Learn more about reading operations
 - **[Writing PMTiles](writing.md)**: Create your own PMTiles archives
 - **[Cloud Storage](cloud-storage.md)**: Deep dive into cloud storage integration
-- **[Range Reader Guide](../../rangereader/user-guide/index.md)**: Understand the underlying data access layer
+- **[Storage Guide](../../storage/index.md)** and **[Range Reader Guide](../../storage/rangereader/user-guide/index.md)**: Understand the underlying data access layer

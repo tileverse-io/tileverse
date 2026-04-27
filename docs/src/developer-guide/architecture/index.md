@@ -4,7 +4,7 @@ Tileverse is designed as a collection of **loosely coupled, composable libraries
 
 ## Component Relationships
 
-The following diagram illustrates how the libraries relate to user applications and each other. Note that `pmtiles` is the only module that strictly depends on others (`rangereader` for I/O and `vectortiles` for decoding).
+The following diagram illustrates how the libraries relate to user applications and each other. Note that `pmtiles` is the only module that strictly depends on others (`tileverse-storage` for I/O and `vectortiles` for decoding).
 
 ```mermaid
 graph TD
@@ -13,7 +13,7 @@ graph TD
     end
 
     subgraph "Independent Modules"
-        RR[tileverse-rangereader]
+        ST[tileverse-storage<br/>Storage + RangeReader]
         VT[tileverse-vectortiles]
         TMS[tileverse-tilematrixset]
     end
@@ -22,24 +22,24 @@ graph TD
         PMT[tileverse-pmtiles]
     end
 
-    App --> RR
+    App --> ST
     App --> VT
     App --> TMS
     App --> PMT
-    
-    PMT --> RR
+
+    PMT --> ST
     PMT --> VT
     PMT --> TMS
 ```
 
 ## Design Philosophy
 
-### 1. I/O Independence (`rangereader`)
-We treat data access as a distinct problem from data format. 
+### 1. I/O Independence (`tileverse-storage`)
+We treat data access as a distinct problem from data format.
 
-*   **Goal:** Read bytes from anywhere (S3, HTTP, Azure, File) efficiently.
+*   **Goal:** Read (and write, list, copy, presign) bytes from anywhere (S3, HTTP, Azure, GCS, File) efficiently.
 *   **Anti-Pattern:** Format libraries (like a GeoTIFF reader) implementing their own S3 clients.
-*   **Solution:** `RangeReader` provides a unified `readRange(start, length)` interface.
+*   **Solution:** `Storage` provides a unified container API; its `RangeReader` API exposes the byte-range read surface used by single-file consumers (PMTiles, COG, single-file Parquet).
 
 ### 2. Pure Mathematical Models (`tilematrixset`)
 Spatial reference systems and grid logic are kept separate from data storage.
@@ -60,7 +60,7 @@ Applications often use modules directly:
 
 *   **ETL Pipelines:** Use `vectortiles` to convert PostGIS geometry to MVT bytes.
 *   **Tile Servers:** Use `tilematrixset` to calculate which tiles cover a viewport.
-*   **Data Access:** Use `rangereader` to fetch partial content from Cloud Optimized GeoTIFFs (COGs) stored on S3.
+*   **Data Access:** Use `tileverse-storage` (its `RangeReader` API) to fetch partial content from Cloud Optimized GeoTIFFs (COGs) stored on S3.
 
 ### Composed Usage
 The `pmtiles` library demonstrates the power of composition:

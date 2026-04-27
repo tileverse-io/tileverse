@@ -10,7 +10,7 @@
 
   <groupId>io.tileverse.vectortiles</groupId>
   <artifactId>tileverse-vectortiles</artifactId>
-  <name>Tileverse Vector Tiles</name>
+  <name>Tileverse :: Vector Tiles</name>
   <description>Vector tile encoding/decoding for Tileverse</description>
 
   <dependencyManagement>

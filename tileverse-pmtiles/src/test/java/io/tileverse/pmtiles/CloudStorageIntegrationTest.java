@@ -19,22 +19,27 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.BlobServiceClientBuilder;
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
-import io.tileverse.rangereader.RangeReader;
-import io.tileverse.rangereader.azure.AzureBlobRangeReader;
-import io.tileverse.rangereader.cache.CachingRangeReader;
-import io.tileverse.rangereader.http.HttpRangeReader;
-import io.tileverse.rangereader.s3.S3RangeReader;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
+import io.tileverse.storage.azure.AzureBlobStorageProvider;
+import io.tileverse.storage.cache.CachingRangeReader;
+import io.tileverse.storage.s3.S3StorageProvider;
 import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.Optional;
+import java.util.Properties;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
 
 /**
  * Integration tests for cloud storage access with PMTilesReader using RangeReaderBuilder.
@@ -90,16 +95,18 @@ class CloudStorageIntegrationTest {
                 s3Bucket != null && s3Key != null && s3Region != null,
                 "S3 test configuration not found in environment variables");
 
-        URI s3Uri = URI.create("s3://" + s3Bucket + "/" + s3Key);
+        URI bucketUri = URI.create("s3://" + s3Bucket + "/");
 
-        try (S3RangeReader s3Reader = S3RangeReader.builder()
-                        .uri(s3Uri)
-                        .region(Region.of(s3Region))
-                        .credentialsProvider(
-                                DefaultCredentialsProvider.builder().build())
-                        .build();
+        S3Client s3Client = S3Client.builder()
+                .region(Region.of(s3Region))
+                .credentialsProvider(DefaultCredentialsProvider.builder().build())
+                .build();
+
+        try (S3Client closeable = s3Client;
+                Storage storage = S3StorageProvider.open(bucketUri, s3Client);
+                RangeReader baseReader = storage.openRangeReader(s3Key);
                 RangeReader rangeReader =
-                        CachingRangeReader.builder(s3Reader).blockSize(16384).build()) {
+                        CachingRangeReader.builder(baseReader).blockSize(16384).build()) {
 
             PMTilesReader pmTilesReader = new PMTilesReader(rangeReader);
             // Verify we can read the header
@@ -130,16 +137,20 @@ class CloudStorageIntegrationTest {
                 azureConnectionString != null && azureContainer != null && azureBlob != null,
                 "Azure test configuration not found in environment variables");
 
-        try (AzureBlobRangeReader azureRangeReader = AzureBlobRangeReader.builder()
-                        .connectionString(azureConnectionString)
-                        .containerName(azureContainer)
-                        .blobName(azureBlob)
-                        .build();
-                RangeReader reader = CachingRangeReader.builder(azureRangeReader)
-                        .blockSize(32768)
-                        .build()) {
+        BlobServiceClient blobServiceClient = new BlobServiceClientBuilder()
+                .connectionString(azureConnectionString)
+                .buildClient();
 
-            PMTilesReader pmTilesReader = new PMTilesReader(azureRangeReader);
+        // Container endpoint URI is required by AzureBlobStorageProvider.open; derive it from the service client.
+        URI containerUri = URI.create(
+                blobServiceClient.getBlobContainerClient(azureContainer).getBlobContainerUrl() + "/");
+
+        try (Storage storage = AzureBlobStorageProvider.open(containerUri, blobServiceClient);
+                RangeReader baseReader = storage.openRangeReader(azureBlob);
+                RangeReader reader =
+                        CachingRangeReader.builder(baseReader).blockSize(32768).build()) {
+
+            PMTilesReader pmTilesReader = new PMTilesReader(reader);
             // Verify we can read the header
             PMTilesHeader header = pmTilesReader.getHeader();
             assertNotNull(header);
@@ -165,10 +176,11 @@ class CloudStorageIntegrationTest {
 
         URI httpUri = URI.create(httpUrl);
 
-        try (HttpRangeReader httpRangeReader =
-                        HttpRangeReader.builder(httpUri).trustAllCertificates().build();
-                RangeReader rangeReader =
-                        CachingRangeReader.builder(httpRangeReader).build()) {
+        Properties props = new Properties();
+        props.setProperty("storage.http.trust-all-certificates", "true");
+
+        try (RangeReader baseReader = StorageFactory.openRangeReader(httpUri, props);
+                RangeReader rangeReader = CachingRangeReader.builder(baseReader).build()) {
 
             PMTilesReader pmTilesReader = new PMTilesReader(rangeReader);
             // Verify we can read the header

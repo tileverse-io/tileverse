@@ -37,11 +37,11 @@ assignees: []
 
 ### Module Information
 <!-- Which modules are you using? -->
-- [ ] tileverse-rangereader-core
-- [ ] tileverse-rangereader-s3
-- [ ] tileverse-rangereader-azure
-- [ ] tileverse-rangereader-gcs
-- [ ] tileverse-rangereader-all
+- [ ] tileverse-storage-core
+- [ ] tileverse-storage-s3
+- [ ] tileverse-storage-azure
+- [ ] tileverse-storage-gcs
+- [ ] tileverse-storage-all
 
 ### Configuration
 <!-- Relevant configuration details -->

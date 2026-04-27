@@ -17,8 +17,8 @@ package io.tileverse.pmtiles;
 
 import static java.util.Objects.requireNonNull;
 
-import io.tileverse.rangereader.RangeReader;
-import io.tileverse.rangereader.file.FileRangeReader;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.StorageFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -40,7 +40,7 @@ public class PMTilesTestData {
     }
 
     public static RangeReader andorraFileRangeReader(Path tmpFolder) throws IOException {
-        return FileRangeReader.of(andorra(tmpFolder));
+        return StorageFactory.openRangeReader(andorra(tmpFolder).toUri());
     }
 
     public static List<String> andorraLayerNames() {

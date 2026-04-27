@@ -6,7 +6,7 @@ A Java library for reading and writing PMTiles - a cloud-optimized format for ma
 
 ## Overview
 
-Tileverse PMTiles is a Java implementation of the PMTiles format that provides efficient reading and writing capabilities for PMTiles archives. Built on top of [Tileverse Range Reader](../tileverse-rangereader/), it supports both local files and cloud storage sources (S3, Azure Blob Storage, Google Cloud Storage, HTTP).
+Tileverse PMTiles is a Java implementation of the PMTiles format that provides efficient reading and writing capabilities for PMTiles archives. Built on top of [Tileverse Storage](../tileverse-storage/), it supports both local files and cloud storage sources (S3, Azure Blob Storage, Google Cloud Storage, HTTP).
 
 ## Features
 
@@ -14,7 +14,7 @@ Tileverse PMTiles is a Java implementation of the PMTiles format that provides e
 - **Write PMTiles v3 files** with efficient spatial indexing
 - **Cloud-optimized access** via HTTP range requests
 - **High-performance tile retrieval** using Hilbert curve spatial indexing
-- **Multi-source support** through tileverse-rangereader integration
+- **Multi-source support** through tileverse-storage integration
 - **Thread-safe operations** for concurrent access
 - **Memory-efficient streaming** for large datasets
 
@@ -25,13 +25,13 @@ Tileverse PMTiles is a Java implementation of the PMTiles format that provides e
 <dependency>
     <groupId>io.tileverse.pmtiles</groupId>
     <artifactId>tileverse-pmtiles</artifactId>
-    <version>1.1.0</version>
+    <version>2.0.0</version>
 </dependency>
 ```
 
 **Gradle:**
 ```gradle
-implementation 'io.tileverse.pmtiles:tileverse-pmtiles:1.1.0'
+implementation 'io.tileverse.pmtiles:tileverse-pmtiles:2.0.0'
 ```
 
 See the [main README](../README.md#installation) for BOM usage.
@@ -42,7 +42,7 @@ See the [main README](../README.md#installation) for BOM usage.
 
 ```java
 import io.tileverse.pmtiles.PMTilesReader;
-import io.tileverse.rangereader.file.FileRangeReader;
+import io.tileverse.storage.rangereader.file.FileRangeReader;
 
 // Create a range reader for the local file
 RangeReader rangeReader = FileRangeReader.builder()
@@ -71,8 +71,8 @@ try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
 #### Reading PMTiles from Cloud Storage
 
 ```java
-import io.tileverse.rangereader.s3.S3RangeReader;
-import io.tileverse.rangereader.cache.CachingRangeReader;
+import io.tileverse.storage.rangereader.s3.S3RangeReader;
+import io.tileverse.storage.rangereader.cache.CachingRangeReader;
 
 // Create an S3 range reader with caching
 RangeReader s3Reader = S3RangeReader.builder()
@@ -94,7 +94,7 @@ try (PMTilesReader reader = new PMTilesReader(cachedReader)) {
 #### Reading PMTiles from HTTP Sources
 
 ```java
-import io.tileverse.rangereader.http.HttpRangeReader;
+import io.tileverse.storage.rangereader.http.HttpRangeReader;
 
 // Read from HTTP with authentication
 RangeReader httpReader = HttpRangeReader.builder()
@@ -119,7 +119,7 @@ For more detailed information, see the documentation:
 
 This library works together with other Tileverse modules:
 
-- **[tileverse-rangereader](../tileverse-rangereader/)**: Provides the underlying data access layer
+- **[tileverse-storage](../tileverse-storage/)**: Provides the underlying data access layer
 - **[tileverse-vectortiles](../tileverse-vectortiles/)**: For working with Mapbox Vector Tiles
 - **[tileverse-tilematrixset](../tileverse-tilematrixset/)**: Generic tile pyramid and tiling scheme models
 
@@ -128,7 +128,7 @@ This library works together with other Tileverse modules:
 Tileverse PMTiles is designed for high-performance access to PMTiles archives:
 
 - **Efficient spatial indexing** using Hilbert curves for fast tile lookup
-- **Multi-level caching** through tileverse-rangereader integration
+- **Multi-level caching** through tileverse-storage integration
 - **Block-aligned reads** to minimize cloud storage requests
 - **Memory-efficient streaming** for processing large tile sets
 - **Thread-safe concurrent access** for server applications
@@ -137,4 +137,4 @@ Tileverse PMTiles is designed for high-performance access to PMTiles archives:
 
 - **[PMTiles Format Specification](https://github.com/protomaps/PMTiles/blob/main/spec/v3/spec.md)**: Official specification
 - **[Tileverse Documentation](https://tileverse.io)**: Complete documentation for all Tileverse libraries
-- **[Tileverse Range Reader](../tileverse-rangereader/README.md)**: Learn about the underlying data access layer
+- **[Tileverse Storage](../tileverse-storage/README.md)**: Learn about the underlying data access layer

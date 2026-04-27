@@ -50,7 +50,7 @@ You can build specific modules to save time:
 
 ```bash
 # Build Range Reader only
-./mvnw clean package -pl tileverse-rangereader
+./mvnw clean package -pl tileverse-storage
 
 # Build PMTiles only
 ./mvnw clean package -pl tileverse-pmtiles

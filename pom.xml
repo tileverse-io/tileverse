@@ -86,7 +86,7 @@
     <protobuf-java.version>4.33.2</protobuf-java.version>
     <slf4j-api.version>2.0.17</slf4j-api.version>
     <zstd-jni.version>1.5.7-6</zstd-jni.version>
-    <lombok.version>1.18.42</lombok.version>
+    <lombok.version>1.18.46</lombok.version>
 
     <!-- Test Dependency versions -->
     <assertj.version>3.27.3</assertj.version>
@@ -101,7 +101,7 @@
     <failsafe.skip>false</failsafe.skip>
 
     <!-- Plugin versions -->
-    <jacoco.version>0.8.13</jacoco.version>
+    <jacoco.version>0.8.14</jacoco.version>
 
     <!-- JaCoCo argLine property (overridden by jacoco:prepare-agent when coverage profile is active) -->
     <argLine></argLine>
@@ -332,10 +332,11 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.14.0</version>
+          <version>3.15.0</version>
           <inherited>true</inherited>
           <configuration>
             <release>${maven.compiler.release}</release>
+            <parameters>true</parameters>
             <annotationProcessorPaths>
               <path>
                 <groupId>org.projectlombok</groupId>
@@ -378,12 +379,12 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.5.3</version>
+          <version>3.5.5</version>
           <inherited>true</inherited>
           <configuration>
             <skip>${surefire.skip}</skip>
             <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
-            <argLine>@{argLine} --enable-native-access=ALL-UNNAMED --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
+            <argLine>@{argLine} --enable-native-access=ALL-UNNAMED --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/jdk.internal.reflect=ALL-UNNAMED -Dnet.bytebuddy.experimental=true</argLine>
             <systemPropertyVariables>
               <junit.jupiter.execution.parallel.enabled>true</junit.jupiter.execution.parallel.enabled>
               <junit.jupiter.execution.parallel.mode.default>concurrent</junit.jupiter.execution.parallel.mode.default>
@@ -397,12 +398,12 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-failsafe-plugin</artifactId>
-          <version>3.5.3</version>
+          <version>3.5.5</version>
           <inherited>true</inherited>
           <configuration>
             <skip>${failsafe.skip}</skip>
             <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
-            <argLine>@{argLine} --enable-native-access=ALL-UNNAMED --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED</argLine>
+            <argLine>@{argLine} --enable-native-access=ALL-UNNAMED --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/jdk.internal.reflect=ALL-UNNAMED -Dnet.bytebuddy.experimental=true</argLine>
             <systemPropertyVariables>
               <junit.jupiter.execution.parallel.enabled>true</junit.jupiter.execution.parallel.enabled>
               <junit.jupiter.execution.parallel.mode.default>concurrent</junit.jupiter.execution.parallel.mode.default>

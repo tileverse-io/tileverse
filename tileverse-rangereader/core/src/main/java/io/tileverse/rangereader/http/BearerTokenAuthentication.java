@@ -21,9 +21,9 @@ import java.util.Objects;
 
 /**
  * HTTP Bearer Token Authentication implementation for HttpRangeReader.
- * <p>
- * This authenticator adds the standard Bearer token Authorization header
- * to requests, which is commonly used for OAuth and JWT tokens.
+ *
+ * <p>This authenticator adds the standard Bearer token Authorization header to requests, which is commonly used for
+ * OAuth and JWT tokens.
  */
 public class BearerTokenAuthentication implements HttpAuthentication {
 

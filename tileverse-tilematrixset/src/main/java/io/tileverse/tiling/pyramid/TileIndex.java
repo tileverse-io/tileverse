@@ -21,12 +21,11 @@ import java.util.Comparator;
 import java.util.function.LongUnaryOperator;
 
 /**
- * Represents a 3D tile coordinate (x, y, z) combining spatial position with zoom level.
- * This is an immutable value object that provides coordinate manipulation methods.
- * Orders tiles by zoom level first, then by 2D coordinates.
+ * Represents a 3D tile coordinate (x, y, z) combining spatial position with zoom level. This is an immutable value
+ * object that provides coordinate manipulation methods. Orders tiles by zoom level first, then by 2D coordinates.
  *
- * <p>The implementation automatically chooses between memory-optimized variants:
- * uses 32-bit integers when coordinates fit, falls back to 64-bit longs when needed.
+ * <p>The implementation automatically chooses between memory-optimized variants: uses 32-bit integers when coordinates
+ * fit, falls back to 64-bit longs when needed.
  *
  * @since 1.0
  */
@@ -36,8 +35,8 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
             Comparator.comparingInt(TileIndex::z).thenComparing(TileIndex::x).thenComparing(TileIndex::y);
 
     /**
-     * Factory method to create a TileIndex with the specified coordinates.
-     * Automatically chooses the most memory-efficient implementation.
+     * Factory method to create a TileIndex with the specified coordinates. Automatically chooses the most
+     * memory-efficient implementation.
      *
      * @param x the X coordinate
      * @param y the Y coordinate
@@ -153,8 +152,8 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
      * Compares this tile index with another, ordering by zoom level first, then by 2D coordinates.
      *
      * @param o the other tile index to compare with
-     * @return a negative integer, zero, or a positive integer as this tile index is less than,
-     *         equal to, or greater than the specified tile index
+     * @return a negative integer, zero, or a positive integer as this tile index is less than, equal to, or greater
+     *     than the specified tile index
      */
     @Override
     default int compareTo(TileIndex o) {
@@ -162,8 +161,8 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
     }
 
     /**
-     * Static helper method for equals implementation.
-     * Ensures consistent equality behavior across different TileIndex implementations.
+     * Static helper method for equals implementation. Ensures consistent equality behavior across different TileIndex
+     * implementations.
      *
      * @param tile1 the first tile index
      * @param tile2 the index to compare with
@@ -174,8 +173,8 @@ public sealed interface TileIndex extends Comparable<TileIndex> permits TileInde
     }
 
     /**
-     * Static helper method for hashCode implementation.
-     * Ensures consistent hash code behavior across different TileIndex implementations.
+     * Static helper method for hashCode implementation. Ensures consistent hash code behavior across different
+     * TileIndex implementations.
      *
      * @param tile the tile index to compute hash code for
      * @return the hash code

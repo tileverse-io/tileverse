@@ -19,9 +19,9 @@ import java.io.IOException;
 
 /**
  * Exception thrown when a ByteBuffer has insufficient capacity for encoding a vector tile.
- * <p>
- * The caller can use the {@link #getSerializedSize()} to determine the required buffer size
- * and retry the operation with an appropriately sized buffer.
+ *
+ * <p>The caller can use the {@link #getSerializedSize()} to determine the required buffer size and retry the operation
+ * with an appropriately sized buffer.
  */
 @SuppressWarnings("serial")
 public class InsufficientBufferException extends IOException {
@@ -44,9 +44,8 @@ public class InsufficientBufferException extends IOException {
     }
 
     /**
-     * Returns the required buffer size in bytes for the vector tile.
-     * The caller can use this value to allocate an appropriately sized buffer
-     * and retry the encoding operation.
+     * Returns the required buffer size in bytes for the vector tile. The caller can use this value to allocate an
+     * appropriately sized buffer and retry the encoding operation.
      *
      * @return the serialized size in bytes
      */

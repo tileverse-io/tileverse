@@ -36,10 +36,10 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Tests for the ByteBuffer-reusing API of RangeReader implementations.
- * <p>
- * These tests verify that the {@code int readRange(long offset, int length, ByteBuffer target)}
- * method correctly returns the number of bytes read and leaves the target buffer in a readable
- * state without requiring the caller to flip it.
+ *
+ * <p>These tests verify that the {@code int readRange(long offset, int length, ByteBuffer target)} method correctly
+ * returns the number of bytes read and leaves the target buffer in a readable state without requiring the caller to
+ * flip it.
  */
 class RangeReaderBufferTest {
 

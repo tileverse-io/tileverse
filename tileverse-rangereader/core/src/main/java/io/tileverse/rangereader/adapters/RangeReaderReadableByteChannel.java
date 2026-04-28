@@ -26,26 +26,24 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * A {@link ReadableByteChannel} adapter that wraps a {@link RangeReader} to provide
- * standard Java NIO channel semantics for sequential reading.
- * <p>
- * This adapter allows RangeReader instances to be used with any API that expects
- * a ReadableByteChannel, enabling integration with standard Java NIO operations,
- * file systems, and frameworks that work with channels.
- * <p>
- * <strong>Thread Safety:</strong> This class is thread-safe if the underlying
- * RangeReader is thread-safe. The position state is managed internally with
- * proper synchronization.
- * <p>
- * <strong>Read-Only Channel:</strong> This channel is read-only. It provides sequential
- * access to the underlying RangeReader starting from position 0.
- * <p>
- * <strong>Lifecycle Management:</strong> This channel does not take ownership of the
- * underlying RangeReader. Closing this channel will not close the underlying RangeReader.
- * Note that while multiple channels could technically share the same RangeReader,
- * this is not recommended as they would interfere with each other's position state.
+ * A {@link ReadableByteChannel} adapter that wraps a {@link RangeReader} to provide standard Java NIO channel semantics
+ * for sequential reading.
  *
- * <p><strong>Usage Example:</strong></p>
+ * <p>This adapter allows RangeReader instances to be used with any API that expects a ReadableByteChannel, enabling
+ * integration with standard Java NIO operations, file systems, and frameworks that work with channels.
+ *
+ * <p><strong>Thread Safety:</strong> This class is thread-safe if the underlying RangeReader is thread-safe. The
+ * position state is managed internally with proper synchronization.
+ *
+ * <p><strong>Read-Only Channel:</strong> This channel is read-only. It provides sequential access to the underlying
+ * RangeReader starting from position 0.
+ *
+ * <p><strong>Lifecycle Management:</strong> This channel does not take ownership of the underlying RangeReader. Closing
+ * this channel will not close the underlying RangeReader. Note that while multiple channels could technically share the
+ * same RangeReader, this is not recommended as they would interfere with each other's position state.
+ *
+ * <p><strong>Usage Example:</strong>
+ *
  * <pre>{@code
  * RangeReader reader = FileRangeReader.of(path);
  * try (ReadableByteChannel channel = RangeReaderReadableByteChannel.of(reader)) {
@@ -93,9 +91,9 @@ public class RangeReaderReadableByteChannel implements ReadableByteChannel {
 
     /**
      * {@inheritDoc}
-     * <p>
-     * Reads bytes from the current position in the underlying RangeReader into the
-     * provided buffer. The position is advanced by the number of bytes read.
+     *
+     * <p>Reads bytes from the current position in the underlying RangeReader into the provided buffer. The position is
+     * advanced by the number of bytes read.
      *
      * @param dst the buffer to read into
      * @return the number of bytes read, or -1 if the end of the source is reached
@@ -138,8 +136,7 @@ public class RangeReaderReadableByteChannel implements ReadableByteChannel {
     }
 
     /**
-     * Returns the current position in the source. The position is advanced
-     * by read operations.
+     * Returns the current position in the source. The position is advanced by read operations.
      *
      * @return the current position
      * @throws ClosedChannelException if this channel is closed
@@ -165,8 +162,8 @@ public class RangeReaderReadableByteChannel implements ReadableByteChannel {
 
     /**
      * {@inheritDoc}
-     * <p>
-     * Returns whether this channel is currently open.
+     *
+     * <p>Returns whether this channel is currently open.
      *
      * @return true if this channel is open, false otherwise
      */
@@ -177,13 +174,12 @@ public class RangeReaderReadableByteChannel implements ReadableByteChannel {
 
     /**
      * {@inheritDoc}
-     * <p>
-     * Closes this channel. After calling this method, all other operations on this
-     * channel will throw {@link ClosedChannelException}.
-     * <p>
-     * <strong>Note:</strong> This method does not close the underlying RangeReader,
-     * as this channel does not take ownership of it. The RangeReader should be
-     * closed separately by the caller if needed.
+     *
+     * <p>Closes this channel. After calling this method, all other operations on this channel will throw
+     * {@link ClosedChannelException}.
+     *
+     * <p><strong>Note:</strong> This method does not close the underlying RangeReader, as this channel does not take
+     * ownership of it. The RangeReader should be closed separately by the caller if needed.
      *
      * @throws IOException this implementation never throws IOException
      */
@@ -194,11 +190,10 @@ public class RangeReaderReadableByteChannel implements ReadableByteChannel {
 
     /**
      * Gets the underlying RangeReader that this channel wraps.
-     * <p>
-     * This method provides access to the underlying RangeReader for cases where
-     * RangeReader-specific functionality is needed. Care should be taken when
-     * using the returned RangeReader directly, as it may affect the state of
-     * this channel.
+     *
+     * <p>This method provides access to the underlying RangeReader for cases where RangeReader-specific functionality
+     * is needed. Care should be taken when using the returned RangeReader directly, as it may affect the state of this
+     * channel.
      *
      * @return the underlying RangeReader
      * @throws ClosedChannelException if this channel is closed
@@ -210,8 +205,8 @@ public class RangeReaderReadableByteChannel implements ReadableByteChannel {
 
     /**
      * Gets the source identifier from the underlying RangeReader.
-     * <p>
-     * This is a convenience method that delegates to the underlying RangeReader's
+     *
+     * <p>This is a convenience method that delegates to the underlying RangeReader's
      * {@link RangeReader#getSourceIdentifier()} method.
      *
      * @return the source identifier

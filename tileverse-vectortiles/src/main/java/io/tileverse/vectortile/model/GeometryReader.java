@@ -24,19 +24,21 @@ import org.locationtech.jts.geom.GeometryFactory;
 
 /**
  * Interface for reading and customizing geometry decoding from vector tile features.
- * <p>
- * GeometryReader provides a flexible way to control how geometries are decoded from vector tile data,
- * allowing customization of the JTS GeometryFactory and application of coordinate transformations.
+ *
+ * <p>GeometryReader provides a flexible way to control how geometries are decoded from vector tile data, allowing
+ * customization of the JTS GeometryFactory and application of coordinate transformations.
  *
  * <h2>Key Features</h2>
+ *
  * <ul>
- * <li><strong>Custom GeometryFactory</strong> - Control coordinate sequence implementation and precision</li>
- * <li><strong>Coordinate Transformations</strong> - Apply scaling, translation, projection changes</li>
- * <li><strong>Chainable Configuration</strong> - Fluent API for combining multiple customizations</li>
- * <li><strong>Transformation Utilities</strong> - Helper methods for common transformation patterns</li>
+ *   <li><strong>Custom GeometryFactory</strong> - Control coordinate sequence implementation and precision
+ *   <li><strong>Coordinate Transformations</strong> - Apply scaling, translation, projection changes
+ *   <li><strong>Chainable Configuration</strong> - Fluent API for combining multiple customizations
+ *   <li><strong>Transformation Utilities</strong> - Helper methods for common transformation patterns
  * </ul>
  *
  * <h2>Usage Examples</h2>
+ *
  * <pre>{@code
  * // Basic usage with custom GeometryFactory
  * GeometryFactory customFactory = new GeometryFactory(new CoordinateArraySequenceFactory());
@@ -75,9 +77,9 @@ public interface GeometryReader {
 
     /**
      * Decodes geometry data from a vector tile feature.
-     * <p>
-     * This method converts the feature's encoded geometry using the current configuration
-     * (GeometryFactory and transformations) of this GeometryReader.
+     *
+     * <p>This method converts the feature's encoded geometry using the current configuration (GeometryFactory and
+     * transformations) of this GeometryReader.
      *
      * @param feature the vector tile feature containing geometry data
      * @return the decoded JTS Geometry object
@@ -87,12 +89,13 @@ public interface GeometryReader {
 
     /**
      * Returns a new GeometryReader configured with the specified GeometryFactory.
-     * <p>
-     * The GeometryFactory controls how JTS geometry objects are created, including:
+     *
+     * <p>The GeometryFactory controls how JTS geometry objects are created, including:
+     *
      * <ul>
-     * <li>Coordinate sequence implementation (array-based, packed, etc.)</li>
-     * <li>Precision model for coordinate values</li>
-     * <li>Spatial reference system identifier (SRID)</li>
+     *   <li>Coordinate sequence implementation (array-based, packed, etc.)
+     *   <li>Precision model for coordinate values
+     *   <li>Spatial reference system identifier (SRID)
      * </ul>
      *
      * @param geometryFactory the JTS GeometryFactory to use for creating geometries
@@ -103,13 +106,14 @@ public interface GeometryReader {
 
     /**
      * Returns a new GeometryReader configured with the specified geometry transformation.
-     * <p>
-     * The transformation function is applied to each decoded geometry, allowing for:
+     *
+     * <p>The transformation function is applied to each decoded geometry, allowing for:
+     *
      * <ul>
-     * <li>Coordinate scaling and translation</li>
-     * <li>Projection changes</li>
-     * <li>Coordinate system transformations</li>
-     * <li>Custom geometry modifications</li>
+     *   <li>Coordinate scaling and translation
+     *   <li>Projection changes
+     *   <li>Coordinate system transformations
+     *   <li>Custom geometry modifications
      * </ul>
      *
      * <p>Multiple transformations can be chained using {@link #concat(UnaryOperator...)}.
@@ -122,12 +126,12 @@ public interface GeometryReader {
 
     /**
      * Converts a CoordinateSequenceFilter to a geometry transformation function.
-     * <p>
-     * This utility method allows using JTS CoordinateSequenceFilter implementations
-     * as geometry transformations. The filter is applied to the geometry's coordinate
-     * sequences in-place.
+     *
+     * <p>This utility method allows using JTS CoordinateSequenceFilter implementations as geometry transformations. The
+     * filter is applied to the geometry's coordinate sequences in-place.
      *
      * <h4>Example</h4>
+     *
      * <pre>{@code
      * // Create a filter that scales coordinates
      * CoordinateSequenceFilter scaleFilter = new CoordinateSequenceFilter() {
@@ -158,12 +162,12 @@ public interface GeometryReader {
 
     /**
      * Concatenates multiple geometry transformation operations into a single function.
-     * <p>
-     * This utility method chains multiple UnaryOperator transformations in sequence,
-     * applying them in the order specified. This is useful for complex coordinate
-     * transformations that require multiple steps.
+     *
+     * <p>This utility method chains multiple UnaryOperator transformations in sequence, applying them in the order
+     * specified. This is useful for complex coordinate transformations that require multiple steps.
      *
      * <h4>Example</h4>
+     *
      * <pre>{@code
      * // Define individual transformations
      * UnaryOperator<Geometry> scale = geom -> scaleGeometry(geom, 2.0);

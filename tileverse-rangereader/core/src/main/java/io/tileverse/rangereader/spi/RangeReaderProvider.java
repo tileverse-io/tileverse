@@ -26,8 +26,8 @@ import java.util.ServiceLoader.Provider;
 import java.util.stream.Stream;
 
 /**
- * Service Provider Interface (SPI) for creating {@link RangeReader} instances.
- * Implementations of this interface can be discovered at runtime using {@link ServiceLoader}.
+ * Service Provider Interface (SPI) for creating {@link RangeReader} instances. Implementations of this interface can be
+ * discovered at runtime using {@link ServiceLoader}.
  */
 public interface RangeReaderProvider {
 
@@ -46,8 +46,8 @@ public interface RangeReaderProvider {
     String getDescription();
 
     /**
-     * Checks if this provider is available in the current environment.
-     * For example, a provider might check for the presence of a specific library or a configuration flag.
+     * Checks if this provider is available in the current environment. For example, a provider might check for the
+     * presence of a specific library or a configuration flag.
      *
      * @return {@code true} if available, {@code false} otherwise.
      */
@@ -70,8 +70,8 @@ public interface RangeReaderProvider {
     }
 
     /**
-     * Performs a fast, static check to see if this provider can likely handle the given config.
-     * This check should be based on URI schemes and hostname patterns only, without I/O.
+     * Performs a fast, static check to see if this provider can likely handle the given config. This check should be
+     * based on URI schemes and hostname patterns only, without I/O.
      *
      * @param config The configuration to check.
      * @return {@code true} if this provider can likely handle the config, {@code false} otherwise.
@@ -79,8 +79,8 @@ public interface RangeReaderProvider {
     boolean canProcess(RangeReaderConfig config);
 
     /**
-     * Performs a more definitive check by inspecting HTTP headers from a HEAD request.
-     * This method is only called for ambiguous http(s) URIs as a final disambiguation step.
+     * Performs a more definitive check by inspecting HTTP headers from a HEAD request. This method is only called for
+     * ambiguous http(s) URIs as a final disambiguation step.
      *
      * @param uri the URI of the returned headers, can be used to disambiguate based on well-known host names
      * @param headers The HTTP headers from a HEAD request to the resource URI.
@@ -91,8 +91,7 @@ public interface RangeReaderProvider {
     }
 
     /**
-     * Gets the order value of this provider. Lower values have higher priority.
-     * The default priority is 0.
+     * Gets the order value of this provider. Lower values have higher priority. The default priority is 0.
      *
      * @return The order value.
      */
@@ -121,9 +120,8 @@ public interface RangeReaderProvider {
     RangeReader create(RangeReaderConfig opts) throws IOException;
 
     /**
-     * Checks if a feature is enabled via a system property or environment variable.
-     * The check is case-sensitive. The property is checked first, then the environment variable.
-     * If neither is set, it defaults to {@code true}.
+     * Checks if a feature is enabled via a system property or environment variable. The check is case-sensitive. The
+     * property is checked first, then the environment variable. If neither is set, it defaults to {@code true}.
      *
      * @param key The key for the system property/environment variable.
      * @return {@code true} if enabled, {@code false} otherwise.
@@ -156,8 +154,8 @@ public interface RangeReaderProvider {
     }
 
     /**
-     * Returns all {@link RangeReaderProvider}s registered through the standard Java SPI mechanism
-     * that are {@link RangeReaderProvider#isAvailable() available}.
+     * Returns all {@link RangeReaderProvider}s registered through the standard Java SPI mechanism that are
+     * {@link RangeReaderProvider#isAvailable() available}.
      *
      * @return A list of available providers.
      */
@@ -181,9 +179,10 @@ public interface RangeReaderProvider {
      * Retrieves a specific {@link RangeReaderProvider} by its ID, with an option to check for availability.
      *
      * @param providerId The ID of the provider to retrieve.
-     * @param available  If {@code true}, the method will throw an exception if the provider is not available.
+     * @param available If {@code true}, the method will throw an exception if the provider is not available.
      * @return The requested {@link RangeReaderProvider}.
-     * @throws IllegalStateException if the provider is not found, or if {@code available} is true and the provider is not available.
+     * @throws IllegalStateException if the provider is not found, or if {@code available} is true and the provider is
+     *     not available.
      */
     static RangeReaderProvider getProvider(String providerId, boolean available) {
         RangeReaderProvider provider = findProviders()

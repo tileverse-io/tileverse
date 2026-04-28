@@ -31,10 +31,7 @@ import org.apache.commons.compress.compressors.zstandard.ZstdCompressorInputStre
 import org.apache.commons.compress.compressors.zstandard.ZstdCompressorOutputStream;
 import org.apache.commons.io.input.BoundedInputStream;
 
-/**
- * Utility class for compressing and decompressing data using various
- * compression algorithms.
- */
+/** Utility class for compressing and decompressing data using various compression algorithms. */
 final class CompressionUtil {
 
     private CompressionUtil() {
@@ -44,12 +41,11 @@ final class CompressionUtil {
     /**
      * Compresses data using the specified compression type.
      *
-     * @param data            the data to compress
+     * @param data the data to compress
      * @param compressionType the compression type to use
      * @return the compressed data
-     * @throws IOException                     if an I/O error occurs
-     * @throws UnsupportedCompressionException if the compression type is not
-     *                                         supported
+     * @throws IOException if an I/O error occurs
+     * @throws UnsupportedCompressionException if the compression type is not supported
      */
     public static byte[] compress(byte[] data, byte compressionType) throws IOException {
         if (compressionType == PMTilesHeader.COMPRESSION_NONE) {
@@ -95,12 +91,11 @@ final class CompressionUtil {
     /**
      * Creates a compressor for the specified compression type.
      *
-     * @param outputStream    the output stream to write compressed data to
+     * @param outputStream the output stream to write compressed data to
      * @param compressionType the compression type to use
      * @return a compressor output stream
-     * @throws IOException                     if an I/O error occurs
-     * @throws UnsupportedCompressionException if the compression type is not
-     *                                         supported
+     * @throws IOException if an I/O error occurs
+     * @throws UnsupportedCompressionException if the compression type is not supported
      */
     private static OutputStream createCompressor(OutputStream outputStream, byte compressionType) throws IOException {
         return switch (compressionType) {
@@ -116,13 +111,12 @@ final class CompressionUtil {
     /**
      * Creates a decompressor for the specified compression type.
      *
-     * @param inputStream     the input stream containing compressed data
+     * @param inputStream the input stream containing compressed data
      * @param compressionType the compression type used
      * @return a decompressor input stream
-     * @throws IOException                     if an I/O error occurs
-     * @throws CompressorException             if the compressor creation fails
-     * @throws UnsupportedCompressionException if the compression type is not
-     *                                         supported
+     * @throws IOException if an I/O error occurs
+     * @throws CompressorException if the compressor creation fails
+     * @throws UnsupportedCompressionException if the compression type is not supported
      */
     private static InputStream createDecompressor(InputStream inputStream, byte compressionType) throws IOException {
         return switch (compressionType) {

@@ -34,9 +34,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Integration tests for RangeReader decorator implementations.
- * <p>
- * These tests verify the behavior of the BlockAlignedRangeReader and
- * CachingRangeReader implementations, as well as their combined usage.
+ *
+ * <p>These tests verify the behavior of the BlockAlignedRangeReader and CachingRangeReader implementations, as well as
+ * their combined usage.
  */
 class RangeReaderDecoratorIT {
 

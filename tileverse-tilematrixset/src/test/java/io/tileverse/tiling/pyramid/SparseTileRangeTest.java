@@ -30,72 +30,56 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Test matrices:
- * <pre>
- * {@code
  *
- *   0,0
- *    o--------o
- *    |        |
- *    |        |
- *    |  4,4   |
- *    |   o----+---o
- *    |   |    |   |
- *    |   |    |   |
- *    |   |    |   |
- *    |   |    |   |
- *    o---+----o   |
- *        |    9,9 |
- *        |        |
- *        |        |
- *        |        |
- *        o--------o 14,14
+ * <pre>{@code
+ * 0,0
+ *  o--------o
+ *  |        |
+ *  |        |
+ *  |  4,4   |
+ *  |   o----+---o
+ *  |   |    |   |
+ *  |   |    |   |
+ *  |   |    |   |
+ *  |   |    |   |
+ *  o---+----o   |
+ *      |    9,9 |
+ *      |        |
+ *      |        |
+ *      |        |
+ *      o--------o 14,14
  *
- *            15,15 o--------o
- *   1,17           |        |
- *     o------------+-----o  |
- *     |            |     |  |
- *     |            |     |  |
- *     |            |     |  |
- *     o------------+-----o  |
- *                  |  21,21 |
- *                  |        |
- *                  o--------o
- *                          24,24
- * }
- * </pre>
+ *          15,15 o--------o
+ * 1,17           |        |
+ *   o------------+-----o  |
+ *   |            |     |  |
+ *   |            |     |  |
+ *   |            |     |  |
+ *   o------------+-----o  |
+ *                |  21,21 |
+ *                |        |
+ *                o--------o
+ *                        24,24
+ * }</pre>
  */
 class SparseTileRangeTest {
 
-    /**
-     * {@code (0,0)-(9,9)}
-     */
+    /** {@code (0,0)-(9,9)} */
     private TileRange topLeft;
-    /**
-     * {@code (4,4)-(14,14)}
-     */
+    /** {@code (4,4)-(14,14)} */
     private TileRange topLeftOverlapping;
 
-    /**
-     * {@code (15,15)-(24,24)}
-     */
+    /** {@code (15,15)-(24,24)} */
     private TileRange bottomRight;
 
-    /**
-     * {@code (1,17)-(21,21)}
-     */
+    /** {@code (1,17)-(21,21)} */
     private TileRange bottomRightOverlapping;
 
-    /**
-     * topLeft.union(topLeftOverlapping)
-     */
+    /** topLeft.union(topLeftOverlapping) */
     private TileRange topUnion;
-    /**
-     * bottomRight.union(bottomRightOverlapping)
-     */
+    /** bottomRight.union(bottomRightOverlapping) */
     private TileRange bottomUnion;
-    /**
-     * topUnion.union(bottomUnion)
-     */
+    /** topUnion.union(bottomUnion) */
     private TileRange union;
 
     @BeforeEach
@@ -389,8 +373,9 @@ class SparseTileRangeTest {
         assertThat(withBottomLeft).isInstanceOf(SparseTileRange.class).isNotSameAs(union);
         assertThat(withBottomLeft.cornerOfOrigin()).isEqualTo(CornerOfOrigin.BOTTOM_LEFT);
 
-        ((SparseTileRange) withBottomLeft).parts().forEach(part -> assertThat(part.cornerOfOrigin())
-                .isEqualTo(CornerOfOrigin.BOTTOM_LEFT));
+        ((SparseTileRange) withBottomLeft)
+                .parts()
+                .forEach(part -> assertThat(part.cornerOfOrigin()).isEqualTo(CornerOfOrigin.BOTTOM_LEFT));
 
         assertThat(withBottomLeft).isNotEqualTo(union);
         assertThat(withBottomLeft.withCornerOfOrigin(CornerOfOrigin.TOP_LEFT)).isEqualTo(union);
@@ -418,8 +403,9 @@ class SparseTileRangeTest {
     void testContainsRangeNotOverlappingAnyPart() {
         // a range that's within the bounds of the union but does not actually overlap any of its parts
         TileRange range = range(1, 10, 2, 11);
-        ((SparseTileRange) union).parts().forEach(nonSparse -> assertThat(nonSparse.contains(range))
-                .isFalse());
+        ((SparseTileRange) union)
+                .parts()
+                .forEach(nonSparse -> assertThat(nonSparse.contains(range)).isFalse());
         assertThat(union.contains(range)).isFalse();
     }
 

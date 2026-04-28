@@ -350,8 +350,7 @@ class VectorTileBuilderTest {
     @Test
     void testPolygonCounterClockwiseWithHole() {
         // Test polygon with counter-clockwise exterior ring and clockwise interior ring
-        Geometry polygon = geom(
-                """
+        Geometry polygon = geom("""
                 POLYGON(
                   (10 0, 0 0, 0 10, 10 10, 10 0),
                   (3 3, 3 7, 7 7, 7 3, 3 3)
@@ -365,8 +364,7 @@ class VectorTileBuilderTest {
                 .firstFeature()
                 .geometry()
                 .isPolygon()
-                .equalsExact(
-                        """
+                .equalsExact("""
                         POLYGON(
                           (0 0, 0 10, 10 10, 10 0, 0 0),
                           (7 3, 7 7, 3 7, 3 3, 7 3)
@@ -512,8 +510,7 @@ class VectorTileBuilderTest {
     void testGenericGeometryCollection() {
         // Test that a generic GeometryCollection (with disparate geometry types)
         // gets decomposed into multiple features, each with the same attributes
-        Geometry geomCollection = geom(
-                """
+        Geometry geomCollection = geom("""
                 GEOMETRYCOLLECTION(
                   POINT(10 20),
                   LINESTRING(30 40, 50 60),

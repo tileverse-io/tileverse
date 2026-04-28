@@ -32,14 +32,12 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 /**
- * Comprehensive tests for TileRange functionality across all axis origins.
- * Uses simple coordinate ranges that are easy to understand and verify.
+ * Comprehensive tests for TileRange functionality across all axis origins. Uses simple coordinate ranges that are easy
+ * to understand and verify.
  */
 class TileRangeAllCornerOfOriginsTest {
 
-    /**
-     * Test basic TileRange creation and properties for all axis origins.
-     */
+    /** Test basic TileRange creation and properties for all axis origins. */
     @ParameterizedTest
     @EnumSource(CornerOfOrigin.class)
     void testTileRangeCreationAllOrigins(CornerOfOrigin cornerOfOrigin) {
@@ -54,9 +52,7 @@ class TileRangeAllCornerOfOriginsTest {
         assertEquals(11 * 11, range.count()); // (15-5+1) * (20-10+1)
     }
 
-    /**
-     * Test first() and last() methods return correct start/end positions for each axis origin.
-     */
+    /** Test first() and last() methods return correct start/end positions for each axis origin. */
     @Test
     void testFirstLastPositionsAllOrigins() {
         // Simple 2x2 range: (0,0) to (1,1)
@@ -73,8 +69,8 @@ class TileRangeAllCornerOfOriginsTest {
     }
 
     /**
-     * Test complete traversal for each axis origin to ensure correct order.
-     * Uses simple 2x2 grid to verify traversal patterns.
+     * Test complete traversal for each axis origin to ensure correct order. Uses simple 2x2 grid to verify traversal
+     * patterns.
      */
     @Test
     void testCompleteTraversalAllOrigins() {
@@ -103,9 +99,7 @@ class TileRangeAllCornerOfOriginsTest {
                         );
     }
 
-    /**
-     * Test reverse traversal using prev() for all axis origins.
-     */
+    /** Test reverse traversal using prev() for all axis origins. */
     @Test
     void testReverseTraversalAllOrigins() {
         // Test reverse traversal on 2x2 grid
@@ -133,9 +127,7 @@ class TileRangeAllCornerOfOriginsTest {
                         );
     }
 
-    /**
-     * Test next() and prev() methods work correctly at boundaries.
-     */
+    /** Test next() and prev() methods work correctly at boundaries. */
     @ParameterizedTest
     @EnumSource(CornerOfOrigin.class)
     void testBoundaryTransitionsAllOrigins(CornerOfOrigin cornerOfOrigin) {
@@ -154,9 +146,7 @@ class TileRangeAllCornerOfOriginsTest {
         assertEquals(last, backToLast, "next(prev(last)) should return last");
     }
 
-    /**
-     * Test intersection behavior for different axis origins.
-     */
+    /** Test intersection behavior for different axis origins. */
     @ParameterizedTest
     @EnumSource(CornerOfOrigin.class)
     void testIntersectionAllOrigins(CornerOfOrigin cornerOfOrigin) {
@@ -176,9 +166,7 @@ class TileRangeAllCornerOfOriginsTest {
         assertEquals(36, result.count()); // 6x6 grid
     }
 
-    /**
-     * Test contains() method for different axis origins.
-     */
+    /** Test contains() method for different axis origins. */
     @ParameterizedTest
     @EnumSource(CornerOfOrigin.class)
     void testContainsAllOrigins(CornerOfOrigin cornerOfOrigin) {
@@ -195,9 +183,7 @@ class TileRangeAllCornerOfOriginsTest {
         assertFalse(range.contains(TileIndex.xyz(5, 10, 6))); // Wrong zoom
     }
 
-    /**
-     * Test min() and max() always return simple coordinate bounds regardless of axis origin.
-     */
+    /** Test min() and max() always return simple coordinate bounds regardless of axis origin. */
     @ParameterizedTest
     @EnumSource(CornerOfOrigin.class)
     void testMinMaxAllOrigins(CornerOfOrigin cornerOfOrigin) {
@@ -216,9 +202,7 @@ class TileRangeAllCornerOfOriginsTest {
         assertEquals(9, last.z());
     }
 
-    /**
-     * Collect complete forward traversal of a tile range.
-     */
+    /** Collect complete forward traversal of a tile range. */
     private List<TileIndex> collectTraversal(TileRange range) {
         List<TileIndex> result = new ArrayList<>();
         TileIndex current = range.first();
@@ -234,9 +218,7 @@ class TileRangeAllCornerOfOriginsTest {
         return result;
     }
 
-    /**
-     * Collect complete reverse traversal of a tile range.
-     */
+    /** Collect complete reverse traversal of a tile range. */
     private List<TileIndex> collectReverseTraversal(TileRange range) {
         List<TileIndex> result = new ArrayList<>();
         TileIndex current = range.last();

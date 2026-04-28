@@ -34,9 +34,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * A factory for creating {@link RangeReader} instances.
- * This factory uses the Java Service Provider Interface (SPI) to discover
- * available {@link RangeReaderProvider} implementations at runtime.
+ * A factory for creating {@link RangeReader} instances. This factory uses the Java Service Provider Interface (SPI) to
+ * discover available {@link RangeReaderProvider} implementations at runtime.
  */
 public final class RangeReaderFactory {
     private static final Logger logger = LoggerFactory.getLogger(RangeReaderFactory.class);
@@ -64,9 +63,8 @@ public final class RangeReaderFactory {
     }
 
     /**
-     * Creates a {@link RangeReader} for the given URI and configuration properties.
-     * This method converts the {@link Properties} into a {@link RangeReaderConfig} and
-     * then delegates to {@link #create(RangeReaderConfig)}.
+     * Creates a {@link RangeReader} for the given URI and configuration properties. This method converts the
+     * {@link Properties} into a {@link RangeReaderConfig} and then delegates to {@link #create(RangeReaderConfig)}.
      *
      * @param uri The URI of the resource to read.
      * @param config Additional configuration properties for the RangeReader.
@@ -82,9 +80,8 @@ public final class RangeReaderFactory {
     }
 
     /**
-     * Creates a {@link RangeReader} based on the provided configuration properties.
-     * This method converts the {@link Properties} into a {@link RangeReaderConfig} and
-     * then delegates to {@link #create(RangeReaderConfig)}.
+     * Creates a {@link RangeReader} based on the provided configuration properties. This method converts the
+     * {@link Properties} into a {@link RangeReaderConfig} and then delegates to {@link #create(RangeReaderConfig)}.
      *
      * @param config A {@link Properties} object containing configuration, including the URI.
      * @return A new {@link RangeReader} instance.
@@ -97,27 +94,26 @@ public final class RangeReaderFactory {
     }
 
     /**
-     * Creates a {@link RangeReader} using the best available provider for the given configuration.
-     * The selection process is as follows:
+     * Creates a {@link RangeReader} using the best available provider for the given configuration. The selection
+     * process is as follows:
+     *
      * <ol>
-     *   <li>If a provider ID is explicitly set in the config (via {@link RangeReaderConfig#providerId()}),
-     *       only that specific provider is considered.</li>
+     *   <li>If a provider ID is explicitly set in the config (via {@link RangeReaderConfig#providerId()}), only that
+     *       specific provider is considered.
      *   <li>For non-http(s) schemes (e.g., 'file', 's3', 'gs'), the factory attempts to find a unique
-     *       {@link RangeReaderProvider} that {@link RangeReaderProvider#canProcess(RangeReaderConfig) can process}
-     *       the URI's scheme.</li>
+     *       {@link RangeReaderProvider} that {@link RangeReaderProvider#canProcess(RangeReaderConfig) can process} the
+     *       URI's scheme.
      *   <li>For http(s) schemes, a multi-step disambiguation is performed:
-     *     <ol>
-     *       <li>First, it checks for unique matches based on known cloud provider hostname patterns
-     *           (e.g., ".blob.core.windows.net" for Azure, ".s3.amazonaws.com" for S3).</li>
-     *       <li>If ambiguity remains among multiple providers, it performs a HEAD request to the URI
-     *           to check for provider-specific response headers (e.g., "x-ms-request-id" for Azure,
-     *           "x-amz-request-id" for S3).</li>
-     *       <li>If ambiguity still remains after header inspection, it uses the provider with the
-     *           highest priority (lowest value returned by {@link RangeReaderProvider#getOrder()}).</li>
-     *     </ol>
-     *   </li>
-     *   <li>If no suitable provider is found or if an unresolvable tie-breaker is needed (multiple
-     *       providers with the same highest priority), an {@link IllegalStateException} is thrown.</li>
+     *       <ol>
+     *         <li>First, it checks for unique matches based on known cloud provider hostname patterns (e.g.,
+     *             ".blob.core.windows.net" for Azure, ".s3.amazonaws.com" for S3).
+     *         <li>If ambiguity remains among multiple providers, it performs a HEAD request to the URI to check for
+     *             provider-specific response headers (e.g., "x-ms-request-id" for Azure, "x-amz-request-id" for S3).
+     *         <li>If ambiguity still remains after header inspection, it uses the provider with the highest priority
+     *             (lowest value returned by {@link RangeReaderProvider#getOrder()}).
+     *       </ol>
+     *   <li>If no suitable provider is found or if an unresolvable tie-breaker is needed (multiple providers with the
+     *       same highest priority), an {@link IllegalStateException} is thrown.
      * </ol>
      *
      * @param config The configuration for the RangeReader, including the URI and optional provider ID.
@@ -131,8 +127,8 @@ public final class RangeReaderFactory {
     }
 
     /**
-     * Finds the best {@link RangeReaderProvider} for the given configuration.
-     * This method encapsulates the provider selection and disambiguation logic.
+     * Finds the best {@link RangeReaderProvider} for the given configuration. This method encapsulates the provider
+     * selection and disambiguation logic.
      *
      * @param config The configuration for the RangeReader.
      * @return The selected {@link RangeReaderProvider}.
@@ -157,9 +153,8 @@ public final class RangeReaderFactory {
     }
 
     /**
-     * Disambiguates between multiple candidate {@link RangeReaderProvider}s.
-     * For HTTP/HTTPS URIs, it performs further checks (hostname patterns, HEAD requests).
-     * For other schemes, it resolves by provider priority.
+     * Disambiguates between multiple candidate {@link RangeReaderProvider}s. For HTTP/HTTPS URIs, it performs further
+     * checks (hostname patterns, HEAD requests). For other schemes, it resolves by provider priority.
      *
      * @param uri The URI of the resource.
      * @param candidates The list of candidate {@link RangeReaderProvider}s.
@@ -203,9 +198,9 @@ public final class RangeReaderFactory {
     }
 
     /**
-     * Disambiguates between multiple HTTP/HTTPS {@link RangeReaderProvider} candidates.
-     * This involves checking for specific cloud provider hostname patterns and, if necessary,
-     * performing a HEAD request to inspect response headers.
+     * Disambiguates between multiple HTTP/HTTPS {@link RangeReaderProvider} candidates. This involves checking for
+     * specific cloud provider hostname patterns and, if necessary, performing a HEAD request to inspect response
+     * headers.
      *
      * @param uri The HTTP/HTTPS URI.
      * @param httpCandidates The list of candidate {@link RangeReaderProvider}s for HTTP/HTTPS.
@@ -249,12 +244,13 @@ public final class RangeReaderFactory {
     }
 
     /**
-     * Resolves ambiguity among multiple {@link RangeReaderProvider}s by selecting the one
-     * with the highest priority (lowest {@link RangeReaderProvider#getOrder()}).
+     * Resolves ambiguity among multiple {@link RangeReaderProvider}s by selecting the one with the highest priority
+     * (lowest {@link RangeReaderProvider#getOrder()}).
      *
      * @param specificCandidates The list of candidate {@link RangeReaderProvider}s.
      * @return The {@link RangeReaderProvider} with the highest priority.
-     * @throws IllegalStateException If multiple providers have the same highest priority, leading to an unresolvable ambiguity.
+     * @throws IllegalStateException If multiple providers have the same highest priority, leading to an unresolvable
+     *     ambiguity.
      */
     private static RangeReaderProvider resolveByPriority(List<RangeReaderProvider> specificCandidates) {
 
@@ -278,9 +274,8 @@ public final class RangeReaderFactory {
     }
 
     /**
-     * Performs an HTTP HEAD request to the given URI and returns the response headers.
-     * This is used for disambiguating HTTP(S) {@link RangeReaderProvider}s by inspecting
-     * provider-specific headers.
+     * Performs an HTTP HEAD request to the given URI and returns the response headers. This is used for disambiguating
+     * HTTP(S) {@link RangeReaderProvider}s by inspecting provider-specific headers.
      *
      * @param uri The URI to probe.
      * @return A map of response headers.

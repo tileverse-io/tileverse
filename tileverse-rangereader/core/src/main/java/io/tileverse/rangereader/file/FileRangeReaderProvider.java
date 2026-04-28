@@ -23,26 +23,22 @@ import java.io.IOException;
 import java.net.URI;
 
 /**
- * A {@link RangeReaderProvider} for creating {@link FileRangeReader} instances
- * that read from the local file system.
+ * A {@link RangeReaderProvider} for creating {@link FileRangeReader} instances that read from the local file system.
  */
 public class FileRangeReaderProvider extends AbstractRangeReaderProvider {
 
     /**
      * Key used as environment variable name to disable this range reader provider
+     *
      * <pre>
      * {@code export IO_TILEVERSE_RANGEREADER_FILE=false}
      * </pre>
      */
     public static final String ENABLED_KEY = "IO_TILEVERSE_RANGEREADER_FILE";
-    /**
-     * This range reader implementation's {@link #getId() unique identifier}
-     */
+    /** This range reader implementation's {@link #getId() unique identifier} */
     public static final String ID = "file";
 
-    /**
-     * Create a new FileRangeReaderProvider without support for caching decorator
-     */
+    /** Create a new FileRangeReaderProvider without support for caching decorator */
     public FileRangeReaderProvider() {
         super(false); // don't add caching parameters
     }

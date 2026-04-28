@@ -20,21 +20,21 @@ import java.io.IOException;
 import java.nio.channels.SeekableByteChannel;
 
 /**
- * A {@link DataInput} adapter that wraps a {@link SeekableByteChannel} to provide
- * standard Java DataInput semantics with optimized seeking capabilities.
- * <p>
- * This adapter provides the same functionality as {@link ReadableByteChannelDataInput}
- * but with an optimized {@link #skipBytes(int)} implementation that uses the channel's
- * seeking capability instead of reading and discarding data, making it much more
- * efficient for large skip operations.
- * <p>
- * <strong>Thread Safety:</strong> This class is not thread-safe. External synchronization
- * is required if multiple threads access the same instance concurrently.
- * <p>
- * <strong>Read-Only Adapter:</strong> This adapter only provides reading functionality.
- * It maintains an internal buffer for efficient reading of primitive types.
+ * A {@link DataInput} adapter that wraps a {@link SeekableByteChannel} to provide standard Java DataInput semantics
+ * with optimized seeking capabilities.
  *
- * <p><strong>Usage Example:</strong></p>
+ * <p>This adapter provides the same functionality as {@link ReadableByteChannelDataInput} but with an optimized
+ * {@link #skipBytes(int)} implementation that uses the channel's seeking capability instead of reading and discarding
+ * data, making it much more efficient for large skip operations.
+ *
+ * <p><strong>Thread Safety:</strong> This class is not thread-safe. External synchronization is required if multiple
+ * threads access the same instance concurrently.
+ *
+ * <p><strong>Read-Only Adapter:</strong> This adapter only provides reading functionality. It maintains an internal
+ * buffer for efficient reading of primitive types.
+ *
+ * <p><strong>Usage Example:</strong>
+ *
  * <pre>{@code
  * try (SeekableByteChannel channel = Files.newByteChannel(path, StandardOpenOption.READ)) {
  *     DataInput dataInput = SeekableByteChannelDataInput.of(channel);
@@ -98,9 +98,7 @@ public final class SeekableByteChannelDataInput extends ReadableByteChannelDataI
         return new SeekableByteChannelDataInput(channel, bufferSize);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public SeekableByteChannel channel() {
         return (SeekableByteChannel) super.channel();
@@ -108,10 +106,9 @@ public final class SeekableByteChannelDataInput extends ReadableByteChannelDataI
 
     /**
      * {@inheritDoc}
-     * <p>
-     * This implementation uses the channel's seeking capability to efficiently skip
-     * over data without reading it, making it much faster than reading and discarding
-     * for large skip operations.
+     *
+     * <p>This implementation uses the channel's seeking capability to efficiently skip over data without reading it,
+     * making it much faster than reading and discarding for large skip operations.
      *
      * @param n the number of bytes to skip
      * @return the actual number of bytes skipped

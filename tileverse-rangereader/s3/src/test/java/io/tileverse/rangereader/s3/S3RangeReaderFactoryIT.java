@@ -32,17 +32,18 @@ import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.core.exception.SdkClientException;
 
 /**
- * Integration tests for S3RangeReaderFactory that verify URL parsing and RangeReader creation
- * using real, publicly accessible S3 resources.
+ * Integration tests for S3RangeReaderFactory that verify URL parsing and RangeReader creation using real, publicly
+ * accessible S3 resources.
  *
- * <p><strong>AWS Credentials Required:</strong> These tests require valid AWS credentials to access
- * real S3 buckets. The tests will be automatically skipped if credentials are not available.
+ * <p><strong>AWS Credentials Required:</strong> These tests require valid AWS credentials to access real S3 buckets.
+ * The tests will be automatically skipped if credentials are not available.
  *
  * <h2>Setting Up AWS Credentials</h2>
  *
  * <p>AWS credentials can be provided through several methods (in order of precedence):
  *
  * <h3>1. Environment Variables</h3>
+ *
  * <pre>
  * export AWS_ACCESS_KEY_ID=your-access-key-id
  * export AWS_SECRET_ACCESS_KEY=your-secret-access-key
@@ -50,7 +51,9 @@ import software.amazon.awssdk.core.exception.SdkClientException;
  * </pre>
  *
  * <h3>2. AWS Credentials File</h3>
+ *
  * <p>Create or edit {@code ~/.aws/credentials}:
+ *
  * <pre>
  * [default]
  * aws_access_key_id = your-access-key-id
@@ -58,13 +61,16 @@ import software.amazon.awssdk.core.exception.SdkClientException;
  * </pre>
  *
  * <p>And optionally {@code ~/.aws/config}:
+ *
  * <pre>
  * [default]
  * region = us-west-2
  * </pre>
  *
  * <h3>3. AWS CLI</h3>
+ *
  * <p>Run {@code aws configure} and follow the prompts:
+ *
  * <pre>
  * $ aws configure
  * AWS Access Key ID: your-access-key-id
@@ -74,14 +80,17 @@ import software.amazon.awssdk.core.exception.SdkClientException;
  * </pre>
  *
  * <h3>4. IAM Roles (for EC2/ECS/Lambda)</h3>
+ *
  * <p>When running on AWS infrastructure, credentials can be automatically obtained from:
+ *
  * <ul>
- * <li>EC2 instance metadata service</li>
- * <li>ECS task role</li>
- * <li>Lambda execution role</li>
+ *   <li>EC2 instance metadata service
+ *   <li>ECS task role
+ *   <li>Lambda execution role
  * </ul>
  *
  * <h3>5. System Properties</h3>
+ *
  * <pre>
  * -Daws.accessKeyId=your-access-key-id
  * -Daws.secretAccessKey=your-secret-access-key
@@ -90,11 +99,12 @@ import software.amazon.awssdk.core.exception.SdkClientException;
  *
  * <h2>Minimum Required Permissions</h2>
  *
- * <p>The AWS credentials only need read access to the public S3 buckets used in tests.
- * For the Overture Maps dataset, no special permissions are required as it's publicly accessible.
- * However, the AWS credential chain still needs to be able to authenticate.
+ * <p>The AWS credentials only need read access to the public S3 buckets used in tests. For the Overture Maps dataset,
+ * no special permissions are required as it's publicly accessible. However, the AWS credential chain still needs to be
+ * able to authenticate.
  *
  * <p>A minimal IAM policy would be:
+ *
  * <pre>
  * {
  *   "Version": "2012-10-17",
@@ -116,6 +126,7 @@ import software.amazon.awssdk.core.exception.SdkClientException;
  * <h2>Troubleshooting</h2>
  *
  * <p>If tests are being skipped, verify credentials are working:
+ *
  * <pre>
  * # Test AWS CLI access
  * aws sts get-caller-identity
@@ -124,7 +135,8 @@ import software.amazon.awssdk.core.exception.SdkClientException;
  * aws s3 ls s3://overturemaps-tiles-us-west-2-beta/2025-08-20/ --no-sign-request
  * </pre>
  *
- * @see <a href="https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials.html">AWS SDK for Java Credentials</a>
+ * @see <a href="https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials.html">AWS SDK for Java
+ *     Credentials</a>
  * @see <a href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html">AWS CLI Configuration</a>
  */
 class S3RangeReaderFactoryIT {
@@ -151,8 +163,8 @@ class S3RangeReaderFactoryIT {
     }
 
     /**
-     * Test cases using real, publicly accessible S3 URLs in different formats.
-     * These test that our URL parsing works with actual S3 resources.
+     * Test cases using real, publicly accessible S3 URLs in different formats. These test that our URL parsing works
+     * with actual S3 resources.
      */
     private static Stream<Arguments> provideRealS3Urls() {
         return Stream.of(

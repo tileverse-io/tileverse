@@ -21,48 +21,43 @@ import java.util.function.LongConsumer;
 public interface PMTilesEntry extends Comparable<PMTilesEntry> {
 
     /**
-     * Specifies the ID of the tile or the first tile in the leaf directory. The
-     * TileID corresponds to a cumulative position on the series of Hilbert curves
-     * starting at zoom level {@code 0}.
-     * <p>
-     * When an entry points to a {@link PMTilesEntry#isLeaf Leaf Directory} (rather
-     * than a map tile), the TileID field serves as a routing key.
-     * <p>
-     * Specifically, the TileID represents the lowest (first) Hilbert TileID
-     * contained within that leaf directory, hence acting as the inclusive start of
-     * the range covered by that leaf, allowing the client to perform a binary
+     * Specifies the ID of the tile or the first tile in the leaf directory. The TileID corresponds to a cumulative
+     * position on the series of Hilbert curves starting at zoom level {@code 0}.
+     *
+     * <p>When an entry points to a {@link PMTilesEntry#isLeaf Leaf Directory} (rather than a map tile), the TileID
+     * field serves as a routing key.
+     *
+     * <p>Specifically, the TileID represents the lowest (first) Hilbert TileID contained within that leaf directory,
+     * hence acting as the inclusive start of the range covered by that leaf, allowing the client to perform a binary
      * search or linear scan to find the correct directory to fetch.
      */
     long tileId();
 
     /**
      * The offset of the tile data or leaf directory in the file.
-     * <p>
-     * For regular entries, this is the offset within the tile data section,
-     * relative to the tileDataOffset in the header.
-     * <p>
-     * For leaf directory entries, this is the offset within the leaf directories
-     * section, relative to the leafDirsOffset in the header.
+     *
+     * <p>For regular entries, this is the offset within the tile data section, relative to the tileDataOffset in the
+     * header.
+     *
+     * <p>For leaf directory entries, this is the offset within the leaf directories section, relative to the
+     * leafDirsOffset in the header.
      */
     long offset();
 
     /**
-     * Specifies the number of bytes of this tile or leaf directory. This size
-     * always indicates the compressed size, if the tile or leaf directory is
-     * compressed. The length <strong>MUST</strong> be greater than {@code 0}
+     * Specifies the number of bytes of this tile or leaf directory. This size always indicates the compressed size, if
+     * the tile or leaf directory is compressed. The length <strong>MUST</strong> be greater than {@code 0}
      */
     int length();
 
     /**
      * Specifies the number of tiles for which this entry is valid.
-     * <p>
-     * A runLength of {@code 0} indicates this is a leaf directory entry. A
-     * runLength of {@code 1} indicates a single tile. A runLength greater than
-     * {@code 1} indicates a run of tiles that share the same content, starting at
-     * the {@code tileId} and continuing for {@code runLength} consecutive tile IDs.
-     * <p>
-     * Runs are used to efficiently represent repeated tiles, such as ocean or empty
-     * areas in maps.
+     *
+     * <p>A runLength of {@code 0} indicates this is a leaf directory entry. A runLength of {@code 1} indicates a single
+     * tile. A runLength greater than {@code 1} indicates a run of tiles that share the same content, starting at the
+     * {@code tileId} and continuing for {@code runLength} consecutive tile IDs.
+     *
+     * <p>Runs are used to efficiently represent repeated tiles, such as ocean or empty areas in maps.
      */
     int runLength();
 
@@ -84,9 +79,9 @@ public interface PMTilesEntry extends Comparable<PMTilesEntry> {
     /**
      * Creates a new PMTilesEntry with the specified runLength.
      *
-     * @param tileId    the tile ID
-     * @param offset    the offset of the tile data in the file
-     * @param length    the length of the tile data
+     * @param tileId the tile ID
+     * @param offset the offset of the tile data in the file
+     * @param length the length of the tile data
      * @param runLength the number of consecutive tiles with the same content
      * @return a new PMTilesEntry
      */
@@ -98,24 +93,22 @@ public interface PMTilesEntry extends Comparable<PMTilesEntry> {
      * Compares this entry with another entry based on tile ID.
      *
      * @param other the entry to compare with
-     * @return a negative integer, zero, or a positive integer as this entry's tile
-     *         ID is less than, equal to, or greater than the other entry's tile ID
+     * @return a negative integer, zero, or a positive integer as this entry's tile ID is less than, equal to, or
+     *     greater than the other entry's tile ID
      */
     @Override
     default int compareTo(PMTilesEntry other) {
         return Long.compare(this.tileId(), other.tileId());
     }
 
-    /**
-     * @return true if this is a leaf directory entry, false if {@link #isTile()}
-     */
+    /** @return true if this is a leaf directory entry, false if {@link #isTile()} */
     default boolean isLeaf() {
         return runLength() == 0;
     }
 
     /**
-     * @return true if this is a tile entry (or multiple tiles entry, depending on
-     *         runLenght being 1 or > 1), false if {@link #isLeaf()}
+     * @return true if this is a tile entry (or multiple tiles entry, depending on runLenght being 1 or > 1), false if
+     *     {@link #isLeaf()}
      */
     default boolean isTile() {
         return runLength() > 0;

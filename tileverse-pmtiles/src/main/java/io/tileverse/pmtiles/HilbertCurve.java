@@ -21,30 +21,31 @@ import java.util.Arrays;
 /**
  * High-performance Hilbert curve implementation for PMTiles tile ID encoding/decoding.
  *
- * <p>
- * PMTiles uses a Hilbert curve to map 2D tile coordinates (x, y, z) into a single scalar
- * "Tile ID". This preserves spatial locality: tiles that are close geographically are
- * likely to have close Tile IDs, optimizing storage layout and range requests.
+ * <p>PMTiles uses a Hilbert curve to map 2D tile coordinates (x, y, z) into a single scalar "Tile ID". This preserves
+ * spatial locality: tiles that are close geographically are likely to have close Tile IDs, optimizing storage layout
+ * and range requests.
  *
- * <p>
- * <strong>Performance Notes:</strong>
+ * <p><strong>Performance Notes:</strong>
+ *
  * <ul>
- * <li>This class is zero-allocation (except for the final {@link TileIndex} result).</li>
- * <li>All coordinate math uses inlined primitive operations to facilitate JIT loop unrolling.</li>
- * <li>Zoom level lookup uses binary search rather than linear scan.</li>
+ *   <li>This class is zero-allocation (except for the final {@link TileIndex} result).
+ *   <li>All coordinate math uses inlined primitive operations to facilitate JIT loop unrolling.
+ *   <li>Zoom level lookup uses binary search rather than linear scan.
  * </ul>
- * * <p>
- * This implementation assumes {@link TileIndex} will become a Value Object in future JDKs (Project Valhalla).
+ *
+ * *
+ *
+ * <p>This implementation assumes {@link TileIndex} will become a Value Object in future JDKs (Project Valhalla).
  */
 final class HilbertCurve {
 
     /**
      * Pre-computed offsets for the start of each zoom level.
-     * <p>
-     * {@code TZ_VALUES[z]} is the cumulative count of all tiles in levels {@code 0} through {@code z-1}.
+     *
+     * <p>{@code TZ_VALUES[z]} is the cumulative count of all tiles in levels {@code 0} through {@code z-1}.
      * Effectively, it is the Tile ID of the first tile at zoom level {@code z} (coordinate 0,0).
-     * <p>
-     * Max supported Zoom: 26.
+     *
+     * <p>Max supported Zoom: 26.
      */
     private static final long[] TZ_VALUES = {
         0L,
@@ -79,9 +80,8 @@ final class HilbertCurve {
     /**
      * Decodes a scalar PMTiles Tile ID into (z, x, y) coordinates.
      *
-     * <p>
-     * This method determines the zoom level via binary search, validates bounds,
-     * and performs the inverse Hilbert mapping to reconstruct the 2D position.
+     * <p>This method determines the zoom level via binary search, validates bounds, and performs the inverse Hilbert
+     * mapping to reconstruct the 2D position.
      *
      * @param tileId the global PMTiles identifier (must be positive).
      * @return the decoded {@link TileIndex}.
@@ -147,6 +147,7 @@ final class HilbertCurve {
     /**
      * Validates that the given {@code tileId} actually falls within the range of the detected zoom level {@code z}.
      * * @param tileId the input tile ID.
+     *
      * @param z the zoom level detected by binary search.
      */
     private void checkBounds(long tileId, int z) {
@@ -171,8 +172,7 @@ final class HilbertCurve {
     /**
      * Encodes (z, x, y) coordinates into a scalar PMTiles Tile ID.
      *
-     * <p>
-     * This performs the forward Hilbert curve mapping.
+     * <p>This performs the forward Hilbert curve mapping.
      *
      * @param tileIndex the tile coordinates.
      * @return the scalar PMTiles ID.

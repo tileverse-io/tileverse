@@ -63,9 +63,7 @@ class GoogleCloudStorageRangeReaderTest {
     private GoogleCloudStorageRangeReader reader;
     private long currentSeekPosition = 0;
 
-    /**
-     * Creates test data with a predictable pattern.
-     */
+    /** Creates test data with a predictable pattern. */
     private static byte[] createTestData(int size) {
         byte[] data = new byte[size];
         for (int i = 0; i < size; i++) {
@@ -337,19 +335,23 @@ class GoogleCloudStorageRangeReaderTest {
     @Test
     void testBuilderValidation() {
         // Test missing bucket/object
-        assertThrows(IllegalStateException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .build());
+        assertThrows(
+                IllegalStateException.class,
+                () -> GoogleCloudStorageRangeReader.builder().build());
 
         // Test invalid URI scheme
-        assertThrows(IllegalArgumentException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .uri(URI.create("http://example.com")));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> GoogleCloudStorageRangeReader.builder().uri(URI.create("http://example.com")));
 
         // Test URI without bucket
-        assertThrows(IllegalArgumentException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .uri(URI.create("gs:///")));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> GoogleCloudStorageRangeReader.builder().uri(URI.create("gs:///")));
 
         // Test URI without object
-        assertThrows(IllegalArgumentException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .uri(URI.create("gs://bucket/")));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> GoogleCloudStorageRangeReader.builder().uri(URI.create("gs://bucket/")));
     }
 }

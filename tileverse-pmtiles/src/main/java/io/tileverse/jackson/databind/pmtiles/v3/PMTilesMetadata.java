@@ -26,74 +26,61 @@ import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
 /**
- * Represents PMTiles v3 metadata as defined in the PMTiles specification.
- * PMTiles metadata is stored as JSON and contains information about the tileset.
+ * Represents PMTiles v3 metadata as defined in the PMTiles specification. PMTiles metadata is stored as JSON and
+ * contains information about the tileset.
  *
- * <p>According to the PMTiles v3 specification, metadata MUST contain a valid JSON object
- * which MAY include additional metadata related to the tileset. For MVT Vector Tiles,
- * it MUST contain a "vector_layers" key as described in the TileJSON 3.0 specification.
+ * <p>According to the PMTiles v3 specification, metadata MUST contain a valid JSON object which MAY include additional
+ * metadata related to the tileset. For MVT Vector Tiles, it MUST contain a "vector_layers" key as described in the
+ * TileJSON 3.0 specification.
  *
- * <p>The PMTiles specification defines specific optional keys: name, description, attribution,
- * type, and version. Additional properties are allowed and ignored during deserialization
- * to ensure forward compatibility.
+ * <p>The PMTiles specification defines specific optional keys: name, description, attribution, type, and version.
+ * Additional properties are allowed and ignored during deserialization to ensure forward compatibility.
  *
  * @since 1.0
- * @see <a href="https://github.com/protomaps/PMTiles/blob/main/spec/v3/spec.md#5-json-metadata">PMTiles v3 Metadata Specification</a>
+ * @see <a href="https://github.com/protomaps/PMTiles/blob/main/spec/v3/spec.md#5-json-metadata">PMTiles v3 Metadata
+ *     Specification</a>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record PMTilesMetadata(
 
-        /**
-         * A name describing the tileset.
-         * Optional field as defined in PMTiles v3 specification.
-         */
+        /** A name describing the tileset. Optional field as defined in PMTiles v3 specification. */
         @JsonProperty("name") String name,
 
-        /**
-         * A text description of the tileset.
-         * Optional field as defined in PMTiles v3 specification.
-         */
+        /** A text description of the tileset. Optional field as defined in PMTiles v3 specification. */
         @JsonProperty("description") String description,
 
         /**
-         * An attribution to be displayed when the map is shown to a user.
-         * Implementations MAY decide to treat this as HTML or literal text.
-         * Optional field as defined in PMTiles v3 specification.
+         * An attribution to be displayed when the map is shown to a user. Implementations MAY decide to treat this as
+         * HTML or literal text. Optional field as defined in PMTiles v3 specification.
          */
         @JsonProperty("attribution") String attribution,
 
         /**
-         * The type of the tileset, indicating whether it's a base layer or overlay.
-         * Must be either "baselayer" or "overlay" if present.
-         * Optional field as defined in PMTiles v3 specification.
+         * The type of the tileset, indicating whether it's a base layer or overlay. Must be either "baselayer" or
+         * "overlay" if present. Optional field as defined in PMTiles v3 specification.
          */
         @JsonProperty("type") TilesetType type,
 
         /**
-         * The version number of the tileset.
-         * Should be a valid version according to Semantic Versioning 2.0.0.
-         * Optional field as defined in PMTiles v3 specification.
+         * The version number of the tileset. Should be a valid version according to Semantic Versioning 2.0.0. Optional
+         * field as defined in PMTiles v3 specification.
          */
         @JsonProperty("version") String version,
 
         /**
-         * Vector layer definitions for vector tilesets.
-         * Required for MVT Vector Tiles as per TileJSON 3.0 specification.
-         * Each layer describes the data fields and zoom range available.
+         * Vector layer definitions for vector tilesets. Required for MVT Vector Tiles as per TileJSON 3.0
+         * specification. Each layer describes the data fields and zoom range available.
          */
         @JsonProperty("vector_layers") List<VectorLayer> vectorLayers,
 
         /**
-         * Additional arbitrary metadata as key-value pairs.
-         * This can contain any additional properties not covered by the PMTiles specification.
-         * Allows for future extensions and custom metadata.
+         * Additional arbitrary metadata as key-value pairs. This can contain any additional properties not covered by
+         * the PMTiles specification. Allows for future extensions and custom metadata.
          */
         @JsonProperty("extras") Map<String, Object> extras) {
 
-    /**
-     * Override default constructor for defensive, non-null and read-only copies of collection arguments
-     */
+    /** Override default constructor for defensive, non-null and read-only copies of collection arguments */
     public PMTilesMetadata {
         if (vectorLayers == null) {
             vectorLayers = List.of();

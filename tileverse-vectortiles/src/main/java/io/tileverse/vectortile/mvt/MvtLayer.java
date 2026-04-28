@@ -55,10 +55,10 @@ record MvtLayer(MvtTile tile, VectorTileProto.Tile.Layer layerProto) implements 
 
     /**
      * Returns a stream of features in this layer.
-     * <p>
-     * If the features don't have ids, they'll be assigned an id based on their position in the list
-     * @return a sequential-only stream that reuses Feature instances for memory
-     *         efficiency
+     *
+     * <p>If the features don't have ids, they'll be assigned an id based on their position in the list
+     *
+     * @return a sequential-only stream that reuses Feature instances for memory efficiency
      * @see MvtFeature#copy() for creating independent Feature copies
      */
     @Override

@@ -33,17 +33,11 @@ import java.util.stream.Stream;
  */
 public interface TileStore<T> {
 
-    /**
-     * Strategy for selecting zoom levels based on resolution.
-     */
+    /** Strategy for selecting zoom levels based on resolution. */
     enum Strategy {
-        /**
-         * Selects the closest lower quality zoom level based on the provided resolution
-         */
+        /** Selects the closest lower quality zoom level based on the provided resolution */
         SPEED,
-        /**
-         * Selects the closest higher quality zoom level based on the provided resolution
-         */
+        /** Selects the closest higher quality zoom level based on the provided resolution */
         QUALITY
     }
 
@@ -132,8 +126,8 @@ public interface TileStore<T> {
     Optional<TileData<T>> loadTile(Tile tile);
 
     /**
-     * Finds the best zoom level for the provided resolution, based on the strategy chosen
-     * and each {@link TileMatrixSet#resolution(int) TileMatrix resolution}.
+     * Finds the best zoom level for the provided resolution, based on the strategy chosen and each
+     * {@link TileMatrixSet#resolution(int) TileMatrix resolution}.
      *
      * @param resolution the target resolution
      * @param strategy the selection strategy (SPEED or QUALITY)
@@ -148,6 +142,7 @@ public interface TileStore<T> {
 
     /**
      * Finds the best zoom level for the provided resolution between {@code minZoomLevel} and {@code maxZoomLevel}
+     *
      * @param resolution the target resolution
      * @param strategy the selection strategy (SPEED or QUALITY)
      * @param minZoomLevel the minimum zoom level to consider
@@ -199,7 +194,8 @@ public interface TileStore<T> {
                     yield closestZoom;
 
                 default:
-                    yield closestZoom;};
+                    yield closestZoom;
+            };
         }
         return bestZoomLevel;
     }

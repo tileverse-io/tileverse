@@ -15,9 +15,7 @@
  */
 package io.tileverse.pmtiles;
 
-/**
- * Exception thrown when an unsupported compression type is used.
- */
+/** Exception thrown when an unsupported compression type is used. */
 @SuppressWarnings("serial")
 public class UnsupportedCompressionException extends RuntimeException {
     public UnsupportedCompressionException(String message) {

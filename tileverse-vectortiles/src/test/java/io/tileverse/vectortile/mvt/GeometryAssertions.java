@@ -35,6 +35,7 @@ import org.locationtech.jts.io.WKTReader;
  * AssertJ-style fluent assertions for JTS geometries with proper type safety.
  *
  * <p>Usage example:
+ *
  * <pre>{@code
  * Geometry actual = ...;
  *
@@ -52,15 +53,14 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         super(actual, GeometryAssertions.class);
     }
 
-    /**
-     * Entry point for fluent assertions on JTS geometries.
-     */
+    /** Entry point for fluent assertions on JTS geometries. */
     public static GeometryAssertions assertThat(Geometry actual) {
         return new GeometryAssertions(actual);
     }
 
     /**
      * Helper method to parse WKT strings into geometries.
+     *
      * @param wkt the WKT string to parse
      * @return the parsed geometry
      * @throws IllegalArgumentException if the WKT cannot be parsed
@@ -74,8 +74,8 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
     }
 
     /**
-     * Assert that the geometry is exactly equal to the expected geometry within the specified tolerance.
-     * Uses JTS {@link Geometry#equalsExact(Geometry, double)} for precise coordinate comparison.
+     * Assert that the geometry is exactly equal to the expected geometry within the specified tolerance. Uses JTS
+     * {@link Geometry#equalsExact(Geometry, double)} for precise coordinate comparison.
      */
     public GeometryAssertions equalsExact(Geometry expected, double tolerance) {
         isNotNull();
@@ -89,32 +89,32 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
     }
 
     /**
-     * Assert that the geometry is exactly equal to the expected geometry (zero tolerance).
-     * Uses JTS {@link Geometry#equalsExact(Geometry)} for precise coordinate comparison.
+     * Assert that the geometry is exactly equal to the expected geometry (zero tolerance). Uses JTS
+     * {@link Geometry#equalsExact(Geometry)} for precise coordinate comparison.
      */
     public GeometryAssertions equalsExact(Geometry expected) {
         return equalsExact(expected, 0.0);
     }
 
     /**
-     * Assert that the geometry is exactly equal to the expected WKT geometry within the specified tolerance.
-     * Uses JTS {@link Geometry#equalsExact(Geometry, double)} for precise coordinate comparison.
+     * Assert that the geometry is exactly equal to the expected WKT geometry within the specified tolerance. Uses JTS
+     * {@link Geometry#equalsExact(Geometry, double)} for precise coordinate comparison.
      */
     public GeometryAssertions equalsExact(String expectedWkt, double tolerance) {
         return equalsExact(parseWkt(expectedWkt), tolerance);
     }
 
     /**
-     * Assert that the geometry is exactly equal to the expected WKT geometry (zero tolerance).
-     * Uses JTS {@link Geometry#equalsExact(Geometry)} for precise coordinate comparison.
+     * Assert that the geometry is exactly equal to the expected WKT geometry (zero tolerance). Uses JTS
+     * {@link Geometry#equalsExact(Geometry)} for precise coordinate comparison.
      */
     public GeometryAssertions equalsExact(String expectedWkt) {
         return equalsExact(parseWkt(expectedWkt), 0.0);
     }
 
     /**
-     * Assert that the geometry is normalized-equal to the expected geometry.
-     * Uses JTS {@link Geometry#equalsNorm(Geometry)} which normalizes geometries before comparison.
+     * Assert that the geometry is normalized-equal to the expected geometry. Uses JTS
+     * {@link Geometry#equalsNorm(Geometry)} which normalizes geometries before comparison.
      */
     public GeometryAssertions equalsNorm(Geometry expected) {
         isNotNull();
@@ -129,8 +129,8 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
     }
 
     /**
-     * Assert that the geometry is topologically equal to the expected geometry.
-     * Uses JTS {@link Geometry#equalsTopo(Geometry)} for topological comparison.
+     * Assert that the geometry is topologically equal to the expected geometry. Uses JTS
+     * {@link Geometry#equalsTopo(Geometry)} for topological comparison.
      */
     public GeometryAssertions equalsTopo(Geometry expected) {
         isNotNull();
@@ -143,34 +143,29 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
     }
 
     /**
-     * Assert that the geometry is normalized-equal to the expected WKT geometry.
-     * Uses JTS {@link Geometry#equalsNorm(Geometry)} which normalizes geometries before comparison.
+     * Assert that the geometry is normalized-equal to the expected WKT geometry. Uses JTS
+     * {@link Geometry#equalsNorm(Geometry)} which normalizes geometries before comparison.
      */
     public GeometryAssertions equalsNorm(String expectedWkt) {
         return equalsNorm(parseWkt(expectedWkt));
     }
 
     /**
-     * Assert that the geometry is topologically equal to the expected WKT geometry.
-     * Uses JTS {@link Geometry#equalsTopo(Geometry)} for topological comparison.
+     * Assert that the geometry is topologically equal to the expected WKT geometry. Uses JTS
+     * {@link Geometry#equalsTopo(Geometry)} for topological comparison.
      */
     public GeometryAssertions equalsTopo(String expectedWkt) {
         return equalsTopo(parseWkt(expectedWkt));
     }
 
-    /**
-     * Assert that the geometry is normalized.
-     */
+    /** Assert that the geometry is normalized. */
     public GeometryAssertions isNormalized() {
         isNotNull();
         Geometry expected = actual.norm();
         return equalsNorm(expected);
     }
 
-    /**
-     * Assert that the geometry is valid according to OGC standards.
-     * Uses JTS {@link Geometry#isValid()}.
-     */
+    /** Assert that the geometry is valid according to OGC standards. Uses JTS {@link Geometry#isValid()}. */
     public GeometryAssertions isValid() {
         isNotNull();
         boolean valid = actual.isValid();
@@ -180,10 +175,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry is invalid according to OGC standards.
-     * Uses JTS {@link Geometry#isValid()}.
-     */
+    /** Assert that the geometry is invalid according to OGC standards. Uses JTS {@link Geometry#isValid()}. */
     public GeometryAssertions isInvalid() {
         isNotNull();
         boolean valid = actual.isValid();
@@ -193,10 +185,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry is simple (no self-intersections).
-     * Uses JTS {@link Geometry#isSimple()}.
-     */
+    /** Assert that the geometry is simple (no self-intersections). Uses JTS {@link Geometry#isSimple()}. */
     public GeometryAssertions isSimple() {
         isNotNull();
         boolean simple = actual.isSimple();
@@ -206,10 +195,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry is not simple (has self-intersections).
-     * Uses JTS {@link Geometry#isSimple()}.
-     */
+    /** Assert that the geometry is not simple (has self-intersections). Uses JTS {@link Geometry#isSimple()}. */
     public GeometryAssertions isNotSimple() {
         isNotNull();
         boolean simple = actual.isSimple();
@@ -219,10 +205,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry is empty.
-     * Uses JTS {@link Geometry#isEmpty()}.
-     */
+    /** Assert that the geometry is empty. Uses JTS {@link Geometry#isEmpty()}. */
     public GeometryAssertions isEmpty() {
         isNotNull();
         boolean empty = actual.isEmpty();
@@ -232,10 +215,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry is not empty.
-     * Uses JTS {@link Geometry#isEmpty()}.
-     */
+    /** Assert that the geometry is not empty. Uses JTS {@link Geometry#isEmpty()}. */
     public GeometryAssertions isNotEmpty() {
         isNotNull();
         boolean empty = actual.isEmpty();
@@ -247,9 +227,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
 
     // Geometry type assertions
 
-    /**
-     * Assert that the geometry is a Point.
-     */
+    /** Assert that the geometry is a Point. */
     public GeometryAssertions isPoint() {
         isNotNull();
         Assertions.assertThat(actual)
@@ -258,9 +236,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry is a LineString.
-     */
+    /** Assert that the geometry is a LineString. */
     public GeometryAssertions isLineString() {
         isNotNull();
         Assertions.assertThat(actual)
@@ -269,9 +245,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry is a Polygon.
-     */
+    /** Assert that the geometry is a Polygon. */
     public GeometryAssertions isPolygon() {
         isNotNull();
         Assertions.assertThat(actual)
@@ -280,9 +254,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry is a MultiPoint.
-     */
+    /** Assert that the geometry is a MultiPoint. */
     public GeometryAssertions isMultiPoint() {
         isNotNull();
         Assertions.assertThat(actual)
@@ -291,9 +263,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry is a MultiLineString.
-     */
+    /** Assert that the geometry is a MultiLineString. */
     public GeometryAssertions isMultiLineString() {
         isNotNull();
         Assertions.assertThat(actual)
@@ -303,9 +273,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry is a MultiPolygon.
-     */
+    /** Assert that the geometry is a MultiPolygon. */
     public GeometryAssertions isMultiPolygon() {
         isNotNull();
         Assertions.assertThat(actual)
@@ -314,9 +282,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry is a GeometryCollection.
-     */
+    /** Assert that the geometry is a GeometryCollection. */
     public GeometryAssertions isGeometryCollection() {
         isNotNull();
         Assertions.assertThat(actual)
@@ -326,9 +292,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry has the expected geometry type name.
-     */
+    /** Assert that the geometry has the expected geometry type name. */
     public GeometryAssertions hasGeometryType(String expectedTypeName) {
         isNotNull();
         Assertions.assertThat(actual.getGeometryType())
@@ -341,8 +305,8 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
     // Geometry interface-based assertions (covers multiple specific types)
 
     /**
-     * Assert that the geometry is puntal (point-like): Point or MultiPoint.
-     * Uses JTS {@link Puntal} interface which covers both Point and MultiPoint geometries.
+     * Assert that the geometry is puntal (point-like): Point or MultiPoint. Uses JTS {@link Puntal} interface which
+     * covers both Point and MultiPoint geometries.
      */
     public GeometryAssertions isPuntal() {
         isNotNull();
@@ -354,8 +318,8 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
     }
 
     /**
-     * Assert that the geometry is lineal (line-like): LineString or MultiLineString.
-     * Uses JTS {@link Lineal} interface which covers both LineString and MultiLineString geometries.
+     * Assert that the geometry is lineal (line-like): LineString or MultiLineString. Uses JTS {@link Lineal} interface
+     * which covers both LineString and MultiLineString geometries.
      */
     public GeometryAssertions isLineal() {
         isNotNull();
@@ -368,8 +332,8 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
     }
 
     /**
-     * Assert that the geometry is polygonal (polygon-like): Polygon or MultiPolygon.
-     * Uses JTS {@link Polygonal} interface which covers both Polygon and MultiPolygon geometries.
+     * Assert that the geometry is polygonal (polygon-like): Polygon or MultiPolygon. Uses JTS {@link Polygonal}
+     * interface which covers both Polygon and MultiPolygon geometries.
      */
     public GeometryAssertions isPolygonal() {
         isNotNull();
@@ -383,10 +347,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
 
     // Spatial relationship assertions
 
-    /**
-     * Assert that the geometry is disjoint from the other geometry.
-     * Uses JTS {@link Geometry#disjoint(Geometry)}.
-     */
+    /** Assert that the geometry is disjoint from the other geometry. Uses JTS {@link Geometry#disjoint(Geometry)}. */
     public GeometryAssertions disjoint(Geometry other) {
         isNotNull();
         boolean isDisjoint = actual.disjoint(other);
@@ -397,10 +358,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry touches the other geometry.
-     * Uses JTS {@link Geometry#touches(Geometry)}.
-     */
+    /** Assert that the geometry touches the other geometry. Uses JTS {@link Geometry#touches(Geometry)}. */
     public GeometryAssertions touches(Geometry other) {
         isNotNull();
         boolean touches = actual.touches(other);
@@ -410,10 +368,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry intersects the other geometry.
-     * Uses JTS {@link Geometry#intersects(Geometry)}.
-     */
+    /** Assert that the geometry intersects the other geometry. Uses JTS {@link Geometry#intersects(Geometry)}. */
     public GeometryAssertions intersects(Geometry other) {
         isNotNull();
         boolean intersects = actual.intersects(other);
@@ -425,8 +380,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
     }
 
     /**
-     * Assert that the geometry does not intersect the other geometry.
-     * Uses JTS {@link Geometry#intersects(Geometry)}.
+     * Assert that the geometry does not intersect the other geometry. Uses JTS {@link Geometry#intersects(Geometry)}.
      */
     public GeometryAssertions doesNotIntersect(Geometry other) {
         isNotNull();
@@ -438,10 +392,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry crosses the other geometry.
-     * Uses JTS {@link Geometry#crosses(Geometry)}.
-     */
+    /** Assert that the geometry crosses the other geometry. Uses JTS {@link Geometry#crosses(Geometry)}. */
     public GeometryAssertions crosses(Geometry other) {
         isNotNull();
         boolean crosses = actual.crosses(other);
@@ -451,10 +402,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry is within the other geometry.
-     * Uses JTS {@link Geometry#within(Geometry)}.
-     */
+    /** Assert that the geometry is within the other geometry. Uses JTS {@link Geometry#within(Geometry)}. */
     public GeometryAssertions within(Geometry other) {
         isNotNull();
         boolean within = actual.within(other);
@@ -464,10 +412,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry contains the other geometry.
-     * Uses JTS {@link Geometry#contains(Geometry)}.
-     */
+    /** Assert that the geometry contains the other geometry. Uses JTS {@link Geometry#contains(Geometry)}. */
     public GeometryAssertions contains(Geometry other) {
         isNotNull();
         boolean contains = actual.contains(other);
@@ -477,10 +422,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry does not contain the other geometry.
-     * Uses JTS {@link Geometry#contains(Geometry)}.
-     */
+    /** Assert that the geometry does not contain the other geometry. Uses JTS {@link Geometry#contains(Geometry)}. */
     public GeometryAssertions doesNotContain(Geometry other) {
         isNotNull();
         boolean contains = actual.contains(other);
@@ -490,10 +432,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry overlaps the other geometry.
-     * Uses JTS {@link Geometry#overlaps(Geometry)}.
-     */
+    /** Assert that the geometry overlaps the other geometry. Uses JTS {@link Geometry#overlaps(Geometry)}. */
     public GeometryAssertions overlaps(Geometry other) {
         isNotNull();
         boolean overlaps = actual.overlaps(other);
@@ -503,10 +442,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry covers the other geometry.
-     * Uses JTS {@link Geometry#covers(Geometry)}.
-     */
+    /** Assert that the geometry covers the other geometry. Uses JTS {@link Geometry#covers(Geometry)}. */
     public GeometryAssertions covers(Geometry other) {
         isNotNull();
         boolean covers = actual.covers(other);
@@ -516,10 +452,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry is covered by the other geometry.
-     * Uses JTS {@link Geometry#coveredBy(Geometry)}.
-     */
+    /** Assert that the geometry is covered by the other geometry. Uses JTS {@link Geometry#coveredBy(Geometry)}. */
     public GeometryAssertions coveredBy(Geometry other) {
         isNotNull();
         boolean coveredBy = actual.coveredBy(other);
@@ -532,96 +465,68 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
     // WKT overloads for spatial relationship assertions
 
     /**
-     * Assert that the geometry is disjoint from the other WKT geometry.
-     * Uses JTS {@link Geometry#disjoint(Geometry)}.
+     * Assert that the geometry is disjoint from the other WKT geometry. Uses JTS {@link Geometry#disjoint(Geometry)}.
      */
     public GeometryAssertions disjoint(String otherWkt) {
         return disjoint(parseWkt(otherWkt));
     }
 
-    /**
-     * Assert that the geometry touches the other WKT geometry.
-     * Uses JTS {@link Geometry#touches(Geometry)}.
-     */
+    /** Assert that the geometry touches the other WKT geometry. Uses JTS {@link Geometry#touches(Geometry)}. */
     public GeometryAssertions touches(String otherWkt) {
         return touches(parseWkt(otherWkt));
     }
 
-    /**
-     * Assert that the geometry intersects the other WKT geometry.
-     * Uses JTS {@link Geometry#intersects(Geometry)}.
-     */
+    /** Assert that the geometry intersects the other WKT geometry. Uses JTS {@link Geometry#intersects(Geometry)}. */
     public GeometryAssertions intersects(String otherWkt) {
         return intersects(parseWkt(otherWkt));
     }
 
     /**
-     * Assert that the geometry does not intersect the other WKT geometry.
-     * Uses JTS {@link Geometry#intersects(Geometry)}.
+     * Assert that the geometry does not intersect the other WKT geometry. Uses JTS
+     * {@link Geometry#intersects(Geometry)}.
      */
     public GeometryAssertions doesNotIntersect(String otherWkt) {
         return doesNotIntersect(parseWkt(otherWkt));
     }
 
-    /**
-     * Assert that the geometry crosses the other WKT geometry.
-     * Uses JTS {@link Geometry#crosses(Geometry)}.
-     */
+    /** Assert that the geometry crosses the other WKT geometry. Uses JTS {@link Geometry#crosses(Geometry)}. */
     public GeometryAssertions crosses(String otherWkt) {
         return crosses(parseWkt(otherWkt));
     }
 
-    /**
-     * Assert that the geometry is within the other WKT geometry.
-     * Uses JTS {@link Geometry#within(Geometry)}.
-     */
+    /** Assert that the geometry is within the other WKT geometry. Uses JTS {@link Geometry#within(Geometry)}. */
     public GeometryAssertions within(String otherWkt) {
         return within(parseWkt(otherWkt));
     }
 
-    /**
-     * Assert that the geometry contains the other WKT geometry.
-     * Uses JTS {@link Geometry#contains(Geometry)}.
-     */
+    /** Assert that the geometry contains the other WKT geometry. Uses JTS {@link Geometry#contains(Geometry)}. */
     public GeometryAssertions contains(String otherWkt) {
         return contains(parseWkt(otherWkt));
     }
 
     /**
-     * Assert that the geometry does not contain the other WKT geometry.
-     * Uses JTS {@link Geometry#contains(Geometry)}.
+     * Assert that the geometry does not contain the other WKT geometry. Uses JTS {@link Geometry#contains(Geometry)}.
      */
     public GeometryAssertions doesNotContain(String otherWkt) {
         return doesNotContain(parseWkt(otherWkt));
     }
 
-    /**
-     * Assert that the geometry overlaps the other WKT geometry.
-     * Uses JTS {@link Geometry#overlaps(Geometry)}.
-     */
+    /** Assert that the geometry overlaps the other WKT geometry. Uses JTS {@link Geometry#overlaps(Geometry)}. */
     public GeometryAssertions overlaps(String otherWkt) {
         return overlaps(parseWkt(otherWkt));
     }
 
-    /**
-     * Assert that the geometry covers the other WKT geometry.
-     * Uses JTS {@link Geometry#covers(Geometry)}.
-     */
+    /** Assert that the geometry covers the other WKT geometry. Uses JTS {@link Geometry#covers(Geometry)}. */
     public GeometryAssertions covers(String otherWkt) {
         return covers(parseWkt(otherWkt));
     }
 
-    /**
-     * Assert that the geometry is covered by the other WKT geometry.
-     * Uses JTS {@link Geometry#coveredBy(Geometry)}.
-     */
+    /** Assert that the geometry is covered by the other WKT geometry. Uses JTS {@link Geometry#coveredBy(Geometry)}. */
     public GeometryAssertions coveredBy(String otherWkt) {
         return coveredBy(parseWkt(otherWkt));
     }
 
-    /**
-     * Assert that the geometry has the expected area within the specified tolerance.
-     */
+    /** Assert that the geometry has the expected area within the specified tolerance. */
     public GeometryAssertions hasArea(double expectedArea, double tolerance) {
         isNotNull();
         double actualArea = actual.getArea();
@@ -632,9 +537,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry has the expected length/perimeter within the specified tolerance.
-     */
+    /** Assert that the geometry has the expected length/perimeter within the specified tolerance. */
     public GeometryAssertions hasLength(double expectedLength, double tolerance) {
         isNotNull();
         double actualLength = actual.getLength();
@@ -646,9 +549,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry has the expected number of points.
-     */
+    /** Assert that the geometry has the expected number of points. */
     public GeometryAssertions hasNumPoints(int expectedNumPoints) {
         isNotNull();
         int actualNumPoints = actual.getNumPoints();
@@ -659,9 +560,7 @@ public class GeometryAssertions extends AbstractAssert<GeometryAssertions, Geome
         return this;
     }
 
-    /**
-     * Assert that the geometry has the expected number of geometries (for collections).
-     */
+    /** Assert that the geometry has the expected number of geometries (for collections). */
     public GeometryAssertions hasNumGeometries(int expectedNumGeometries) {
         isNotNull();
         int actualNumGeometries = actual.getNumGeometries();

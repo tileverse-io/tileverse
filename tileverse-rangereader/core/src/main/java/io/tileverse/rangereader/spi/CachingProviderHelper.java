@@ -25,20 +25,19 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * A helper class for {@link RangeReaderProvider} implementations to manage caching-related parameters
- * and to decorate {@link RangeReader} instances with {@link CachingRangeReader}.
+ * A helper class for {@link RangeReaderProvider} implementations to manage caching-related parameters and to decorate
+ * {@link RangeReader} instances with {@link CachingRangeReader}.
  */
 class CachingProviderHelper {
 
     /**
-     * A {@link RangeReaderParameter} to enable or disable memory caching for raw byte range requests.
-     * When enabled, a {@link CachingRangeReader} will wrap the underlying {@link RangeReader}.
+     * A {@link RangeReaderParameter} to enable or disable memory caching for raw byte range requests. When enabled, a
+     * {@link CachingRangeReader} will wrap the underlying {@link RangeReader}.
      */
     static final RangeReaderParameter<Boolean> MEMORY_CACHE_ENABLED = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.caching.enabled")
             .title("Enable memory cache for raw byte data")
-            .description(
-                    """
+            .description("""
                     Enables in-memory caching of byte ranges. When a range of data is requested, \
                     it is fetched from the underlying storage and stored in a memory cache.
                     Subsequent requests for the same or overlapping ranges can then be served \
@@ -54,14 +53,13 @@ class CachingProviderHelper {
             .build();
 
     /**
-     * A {@link RangeReaderParameter} to control whether cached byte ranges should be block-aligned.
-     * Block alignment can improve performance for certain storage types by optimizing read patterns.
+     * A {@link RangeReaderParameter} to control whether cached byte ranges should be block-aligned. Block alignment can
+     * improve performance for certain storage types by optimizing read patterns.
      */
     static final RangeReaderParameter<Boolean> MEMORY_CACHE_BLOCK_ALIGNED = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.caching.blockaligned")
             .title("Apply block alignment for cached byte ranges")
-            .description(
-                    """
+            .description("""
                     When enabled, all read requests are aligned to predefined block boundaries.
 
                     For example, a request for bytes 10-20 with a block size of 100 would \
@@ -79,14 +77,13 @@ class CachingProviderHelper {
             .build();
 
     /**
-     * A {@link RangeReaderParameter} to specify the block size in bytes for the memory cache.
-     * The block size should be a power of 2 for optimal performance.
+     * A {@link RangeReaderParameter} to specify the block size in bytes for the memory cache. The block size should be
+     * a power of 2 for optimal performance.
      */
     static final RangeReaderParameter<Integer> MEMORY_CACHE_BLOCK_SIZE = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.caching.blocksize")
             .title("Cache block size in bytes (power of 2)")
-            .description(
-                    """
+            .description("""
                     Defines the size of the blocks used for block-aligned caching.
 
                     The optimal value for this parameter often depends on the characteristics of the \
@@ -109,8 +106,8 @@ class CachingProviderHelper {
             List.of(MEMORY_CACHE_ENABLED, MEMORY_CACHE_BLOCK_ALIGNED, MEMORY_CACHE_BLOCK_SIZE);
 
     /**
-     * Returns a new list of parameters that includes the provided parameters along with
-     * the caching-related parameters defined in this helper.
+     * Returns a new list of parameters that includes the provided parameters along with the caching-related parameters
+     * defined in this helper.
      *
      * @param params The initial list of parameters.
      * @return A new list containing all parameters, including caching parameters.
@@ -132,13 +129,14 @@ class CachingProviderHelper {
     }
 
     /**
-     * Decorates the given {@link RangeReader} with a {@link CachingRangeReader} if caching is enabled
-     * in the provided {@link RangeReaderConfig}.
-     * The caching behavior (block alignment, block size) is configured based on the {@code opts}.
+     * Decorates the given {@link RangeReader} with a {@link CachingRangeReader} if caching is enabled in the provided
+     * {@link RangeReaderConfig}. The caching behavior (block alignment, block size) is configured based on the
+     * {@code opts}.
      *
      * @param reader The {@link RangeReader} to decorate.
      * @param opts The {@link RangeReaderConfig} containing caching settings.
-     * @return The decorated {@link RangeReader} (a {@link CachingRangeReader}) or the original reader if caching is disabled.
+     * @return The decorated {@link RangeReader} (a {@link CachingRangeReader}) or the original reader if caching is
+     *     disabled.
      */
     public static RangeReader decorate(RangeReader reader, RangeReaderConfig opts) {
         final boolean enableCaching = opts.getParameter(MEMORY_CACHE_ENABLED).orElse(false);

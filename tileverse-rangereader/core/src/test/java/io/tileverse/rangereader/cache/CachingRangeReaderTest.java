@@ -50,9 +50,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * Tests for {@link CachingRangeReader}.
- */
+/** Tests for {@link CachingRangeReader}. */
 class CachingRangeReaderTest {
 
     @TempDir
@@ -286,8 +284,9 @@ class CachingRangeReaderTest {
     @Test
     void testBuilderValidation() throws IOException {
         RangeReader delegate = FileRangeReader.builder().path(testFile).build();
-        assertThrows(IllegalArgumentException.class, () -> CachingRangeReader.builder(delegate)
-                .blockSize(-1));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> CachingRangeReader.builder(delegate).blockSize(-1));
     }
 
     @Test
@@ -397,9 +396,7 @@ class CachingRangeReaderTest {
         }
     }
 
-    /**
-     * Helper method to convert ByteBuffer to byte array.
-     */
+    /** Helper method to convert ByteBuffer to byte array. */
     private byte[] bufferToArray(ByteBuffer buffer) {
         buffer.rewind();
         byte[] array = new byte[buffer.remaining()];
@@ -407,9 +404,7 @@ class CachingRangeReaderTest {
         return array;
     }
 
-    /**
-     * Mock RangeReader that counts read operations for concurrency testing.
-     */
+    /** Mock RangeReader that counts read operations for concurrency testing. */
     private static class CountingRangeReader extends AbstractRangeReader {
         private final RangeReader delegate;
         private final AtomicInteger readCount = new AtomicInteger(0);
@@ -447,9 +442,7 @@ class CachingRangeReaderTest {
         }
     }
 
-    /**
-     * Mock closable RangeReader for testing close behavior.
-     */
+    /** Mock closable RangeReader for testing close behavior. */
     private static class MockClosableRangeReader extends AbstractRangeReader {
         private boolean closed = false;
 

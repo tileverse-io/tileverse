@@ -50,18 +50,18 @@ class VectorTileCache {
 
     /**
      * Estimated average weight of a cached VectorTile entry in bytes.
-     * <p>
-     * This value accounts for:
+     *
+     * <p>This value accounts for:
+     *
      * <ul>
-     * <li>Key/Value Overhead: Approximately 100 bytes of JVM object
-     * metadata.
-     * <li>Binary Size: An assumed average tile payload of 75-80 KB.
-     * <li>Inflation: A 5x multiplier to account for in-memory expansion of
-     * Protobuf objects compared to their serialized form.
+     *   <li>Key/Value Overhead: Approximately 100 bytes of JVM object metadata.
+     *   <li>Binary Size: An assumed average tile payload of 75-80 KB.
+     *   <li>Inflation: A 5x multiplier to account for in-memory expansion of Protobuf objects compared to their
+     *       serialized form.
      * </ul>
-     * Used by {@link #buildCache()} and effectively by
-     * {@code CaffeineCache#Builder}'s {@code computeInitialCapacity()} to pre-size
-     * internal data structures and minimize GC churn during cache warm-up.
+     *
+     * Used by {@link #buildCache()} and effectively by {@code CaffeineCache#Builder}'s {@code computeInitialCapacity()}
+     * to pre-size internal data structures and minimize GC churn during cache warm-up.
      */
     private static final int AVERAGE_TILE_WEIGHT = 1024 * 400;
 
@@ -71,8 +71,7 @@ class VectorTileCache {
     private CacheManager cacheManager;
 
     /**
-     * Decodes {@code ByteBuffer} blobs from
-     * {@link PMTilesReader#getTile(TileIndex, java.util.function.Function)
+     * Decodes {@code ByteBuffer} blobs from {@link PMTilesReader#getTile(TileIndex, java.util.function.Function)
      * PMTilesReader} as {@link VectorTile}s
      *
      * @see #decodeVectorTile(ByteBuffer)
@@ -92,12 +91,10 @@ class VectorTileCache {
     }
 
     /**
-     * Short-lived (expireAfterAccess) {@link VectorTile} cache to account for
-     * consecutive single-layer requests.
-     * <p>
-     * Since {@link VectorTile} objects are immutable and relatively expensive to
-     * decode, caching them improves performance when multiple layers are requested
-     * for the same tile.
+     * Short-lived (expireAfterAccess) {@link VectorTile} cache to account for consecutive single-layer requests.
+     *
+     * <p>Since {@link VectorTile} objects are immutable and relatively expensive to decode, caching them improves
+     * performance when multiple layers are requested for the same tile.
      */
     private final io.tileverse.cache.Cache<TileIndex, Optional<VectorTile>> cache() {
         if (this.cacheManager == null) {

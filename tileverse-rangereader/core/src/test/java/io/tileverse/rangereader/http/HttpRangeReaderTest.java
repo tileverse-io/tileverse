@@ -44,9 +44,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
-/**
- * Comprehensive tests for HttpRangeReader using WireMock.
- */
+/** Comprehensive tests for HttpRangeReader using WireMock. */
 class HttpRangeReaderTest {
 
     private static final String TEST_PATH = "/test-pmtiles";
@@ -60,9 +58,7 @@ class HttpRangeReaderTest {
     private URI testUri;
     private HttpRangeReader reader;
 
-    /**
-     * Creates test data with a predictable pattern.
-     */
+    /** Creates test data with a predictable pattern. */
     private static byte[] createTestData(int size) {
         byte[] data = new byte[size];
         for (int i = 0; i < size; i++) {

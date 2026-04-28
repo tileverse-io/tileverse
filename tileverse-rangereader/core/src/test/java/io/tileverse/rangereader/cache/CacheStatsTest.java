@@ -32,9 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * Tests for {@link CacheStats} and consistent cache statistics APIs.
- */
+/** Tests for {@link CacheStats} and consistent cache statistics APIs. */
 class CacheStatsTest {
 
     @TempDir

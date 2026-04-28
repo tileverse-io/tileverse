@@ -37,9 +37,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Integration tests for AzureBlobRangeReader using Azurite.
- * <p>
- * These tests verify that the AzureBlobRangeReader can correctly read ranges of bytes
- * from an Azure Blob Storage container using the Azure SDK against an Azurite container.
+ *
+ * <p>These tests verify that the AzureBlobRangeReader can correctly read ranges of bytes from an Azure Blob Storage
+ * container using the Azure SDK against an Azurite container.
  */
 @Testcontainers(disabledWithoutDocker = true)
 class AzureBlobRangeReaderIT extends AbstractRangeReaderIT {
@@ -87,9 +87,7 @@ class AzureBlobRangeReaderIT extends AbstractRangeReaderIT {
         }
     }
 
-    /**
-     * Creates AzureBlobRangeReader using the factory method with connection string
-     */
+    /** Creates AzureBlobRangeReader using the factory method with connection string */
     @Override
     protected RangeReader createBaseReader() throws IOException {
 
@@ -107,9 +105,7 @@ class AzureBlobRangeReaderIT extends AbstractRangeReaderIT {
         //                .build();
     }
 
-    /**
-     * Additional Azure-specific tests can go here
-     */
+    /** Additional Azure-specific tests can go here */
     @Test
     void testAzureBlobRangeReaderImplementation() throws IOException {
         try (RangeReader reader = AzureBlobRangeReader.builder()

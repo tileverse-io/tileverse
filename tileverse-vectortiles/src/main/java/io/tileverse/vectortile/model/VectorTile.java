@@ -28,10 +28,9 @@ import org.locationtech.jts.geom.Geometry;
 
 /**
  * A vector tile containing multiple named layers.
- * <p>
- * Represents the root container for vector tile data, organizing
- * features into logical layers. Each layer can have different
- * coordinate extents and feature types.
+ *
+ * <p>Represents the root container for vector tile data, organizing features into logical layers. Each layer can have
+ * different coordinate extents and feature types.
  */
 public interface VectorTile {
 
@@ -109,10 +108,9 @@ public interface VectorTile {
 
     /**
      * A named collection of vector features with shared coordinate space.
-     * <p>
-     * Layers group related features and define the coordinate extent.
-     * All features within a layer share the same coordinate precision
-     * and valid coordinate range [0, extent-1].
+     *
+     * <p>Layers group related features and define the coordinate extent. All features within a layer share the same
+     * coordinate precision and valid coordinate range [0, extent-1].
      */
     public static interface Layer {
 
@@ -132,9 +130,9 @@ public interface VectorTile {
 
         /**
          * Returns the coordinate extent for this layer.
-         * <p>
-         * Defines the valid coordinate range [0, extent-1] and precision.
-         * Defaults to 4096 in MVT. Common values are 256, 512, 1024, 2048, or 4096.
+         *
+         * <p>Defines the valid coordinate range [0, extent-1] and precision. Defaults to 4096 in MVT. Common values are
+         * 256, 512, 1024, 2048, or 4096.
          *
          * @return the coordinate extent value
          */
@@ -142,8 +140,8 @@ public interface VectorTile {
 
         /**
          * Returns all attribute names present in this layer.
-         * <p>
-         * Represents the union of all attribute names across all features.
+         *
+         * <p>Represents the union of all attribute names across all features.
          *
          * @return set of attribute names
          */
@@ -158,12 +156,12 @@ public interface VectorTile {
 
         /**
          * Returns a stream of features in this layer.
-         * <p>
-         * Geometries are returned in their raw extent space (0 to extent-1) as stored in the MVT data.
-         * <p>
-         * If the features don't have ids, they'll be assigned an id based on their position in the list
-         * @return a sequential-only stream that reuses Feature instances for memory
-         *         efficiency
+         *
+         * <p>Geometries are returned in their raw extent space (0 to extent-1) as stored in the MVT data.
+         *
+         * <p>If the features don't have ids, they'll be assigned an id based on their position in the list
+         *
+         * @return a sequential-only stream that reuses Feature instances for memory efficiency
          */
         Stream<Feature> getFeatures();
 
@@ -186,10 +184,9 @@ public interface VectorTile {
 
         /**
          * A vector tile feature with geometry and attributes.
-         * <p>
-         * Features represent individual geographic objects within a tile layer.
-         * Each feature has a geometry, optional attributes, and an identifier.
-         * Coordinates are in tile extent space [0, extent-1].
+         *
+         * <p>Features represent individual geographic objects within a tile layer. Each feature has a geometry,
+         * optional attributes, and an identifier. Coordinates are in tile extent space [0, extent-1].
          */
         public static interface Feature {
 
@@ -202,8 +199,8 @@ public interface VectorTile {
 
             /**
              * Returns the feature identifier.
-             * <p>
-             * Features may have explicit IDs or default to 0.
+             *
+             * <p>Features may have explicit IDs or default to 0.
              *
              * @return the feature ID
              */
@@ -211,9 +208,9 @@ public interface VectorTile {
 
             /**
              * Returns the feature's geometry in tile extent coordinates.
-             * <p>
-             * Coordinates are preserved exactly as stored in the MVT data,
-             * typically in the range [0, extent-1] where extent is the layer's extent value.
+             *
+             * <p>Coordinates are preserved exactly as stored in the MVT data, typically in the range [0, extent-1]
+             * where extent is the layer's extent value.
              *
              * @return the feature geometry
              */
@@ -229,9 +226,9 @@ public interface VectorTile {
 
             /**
              * Returns all feature attributes as a map.
-             * <p>
-             * The returned map reflects the feature's current attribute state.
-             * Missing attributes return null when accessed individually.
+             *
+             * <p>The returned map reflects the feature's current attribute state. Missing attributes return null when
+             * accessed individually.
              *
              * @return map of attribute names to values
              */

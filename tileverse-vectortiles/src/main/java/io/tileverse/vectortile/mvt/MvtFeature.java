@@ -31,9 +31,7 @@ final class MvtFeature implements VectorTile.Layer.Feature {
     final VectorTileProto.Tile.Feature featureProto;
     final GeometryReader decoder;
 
-    /**
-     * Attribute name to value map, lazily created by {@link #buildValues()}
-     */
+    /** Attribute name to value map, lazily created by {@link #buildValues()} */
     private Map<String, Object> valueIndex;
 
     private Geometry geometry;

@@ -17,9 +17,9 @@ package io.tileverse.cache;
 
 /**
  * Cache statistics record that provides consistent cache metrics across different caching implementations.
- * <p>
- * This record abstracts away the underlying caching implementation details and provides a unified
- * interface for cache statistics, whether from memory-based or disk-based caching.
+ *
+ * <p>This record abstracts away the underlying caching implementation details and provides a unified interface for
+ * cache statistics, whether from memory-based or disk-based caching.
  *
  * @param hitCount The number of cache hits
  * @param missCount The number of cache misses

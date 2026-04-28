@@ -17,9 +17,7 @@ package io.tileverse.io;
 
 import java.io.IOException;
 
-/**
- * Throwing function for I/O operations
- */
+/** Throwing function for I/O operations */
 @FunctionalInterface
 public interface IOFunction<T, R> {
 

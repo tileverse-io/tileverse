@@ -62,9 +62,7 @@ class PMTilesReaderTest {
         return andorraReader;
     }
 
-    /**
-     * Subclasses would override this method to test against different range readers
-     */
+    /** Subclasses would override this method to test against different range readers */
     protected RangeReader getAndorraRangeReader() throws IOException {
         return PMTilesTestData.andorraFileRangeReader(tmpFolder);
     }
@@ -168,8 +166,8 @@ class PMTilesReaderTest {
     }
 
     /**
-     * Test tile fetching matching the output of pmtiles tile commands. Tests
-     * various tiles that should exist in the andorra.pmtiles file.
+     * Test tile fetching matching the output of pmtiles tile commands. Tests various tiles that should exist in the
+     * andorra.pmtiles file.
      */
     @Test
     void testTileFetching() throws Exception {
@@ -188,9 +186,7 @@ class PMTilesReaderTest {
         assertTrue(tile110.get().remaining() > 0, "Tile 1/1/0 should have data");
     }
 
-    /**
-     * Test tiles that should not exist in the archive.
-     */
+    /** Test tiles that should not exist in the archive. */
     @Test
     void testNonExistentTiles() throws Exception {
         // Test beyond max zoom level
@@ -206,9 +202,7 @@ class PMTilesReaderTest {
         assertTrue(tileOutOfBounds.isEmpty(), "Tile outside geographic bounds should not exist");
     }
 
-    /**
-     * Test edge cases and invalid coordinates.
-     */
+    /** Test edge cases and invalid coordinates. */
     @Test
     @SuppressWarnings("java:S5778")
     void testEdgeCases() {
@@ -237,9 +231,7 @@ class PMTilesReaderTest {
                 "Tile with Y beyond grid bounds should throw IllegalArgumentException");
     }
 
-    /**
-     * Test tiles at different zoom levels to verify zoom-specific behavior.
-     */
+    /** Test tiles at different zoom levels to verify zoom-specific behavior. */
     @Test
     void testDifferentZoomLevels() throws Exception {
         PMTilesHeader header = reader.getHeader();
@@ -278,9 +270,7 @@ class PMTilesReaderTest {
         }
     }
 
-    /**
-     * Test utility methods for converting E7 encoded coordinates to doubles.
-     */
+    /** Test utility methods for converting E7 encoded coordinates to doubles. */
     @Test
     void testCoordinateUtilityMethods() {
 
@@ -307,9 +297,7 @@ class PMTilesReaderTest {
                 "Center latitude should be within bounds");
     }
 
-    /**
-     * Test that tile data is properly decompressed when compression is used.
-     */
+    /** Test that tile data is properly decompressed when compression is used. */
     @Test
     void testTileDecompression() throws Exception {
 
@@ -333,8 +321,7 @@ class PMTilesReaderTest {
 
     @Test
     void testParseMetadataException() {
-        final String rawMetadata =
-                """
+        final String rawMetadata = """
                 {
                   "name": "Shortbread",
                   "description": "A basic, lean, general-purpose vector tile schema for OpenStreetMap data. See https://shortbread.geofabrik.de/",

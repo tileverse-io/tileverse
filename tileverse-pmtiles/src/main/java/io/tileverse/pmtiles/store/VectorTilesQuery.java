@@ -61,6 +61,7 @@ public class VectorTilesQuery {
 
     /**
      * The zoom level to query. If set, it takes precedence over {@link #resolution()}
+     *
      * @param zoomLevel
      * @return
      */
@@ -75,6 +76,7 @@ public class VectorTilesQuery {
 
     /**
      * The query resolution. If {@link #zoomLevel} is set, it takes precedence over resolution/strategy
+     *
      * @param resolution the resolution for tile selection
      * @return this query for method chaining
      */
@@ -139,10 +141,9 @@ public class VectorTilesQuery {
     /**
      * Sets a geometry transformation to apply to features.
      *
-     * @param geometryOperation operation to apply to geometries during feature reading.
-     *                          If {@code transformToCrs} is {@code true} this operation is
-     *                          concatenated to the tile space to
-     *                          {@link TileMatrixSet#crsId() CRS} transformation.
+     * @param geometryOperation operation to apply to geometries during feature reading. If {@code transformToCrs} is
+     *     {@code true} this operation is concatenated to the tile space to {@link TileMatrixSet#crsId() CRS}
+     *     transformation.
      * @return this query for method chaining
      */
     public VectorTilesQuery geometryTransformation(UnaryOperator<Geometry> geometryOperation) {

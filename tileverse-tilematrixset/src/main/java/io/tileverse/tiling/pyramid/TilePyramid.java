@@ -23,8 +23,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Abstract base class representing a complete multi-level tile pyramid.
- * Contains tile range operations and provides pyramid-wide functionality.
+ * Abstract base class representing a complete multi-level tile pyramid. Contains tile range operations and provides
+ * pyramid-wide functionality.
  *
  * @since 1.0
  */
@@ -32,10 +32,7 @@ public abstract class TilePyramid {
 
     private final CornerOfOrigin cornerOfOrigin;
 
-    /**
-     * Default constructor for backward compatibility.
-     * Uses LOWER_LEFT axis origin.
-     */
+    /** Default constructor for backward compatibility. Uses LOWER_LEFT axis origin. */
     protected TilePyramid() {
         this(CornerOfOrigin.BOTTOM_LEFT);
     }
@@ -57,8 +54,7 @@ public abstract class TilePyramid {
     public abstract List<TileRange> levels();
 
     /**
-     * Returns the axis origin for this pyramid.
-     * All levels in the pyramid use the same axis origin.
+     * Returns the axis origin for this pyramid. All levels in the pyramid use the same axis origin.
      *
      * @return the axis origin
      */
@@ -186,8 +182,7 @@ public abstract class TilePyramid {
     }
 
     /**
-     * Returns the tile range for a specific zoom level.
-     * Throws an exception if the zoom level is not present.
+     * Returns the tile range for a specific zoom level. Throws an exception if the zoom level is not present.
      *
      * @param zoomLevel the zoom level to query
      * @return the TileRange for the specified zoom level
@@ -209,8 +204,8 @@ public abstract class TilePyramid {
     }
 
     /**
-     * Returns true if the pyramid contains the specified tile index.
-     * The tile must be at a valid zoom level and within the bounds of that level's range.
+     * Returns true if the pyramid contains the specified tile index. The tile must be at a valid zoom level and within
+     * the bounds of that level's range.
      *
      * @param tile the tile index to check
      * @return true if the pyramid contains the tile
@@ -220,8 +215,8 @@ public abstract class TilePyramid {
     }
 
     /**
-     * Returns true if the pyramid contains the specified tile range.
-     * The range must be at a valid zoom level and be fully contained within that level's bounds.
+     * Returns true if the pyramid contains the specified tile range. The range must be at a valid zoom level and be
+     * fully contained within that level's bounds.
      *
      * @param range the tile range to check
      * @return true if the pyramid contains the range
@@ -297,9 +292,7 @@ public abstract class TilePyramid {
         return new Builder();
     }
 
-    /**
-     * Builder class for constructing TilePyramid instances.
-     */
+    /** Builder class for constructing TilePyramid instances. */
     public static class Builder {
         private final List<TileRange> ranges = new ArrayList<>();
         private CornerOfOrigin cornerOfOrigin = CornerOfOrigin.BOTTOM_LEFT;
@@ -344,8 +337,7 @@ public abstract class TilePyramid {
         }
 
         /**
-         * Sets the axis origin for the pyramid.
-         * All tile ranges will be converted to this axis origin if needed.
+         * Sets the axis origin for the pyramid. All tile ranges will be converted to this axis origin if needed.
          *
          * @param cornerOfOrigin the axis origin
          * @return this builder
@@ -356,8 +348,7 @@ public abstract class TilePyramid {
         }
 
         /**
-         * Builds the TilePyramid instance.
-         * All tile ranges are converted to the pyramid's axis origin if needed.
+         * Builds the TilePyramid instance. All tile ranges are converted to the pyramid's axis origin if needed.
          *
          * @return a new TilePyramid
          * @throws ArithmeticException if the total tile count would overflow Long.MAX_VALUE
@@ -375,9 +366,7 @@ public abstract class TilePyramid {
         }
     }
 
-    /**
-     * Standard implementation of TilePyramid that stores tile ranges directly.
-     */
+    /** Standard implementation of TilePyramid that stores tile ranges directly. */
     private static class TilePyramidImpl extends TilePyramid {
         private final List<TileRange> levels;
 
@@ -397,8 +386,8 @@ public abstract class TilePyramid {
     }
 
     /**
-     * A view of the pyramid that filters ranges to a specific zoom level range.
-     * Uses efficient subList() to avoid copying or lazy initialization.
+     * A view of the pyramid that filters ranges to a specific zoom level range. Uses efficient subList() to avoid
+     * copying or lazy initialization.
      */
     private static class SubsetView extends TilePyramid {
         private final TilePyramid source;

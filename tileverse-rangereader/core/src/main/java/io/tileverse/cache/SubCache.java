@@ -134,9 +134,7 @@ class SubCache<K, V> implements Cache<K, V> {
         return mappingFunction.apply(outerKey);
     }
 
-    /**
-     * @return keys filtered by this {@link #cacheId}
-     */
+    /** @return keys filtered by this {@link #cacheId} */
     private Stream<SubCacheKey> cacheKeys() {
         return cache.keys().stream().filter(this::subCacheFilter).map(SubCacheKey.class::cast);
     }

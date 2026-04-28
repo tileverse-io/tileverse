@@ -26,6 +26,7 @@ import org.assertj.core.api.Assertions;
  * AssertJ-style fluent assertions for MVT layers.
  *
  * <p>Usage example:
+ *
  * <pre>{@code
  * Layer layer = ...;
  * LayerAssertions.assertThat(layer)
@@ -50,16 +51,12 @@ class LayerAssertions extends AbstractAssert<LayerAssertions, Layer> {
         this.parentTile = parentTile;
     }
 
-    /**
-     * Entry point for fluent assertions on MVT layers.
-     */
+    /** Entry point for fluent assertions on MVT layers. */
     public static LayerAssertions assertThat(Layer actual) {
         return new LayerAssertions(actual);
     }
 
-    /**
-     * Assert that the layer has the specified name.
-     */
+    /** Assert that the layer has the specified name. */
     public LayerAssertions hasName(String expectedName) {
         isNotNull();
         Assertions.assertThat(actual.getName())
@@ -68,9 +65,7 @@ class LayerAssertions extends AbstractAssert<LayerAssertions, Layer> {
         return this;
     }
 
-    /**
-     * Assert that the layer has the specified extent.
-     */
+    /** Assert that the layer has the specified extent. */
     public LayerAssertions hasExtent(int expectedExtent) {
         isNotNull();
         Assertions.assertThat(actual.getExtent())
@@ -80,9 +75,7 @@ class LayerAssertions extends AbstractAssert<LayerAssertions, Layer> {
         return this;
     }
 
-    /**
-     * Assert that the layer has the specified number of features.
-     */
+    /** Assert that the layer has the specified number of features. */
     public LayerAssertions hasFeatureCount(int expectedCount) {
         isNotNull();
         Assertions.assertThat(actual.count())
@@ -92,9 +85,7 @@ class LayerAssertions extends AbstractAssert<LayerAssertions, Layer> {
         return this;
     }
 
-    /**
-     * Assert that the layer has an attribute with the specified name.
-     */
+    /** Assert that the layer has an attribute with the specified name. */
     public LayerAssertions hasAttribute(String attributeName) {
         isNotNull();
         Assertions.assertThat(actual.getAttributeNames())
@@ -105,9 +96,7 @@ class LayerAssertions extends AbstractAssert<LayerAssertions, Layer> {
         return this;
     }
 
-    /**
-     * Assert that the layer has attributes with the specified names (in any order).
-     */
+    /** Assert that the layer has attributes with the specified names (in any order). */
     public LayerAssertions hasAttributes(String... attributeNames) {
         isNotNull();
         Assertions.assertThat(actual.getAttributeNames())
@@ -118,9 +107,7 @@ class LayerAssertions extends AbstractAssert<LayerAssertions, Layer> {
         return this;
     }
 
-    /**
-     * Assert that the layer has exactly the specified attributes (in any order).
-     */
+    /** Assert that the layer has exactly the specified attributes (in any order). */
     public LayerAssertions hasExactAttributes(String... attributeNames) {
         isNotNull();
         Assertions.assertThat(actual.getAttributeNames())
@@ -131,16 +118,14 @@ class LayerAssertions extends AbstractAssert<LayerAssertions, Layer> {
         return this;
     }
 
-    /**
-     * Navigate to feature assertions for the first feature in this layer.
-     */
+    /** Navigate to feature assertions for the first feature in this layer. */
     public FeatureAssertions firstFeature() {
         return feature(0);
     }
 
     /**
-     * Navigate to feature assertions for the feature at the specified index.
-     * This preserves the layer context for attribute assertions.
+     * Navigate to feature assertions for the feature at the specified index. This preserves the layer context for
+     * attribute assertions.
      */
     public FeatureAssertions feature(int index) {
         isNotNull();
@@ -154,9 +139,7 @@ class LayerAssertions extends AbstractAssert<LayerAssertions, Layer> {
         return new FeatureAssertions(feature, actual, this);
     }
 
-    /**
-     * Navigate back to the parent tile assertions.
-     */
+    /** Navigate back to the parent tile assertions. */
     public TileAssertions tile() {
         if (parentTile == null) {
             throw new IllegalStateException("No parent tile context available");

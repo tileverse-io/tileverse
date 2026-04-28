@@ -38,9 +38,9 @@ import org.locationtech.jts.geom.util.AffineTransformation;
 
 /**
  * Optimized MVT geometry decoder that minimizes memory allocations and coordinate access.
- * <p>
- * Uses pre-computed orientations and direct coordinate sequence operations for better performance.
- * Coordinates are preserved exactly as stored in the MVT protobuf data.
+ *
+ * <p>Uses pre-computed orientations and direct coordinate sequence operations for better performance. Coordinates are
+ * preserved exactly as stored in the MVT protobuf data.
  *
  * @param gf the JTS GeometryFactory used to create geometries and coordinate sequences
  */
@@ -53,9 +53,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
         this(DEFAULT_GEOMETRY_FACTORY, UnaryOperator.identity());
     }
 
-    /**
-     * Ring orientation for polygon construction.
-     */
+    /** Ring orientation for polygon construction. */
     private enum Orientation {
         /** Clockwise orientation */
         CW,
@@ -67,6 +65,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
 
     /**
      * Represents a geometry part with coordinate range and orientation.
+     *
      * @param start starting index in the coordinate sequence
      * @param length number of coordinates in this part
      * @param orientation ring orientation (only meaningful for polygon rings)
@@ -74,16 +73,16 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
     private static record Part(int start, int length, Orientation orientation) {}
 
     /**
-     * Returns an instance with the same geometry factory and an in-place coordinate
-     * transformation that converts coordinates from one extent to the other.
-     * <p>
-     * For example, to convert geometries in a tile's internal coordinate extent of {@code 4096x4096}
-     * to a standard tile size of {@code 256x256}, use
-     * {@code withExtentScaling(4096, 256)}
+     * Returns an instance with the same geometry factory and an in-place coordinate transformation that converts
+     * coordinates from one extent to the other.
+     *
+     * <p>For example, to convert geometries in a tile's internal coordinate extent of {@code 4096x4096} to a standard
+     * tile size of {@code 256x256}, use {@code withExtentScaling(4096, 256)}
      *
      * @param fromExtent the original coordinate space extent (e.g. {@code 4096})
-     * @param toExtent   the target coordinate space extent (e.g. {@code 256})
-     * @return a scaling geometry decoder using an affine transformation to scale from the source extent to the target extent
+     * @param toExtent the target coordinate space extent (e.g. {@code 256})
+     * @return a scaling geometry decoder using an affine transformation to scale from the source extent to the target
+     *     extent
      * @see #withAffineTransformation
      */
     public GeometryReader withExtentScaling(int fromExtent, int toExtent) {
@@ -117,6 +116,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
 
     /**
      * Decodes the MVT feature into a JTS Geometry.
+     *
      * @return the decoded geometry
      */
     public Geometry decode(VectorTileProto.Tile.Feature feature, GeometryFactory gf) {
@@ -138,10 +138,10 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
     }
 
     /**
-     * Extracts all coordinates from MVT commands and populates geometry parts.
-     * For POINT geometries, creates a single part with all coordinates.
-     * For POLYGON geometries, pre-computes polygon structure with holes.
-     * For other geometries, creates separate parts for each ring/line.
+     * Extracts all coordinates from MVT commands and populates geometry parts. For POINT geometries, creates a single
+     * part with all coordinates. For POLYGON geometries, pre-computes polygon structure with holes. For other
+     * geometries, creates separate parts for each ring/line.
+     *
      * @param feature
      * @param parts output list to store geometry parts with pre-computed orientations
      * @param gf
@@ -257,6 +257,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
 
     /**
      * Creates Point or MultiPoint geometry from coordinate sequence.
+     *
      * @param coords the coordinate sequence
      * @return Point for single coordinate, MultiPoint for multiple coordinates
      */
@@ -270,6 +271,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
 
     /**
      * Creates LineString or MultiLineString geometry from parts.
+     *
      * @param parts geometry parts defining line segments (all valid)
      * @param allCoords coordinate sequence containing all coordinates
      * @return LineString, MultiLineString, or empty LineString
@@ -284,6 +286,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
 
     /**
      * Creates Polygon or MultiPolygon geometry from ring parts.
+     *
      * @param parts geometry parts defining polygon rings
      * @param allCoords coordinate sequence containing all coordinates
      * @return Polygon, MultiPolygon, or empty Polygon
@@ -298,6 +301,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
 
     /**
      * Creates MultiLineString from multiple line parts, all valid.
+     *
      * @param parts geometry parts defining line segments, > 1
      * @param allCoords coordinate sequence containing all coordinates
      * @return MultiLineString or simplified geometry if possible
@@ -311,9 +315,9 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
     }
     /**
      * Constructs complex polygons or multipolygons with holes from multiple rings.
-     * <p>
-     * All parts are guaranteed to be valid (no degenerate orientations).
-     * Groups rings into polygons based on pre-computed orientations.
+     *
+     * <p>All parts are guaranteed to be valid (no degenerate orientations). Groups rings into polygons based on
+     * pre-computed orientations.
      *
      * @param parts polygon ring parts with orientation information (all valid, size >= 2)
      * @param allCoords coordinate sequence containing all coordinates
@@ -379,6 +383,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
 
     /**
      * Calculates the exact number of coordinates that will be generated from MVT commands.
+     *
      * @param commands the MVT command list
      * @return exact number of coordinates needed
      */
@@ -407,6 +412,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
 
     /**
      * Creates a coordinate subsequence for a specific geometry part.
+     *
      * @param part the geometry part with bounds from the full coord sequence
      * @param allCoords full coordinate sequence
      * @return coordinate subsequence for the specified part
@@ -426,12 +432,13 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
     }
 
     /**
-     * {@link Area#ofRing(CoordinateSequence)} modified to use a subsequence and {@link CoordinateSequence#getOrdinate(int, int)}
-     * instead of {@link CoordinateSequence#createCoordinate()} + {@link CoordinateSequence#getCoordinate(int, Coordinate)}
-     * <p>
-     * Profiler shows a 10% performance improvement on {@link #buildPolygon buildPolygon()}
-     * <p>
-     * This code is copied under JTS EDL 1.0 license (BSD-3)
+     * {@link Area#ofRing(CoordinateSequence)} modified to use a subsequence and
+     * {@link CoordinateSequence#getOrdinate(int, int)} instead of {@link CoordinateSequence#createCoordinate()} +
+     * {@link CoordinateSequence#getCoordinate(int, Coordinate)}
+     *
+     * <p>Profiler shows a 10% performance improvement on {@link #buildPolygon buildPolygon()}
+     *
+     * <p>This code is copied under JTS EDL 1.0 license (BSD-3)
      */
     private static Orientation areaOfRingSigned(CoordinateSequence ring, final int start, final int length) {
         final int n = length;

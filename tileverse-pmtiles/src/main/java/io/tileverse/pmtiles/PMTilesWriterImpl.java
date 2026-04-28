@@ -37,10 +37,9 @@ import java.util.TreeMap;
 
 /**
  * Implementation of the PMTilesWriter interface.
- * <p>
- * This class is responsible for creating PMTiles files by collecting tiles,
- * optimizing storage with deduplication and run-length encoding, and
- * writing the file in the PMTiles format.
+ *
+ * <p>This class is responsible for creating PMTiles files by collecting tiles, optimizing storage with deduplication
+ * and run-length encoding, and writing the file in the PMTiles format.
  */
 class PMTilesWriterImpl implements PMTilesWriter {
     // Constants
@@ -397,9 +396,7 @@ class PMTilesWriterImpl implements PMTilesWriter {
         }
     }
 
-    /**
-     * Builder implementation for PMTilesWriter.
-     */
+    /** Builder implementation for PMTilesWriter. */
     static class BuilderImpl implements Builder {
         private Path outputPath;
         private int minZoom = 0;
@@ -493,11 +490,10 @@ class PMTilesWriterImpl implements PMTilesWriter {
 
     /**
      * Registry for tracking tiles and optimizing storage.
-     * <p>
-     * This class handles the deduplication of tile content, which is a key feature of
-     * the PMTiles format. It maps tile IDs to content hashes, and content hashes to
-     * the actual tile data. This allows multiple tiles to point to the same data blob,
-     * significantly reducing file size for repetitive data (e.g., ocean tiles).
+     *
+     * <p>This class handles the deduplication of tile content, which is a key feature of the PMTiles format. It maps
+     * tile IDs to content hashes, and content hashes to the actual tile data. This allows multiple tiles to point to
+     * the same data blob, significantly reducing file size for repetitive data (e.g., ocean tiles).
      */
     private static class TileRegistry {
         private final HilbertCurve hilbertCurve = new HilbertCurve();
@@ -509,9 +505,8 @@ class PMTilesWriterImpl implements PMTilesWriter {
 
         /**
          * Adds a tile to the registry.
-         * <p>
-         * If the content has been seen before, it is reused. Otherwise, a new
-         * {@link TileContent} is created.
+         *
+         * <p>If the content has been seen before, it is reused. Otherwise, a new {@link TileContent} is created.
          *
          * @param tileIndex the tile coordinates
          * @param data the tile data
@@ -548,10 +543,9 @@ class PMTilesWriterImpl implements PMTilesWriter {
 
         /**
          * Gets the optimized directory entries with run-length encoding.
-         * <p>
-         * This method generates {@link PMTilesEntry} objects by analyzing consecutive
-         * tiles. If consecutive tiles share the same content hash, they are combined
-         * into a single entry with a run length > 1.
+         *
+         * <p>This method generates {@link PMTilesEntry} objects by analyzing consecutive tiles. If consecutive tiles
+         * share the same content hash, they are combined into a single entry with a run length > 1.
          *
          * @return the list of optimized entries
          */
@@ -652,9 +646,9 @@ class PMTilesWriterImpl implements PMTilesWriter {
 
     /**
      * Represents tile content with its hash, data, and offset.
-     * <p>
-     * This class is used to store the unique tile data blobs. Multiple tiles
-     * may point to the same TileContent instance if they have identical data.
+     *
+     * <p>This class is used to store the unique tile data blobs. Multiple tiles may point to the same TileContent
+     * instance if they have identical data.
      */
     private static class TileContent {
         private final String hash;
@@ -677,11 +671,10 @@ class PMTilesWriterImpl implements PMTilesWriter {
 
     /**
      * Represents the layout of the PMTiles file.
-     * <p>
-     * This record holds the calculated offsets and sizes for each section of the
-     * PMTiles file (Header, Root Directory, Metadata, Leaf Directories, Tile Data).
-     * It is used during the final writing phase to construct the header and write
-     * sections in the correct order.
+     *
+     * <p>This record holds the calculated offsets and sizes for each section of the PMTiles file (Header, Root
+     * Directory, Metadata, Leaf Directories, Tile Data). It is used during the final writing phase to construct the
+     * header and write sections in the correct order.
      *
      * @param rootDirOffset offset to the start of the root directory
      * @param rootDirBytes size of the root directory in bytes

@@ -36,9 +36,8 @@ import org.junit.jupiter.api.Test;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * Integration test for {@link RangeReaderFactory} resolving URLs to the correct
- * {@link RangeReaderProvider} implementation (e.g. several providers accept
- * http(s) URLs)
+ * Integration test for {@link RangeReaderFactory} resolving URLs to the correct {@link RangeReaderProvider}
+ * implementation (e.g. several providers accept http(s) URLs)
  */
 @Testcontainers(disabledWithoutDocker = true)
 class RangeReaderFactoryOnlineIT {
@@ -131,7 +130,8 @@ class RangeReaderFactoryOnlineIT {
     }
 
     /**
-     * This is an S3-hosted URL with a custom virtual hosted style, not a valid S3 URL, hence {@link RangeReaderFactory} should use {@link HttpRangeReaderProvider}
+     * This is an S3-hosted URL with a custom virtual hosted style, not a valid S3 URL, hence {@link RangeReaderFactory}
+     * should use {@link HttpRangeReaderProvider}
      */
     @Test
     @DisplayName("HTTPS URL on S3 with invalid path-style falls back to HttpRangeReader")

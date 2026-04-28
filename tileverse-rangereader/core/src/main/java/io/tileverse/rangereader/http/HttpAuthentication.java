@@ -20,10 +20,9 @@ import java.net.http.HttpRequest;
 
 /**
  * Interface for HTTP authentication strategies used by HttpRangeReader.
- * <p>
- * Implementations of this interface provide authentication for HTTP requests
- * by adding appropriate headers or other authentication mechanisms to the
- * request builder.
+ *
+ * <p>Implementations of this interface provide authentication for HTTP requests by adding appropriate headers or other
+ * authentication mechanisms to the request builder.
  */
 @FunctionalInterface
 public interface HttpAuthentication {
@@ -37,8 +36,6 @@ public interface HttpAuthentication {
      */
     HttpRequest.Builder authenticate(HttpClient httpClient, HttpRequest.Builder requestBuilder);
 
-    /**
-     * A no-op authentication implementation that does not modify the request.
-     */
+    /** A no-op authentication implementation that does not modify the request. */
     static final HttpAuthentication NONE = (c, b) -> b;
 }

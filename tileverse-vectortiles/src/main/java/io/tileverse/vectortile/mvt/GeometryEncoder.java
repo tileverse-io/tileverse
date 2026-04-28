@@ -61,26 +61,24 @@ class GeometryEncoder {
         precisionReducer.setRemoveCollapsedComponents(true); // Remove degenerate components
     }
 
-    /**
-     * @param buildParams
-     */
+    /** @param buildParams */
     GeometryEncoder(BuildParams buildParams) {
         this.params = buildParams;
     }
 
     /**
-     * Prepares the final geometries to encode, may result in more geometries than
-     * the original, which requires duplicating the features.
-     * <p>
-     * The Geometry must be in "pixel" {@literal 0..<extent - 1>} in both directions.
-     * <p>
-     * For optimization, geometries will be clipped and simplified. Features with
-     * geometries outside of the tile will be skipped.
+     * Prepares the final geometries to encode, may result in more geometries than the original, which requires
+     * duplicating the features.
      *
-     * @param layerName  a {@link String} with the vector tile layer name.
+     * <p>The Geometry must be in "pixel" {@literal 0..<extent - 1>} in both directions.
+     *
+     * <p>For optimization, geometries will be clipped and simplified. Features with geometries outside of the tile will
+     * be skipped.
+     *
+     * @param layerName a {@link String} with the vector tile layer name.
      * @param attributes a {@link Map} with the vector tile feature attributes.
-     * @param geometry   a {@link Geometry} for the vector tile feature.
-     * @param id         a long with the vector tile feature id field.
+     * @param geometry a {@link Geometry} for the vector tile feature.
+     * @param id a long with the vector tile feature id field.
      */
     public List<Geometry> prepareGeometries(final Geometry input) {
         Geometry geometry = input;
@@ -133,9 +131,7 @@ class GeometryEncoder {
         return List.of(geometry);
     }
 
-    /**
-     * @param preparedGeometry must have been returned from {@link #prepareGeometries(Geometry)}
-     */
+    /** @param preparedGeometry must have been returned from {@link #prepareGeometries(Geometry)} */
     public List<Integer> commands(Geometry preparedGeometry) {
         return pack(preparedGeometry);
     }
@@ -165,18 +161,15 @@ class GeometryEncoder {
     }
 
     /**
-     * Apply coordinate transformation and JTS GeometryPrecisionReducer to ensure integer coordinates.
-     * This is more robust than Math.round() as it maintains topological validity.
+     * Apply coordinate transformation and JTS GeometryPrecisionReducer to ensure integer coordinates. This is more
+     * robust than Math.round() as it maintains topological validity.
      *
-     * Steps:
-     * 1. Transform coordinates to tile extent space (apply scaling)
-     * 2. Apply GeometryPrecisionReducer with PrecisionModel(1.0) to snap to integers
+     * <p>Steps: 1. Transform coordinates to tile extent space (apply scaling) 2. Apply GeometryPrecisionReducer with
+     * PrecisionModel(1.0) to snap to integers
      *
-     * Benefits of GeometryPrecisionReducer over Math.round():
-     * - Maintains topological validity where possible
-     * - Prevents polygon collapse and self-intersections
-     * - Handles degenerate geometries robustly
-     * - Removes collapsed components automatically
+     * <p>Benefits of GeometryPrecisionReducer over Math.round(): - Maintains topological validity where possible -
+     * Prevents polygon collapse and self-intersections - Handles degenerate geometries robustly - Removes collapsed
+     * components automatically
      */
     private Geometry applyPrecisionModelSnapping(Geometry geometry) {
         try {
@@ -200,9 +193,8 @@ class GeometryEncoder {
     //    }
 
     /**
-     * Check if geometry is valid for encoding after precision snapping.
-     * Note: We skip the expensive geometry.isValid() call since GeometryPrecisionReducer
-     * with removeCollapsedComponents=true already ensures reasonable validity.
+     * Check if geometry is valid for encoding after precision snapping. Note: We skip the expensive geometry.isValid()
+     * call since GeometryPrecisionReducer with removeCollapsedComponents=true already ensures reasonable validity.
      */
     private boolean isValidForEncoding(Geometry geometry) {
         if (geometry == null || geometry.isEmpty() || geometry.getNumPoints() == 0) {
@@ -241,9 +233,8 @@ class GeometryEncoder {
     }
 
     /**
-     * A short circuit clip to the tile extent (tile boundary + buffer) for points
-     * to improve performance. This method can be overridden to change clipping
-     * behavior. See also {@link #clipGeometry(Geometry)}.
+     * A short circuit clip to the tile extent (tile boundary + buffer) for points to improve performance. This method
+     * can be overridden to change clipping behavior. See also {@link #clipGeometry(Geometry)}.
      *
      * @param geom a {@link Geometry} to check for "covers"
      * @return a boolean true when the current clip geometry covers the given geom.
@@ -257,14 +248,11 @@ class GeometryEncoder {
     }
 
     /**
-     * Clip geometry according to buffer given at construct time. This method can be
-     * overridden to change clipping behavior. See also
-     * {@link #clipCovers(Geometry)}.
+     * Clip geometry according to buffer given at construct time. This method can be overridden to change clipping
+     * behavior. See also {@link #clipCovers(Geometry)}.
      *
-     * @param geometry a {@link Geometry} to check for intersection with the current
-     *                 clip geometry
-     * @return a boolean true when current clip geometry intersects with the given
-     *         geometry.
+     * @param geometry a {@link Geometry} to check for intersection with the current clip geometry
+     * @return a boolean true when current clip geometry intersects with the given geometry.
      */
     protected Geometry clipGeometry(Geometry geometry) {
         Envelope clipEnvelope = params.getClipEnvelope();
@@ -344,9 +332,7 @@ class GeometryEncoder {
             }
         }
 
-        /**
-         * Only called for {@link LineString}, and {@link LinearRing}
-         */
+        /** Only called for {@link LineString}, and {@link LinearRing} */
         @Override
         public void filter(final CoordinateSequence sequence, final int coordIndex) {
             if (coordIndex >= cursor.startAtIndex && coordIndex <= cursor.stopAtIndex) {

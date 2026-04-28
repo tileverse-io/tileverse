@@ -25,16 +25,17 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * A view-based implementation of TileMatrixSet that delegates to another TileMatrixSet
- * while applying zoom level and/or spatial filtering. This allows for efficient chaining
- * of subset and intersection operations without creating new underlying data structures.
+ * A view-based implementation of TileMatrixSet that delegates to another TileMatrixSet while applying zoom level and/or
+ * spatial filtering. This allows for efficient chaining of subset and intersection operations without creating new
+ * underlying data structures.
  *
  * <p>This implementation supports:
+ *
  * <ul>
- * <li>Zoom level filtering (subset operations)</li>
- * <li>Spatial filtering (intersection operations)</li>
- * <li>Chaining of multiple filters</li>
- * <li>Lazy evaluation of filtered matrices</li>
+ *   <li>Zoom level filtering (subset operations)
+ *   <li>Spatial filtering (intersection operations)
+ *   <li>Chaining of multiple filters
+ *   <li>Lazy evaluation of filtered matrices
  * </ul>
  *
  * @since 1.0
@@ -50,9 +51,7 @@ class TileMatrixSetView implements TileMatrixSet {
     private volatile List<TileMatrix> cachedMatrices;
     private volatile TilePyramid cachedPyramid;
 
-    /**
-     * Creates a view with zoom level filtering.
-     */
+    /** Creates a view with zoom level filtering. */
     private TileMatrixSetView(TileMatrixSet delegate, int minZoomLevel, int maxZoomLevel, BoundingBox2D filterExtent) {
         this.delegate = requireNonNull(delegate);
         this.minZoomLevel = minZoomLevel;
@@ -60,9 +59,7 @@ class TileMatrixSetView implements TileMatrixSet {
         this.filterExtent = requireNonNull(filterExtent);
     }
 
-    /**
-     * Creates a zoom-filtered view of the given tile matrix set.
-     */
+    /** Creates a zoom-filtered view of the given tile matrix set. */
     static TileMatrixSetView subset(TileMatrixSet delegate, int minZoomLevel, int maxZoomLevel) {
         // Validate zoom range
         if (minZoomLevel > maxZoomLevel) {
@@ -86,9 +83,7 @@ class TileMatrixSetView implements TileMatrixSet {
         return new TileMatrixSetView(delegate, minZoomLevel, maxZoomLevel, delegate.boundingBox());
     }
 
-    /**
-     * Creates a spatially-filtered view of the given tile matrix set.
-     */
+    /** Creates a spatially-filtered view of the given tile matrix set. */
     static Optional<TileMatrixSet> intersection(TileMatrixSet delegate, BoundingBox2D mapExtent) {
         TileMatrixSet ret = null;
         int minZoom, maxZoom;

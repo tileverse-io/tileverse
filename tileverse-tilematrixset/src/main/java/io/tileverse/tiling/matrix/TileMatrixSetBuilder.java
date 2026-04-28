@@ -18,9 +18,7 @@ package io.tileverse.tiling.matrix;
 import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.pyramid.TilePyramid;
 
-/**
- * Builder for creating StandardTileMatrixSet instances.
- */
+/** Builder for creating StandardTileMatrixSet instances. */
 public class TileMatrixSetBuilder {
     private TilePyramid tilePyramid;
     private String crsId;
@@ -54,7 +52,7 @@ public class TileMatrixSetBuilder {
     /**
      * Sets the tile dimensions in pixels.
      *
-     * @param width  the tile width in pixels
+     * @param width the tile width in pixels
      * @param height the tile height in pixels
      * @return this builder
      */
@@ -76,8 +74,8 @@ public class TileMatrixSetBuilder {
     }
 
     /**
-     * Sets the resolutions for each zoom level. The array length must match the
-     * number of zoom levels in the tile pyramid.
+     * Sets the resolutions for each zoom level. The array length must match the number of zoom levels in the tile
+     * pyramid.
      *
      * @param resolutions the resolution array (map units per pixel)
      * @return this builder
@@ -88,15 +86,13 @@ public class TileMatrixSetBuilder {
     }
 
     /**
-     * Sets the zoom level range by subsetting the tile pyramid and adjusting
-     * resolutions. This is a convenience method for creating tile matrix
-     * sets with limited zoom ranges.
+     * Sets the zoom level range by subsetting the tile pyramid and adjusting resolutions. This is a convenience method
+     * for creating tile matrix sets with limited zoom ranges.
      *
      * @param minZoom the minimum zoom level (inclusive)
      * @param maxZoom the maximum zoom level (inclusive)
      * @return this builder
-     * @throws IllegalStateException if tilePyramid, resolutions, or origins are not
-     *                               set
+     * @throws IllegalStateException if tilePyramid, resolutions, or origins are not set
      */
     public TileMatrixSetBuilder zoomRange(int minZoom, int maxZoom) {
         if (tilePyramid == null) {

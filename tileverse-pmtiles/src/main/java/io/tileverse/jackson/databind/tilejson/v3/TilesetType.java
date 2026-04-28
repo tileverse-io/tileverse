@@ -19,24 +19,20 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
- * Represents the type of a tileset according to the TileJSON v3.0.0 specification.
- * The type indicates whether the tileset is meant to be used as a base layer
- * or an overlay layer.
+ * Represents the type of a tileset according to the TileJSON v3.0.0 specification. The type indicates whether the
+ * tileset is meant to be used as a base layer or an overlay layer.
  *
  * @since 1.0
  * @see <a href="https://github.com/mapbox/tilejson-spec/tree/master/3.0.0#32-type">TileJSON Type</a>
  */
 public enum TilesetType {
 
-    /**
-     * A baselayer tileset provides the foundational map data.
-     * Typically used as the bottom layer in a map stack.
-     */
+    /** A baselayer tileset provides the foundational map data. Typically used as the bottom layer in a map stack. */
     BASELAYER("baselayer"),
 
     /**
-     * An overlay tileset provides additional data that is rendered
-     * on top of a base layer. Used for thematic data, annotations, etc.
+     * An overlay tileset provides additional data that is rendered on top of a base layer. Used for thematic data,
+     * annotations, etc.
      */
     OVERLAY("overlay");
 
@@ -57,8 +53,8 @@ public enum TilesetType {
     }
 
     /**
-     * Creates a TilesetType from its JSON string representation.
-     * This method is case-insensitive and handles unknown values gracefully.
+     * Creates a TilesetType from its JSON string representation. This method is case-insensitive and handles unknown
+     * values gracefully.
      *
      * @param value the JSON string value
      * @return the corresponding TilesetType, or null for unknown values

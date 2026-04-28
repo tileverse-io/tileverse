@@ -16,15 +16,15 @@
 package io.tileverse.tiling.common;
 
 /**
- * Represents a 2D coordinate in map space (CRS coordinates).
- * This is a simple, GIS-library-agnostic representation that can easily
- * be converted to/from coordinates in various GIS libraries.
+ * Represents a 2D coordinate in map space (CRS coordinates). This is a simple, GIS-library-agnostic representation that
+ * can easily be converted to/from coordinates in various GIS libraries.
  *
  * <p>The coordinate values can represent:
+ *
  * <ul>
- * <li>Geographic coordinates (longitude, latitude) in degrees</li>
- * <li>Projected coordinates (easting, northing) in meters or other units</li>
- * <li>Any other 2D coordinate system values</li>
+ *   <li>Geographic coordinates (longitude, latitude) in degrees
+ *   <li>Projected coordinates (easting, northing) in meters or other units
+ *   <li>Any other 2D coordinate system values
  * </ul>
  *
  * @param x the X coordinate (typically longitude or easting)
@@ -56,9 +56,8 @@ public record Coordinate(double x, double y) {
     }
 
     /**
-     * Returns the distance to another coordinate using Euclidean distance.
-     * This is appropriate for projected coordinate systems but not for
-     * geographic coordinates (longitude/latitude).
+     * Returns the distance to another coordinate using Euclidean distance. This is appropriate for projected coordinate
+     * systems but not for geographic coordinates (longitude/latitude).
      *
      * @param other the other coordinate
      * @return the Euclidean distance

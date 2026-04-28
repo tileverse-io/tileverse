@@ -27,29 +27,25 @@ import org.locationtech.jts.geom.prep.PreparedGeometry;
 import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
 
 /**
- * A streaming builder for creating Mapbox Vector Tiles (MVT) without
- * intermediate memory storage.
- * <p>
- * <strong>IMPORTANT - Coordinate System Requirements:</strong>
- * <p>
- * This builder expects geometries to already be in <strong>tile extent
- * coordinate space</strong>, NOT in real-world coordinate reference systems
- * (CRS) like WGS84 or Web Mercator.
+ * A streaming builder for creating Mapbox Vector Tiles (MVT) without intermediate memory storage.
+ *
+ * <p><strong>IMPORTANT - Coordinate System Requirements:</strong>
+ *
+ * <p>This builder expects geometries to already be in <strong>tile extent coordinate space</strong>, NOT in real-world
+ * coordinate reference systems (CRS) like WGS84 or Web Mercator.
  *
  * <h2>Coordinate Transformation Responsibility</h2>
+ *
  * <ul>
- * <li><strong>Client responsibility:</strong> Transform geometries from
- * real-world CRS to tile extent coordinates</li>
- * <li><strong>VectorTileBuilder responsibility:</strong> Encode geometries
- * to MVT protobuf format</li>
+ *   <li><strong>Client responsibility:</strong> Transform geometries from real-world CRS to tile extent coordinates
+ *   <li><strong>VectorTileBuilder responsibility:</strong> Encode geometries to MVT protobuf format
  * </ul>
  *
  * <h3>Input Coordinate Expectations</h3>
- * <p>
- * Geometries must have coordinates in the range [0, extent-1].
- * For example, with the default extent of 4096, coordinates should be
- * in the range [0, 4095]. No coordinate scaling is performed - coordinates
- * are preserved exactly as provided.
+ *
+ * <p>Geometries must have coordinates in the range [0, extent-1]. For example, with the default extent of 4096,
+ * coordinates should be in the range [0, 4095]. No coordinate scaling is performed - coordinates are preserved exactly
+ * as provided.
  *
  * <h2>Typical Usage Pattern</h2>
  *
@@ -65,21 +61,19 @@ import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
  * }</pre>
  *
  * <h2>MVT Coordinate System Details</h2>
- * <p>
- * Mapbox Vector Tiles use integer coordinates for efficient storage and
- * rendering. The extent parameter defines both the coordinate range and
- * precision for features in a tile.
+ *
+ * <p>Mapbox Vector Tiles use integer coordinates for efficient storage and rendering. The extent parameter defines both
+ * the coordinate range and precision for features in a tile.
  *
  * <h3>Coordinate Precision and Storage</h3>
- * <p>
- * MVT stores coordinates as integers to minimize file size. The extent
- * parameter (typically 4096) defines the valid coordinate range [0, extent-1]
- * and determines the precision available for representing geographic features
- * within the tile boundaries.
+ *
+ * <p>MVT stores coordinates as integers to minimize file size. The extent parameter (typically 4096) defines the valid
+ * coordinate range [0, extent-1] and determines the precision available for representing geographic features within the
+ * tile boundaries.
  *
  * <h3>Coordinate Flow Example</h3>
- * <p>
- * For a tile with extent=4096:
+ *
+ * <p>For a tile with extent=4096:
  *
  * <pre>{@code
  * Input coordinate: POINT(40, 60) in extent coordinate space [0, extent-1]
@@ -89,20 +83,16 @@ import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
  * Decode: POINT(40, 60) in extent coordinate space [Coordinates preserved]
  * }</pre>
  *
- * <p>
- * The {@code extent} parameter controls the coordinate precision and valid coordinate
- * range [0, extent-1] for both input and output geometries.
+ * <p>The {@code extent} parameter controls the coordinate precision and valid coordinate range [0, extent-1] for both
+ * input and output geometries.
  *
  * <h3>Thread Safety</h3>
- * <p>
- * This class is <strong>NOT</strong> thread-safe. Each thread should use its
- * own VectorTileBuilder instance.
+ *
+ * <p>This class is <strong>NOT</strong> thread-safe. Each thread should use its own VectorTileBuilder instance.
  */
 public class VectorTileBuilder {
 
-    /**
-     * Constructs a new VectorTileBuilder with default settings.
-     */
+    /** Constructs a new VectorTileBuilder with default settings. */
     public VectorTileBuilder() {
         // Default constructor
     }
@@ -253,8 +243,8 @@ public class VectorTileBuilder {
     }
 
     /**
-     * Internal method to build the protobuf tile structure. Layers are added
-     * directly via LayerBuilder.build(), so this just finalizes.
+     * Internal method to build the protobuf tile structure. Layers are added directly via LayerBuilder.build(), so this
+     * just finalizes.
      *
      * @return the built VectorTile
      */
@@ -269,18 +259,16 @@ public class VectorTileBuilder {
         return protoTileBuilder.build();
     }
 
-    /**
-     * The proto tile being built
-     */
+    /** The proto tile being built */
     private VectorTileProto.Tile.Builder protoTileBuilder = VectorTileProto.Tile.newBuilder();
 
     /**
-     * The extent value control how detailed the coordinates are encoded in the
-     * vector tile. 4096 is the default.
-     * <p>
-     * This will be the extent on the resulting {@link io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer#getExtent()}, and
-     * coordinates added to {@link FeatureBuilder#geometry(Geometry)} are expected to be in {@code 0..extent-1} coordinate space in
-     * both axis. Input geometries will be clipped to this extent plus the {@link #setClipBuffer(int) buffer}.
+     * The extent value control how detailed the coordinates are encoded in the vector tile. 4096 is the default.
+     *
+     * <p>This will be the extent on the resulting
+     * {@link io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer#getExtent()}, and coordinates added to
+     * {@link FeatureBuilder#geometry(Geometry)} are expected to be in {@code 0..extent-1} coordinate space in both
+     * axis. Input geometries will be clipped to this extent plus the {@link #setClipBuffer(int) buffer}.
      *
      * @param extent an int with extent value. 4096 is a good value.
      * @return this VectorTileBuilder for method chaining
@@ -291,12 +279,10 @@ public class VectorTileBuilder {
     }
 
     /**
-     * The clip buffer value control how large the clipping area is outside of the
-     * tile for geometries. 0 means that the clipping is done at the tile border. 8
-     * is a good default.
+     * The clip buffer value control how large the clipping area is outside of the tile for geometries. 0 means that the
+     * clipping is done at the tile border. 8 is a good default.
      *
-     * @param clipBuffer an int with clip buffer size for geometries. 8 is a good
-     *                   value.
+     * @param clipBuffer an int with clip buffer size for geometries. 8 is a good value.
      * @return this VectorTileBuilder for method chaining
      */
     public VectorTileBuilder setClipBuffer(int clipBuffer) {
@@ -316,9 +302,8 @@ public class VectorTileBuilder {
     }
 
     /**
-     * A positive double representing the distance tolerance to be used for
-     * non-points before (optional) scaling and encoding. A value {@code <=0} will
-     * prevent simplifying geometry. A typical value is 0.1 for most use cases.
+     * A positive double representing the distance tolerance to be used for non-points before (optional) scaling and
+     * encoding. A value {@code <=0} will prevent simplifying geometry. A typical value is 0.1 for most use cases.
      *
      * @param simplificationDistanceTolerance the distance tolerance for geometry simplification
      * @return this VectorTileBuilder for method chaining
@@ -329,9 +314,8 @@ public class VectorTileBuilder {
     }
 
     /**
-     * When true, applies JTS PrecisionModel snapping as final step after geometry
-     * processing to ensure integer coordinates and discard invalid geometries. When
-     * false, uses Math.round() during encoding (default behavior).
+     * When true, applies JTS PrecisionModel snapping as final step after geometry processing to ensure integer
+     * coordinates and discard invalid geometries. When false, uses Math.round() during encoding (default behavior).
      *
      * @param usePrecisionModelSnapping true to enable precision model snapping
      * @return this VectorTileBuilder for method chaining
@@ -341,18 +325,14 @@ public class VectorTileBuilder {
         return this;
     }
 
-    /**
-     * Internal method for LayerBuilder to add completed layers directly.
-     */
+    /** Internal method for LayerBuilder to add completed layers directly. */
     void addLayer(VectorTileProto.Tile.Layer layer) {
         if (layer != null && layer.getFeaturesCount() > 0) {
             protoTileBuilder.addLayers(layer);
         }
     }
 
-    /**
-     * Expose configuration to LayerBuilder
-     */
+    /** Expose configuration to LayerBuilder */
     BuildParams params() {
         return state;
     }

@@ -25,9 +25,9 @@ import org.locationtech.jts.geom.Geometry;
 
 /**
  * Builder for creating vector tile layers with features.
- * <p>
- * Manages feature collection, key/value deduplication for efficient encoding,
- * and construction of the MVT layer protobuf structure.
+ *
+ * <p>Manages feature collection, key/value deduplication for efficient encoding, and construction of the MVT layer
+ * protobuf structure.
  */
 public class LayerBuilder {
 
@@ -61,8 +61,8 @@ public class LayerBuilder {
     }
 
     /**
-     * Get a reusable feature builder for this layer.
-     * The builder is reset for each new feature to avoid object creation overhead.
+     * Get a reusable feature builder for this layer. The builder is reset for each new feature to avoid object creation
+     * overhead.
      *
      * @return a reusable FeatureBuilder instance
      */
@@ -136,9 +136,7 @@ public class LayerBuilder {
         return index;
     }
 
-    /**
-     * Internal method for FeatureBuilder to add completed features.
-     */
+    /** Internal method for FeatureBuilder to add completed features. */
     void addFeature(VectorTileProto.Tile.Feature feature) {
         if (feature != null) {
             features.add(feature);
@@ -146,8 +144,7 @@ public class LayerBuilder {
     }
 
     /**
-     * Build the protobuf layer structure.
-     * This is called internally when build() is called.
+     * Build the protobuf layer structure. This is called internally when build() is called.
      *
      * @return the built VectorTile.Tile.Layer or null if no valid features
      */
@@ -187,9 +184,7 @@ public class LayerBuilder {
         return layerBuilder.build();
     }
 
-    /**
-     * Encode a value into the protobuf Value structure with proper type handling.
-     */
+    /** Encode a value into the protobuf Value structure with proper type handling. */
     private void encodeValue(Object value, VectorTileProto.Tile.Value.Builder valueBuilder) {
         if (value instanceof String string) {
             valueBuilder.setStringValue(string);

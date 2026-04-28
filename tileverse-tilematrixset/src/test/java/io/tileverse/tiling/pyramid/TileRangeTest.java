@@ -28,9 +28,7 @@ import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/**
- * Test class for TileRange functionality combining 2D and 3D operations.
- */
+/** Test class for TileRange functionality combining 2D and 3D operations. */
 class TileRangeTest {
 
     @Test

@@ -24,16 +24,14 @@ import java.util.Objects;
 import java.util.OptionalLong;
 
 /**
- * A decorator for RangeReader that aligns all read requests to fixed-size
- * blocks.
- * <p>
- * This implementation ensures that all reads to the underlying reader are
- * aligned to block boundaries, which helps with caching efficiency. It also
- * prevents overlapping range requests, as all reads will be aligned to the same
- * block boundaries regardless of the original offset requested.
- * <p>
- * When a range is requested that crosses block boundaries, this reader will
- * read all necessary blocks and return only the requested portion.
+ * A decorator for RangeReader that aligns all read requests to fixed-size blocks.
+ *
+ * <p>This implementation ensures that all reads to the underlying reader are aligned to block boundaries, which helps
+ * with caching efficiency. It also prevents overlapping range requests, as all reads will be aligned to the same block
+ * boundaries regardless of the original offset requested.
+ *
+ * <p>When a range is requested that crosses block boundaries, this reader will read all necessary blocks and return
+ * only the requested portion.
  */
 public class BlockAlignedRangeReader extends AbstractRangeReader implements RangeReader {
 
@@ -55,7 +53,7 @@ public class BlockAlignedRangeReader extends AbstractRangeReader implements Rang
     /**
      * Creates a new BlockAlignedRangeReader with the specified block size.
      *
-     * @param delegate  The underlying RangeReader to delegate to
+     * @param delegate The underlying RangeReader to delegate to
      * @param blockSize The block size to align reads to, must be a power of 2
      * @throws IllegalArgumentException If blockSize is not a power of 2
      */
@@ -191,6 +189,7 @@ public class BlockAlignedRangeReader extends AbstractRangeReader implements Rang
 
     /**
      * Creates a new builder for BlockAlignedRangeReader.
+     *
      * @param delegate the decorated range reader
      * @return a new builder instance
      */
@@ -198,9 +197,7 @@ public class BlockAlignedRangeReader extends AbstractRangeReader implements Rang
         return new Builder(delegate);
     }
 
-    /**
-     * Builder for BlockAlignedRangeReader.
-     */
+    /** Builder for BlockAlignedRangeReader. */
     public static class Builder {
         private RangeReader delegate;
         private int blockSize = DEFAULT_BLOCK_SIZE;

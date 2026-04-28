@@ -29,9 +29,9 @@ import org.locationtech.jts.precision.GeometryPrecisionReducer;
 
 /**
  * Builder for creating vector tile features with geometry and attributes.
- * <p>
- * This builder is reused by LayerBuilder for efficiency, avoiding object creation overhead
- * when building multiple features.
+ *
+ * <p>This builder is reused by LayerBuilder for efficiency, avoiding object creation overhead when building multiple
+ * features.
  */
 public class FeatureBuilder {
 
@@ -58,8 +58,7 @@ public class FeatureBuilder {
     }
 
     /**
-     * Reset this feature builder for reuse with a new feature ID.
-     * This avoids object creation overhead in tight loops.
+     * Reset this feature builder for reuse with a new feature ID. This avoids object creation overhead in tight loops.
      */
     FeatureBuilder reset(long id) {
         featureBuilder.clear();
@@ -81,9 +80,8 @@ public class FeatureBuilder {
     }
 
     /**
-     * Set the feature geometry.
-     * The geometry will be processed at {@link #build()} time and may result in duplicate features added if
-     * pre-processing results in multiple geometries.
+     * Set the feature geometry. The geometry will be processed at {@link #build()} time and may result in duplicate
+     * features added if pre-processing results in multiple geometries.
      *
      * @param geometry a {@link Geometry} for the vector tile feature.
      * @return this FeatureBuilder for method chaining
@@ -94,8 +92,7 @@ public class FeatureBuilder {
     }
 
     /**
-     * Add an attribute to this feature.
-     * Attributes are added directly to the protobuf builder as they're set.
+     * Add an attribute to this feature. Attributes are added directly to the protobuf builder as they're set.
      *
      * @param name the attribute name
      * @param value the attribute value (null values are ignored)

@@ -40,9 +40,7 @@ public abstract class VectorTileStore extends AbstractTileStore<VectorTile> {
                 .findFirst();
     }
 
-    /**
-     * @return the extent in the {@link TileMatrixSet#crsId() TileMatrixSet CRS}
-     */
+    /** @return the extent in the {@link TileMatrixSet#crsId() TileMatrixSet CRS} */
     public abstract BoundingBox2D getExtent();
 
     public Stream<Feature> getFeatures(VectorTilesQuery query) {

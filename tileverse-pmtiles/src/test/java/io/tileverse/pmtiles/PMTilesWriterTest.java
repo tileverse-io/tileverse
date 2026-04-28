@@ -36,9 +36,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * Tests for the PMTilesWriter implementation.
- */
+/** Tests for the PMTilesWriter implementation. */
 class PMTilesWriterTest {
 
     @TempDir

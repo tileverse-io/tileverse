@@ -47,24 +47,20 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * Reader for PMTiles files that provides access to tiles and metadata.
- * <p>
- * This class implements the PMTiles format specification, providing a clean API
- * for accessing tile data, metadata, and directory structures within a PMTiles
- * file.
- * <p>
- * It relies on a {@code Supplier<SeekableByteChannel>}, from which it will
- * <strong>acquire and close</strong> a {@link SeekableByteChannel} upon each
- * I/O operation.
- * <p>
- * Therefore this reader does not own the underlying input source and won't
- * close it explicitly unless it provides a new instance on each supplied byte
- * channel.
- * <p>
- * It is recommended to use the {@link RangeReader} library for random access to
- * the underlying data source, allowing for efficient reading from local files,
- * HTTP servers, or cloud storage; though it's not mandatory.
- * <p>
- * Example usage:
+ *
+ * <p>This class implements the PMTiles format specification, providing a clean API for accessing tile data, metadata,
+ * and directory structures within a PMTiles file.
+ *
+ * <p>It relies on a {@code Supplier<SeekableByteChannel>}, from which it will <strong>acquire and close</strong> a
+ * {@link SeekableByteChannel} upon each I/O operation.
+ *
+ * <p>Therefore this reader does not own the underlying input source and won't close it explicitly unless it provides a
+ * new instance on each supplied byte channel.
+ *
+ * <p>It is recommended to use the {@link RangeReader} library for random access to the underlying data source, allowing
+ * for efficient reading from local files, HTTP servers, or cloud storage; though it's not mandatory.
+ *
+ * <p>Example usage:
  *
  * <pre>{@code
  * // Create a RangeReader for the desired source
@@ -100,12 +96,12 @@ public class PMTilesReader implements AutoCloseable {
 
     /**
      * Creates a new PMTilesReader for the specified file.
-     * <p>
-     * This constructor creates a {@code Supplier<SeekableByteChannel>} that will
-     * open and close the file upon each I/O operation.
+     *
+     * <p>This constructor creates a {@code Supplier<SeekableByteChannel>} that will open and close the file upon each
+     * I/O operation.
      *
      * @param path the path to the PMTiles file
-     * @throws IOException            if an I/O error occurs
+     * @throws IOException if an I/O error occurs
      * @throws InvalidHeaderException if the file has an invalid header
      */
     public PMTilesReader(Path path) throws IOException {
@@ -114,15 +110,15 @@ public class PMTilesReader implements AutoCloseable {
 
     /**
      * Creates a new PMTilesReader using the specified RangeReader.
-     * <p>
-     * This constructor allows reading PMTiles from any source that implements the
-     * RangeReader interface, such as local files, HTTP servers, or cloud storage.
-     * <p>
-     * Note the {@code rangeReader} is owned by this instance and will be {@link RangeReader#close() closed}
-     * when {@link #close()} is called on this instance.
+     *
+     * <p>This constructor allows reading PMTiles from any source that implements the RangeReader interface, such as
+     * local files, HTTP servers, or cloud storage.
+     *
+     * <p>Note the {@code rangeReader} is owned by this instance and will be {@link RangeReader#close() closed} when
+     * {@link #close()} is called on this instance.
      *
      * @param rangeReader range reader to read data from
-     * @throws IOException            if an I/O error occurs
+     * @throws IOException if an I/O error occurs
      * @throws InvalidHeaderException if the file has an invalid header
      */
     public PMTilesReader(RangeReader rangeReader) throws IOException {
@@ -132,20 +128,18 @@ public class PMTilesReader implements AutoCloseable {
 
     /**
      * Creates a new PMTilesReader using the specified {@code channelSupplier}
-     * <p>
-     * This constructor allows reading PMTiles from any source providing a
-     * {@link SeekableByteChannel} for each read operation.
-     * <p>
-     * Usually you'd use {@link RangeReader#asByteChannel() RangeReader::asByteChannel)}, though this constructor
+     *
+     * <p>This constructor allows reading PMTiles from any source providing a {@link SeekableByteChannel} for each read
+     * operation.
+     *
+     * <p>Usually you'd use {@link RangeReader#asByteChannel() RangeReader::asByteChannel)}, though this constructor
      * allows to use other data sources that don't implement {@code RangeReader}.
      *
-     * @param pmtilesUri      a unique identifier for the PMTiles source (e.g., file path or URI).
-     *                        This identifier is crucial for caching, as it allows the internal
-     *                        {@link CacheManager} to share cache entries across multiple reader instances
-     *                        pointing to the same resource.
-     * @param channelSupplier supplier of short-lived {@link SeekableByteChannel}s
-     *                        to use on each read operation
-     * @throws IOException            if an I/O error occurs
+     * @param pmtilesUri a unique identifier for the PMTiles source (e.g., file path or URI). This identifier is crucial
+     *     for caching, as it allows the internal {@link CacheManager} to share cache entries across multiple reader
+     *     instances pointing to the same resource.
+     * @param channelSupplier supplier of short-lived {@link SeekableByteChannel}s to use on each read operation
+     * @throws IOException if an I/O error occurs
      * @throws InvalidHeaderException if the file has an invalid header
      */
     public PMTilesReader(String pmtilesUri, Supplier<SeekableByteChannel> channelSupplier) throws IOException {
@@ -225,9 +219,9 @@ public class PMTilesReader implements AutoCloseable {
     }
 
     /**
-     * Computes the list of {@link TileIndex} for an entry, expending
-     * {@link PMTilesEntry#tileId() tileId} {@link PMTilesEntry#runLength()
-     * runLength} times.
+     * Computes the list of {@link TileIndex} for an entry, expending {@link PMTilesEntry#tileId() tileId}
+     * {@link PMTilesEntry#runLength() runLength} times.
+     *
      * @throws IllegalArgumentException if {@code tileEntry} is a {@link PMTilesEntry#isLeaf() leaf} directory
      * @see #getTileIndex(long)
      */
@@ -254,12 +248,11 @@ public class PMTilesReader implements AutoCloseable {
 
     /**
      * Gets a tile by its TileIndex.
-     * <p>
-     * This is a shortcut for {@link #getTile(long) getTile(getTileId(tileIndex))}.
+     *
+     * <p>This is a shortcut for {@link #getTile(long) getTile(getTileId(tileIndex))}.
      *
      * @param tileIndex the tile coordinates
-     * @return an Optional containing the tile data as a ByteBuffer if found, or
-     *         empty if not
+     * @return an Optional containing the tile data as a ByteBuffer if found, or empty if not
      * @throws IOException if an I/O error occurs
      */
     public Optional<ByteBuffer> getTile(TileIndex tileIndex) throws IOException {
@@ -268,9 +261,9 @@ public class PMTilesReader implements AutoCloseable {
 
     /**
      * Gets a tile by its tile id.
+     *
      * @param tileId the scalar PMTiles ID
-     * @return an Optional containing the tile data as a ByteBuffer if found, or
-     *         empty if not
+     * @return an Optional containing the tile data as a ByteBuffer if found, or empty if not
      * @throws IOException if an I/O error occurs
      */
     public Optional<ByteBuffer> getTile(final long tileId) throws IOException {
@@ -304,23 +297,18 @@ public class PMTilesReader implements AutoCloseable {
     }
 
     /**
-     * Returns a stream of all tile indices present in the PMTiles file at the
-     * specified zoom level.
-     * <p>
-     * This method traverses the sparse directory structure of the PMTiles file and
-     * collects all tiles that exist at the given zoom level. Unlike a continuous
-     * TileMatrix grid, PMTiles files contain only the tiles that were actually
-     * written to the file.
-     * <p>
-     * The returned stream provides an efficient way to iterate over all tiles at a
-     * zoom level without having to test each possible tile coordinate for
-     * existence.
+     * Returns a stream of all tile indices present in the PMTiles file at the specified zoom level.
+     *
+     * <p>This method traverses the sparse directory structure of the PMTiles file and collects all tiles that exist at
+     * the given zoom level. Unlike a continuous TileMatrix grid, PMTiles files contain only the tiles that were
+     * actually written to the file.
+     *
+     * <p>The returned stream provides an efficient way to iterate over all tiles at a zoom level without having to test
+     * each possible tile coordinate for existence.
      *
      * @param zoomLevel the zoom level to query (0-based)
-     * @return a stream of TileIndex objects representing all tiles present at the
-     *         zoom level
-     * @throws UncheckedIOException if an I/O error occurs while reading the
-     *                              directory structure
+     * @return a stream of TileIndex objects representing all tiles present at the zoom level
+     * @throws UncheckedIOException if an I/O error occurs while reading the directory structure
      */
     public Stream<TileIndex> getTileIndicesByZoomLevel(int zoomLevel) {
         if (zoomLevel < 0 || zoomLevel > 31) {
@@ -341,9 +329,8 @@ public class PMTilesReader implements AutoCloseable {
      * Gets the metadata as a parsed JSON string.
      *
      * @return the metadata as a JSON string
-     * @throws IOException                     if an I/O error occurs
-     * @throws UnsupportedCompressionException if the compression type is not
-     *                                         supported
+     * @throws IOException if an I/O error occurs
+     * @throws UnsupportedCompressionException if the compression type is not supported
      */
     public String getMetadataAsString() throws IOException {
         final ByteRange metadataRange = header.jsonMetadata();
@@ -357,9 +344,8 @@ public class PMTilesReader implements AutoCloseable {
 
     /**
      * Gets the metadata as a parsed {@link PMTilesMetadata} object.
-     * <p>
-     * This provides structured access to the metadata fields with proper type
-     * conversion.
+     *
+     * <p>This provides structured access to the metadata fields with proper type conversion.
      *
      * @return the metadata as a PMTilesMetadata object
      */
@@ -368,10 +354,8 @@ public class PMTilesReader implements AutoCloseable {
     }
 
     /**
-     * @throws IOException                     if an I/O error occurs or JSON
-     *                                         parsing fails
-     * @throws UnsupportedCompressionException if the compression type is not
-     *                                         supported
+     * @throws IOException if an I/O error occurs or JSON parsing fails
+     * @throws UnsupportedCompressionException if the compression type is not supported
      */
     private PMTilesMetadata parseMetadata() throws IOException {
         String jsonMetadata = getMetadataAsString();
@@ -392,14 +376,12 @@ public class PMTilesReader implements AutoCloseable {
     }
 
     /**
-     * Finds the location of a tile in the PMTiles file using recursive directory
-     * traversal.
+     * Finds the location of a tile in the PMTiles file using recursive directory traversal.
      *
      * @param tileId the ID of the tile to find
      * @return the location of the tile, or empty if the tile doesn't exist
-     * @throws IOException                     if an I/O error occurs
-     * @throws UnsupportedCompressionException if the compression type is not
-     *                                         supported
+     * @throws IOException if an I/O error occurs
+     * @throws UnsupportedCompressionException if the compression type is not supported
      */
     private Optional<ByteRange> findTileLocation(long tileId) throws IOException {
         return searchDirectory(header.rootDirectory(), tileId);
@@ -410,11 +392,10 @@ public class PMTilesReader implements AutoCloseable {
      *
      * @param dirOffset the offset of the directory to search
      * @param dirLength the length of the directory data
-     * @param tileId    the tile ID to find
+     * @param tileId the tile ID to find
      * @return the absolute tile location if found, or empty if not found
-     * @throws IOException                     if an I/O error occurs
-     * @throws UnsupportedCompressionException if the compression type is not
-     *                                         supported
+     * @throws IOException if an I/O error occurs
+     * @throws UnsupportedCompressionException if the compression type is not supported
      */
     private Optional<ByteRange> searchDirectory(ByteRange dirEntryRange, final long tileId) throws IOException {
 
@@ -439,14 +420,12 @@ public class PMTilesReader implements AutoCloseable {
     }
 
     /**
-     * Searches for a directory entry that contains the specified tile ID using
-     * binary search. This method handles both regular tile entries (with run
-     * lengths) and leaf directory entries.
+     * Searches for a directory entry that contains the specified tile ID using binary search. This method handles both
+     * regular tile entries (with run lengths) and leaf directory entries.
      *
      * @param entries the directory entries to search (must be sorted by tileId)
-     * @param tileId  the tile ID to search for
-     * @return the directory entry that contains the tile, or empty if no suitable
-     *         entry found
+     * @param tileId the tile ID to search for
+     * @return the directory entry that contains the tile, or empty if no suitable entry found
      */
     private Optional<PMTilesEntry> findEntryForTileId(PMTilesDirectory entries, final long tileId) {
         int low = 0;
@@ -483,32 +462,26 @@ public class PMTilesReader implements AutoCloseable {
     }
 
     /**
-     * Attempts to find an entry that contains the target tileId at the binary
-     * search insertion point.
+     * Attempts to find an entry that contains the target tileId at the binary search insertion point.
      *
-     * <p>
-     * This method handles the PMTiles format's range-based entries where a single
-     * directory entry can represent multiple consecutive tiles. After a binary
-     * search fails to find an exact match, the entry just before the insertion
-     * point might still contain our target tile.
+     * <p>This method handles the PMTiles format's range-based entries where a single directory entry can represent
+     * multiple consecutive tiles. After a binary search fails to find an exact match, the entry just before the
+     * insertion point might still contain our target tile.
      *
-     * <p>
-     * Two cases are handled:
+     * <p>Two cases are handled:
+     *
      * <ul>
-     * <li><b>Regular entries with run lengths</b>: An entry with tileId=100 and
-     * runLength=5 represents tiles 100-104. If searching for tileId=102, this entry
-     * should be returned even though 102 != 100, because 102 falls within the range
-     * [100, 104].</li>
-     * <li><b>Leaf directory entries</b>: These point to subdirectories that might
-     * contain the target tile. Since we don't know the exact bounds of leaf
-     * directories, we return the closest leaf entry as a heuristic - it might
-     * contain our target in its subdirectory.</li>
+     *   <li><b>Regular entries with run lengths</b>: An entry with tileId=100 and runLength=5 represents tiles 100-104.
+     *       If searching for tileId=102, this entry should be returned even though 102 != 100, because 102 falls within
+     *       the range [100, 104].
+     *   <li><b>Leaf directory entries</b>: These point to subdirectories that might contain the target tile. Since we
+     *       don't know the exact bounds of leaf directories, we return the closest leaf entry as a heuristic - it might
+     *       contain our target in its subdirectory.
      * </ul>
      *
-     * @param entries        the directory entries that was searched
-     * @param insertionPoint the index where the target would be inserted (from
-     *                       binary search)
-     * @param tileId         the tile ID we're searching for
+     * @param entries the directory entries that was searched
+     * @param insertionPoint the index where the target would be inserted (from binary search)
+     * @param tileId the tile ID we're searching for
      * @return the containing entry if found, or empty if no suitable entry exists
      */
     private Optional<PMTilesEntry> findContainingEntry(
@@ -551,15 +524,13 @@ public class PMTilesReader implements AutoCloseable {
     }
 
     /**
-     * Recursively collects all tile indices at the specified zoom level from the
-     * directory structure.
+     * Recursively collects all tile indices at the specified zoom level from the directory structure.
      *
-     * @param entryRange      the directory entry range to search
+     * @param entryRange the directory entry range to search
      * @param targetZoomLevel the zoom level to collect tiles for
-     * @param tileIndices     the list to collect tile indices into
-     * @throws IOException                     if an I/O error occurs
-     * @throws UnsupportedCompressionException if the compression type is not
-     *                                         supported
+     * @param tileIndices the list to collect tile indices into
+     * @throws IOException if an I/O error occurs
+     * @throws UnsupportedCompressionException if the compression type is not supported
      */
     private void collectTileIndicesForZoomLevel(ByteRange entryRange, int targetZoomLevel, List<TileIndex> tileIndices)
             throws IOException {

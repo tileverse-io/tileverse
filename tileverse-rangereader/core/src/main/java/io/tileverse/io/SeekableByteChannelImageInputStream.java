@@ -26,37 +26,27 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * An {@link ImageInputStream} implementation that wraps a
- * {@link SeekableByteChannel} to provide ImageIO integration with efficient
- * seeking capabilities.
- * <p>
- * This adapter allows SeekableByteChannel instances to be used with Java's
- * ImageIO framework, providing both big-endian and little-endian byte order
- * support through the standard ImageInputStream interface. It's particularly
- * useful for reading image data from cloud storage, HTTP sources, or any other
- * channel-based data source.
- * <p>
- * <strong>Thread Safety:</strong> This class is not thread-safe. External
- * synchronization is required if multiple threads access the same instance
- * concurrently.
- * <p>
- * <strong>Seeking Performance:</strong> This implementation uses the channel's
- * seeking capability for efficient positioning, making it suitable for
- * random-access image formats and large image files.
- * <p>
- * <strong>Lifecycle Management:</strong> This adapter does not take ownership
- * of the underlying channel. Closing this adapter will not close the underlying
- * channel. Note that while multiple adapters could technically share the same
- * channel, this is not recommended as they would interfere with each other's
- * position state.
- * <p>
- * <strong>Position Synchronization:</strong> This implementation ensures that
- * the channel position and stream position are always synchronized by reading
- * exactly the requested number of bytes without internal buffering.
+ * An {@link ImageInputStream} implementation that wraps a {@link SeekableByteChannel} to provide ImageIO integration
+ * with efficient seeking capabilities.
  *
- * <p>
- * <strong>Usage Example:</strong>
- * </p>
+ * <p>This adapter allows SeekableByteChannel instances to be used with Java's ImageIO framework, providing both
+ * big-endian and little-endian byte order support through the standard ImageInputStream interface. It's particularly
+ * useful for reading image data from cloud storage, HTTP sources, or any other channel-based data source.
+ *
+ * <p><strong>Thread Safety:</strong> This class is not thread-safe. External synchronization is required if multiple
+ * threads access the same instance concurrently.
+ *
+ * <p><strong>Seeking Performance:</strong> This implementation uses the channel's seeking capability for efficient
+ * positioning, making it suitable for random-access image formats and large image files.
+ *
+ * <p><strong>Lifecycle Management:</strong> This adapter does not take ownership of the underlying channel. Closing
+ * this adapter will not close the underlying channel. Note that while multiple adapters could technically share the
+ * same channel, this is not recommended as they would interfere with each other's position state.
+ *
+ * <p><strong>Position Synchronization:</strong> This implementation ensures that the channel position and stream
+ * position are always synchronized by reading exactly the requested number of bytes without internal buffering.
+ *
+ * <p><strong>Usage Example:</strong>
  *
  * <pre>{@code
  * try (SeekableByteChannel channel = Files.newByteChannel(imagePath, StandardOpenOption.READ)) {
@@ -72,9 +62,7 @@ import org.slf4j.LoggerFactory;
  * }
  * }</pre>
  *
- * <p>
- * <strong>Byte Order Configuration:</strong>
- * </p>
+ * <p><strong>Byte Order Configuration:</strong>
  *
  * <pre>{@code
  * try (SeekableByteChannel channel = openChannel()) {
@@ -129,8 +117,8 @@ public final class SeekableByteChannelImageInputStream extends ImageInputStreamI
 
     /**
      * {@inheritDoc}
-     * <p>
-     * Reads a single byte from the underlying channel.
+     *
+     * <p>Reads a single byte from the underlying channel.
      *
      * @return the next byte, or -1 if the end of the stream is reached
      * @throws IOException if an I/O error occurs
@@ -156,10 +144,10 @@ public final class SeekableByteChannelImageInputStream extends ImageInputStreamI
 
     /**
      * {@inheritDoc}
-     * <p>
-     * Reads bytes into the provided array.
      *
-     * @param b   the byte array to read into
+     * <p>Reads bytes into the provided array.
+     *
+     * @param b the byte array to read into
      * @param off the offset in the array
      * @param len the number of bytes to read
      * @return the number of bytes read, or -1 if end of stream
@@ -206,9 +194,9 @@ public final class SeekableByteChannelImageInputStream extends ImageInputStreamI
 
     /**
      * {@inheritDoc}
-     * <p>
-     * Seeks to the specified position in the stream. This implementation uses the
-     * channel's seeking capability for efficient positioning.
+     *
+     * <p>Seeks to the specified position in the stream. This implementation uses the channel's seeking capability for
+     * efficient positioning.
      *
      * @param pos the position to seek to
      * @throws IOException if an I/O error occurs or pos is negative
@@ -239,8 +227,8 @@ public final class SeekableByteChannelImageInputStream extends ImageInputStreamI
 
     /**
      * {@inheritDoc}
-     * <p>
-     * Returns the length of the stream if known.
+     *
+     * <p>Returns the length of the stream if known.
      *
      * @return the length of the stream, or -1 if unknown
      */
@@ -258,9 +246,8 @@ public final class SeekableByteChannelImageInputStream extends ImageInputStreamI
 
     /**
      * {@inheritDoc}
-     * <p>
-     * Closes this stream. The underlying channel is not closed since this adapter
-     * does not take ownership of it.
+     *
+     * <p>Closes this stream. The underlying channel is not closed since this adapter does not take ownership of it.
      *
      * @throws IOException if an I/O error occurs
      */

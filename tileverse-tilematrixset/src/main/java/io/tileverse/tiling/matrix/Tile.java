@@ -20,25 +20,27 @@ import io.tileverse.tiling.common.Coordinate;
 import io.tileverse.tiling.pyramid.TileIndex;
 
 /**
- * A tile represents a rectangular region of map data with specific dimensions and spatial extent.
- * It combines the discrete grid coordinates ({@link TileIndex}) with the spatial properties
- * needed for rendering and coordinate transformations.
+ * A tile represents a rectangular region of map data with specific dimensions and spatial extent. It combines the
+ * discrete grid coordinates ({@link TileIndex}) with the spatial properties needed for rendering and coordinate
+ * transformations.
  *
  * <p>Key properties:
+ *
  * <ul>
- * <li><b>Tile Index</b>: The discrete grid coordinates (X, Y, Z)</li>
- * <li><b>Extent</b>: The map space bounding box covered by this tile</li>
- * <li><b>Dimensions</b>: The pixel width and height of the tile</li>
- * <li><b>Resolution</b>: Map units per pixel for this tile</li>
- * <li><b>CRS</b>: Coordinate reference system identifier</li>
+ *   <li><b>Tile Index</b>: The discrete grid coordinates (X, Y, Z)
+ *   <li><b>Extent</b>: The map space bounding box covered by this tile
+ *   <li><b>Dimensions</b>: The pixel width and height of the tile
+ *   <li><b>Resolution</b>: Map units per pixel for this tile
+ *   <li><b>CRS</b>: Coordinate reference system identifier
  * </ul>
  *
  * <p>Tiles are immutable value objects that can be used for:
+ *
  * <ul>
- * <li>Spatial queries and intersection testing</li>
- * <li>Coordinate transformations between pixel and map space</li>
- * <li>Tile-based rendering and caching operations</li>
- * <li>Geometric operations on rectangular tile extents</li>
+ *   <li>Spatial queries and intersection testing
+ *   <li>Coordinate transformations between pixel and map space
+ *   <li>Tile-based rendering and caching operations
+ *   <li>Geometric operations on rectangular tile extents
  * </ul>
  *
  * @param tileIndex the discrete grid coordinates for this tile
@@ -47,14 +49,11 @@ import io.tileverse.tiling.pyramid.TileIndex;
  * @param height the tile height in pixels
  * @param resolution map units per pixel
  * @param crsId coordinate reference system identifier
- *
  * @since 1.0
  */
 public record Tile(TileIndex tileIndex, BoundingBox2D extent, int width, int height, double resolution, String crsId) {
 
-    /**
-     * Compact constructor with validation.
-     */
+    /** Compact constructor with validation. */
     public Tile {
         if (tileIndex == null) {
             throw new IllegalArgumentException("tileIndex cannot be null");
@@ -121,9 +120,8 @@ public record Tile(TileIndex tileIndex, BoundingBox2D extent, int width, int hei
     }
 
     /**
-     * Converts a map space coordinate to pixel coordinates within this tile.
-     * The returned coordinate has its origin at the upper-left corner of the tile,
-     * with X increasing to the right and Y increasing downward.
+     * Converts a map space coordinate to pixel coordinates within this tile. The returned coordinate has its origin at
+     * the upper-left corner of the tile, with X increasing to the right and Y increasing downward.
      *
      * @param mapCoordinate the map space coordinate
      * @return the pixel coordinate within this tile, or null if outside tile bounds
@@ -145,8 +143,8 @@ public record Tile(TileIndex tileIndex, BoundingBox2D extent, int width, int hei
     }
 
     /**
-     * Converts a pixel coordinate within this tile to map space coordinates.
-     * The pixel coordinate should have its origin at the upper-left corner of the tile.
+     * Converts a pixel coordinate within this tile to map space coordinates. The pixel coordinate should have its
+     * origin at the upper-left corner of the tile.
      *
      * @param pixelCoordinate the pixel coordinate within this tile
      * @return the corresponding map space coordinate

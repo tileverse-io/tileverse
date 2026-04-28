@@ -33,9 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * Tests for combining BlockAlignedRangeReader with CachingRangeReader.
- */
+/** Tests for combining BlockAlignedRangeReader with CachingRangeReader. */
 class BlockAlignedCachingTest {
 
     @TempDir
@@ -137,9 +135,7 @@ class BlockAlignedCachingTest {
         assertEquals(thirdReadCount, countingReader.getReadCount(), "Should not have read from file again");
     }
 
-    /**
-     * A RangeReader that counts the number of reads for testing purposes.
-     */
+    /** A RangeReader that counts the number of reads for testing purposes. */
     private static class CountingRangeReader implements RangeReader {
         private final RangeReader delegate;
         private int readCount = 0;

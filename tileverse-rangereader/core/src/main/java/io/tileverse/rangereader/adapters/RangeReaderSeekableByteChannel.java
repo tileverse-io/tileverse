@@ -23,22 +23,21 @@ import java.nio.channels.NonWritableChannelException;
 import java.nio.channels.SeekableByteChannel;
 
 /**
- * A {@link SeekableByteChannel} adapter that wraps a {@link RangeReader} to provide
- * standard Java NIO channel semantics with seeking capabilities.
- * <p>
- * This adapter extends {@link RangeReaderReadableByteChannel} to add seeking functionality,
- * allowing RangeReader instances to be used with any API that expects a SeekableByteChannel,
- * enabling integration with standard Java NIO operations, file systems, and frameworks
- * that work with seekable channels.
- * <p>
- * <strong>Thread Safety:</strong> This class is thread-safe if the underlying
- * RangeReader is thread-safe. The position state is managed internally with
- * proper synchronization.
- * <p>
- * <strong>Read-Only Channel:</strong> This channel is read-only. All write operations
- * will throw {@link NonWritableChannelException}.
+ * A {@link SeekableByteChannel} adapter that wraps a {@link RangeReader} to provide standard Java NIO channel semantics
+ * with seeking capabilities.
  *
- * <p><strong>Usage Example:</strong></p>
+ * <p>This adapter extends {@link RangeReaderReadableByteChannel} to add seeking functionality, allowing RangeReader
+ * instances to be used with any API that expects a SeekableByteChannel, enabling integration with standard Java NIO
+ * operations, file systems, and frameworks that work with seekable channels.
+ *
+ * <p><strong>Thread Safety:</strong> This class is thread-safe if the underlying RangeReader is thread-safe. The
+ * position state is managed internally with proper synchronization.
+ *
+ * <p><strong>Read-Only Channel:</strong> This channel is read-only. All write operations will throw
+ * {@link NonWritableChannelException}.
+ *
+ * <p><strong>Usage Example:</strong>
+ *
  * <pre>{@code
  * RangeReader reader = FileRangeReader.of(path);
  * try (SeekableByteChannel channel = RangeReaderSeekableByteChannel.of(reader)) {
@@ -79,8 +78,8 @@ public final class RangeReaderSeekableByteChannel extends RangeReaderReadableByt
 
     /**
      * {@inheritDoc}
-     * <p>
-     * <strong>This operation is not supported.</strong> RangeReader is read-only.
+     *
+     * <p><strong>This operation is not supported.</strong> RangeReader is read-only.
      *
      * @param src the buffer containing data to write
      * @return never returns normally
@@ -93,9 +92,8 @@ public final class RangeReaderSeekableByteChannel extends RangeReaderReadableByt
 
     /**
      * {@inheritDoc}
-     * <p>
-     * Sets the current position in the source. Subsequent read operations will
-     * start from this position.
+     *
+     * <p>Sets the current position in the source. Subsequent read operations will start from this position.
      *
      * @param newPosition the new position, must be non-negative
      * @return this channel
@@ -116,8 +114,8 @@ public final class RangeReaderSeekableByteChannel extends RangeReaderReadableByt
 
     /**
      * {@inheritDoc}
-     * <p>
-     * <strong>This operation is not supported.</strong> RangeReader sources cannot be truncated.
+     *
+     * <p><strong>This operation is not supported.</strong> RangeReader sources cannot be truncated.
      *
      * @param size the new size
      * @return never returns normally

@@ -21,9 +21,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Represents a configurable parameter for a {@link RangeReaderProvider}.
- * This record provides metadata about a parameter, including its key, description, type,
- * default value, and a list of sample values.
+ * Represents a configurable parameter for a {@link RangeReaderProvider}. This record provides metadata about a
+ * parameter, including its key, description, type, default value, and a list of sample values.
  *
  * @param <T> The type of the parameter's value.
  * @param key The unique key identifying the parameter.
@@ -62,7 +61,8 @@ public record RangeReaderParameter<T>(
      * @param type the Java type of values this parameter accepts
      * @param defaultValue optional default value for this parameter
      * @param sampleValues list of example values to help users understand valid inputs
-     * @param password metadata about whether the parameter should be treated as password by the client code (e.g. mask it in user interfaces)
+     * @param password metadata about whether the parameter should be treated as password by the client code (e.g. mask
+     *     it in user interfaces)
      */
     public RangeReaderParameter {
         requireNonNull(key, "Parameter key cannot be null");
@@ -84,9 +84,7 @@ public record RangeReaderParameter<T>(
         return new Builder();
     }
 
-    /**
-     * A builder class for {@link RangeReaderParameter}.
-     */
+    /** A builder class for {@link RangeReaderParameter}. */
     public static class Builder {
         String key;
         String title;
@@ -101,9 +99,7 @@ public record RangeReaderParameter<T>(
         Optional<Object> defaultValue = Optional.empty(); // Initialize with empty optional
         List<Object> sampleValues = List.of();
 
-        /**
-         * Creates a new {@code Builder}.
-         */
+        /** Creates a new {@code Builder}. */
         public Builder() {
             // Default constructor
         }
@@ -198,7 +194,8 @@ public record RangeReaderParameter<T>(
         /**
          * Sets whether the parameter is a "password" field
          *
-         * @param isPassword true if the parameter should be treated as password by the client code (e.g. mask it in user interfaces)
+         * @param isPassword true if the parameter should be treated as password by the client code (e.g. mask it in
+         *     user interfaces)
          * @return This builder instance.
          */
         public Builder password(boolean isPassword) {

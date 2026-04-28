@@ -27,9 +27,7 @@ import java.util.TreeSet;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 
-/**
- * Test class for TilePyramid functionality.
- */
+/** Test class for TilePyramid functionality. */
 class TilePyramidTest {
 
     @Test

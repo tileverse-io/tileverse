@@ -79,9 +79,7 @@ class S3RangeReaderTest {
 
     private S3RangeReader reader;
 
-    /**
-     * Creates test data with a predictable pattern.
-     */
+    /** Creates test data with a predictable pattern. */
     private static byte[] createTestData(int size) {
         byte[] data = new byte[size];
         for (int i = 0; i < size; i++) {
@@ -236,11 +234,13 @@ class S3RangeReaderTest {
                         .message("Key does not exist")
                         .build());
 
-        assertThrows(IOException.class, () -> S3RangeReader.builder()
-                .s3Client(s3Client)
-                .bucket(BUCKET)
-                .key(KEY)
-                .build());
+        assertThrows(
+                IOException.class,
+                () -> S3RangeReader.builder()
+                        .s3Client(s3Client)
+                        .bucket(BUCKET)
+                        .key(KEY)
+                        .build());
     }
 
     @Test
@@ -249,11 +249,13 @@ class S3RangeReaderTest {
         when(s3Client.headObject(any(HeadObjectRequest.class)))
                 .thenThrow(SdkException.builder().message("S3 error").build());
 
-        assertThrows(IOException.class, () -> S3RangeReader.builder()
-                .s3Client(s3Client)
-                .bucket(BUCKET)
-                .key(KEY)
-                .build());
+        assertThrows(
+                IOException.class,
+                () -> S3RangeReader.builder()
+                        .s3Client(s3Client)
+                        .bucket(BUCKET)
+                        .key(KEY)
+                        .build());
     }
 
     @Test

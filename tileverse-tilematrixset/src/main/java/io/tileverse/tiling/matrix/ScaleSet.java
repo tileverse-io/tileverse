@@ -18,49 +18,43 @@ package io.tileverse.tiling.matrix;
 import java.util.List;
 
 /**
- * For the case of a two-dimensional space, given the top left point of the tile
- * matrix in CRS coordinates ({@code tileMatrixMinX, tileMatrixMaxY}), the width
- * and height of the tile matrix in tile units
- * ({@linkplain TileMatrix#matrixWidth() matrixWidth},
- * {@linkplain TileMatrix#matrixHeight() matrixHeight}), the rendering cells in
- * a tile values ({@linkplain TileMatrix#tileWidth() tileWidth},
- * {@linkplain TileMatrix#tileHeight() tileHeight}), the coefficient to convert
- * the coordinate reference system (CRS) units into meters
- * ({@code metersPerUnit}), and the scale ({@code 1:scaleDenominator}), the
- * bottom right corner of the bounding box of a tile matrix (tileMatrixMaxX,
- * tileMatrixMinY) can be calculated as follows:
+ * For the case of a two-dimensional space, given the top left point of the tile matrix in CRS coordinates
+ * ({@code tileMatrixMinX, tileMatrixMaxY}), the width and height of the tile matrix in tile units
+ * ({@linkplain TileMatrix#matrixWidth() matrixWidth}, {@linkplain TileMatrix#matrixHeight() matrixHeight}), the
+ * rendering cells in a tile values ({@linkplain TileMatrix#tileWidth() tileWidth}, {@linkplain TileMatrix#tileHeight()
+ * tileHeight}), the coefficient to convert the coordinate reference system (CRS) units into meters
+ * ({@code metersPerUnit}), and the scale ({@code 1:scaleDenominator}), the bottom right corner of the bounding box of a
+ * tile matrix (tileMatrixMaxX, tileMatrixMinY) can be calculated as follows:
  *
- * <pre>
- * {@code
- *   cellSize = scaleDenominator x 0.28 10^(-3) // metersPerUnit(crs)
- *   tileSpanX = tileWidth x cellSize
- *   tileSpanY = tileHeight x cellSize
- *   tileMatrixMaxX = tileMatrixMinX + tileSpanX x matrixWidth
- *   tileMatrixMinY = tileMatrixMaxY - tileSpanY x matrixHeight
+ * <pre>{@code
+ * cellSize = scaleDenominator x 0.28 10^(-3) // metersPerUnit(crs)
+ * tileSpanX = tileWidth x cellSize
+ * tileSpanY = tileHeight x cellSize
+ * tileMatrixMaxX = tileMatrixMinX + tileSpanX x matrixWidth
+ * tileMatrixMinY = tileMatrixMaxY - tileSpanY x matrixHeight
  * }</pre>
- * <p>
- * In a CRS with coordinates expressed in meters, {@code metersPerUnit(crs)}
- * equals 1
- * <p>
- * In a CRS with coordinates expressed in degrees {@code metersPerUnit(crs)}
- * equals {@code  360 / (EquatorialRadius * 2 * PI)} (360 degrees are
- * equivalent to the EquatorialPerimeter). E.g for WGS84
- * {@code metersPerUnit(crs)} is {@code 111319.4908} meters/degree
+ *
+ * <p>In a CRS with coordinates expressed in meters, {@code metersPerUnit(crs)} equals 1
+ *
+ * <p>In a CRS with coordinates expressed in degrees {@code metersPerUnit(crs)} equals {@code 360 / (EquatorialRadius *
+ * 2 * PI)} (360 degrees are equivalent to the EquatorialPerimeter). E.g for WGS84 {@code metersPerUnit(crs)} is
+ * {@code 111319.4908} meters/degree
  *
  * @param metersPerUnit coefficient to convert CRS units into meters
  * @param scales list of scale denominators and resolutions
- * @see <a href="https://docs.ogc.org/is/17-083r4/17-083r4.pdf">OGC Two Dimensional Tile Matrix Set and Tile Set Metadata</a>
+ * @see <a href="https://docs.ogc.org/is/17-083r4/17-083r4.pdf">OGC Two Dimensional Tile Matrix Set and Tile Set
+ *     Metadata</a>
  */
 public record ScaleSet(double metersPerUnit, List<Scale> scales) {
 
     /**
-     * A "standardized rendering pixel size" of
-     * {@code 0.28mm x 0.28mm} (millimeters). The definition is the same as used in Web Map Service WMS 1.3.0 OGC 06-042
-     * and in the Symbology Encoding (SE) Implementation Specification 1.1.0 OGC 05-077r4 that was later adopted by
-     * WMTS 1.0 OGC 07-057r7. Frequently, the true pixel size of the device is unknown and 0.28 mm was the actual pixel
-     * size of a common display from 2005.
-     * <p>
-     * This value is still being used as reference, even if current display devices are built with much smaller pixel sizes.
+     * A "standardized rendering pixel size" of {@code 0.28mm x 0.28mm} (millimeters). The definition is the same as
+     * used in Web Map Service WMS 1.3.0 OGC 06-042 and in the Symbology Encoding (SE) Implementation Specification
+     * 1.1.0 OGC 05-077r4 that was later adopted by WMTS 1.0 OGC 07-057r7. Frequently, the true pixel size of the device
+     * is unknown and 0.28 mm was the actual pixel size of a common display from 2005.
+     *
+     * <p>This value is still being used as reference, even if current display devices are built with much smaller pixel
+     * sizes.
      */
     public static final double DEFAULT_PIXEL_SIZE = 2.8E-4;
 
@@ -101,14 +95,10 @@ public record ScaleSet(double metersPerUnit, List<Scale> scales) {
         return new ScaleSetBuilder(this);
     }
 
-    /**
-     * Builder for constructing ScaleSet instances.
-     */
+    /** Builder for constructing ScaleSet instances. */
     public static class ScaleSetBuilder {
 
-        /**
-         * Creates a new empty ScaleSetBuilder.
-         */
+        /** Creates a new empty ScaleSetBuilder. */
         public ScaleSetBuilder() {}
 
         /**
@@ -121,8 +111,8 @@ public record ScaleSet(double metersPerUnit, List<Scale> scales) {
         }
 
         /**
-         * Scale denominators for this scale set. If not set, will be computed from
-         * {@link #cellSizes(double...)}. If both are set, both arrays must have the same length
+         * Scale denominators for this scale set. If not set, will be computed from {@link #cellSizes(double...)}. If
+         * both are set, both arrays must have the same length
          *
          * @param denominators the scale denominators
          * @return this builder for method chaining

@@ -33,35 +33,30 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Represents the configuration for creating a {@link io.tileverse.rangereader.RangeReader} instance.
- * This class holds the URI of the resource to be read, an optional explicit provider ID,
- * and a map of generic parameters that can be used by {@link RangeReaderProvider} implementations.
+ * Represents the configuration for creating a {@link io.tileverse.rangereader.RangeReader} instance. This class holds
+ * the URI of the resource to be read, an optional explicit provider ID, and a map of generic parameters that can be
+ * used by {@link RangeReaderProvider} implementations.
  */
 public class RangeReaderConfig {
 
     private static final Logger LOG = Logger.getLogger(RangeReaderConfig.class.getName());
 
-    /**
-     * Canonical prefix for all parameter keys in the tileverse 1.x line.
-     */
+    /** Canonical prefix for all parameter keys in the tileverse 1.x line. */
     static final String CANONICAL_KEY_PREFIX = "io.tileverse.rangereader.";
 
     /**
-     * Forward-compatible prefix used by tileverse 2.x for parameter keys.
-     * Keys with this prefix are accepted on input and translated to the canonical {@value #CANONICAL_KEY_PREFIX}
-     * prefix so that catalogs persisted by future tileverse 2.x consumers (e.g. GeoServer 3.1+) can still be
-     * read by tileverse 1.x.
+     * Forward-compatible prefix used by tileverse 2.x for parameter keys. Keys with this prefix are accepted on input
+     * and translated to the canonical {@value #CANONICAL_KEY_PREFIX} prefix so that catalogs persisted by future
+     * tileverse 2.x consumers (e.g. GeoServer 3.1+) can still be read by tileverse 1.x.
      */
     public static final String FUTURE_KEY_PREFIX = "storage.";
 
-    /**
-     * The key used in {@link Properties} to specify the URI of the resource.
-     */
+    /** The key used in {@link Properties} to specify the URI of the resource. */
     public static final String URI_KEY = CANONICAL_KEY_PREFIX + "uri";
 
     /**
-     * The key used in {@link Properties} to specify the ID of a {@link RangeReaderProvider}.
-     * This can be used to force the use of a specific provider when URI-based disambiguation is not sufficient.
+     * The key used in {@link Properties} to specify the ID of a {@link RangeReaderProvider}. This can be used to force
+     * the use of a specific provider when URI-based disambiguation is not sufficient.
      */
     public static final String PROVIDER_ID_KEY = CANONICAL_KEY_PREFIX + "provider";
 
@@ -74,9 +69,9 @@ public class RangeReaderConfig {
     private static final Set<String> WARNED_FUTURE_KEYS = ConcurrentHashMap.newKeySet();
 
     /**
-     * A parameter that can be used by client code to force a given {@link #providerId(String) provider id}
-     * using {@link #setParameter(RangeReaderParameter, Object)} or {@link #setParameter(String, Object)}, and will be
-     * parsed into {@link #providerId} by {@link #fromProperties(Properties)}
+     * A parameter that can be used by client code to force a given {@link #providerId(String) provider id} using
+     * {@link #setParameter(RangeReaderParameter, Object)} or {@link #setParameter(String, Object)}, and will be parsed
+     * into {@link #providerId} by {@link #fromProperties(Properties)}
      */
     public static final RangeReaderParameter<String> FORCE_PROVIDER_ID = RangeReaderParameter.builder()
             .key(PROVIDER_ID_KEY)
@@ -92,17 +87,14 @@ public class RangeReaderConfig {
     private URI uri;
 
     /**
-     * Optional provider {@link RangeReaderProvider#getId() id}, useful to force
-     * using a given provider when the URI or parameters are not enough to
-     * disambiguate.
+     * Optional provider {@link RangeReaderProvider#getId() id}, useful to force using a given provider when the URI or
+     * parameters are not enough to disambiguate.
      */
     private String providerId;
 
     private Map<String, Object> parameterValues = new HashMap<>();
 
-    /**
-     * Creates a new, empty {@code RangeReaderConfig}.
-     */
+    /** Creates a new, empty {@code RangeReaderConfig}. */
     public RangeReaderConfig() {
         // Default constructor
     }
@@ -122,7 +114,7 @@ public class RangeReaderConfig {
      * @param uri The URI to set.
      * @return This {@code RangeReaderConfig} instance for method chaining.
      * @throws NullPointerException if the provided URI is {@code null}.
-     * @throws  IllegalArgumentException If the given string violates RFC&nbsp;2396
+     * @throws IllegalArgumentException If the given string violates RFC&nbsp;2396
      */
     public RangeReaderConfig uri(String uri) {
         return uri(URI.create(uri));
@@ -162,11 +154,11 @@ public class RangeReaderConfig {
 
     /**
      * Sets a generic parameter value by its key.
-     * <p>
-     * {@link #providerId(String) enforcing a provider id} can also be done by calling this method
-     * with {@link #FORCE_PROVIDER_ID FORCE_PROVIDER_ID.key()}
-     * <p>
-     * Note: This method does not validate the parameter against any known {@link RangeReaderParameter}s.
+     *
+     * <p>{@link #providerId(String) enforcing a provider id} can also be done by calling this method with
+     * {@link #FORCE_PROVIDER_ID FORCE_PROVIDER_ID.key()}
+     *
+     * <p>Note: This method does not validate the parameter against any known {@link RangeReaderParameter}s.
      *
      * @param key The key of the parameter.
      * @param value The value of the parameter.
@@ -183,11 +175,11 @@ public class RangeReaderConfig {
 
     /**
      * Sets a generic parameter value by its key.
-     * <p>
-     * {@link #providerId(String) enforcing a provider id} can also be done by calling this method
-     * with {@link #FORCE_PROVIDER_ID}
-     * <p>
-     * Note: This method does not validate the parameter against any known {@link RangeReaderParameter}s.
+     *
+     * <p>{@link #providerId(String) enforcing a provider id} can also be done by calling this method with
+     * {@link #FORCE_PROVIDER_ID}
+     *
+     * <p>Note: This method does not validate the parameter against any known {@link RangeReaderParameter}s.
      *
      * @param <T> the type of the parameter value
      * @param param The parameter descriptor.
@@ -241,8 +233,8 @@ public class RangeReaderConfig {
     }
 
     /**
-     * Converts an object to a specified target type.
-     * Supports conversion to {@code String}, {@code Boolean}, {@code Integer}, and {@code URI}.
+     * Converts an object to a specified target type. Supports conversion to {@code String}, {@code Boolean},
+     * {@code Integer}, and {@code URI}.
      *
      * @param <T> The target type.
      * @param value The object to convert.
@@ -270,8 +262,8 @@ public class RangeReaderConfig {
     }
 
     /**
-     * Converts this {@code RangeReaderConfig} instance into a {@link Properties} object.
-     * The URI and provider ID (if set) are included, along with all other parameters.
+     * Converts this {@code RangeReaderConfig} instance into a {@link Properties} object. The URI and provider ID (if
+     * set) are included, along with all other parameters.
      *
      * @return A {@link Properties} object representing this configuration.
      */
@@ -294,8 +286,8 @@ public class RangeReaderConfig {
     }
 
     /**
-     * Creates a {@code RangeReaderConfig} instance from a {@link Properties} object.
-     * The properties must contain the {@link #URI_KEY}.
+     * Creates a {@code RangeReaderConfig} instance from a {@link Properties} object. The properties must contain the
+     * {@link #URI_KEY}.
      *
      * @param properties The {@link Properties} object to convert.
      * @return A new {@code RangeReaderConfig} instance.
@@ -330,9 +322,9 @@ public class RangeReaderConfig {
     }
 
     /**
-     * Normalizes a parameter key by rewriting the forward-compatible {@value #FUTURE_KEY_PREFIX} prefix
-     * (canonical in tileverse 2.x) to the current canonical {@value #CANONICAL_KEY_PREFIX} prefix.
-     * Logs a one-time INFO per distinct future key.
+     * Normalizes a parameter key by rewriting the forward-compatible {@value #FUTURE_KEY_PREFIX} prefix (canonical in
+     * tileverse 2.x) to the current canonical {@value #CANONICAL_KEY_PREFIX} prefix. Logs a one-time INFO per distinct
+     * future key.
      *
      * @param key The parameter key to normalize.
      * @return The normalized key, or {@code key} unchanged if it does not use the future prefix.
@@ -364,8 +356,8 @@ public class RangeReaderConfig {
     }
 
     /**
-     * Converts various URI-like objects to a {@link URI}.
-     * Handles {@link URI}, {@link URL}, {@link Path}, {@link File}, and {@link String} types.
+     * Converts various URI-like objects to a {@link URI}. Handles {@link URI}, {@link URL}, {@link Path}, {@link File},
+     * and {@link String} types.
      *
      * @param uriObject The object to convert to a URI
      * @return A {@link URI} instance
@@ -416,8 +408,8 @@ public class RangeReaderConfig {
     }
 
     /**
-     * Checks if a string looks like it could be a file path.
-     * Returns true if the string contains path separators or starts with path indicators.
+     * Checks if a string looks like it could be a file path. Returns true if the string contains path separators or
+     * starts with path indicators.
      */
     private static boolean looksLikeFilePath(String str) {
         if (str == null || str.isEmpty()) {
@@ -450,9 +442,10 @@ public class RangeReaderConfig {
      *
      * @param config The {@code RangeReaderConfig} to check.
      * @param providerId The ID of the provider to match against.
-     * @param acceptedUriSchemes An array of URI schemes that the provider accepts (e.g., "file", "http").
-     *                           If {@code null}, it matches if the config URI also has a {@code null} scheme.
-     * @return {@code true} if the config matches the provider ID and one of the accepted URI schemes, {@code false} otherwise.
+     * @param acceptedUriSchemes An array of URI schemes that the provider accepts (e.g., "file", "http"). If
+     *     {@code null}, it matches if the config URI also has a {@code null} scheme.
+     * @return {@code true} if the config matches the provider ID and one of the accepted URI schemes, {@code false}
+     *     otherwise.
      * @throws NullPointerException if config or providerId is {@code null}.
      */
     public static boolean matches(RangeReaderConfig config, String providerId, String... acceptedUriSchemes) {

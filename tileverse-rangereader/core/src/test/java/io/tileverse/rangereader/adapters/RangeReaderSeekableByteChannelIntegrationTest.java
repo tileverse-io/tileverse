@@ -29,9 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * Integration test for RangeReaderSeekableByteChannel using a real FileRangeReader.
- */
+/** Integration test for RangeReaderSeekableByteChannel using a real FileRangeReader. */
 class RangeReaderSeekableByteChannelIntegrationTest {
 
     @TempDir

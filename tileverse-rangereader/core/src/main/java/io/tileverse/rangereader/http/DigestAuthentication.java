@@ -34,13 +34,12 @@ import java.util.regex.Pattern;
 
 /**
  * HTTP Digest Authentication implementation for HttpRangeReader.
- * <p>
- * This authenticator implements the Digest Access Authentication as specified in RFC 2617.
- * It manages the complexities of digest authentication including nonce management,
- * challenge-response flows, and algorithm selection.
- * <p>
- * Note: This implementation does not support the full spectrum of digest authentication
- * features but covers the most commonly used configurations.
+ *
+ * <p>This authenticator implements the Digest Access Authentication as specified in RFC 2617. It manages the
+ * complexities of digest authentication including nonce management, challenge-response flows, and algorithm selection.
+ *
+ * <p>Note: This implementation does not support the full spectrum of digest authentication features but covers the most
+ * commonly used configurations.
  */
 public class DigestAuthentication implements HttpAuthentication {
 
@@ -98,8 +97,8 @@ public class DigestAuthentication implements HttpAuthentication {
     }
 
     /**
-     * Fetches digest authentication parameters by making a pre-flight request
-     * and parsing the WWW-Authenticate header from the 401 response.
+     * Fetches digest authentication parameters by making a pre-flight request and parsing the WWW-Authenticate header
+     * from the 401 response.
      *
      * @param uri The URI to authenticate against
      * @return The digest parameters, or null if digest auth is not supported
@@ -338,9 +337,7 @@ public class DigestAuthentication implements HttpAuthentication {
         return sb.toString();
     }
 
-    /**
-     * Container class for digest authentication parameters.
-     */
+    /** Container class for digest authentication parameters. */
     private static class DigestParams {
         final String realm;
         final String nonce;

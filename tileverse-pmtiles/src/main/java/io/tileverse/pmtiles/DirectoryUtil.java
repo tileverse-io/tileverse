@@ -23,9 +23,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Utility class for serializing and deserializing PMTiles directories.
- */
+/** Utility class for serializing and deserializing PMTiles directories. */
 final class DirectoryUtil {
 
     private DirectoryUtil() {
@@ -34,14 +32,15 @@ final class DirectoryUtil {
 
     /**
      * Serializes a list of PMTilesEntry objects into a byte array.
-     * <p>
-     * The directory format consists of:
+     *
+     * <p>The directory format consists of:
+     *
      * <ul>
-     *   <li>Number of entries (varint)</li>
-     *   <li>Delta-encoded tile IDs (varints)</li>
-     *   <li>Run lengths (varints)</li>
-     *   <li>Lengths (varints)</li>
-     *   <li>Offsets (varints, with delta encoding for consecutive entries)</li>
+     *   <li>Number of entries (varint)
+     *   <li>Delta-encoded tile IDs (varints)
+     *   <li>Run lengths (varints)
+     *   <li>Lengths (varints)
+     *   <li>Offsets (varints, with delta encoding for consecutive entries)
      * </ul>
      *
      * @param entries the list of entries to serialize
@@ -135,15 +134,15 @@ final class DirectoryUtil {
     }
     /**
      * Builds root and leaf directories from a list of entries.
-     * <p>
-     * This splits a large directory into a root directory and multiple leaf directories
-     * to keep the root directory size under the maximum size (typically 16KB).
+     *
+     * <p>This splits a large directory into a root directory and multiple leaf directories to keep the root directory
+     * size under the maximum size (typically 16KB).
      *
      * @param entries the entries to include in the directories
      * @param compressionType the compression type to use
      * @param maxRootDirSize the maximum size for the root directory
-     * @return a triple containing the compressed root directory, the compressed leaf directories,
-     *         and the number of leaf directories
+     * @return a triple containing the compressed root directory, the compressed leaf directories, and the number of
+     *     leaf directories
      * @throws IOException if an I/O error occurs
      * @throws UnsupportedCompressionException if the compression type is not supported
      */
@@ -179,8 +178,8 @@ final class DirectoryUtil {
      * @param entries the entries to include in the directories
      * @param compressionType the compression type to use
      * @param leafSize the number of entries per leaf directory
-     * @return a triple containing the compressed root directory, the compressed leaf directories,
-     *         and the number of leaf directories
+     * @return a triple containing the compressed root directory, the compressed leaf directories, and the number of
+     *     leaf directories
      * @throws IOException if an I/O error occurs
      * @throws UnsupportedCompressionException if the compression type is not supported
      */

@@ -26,9 +26,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * Tests for TileJSON v3.0.0 specification compliance.
- */
+/** Tests for TileJSON v3.0.0 specification compliance. */
 class TileJSONTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -225,8 +223,7 @@ class TileJSONTest {
 
     @Test
     void testJSONDeserialization() throws Exception {
-        String json =
-                """
+        String json = """
             {
                 "tilejson": "3.0.0",
                 "tiles": ["https://example.com/{z}/{x}/{y}.pbf"],

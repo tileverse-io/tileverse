@@ -23,9 +23,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Utility methods for working with {@link TileRange} instances.
- */
+/** Utility methods for working with {@link TileRange} instances. */
 final class TileRangeUtil {
 
     private TileRangeUtil() {
@@ -124,11 +122,12 @@ final class TileRangeUtil {
     }
 
     /**
-     * Partitions a list of potentially overlapping tile ranges into non-overlapping parts.
-     * For any pair of {@link TileRange#intersects(TileRange) intersecting} ranges in {@code ranges},
-     * a set of new non-intersecting ranges will be created and returned in place of the originals.
-     * <p>
-     * For example:
+     * Partitions a list of potentially overlapping tile ranges into non-overlapping parts. For any pair of
+     * {@link TileRange#intersects(TileRange) intersecting} ranges in {@code ranges}, a set of new non-intersecting
+     * ranges will be created and returned in place of the originals.
+     *
+     * <p>For example:
+     *
      * <pre>{@code
      * +-----------+
      * |           |
@@ -153,7 +152,8 @@ final class TileRangeUtil {
      *
      * @param ranges the list of tile ranges to partition (may contain overlaps)
      * @return a list of non-overlapping tile ranges covering the same total area
-     * @implNote uses a <a href="https://en.wikipedia.org/wiki/Sweep_line_algorithm">Sweep line algorithm</a> to partition overlapping ranges
+     * @implNote uses a <a href="https://en.wikipedia.org/wiki/Sweep_line_algorithm">Sweep line algorithm</a> to
+     *     partition overlapping ranges
      */
     static List<TileRange> partitionIntoNonOverlappingRanges(List<TileRange> ranges) {
         if (requireNonNull(ranges).isEmpty()) {
@@ -222,9 +222,8 @@ final class TileRangeUtil {
     }
 
     /**
-     * Splits two intersecting tile ranges into non-overlapping parts.
-     * Returns a list containing the non-overlapping rectangles that cover
-     * the union of the two input ranges.
+     * Splits two intersecting tile ranges into non-overlapping parts. Returns a list containing the non-overlapping
+     * rectangles that cover the union of the two input ranges.
      */
     private static List<TileRange> splitTwoRanges(TileRange a, TileRange b) {
         // Check containment cases first for optimization
@@ -293,8 +292,8 @@ final class TileRangeUtil {
     }
 
     /**
-     * Subtracts the second range from the first, returning the non-overlapping parts
-     * of the first range that don't intersect with the second.
+     * Subtracts the second range from the first, returning the non-overlapping parts of the first range that don't
+     * intersect with the second.
      */
     private static List<TileRange> subtractRange(TileRange from, TileRange subtract) {
         if (!from.intersects(subtract)) {
@@ -336,9 +335,7 @@ final class TileRangeUtil {
         return parts;
     }
 
-    /**
-     * Creates a bounding range that encompasses all the given ranges.
-     */
+    /** Creates a bounding range that encompasses all the given ranges. */
     private static TileRange createBoundingRange(List<TileRange> ranges) {
         if (ranges.isEmpty()) {
             throw new IllegalArgumentException("Cannot create bounding range from empty list");
@@ -360,8 +357,8 @@ final class TileRangeUtil {
     }
 
     /**
-     * Consolidates adjacent or touching tile ranges into larger ranges where possible.
-     * Two ranges can be merged if they share an edge and form a rectangular union.
+     * Consolidates adjacent or touching tile ranges into larger ranges where possible. Two ranges can be merged if they
+     * share an edge and form a rectangular union.
      */
     private static List<TileRange> consolidateAdjacentRanges(List<TileRange> ranges) {
         if (ranges.size() <= 1) {
@@ -391,9 +388,7 @@ final class TileRangeUtil {
         return result;
     }
 
-    /**
-     * Attempts to merge two ranges if they are adjacent or touching and form a rectangle.
-     */
+    /** Attempts to merge two ranges if they are adjacent or touching and form a rectangle. */
     private static Optional<TileRange> tryMergeRanges(TileRange a, TileRange b) {
         // Try to create the union rectangle
         long minX = Math.min(a.minx(), b.minx());

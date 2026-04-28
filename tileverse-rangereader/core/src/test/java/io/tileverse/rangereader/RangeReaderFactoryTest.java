@@ -42,8 +42,8 @@ import org.junit.jupiter.api.io.TempDir;
 /**
  * Unit tests for {@link RangeReaderFactory} with file and HTTP providers available in core module.
  *
- * <p>Tests the factory's ability to create readers using property-based configuration
- * with different URI types (String, URI, URL, Path).
+ * <p>Tests the factory's ability to create readers using property-based configuration with different URI types (String,
+ * URI, URL, Path).
  */
 class RangeReaderFactoryTest {
 
@@ -62,9 +62,7 @@ class RangeReaderFactoryTest {
     private String testContent;
     private URI httpUri;
 
-    /**
-     * Creates test data with a predictable pattern.
-     */
+    /** Creates test data with a predictable pattern. */
     private static byte[] createTestData(int size) {
         byte[] data = new byte[size];
         for (int i = 0; i < size; i++) {

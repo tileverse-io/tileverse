@@ -46,37 +46,34 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * A decorator for {@link RangeReader} that caches ranges on disk for faster
- * subsequent access.
- * <p>
- * This implementation provides a disk-based cache that persists byte ranges to
- * disk, allowing for caching of larger datasets than would fit in memory. It
- * can be combined with {@link CachingRangeReader} for a two-level caching
+ * A decorator for {@link RangeReader} that caches ranges on disk for faster subsequent access.
+ *
+ * <p>This implementation provides a disk-based cache that persists byte ranges to disk, allowing for caching of larger
+ * datasets than would fit in memory. It can be combined with {@link CachingRangeReader} for a two-level caching
  * strategy (memory + disk).
- * <p>
- * For optimal performance, consider wrapping this reader with
- * {@link io.tileverse.rangereader.block.BlockAlignedRangeReader} to ensure that all reads are aligned to
- * fixed-sized blocks, which can significantly improve cache efficiency and reduce
- * the number of cache entries by encouraging cache reuse across overlapping ranges.
- * <p>
- * Disk cache entries are stored in a subdirectory within the specified cache
- * directory, where the subdirectory name is based on a hash of the source
- * identifier. Cache files within the subdirectory use filenames based on the
- * range offset and length. Caffeine's built-in LRU eviction policy is applied
- * when the cache exceeds the configured maximum size.
- * <p>
- * <strong>Multi-Instance Sharing:</strong> Multiple DiskCachingRangeReader instances
- * for the same source can share cache files on disk, enabling efficient data sharing.
- * However, each instance maintains its own internal cache view for concurrency control
- * and size management. This means:
+ *
+ * <p>For optimal performance, consider wrapping this reader with
+ * {@link io.tileverse.rangereader.block.BlockAlignedRangeReader} to ensure that all reads are aligned to fixed-sized
+ * blocks, which can significantly improve cache efficiency and reduce the number of cache entries by encouraging cache
+ * reuse across overlapping ranges.
+ *
+ * <p>Disk cache entries are stored in a subdirectory within the specified cache directory, where the subdirectory name
+ * is based on a hash of the source identifier. Cache files within the subdirectory use filenames based on the range
+ * offset and length. Caffeine's built-in LRU eviction policy is applied when the cache exceeds the configured maximum
+ * size.
+ *
+ * <p><strong>Multi-Instance Sharing:</strong> Multiple DiskCachingRangeReader instances for the same source can share
+ * cache files on disk, enabling efficient data sharing. However, each instance maintains its own internal cache view
+ * for concurrency control and size management. This means:
+ *
  * <ul>
- * <li>Cache files created by one instance are immediately accessible to other instances</li>
- * <li>Each instance may report different cache statistics (entry counts, hit rates)</li>
- * <li>Cache eviction decisions are made independently by each instance</li>
- * <li>An instance may find "surprise cache hits" from files cached by other instances</li>
+ *   <li>Cache files created by one instance are immediately accessible to other instances
+ *   <li>Each instance may report different cache statistics (entry counts, hit rates)
+ *   <li>Cache eviction decisions are made independently by each instance
+ *   <li>An instance may find "surprise cache hits" from files cached by other instances
  * </ul>
- * <p>
- * Inspired by DuckDB's cache_httpfs extension.
+ *
+ * <p>Inspired by DuckDB's cache_httpfs extension.
  */
 public class DiskCachingRangeReader extends AbstractRangeReader implements RangeReader {
 
@@ -101,16 +98,14 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
     private final LoadingCache<ByteRange, Path> cache;
 
     /**
-     * Creates a new DiskCachingRangeReader that caches ranges from the delegate on
-     * disk. Package-private constructor - use the builder pattern instead.
+     * Creates a new DiskCachingRangeReader that caches ranges from the delegate on disk. Package-private constructor -
+     * use the builder pattern instead.
      *
-     * @param delegate           The delegate RangeReader
-     * @param cacheDirectoryRoot The root directory for caches (a subdirectory will
-     *                           be created)
-     * @param maxCacheSizeBytes  The maximum size of the disk cache in bytes
-     * @param deleteOnClose      Whether to delete cached files when this reader is
-     *                           closed
-     * @param blockSize          The block size for alignment (0 to disable alignment)
+     * @param delegate The delegate RangeReader
+     * @param cacheDirectoryRoot The root directory for caches (a subdirectory will be created)
+     * @param maxCacheSizeBytes The maximum size of the disk cache in bytes
+     * @param deleteOnClose Whether to delete cached files when this reader is closed
+     * @param blockSize The block size for alignment (0 to disable alignment)
      * @throws IOException If an I/O error occurs
      */
     DiskCachingRangeReader(
@@ -160,8 +155,8 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
     }
 
     /**
-     * Reads a range with block alignment, potentially spanning multiple single-block cache entries.
-     * Uses parallel loading for multi-block requests to improve performance.
+     * Reads a range with block alignment, potentially spanning multiple single-block cache entries. Uses parallel
+     * loading for multi-block requests to improve performance.
      */
     private int readRangeWithBlockAlignment(final long offset, final int actualLength, ByteBuffer target)
             throws IOException {
@@ -190,9 +185,7 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
         }
     }
 
-    /**
-     * Computes the block requests needed to satisfy the given range request.
-     */
+    /** Computes the block requests needed to satisfy the given range request. */
     private List<BlockRequest> computeRequiredBlocks(long offset, int actualLength, int targetRemaining) {
         long currentOffset = offset;
         int remainingBytes = Math.min(actualLength, targetRemaining);
@@ -249,8 +242,8 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
     }
 
     /**
-     * Computes the appropriate block size for a cache key starting at the given offset.
-     * This accounts for EOF by ensuring the block size doesn't extend beyond the file size.
+     * Computes the appropriate block size for a cache key starting at the given offset. This accounts for EOF by
+     * ensuring the block size doesn't extend beyond the file size.
      *
      * @param blockStartOffset the starting offset of the block
      * @return the appropriate block size (may be less than blockSize if near EOF)
@@ -277,9 +270,7 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
         }
     }
 
-    /**
-     * Reads a single block and copies the requested portion to the target buffer.
-     */
+    /** Reads a single block and copies the requested portion to the target buffer. */
     private int readSingleBlock(BlockRequest request, ByteBuffer target) throws IOException {
         try {
             // Use Caffeine for concurrency control and cache management
@@ -319,9 +310,7 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
         }
     }
 
-    /**
-     * Reads multiple blocks in parallel and assembles the result.
-     */
+    /** Reads multiple blocks in parallel and assembles the result. */
     private int readBlocksParallel(List<BlockRequest> blockRequests, ByteBuffer target) throws IOException {
         CompletableFuture<Path>[] futures = new CompletableFuture[blockRequests.size()];
 
@@ -372,9 +361,7 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
         }
     }
 
-    /**
-     * Represents a request for data from a specific block.
-     */
+    /** Represents a request for data from a specific block. */
     private record BlockRequest(
             ByteRange key, // The cache key for the block
             int offsetWithinBlock, // Offset within the block to start reading
@@ -382,9 +369,7 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
             int targetPosition // Position in target buffer (for future use)
             ) {}
 
-    /**
-     * Reads a range without block alignment, caching exactly what was requested.
-     */
+    /** Reads a range without block alignment, caching exactly what was requested. */
     private int readRangeWithoutAlignment(final long offset, final int actualLength, ByteBuffer target)
             throws IOException {
         // Skip caching for ranges larger than the entire cache
@@ -435,8 +420,8 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
     }
 
     /**
-     * Reads data from a cache file into the target buffer.
-     * This method enables file-level sharing between multiple DiskCachingRangeReader instances.
+     * Reads data from a cache file into the target buffer. This method enables file-level sharing between multiple
+     * DiskCachingRangeReader instances.
      *
      * @param cachePath the path to the cache file
      * @param target the target buffer to read into
@@ -448,8 +433,8 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
     }
 
     /**
-     * Reads data from a cache file into the target buffer, starting at a specific offset
-     * within the cache file and reading only the requested length.
+     * Reads data from a cache file into the target buffer, starting at a specific offset within the cache file and
+     * reading only the requested length.
      *
      * @param cachePath the path to the cache file
      * @param target the target buffer to read into
@@ -570,15 +555,13 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
 
     /**
      * Clears the disk cache, removing all cached entries and their corresponding cache files.
-     * <p>
-     * This method invalidates all entries in the cache and triggers the removal listener
-     * to delete the associated cache files from disk. After this method completes,
-     * all cache files known to this reader instance will have been removed from the
-     * file system.
-     * <p>
-     * Note: If multiple DiskCachingRangeReader instances share the same cache directory
-     * and source, this will only remove cache files known to this specific instance.
-     * Cache files created by other instances may remain on disk.
+     *
+     * <p>This method invalidates all entries in the cache and triggers the removal listener to delete the associated
+     * cache files from disk. After this method completes, all cache files known to this reader instance will have been
+     * removed from the file system.
+     *
+     * <p>Note: If multiple DiskCachingRangeReader instances share the same cache directory and source, this will only
+     * remove cache files known to this specific instance. Cache files created by other instances may remain on disk.
      */
     public void clearCache() {
         cache.invalidateAll();
@@ -586,9 +569,8 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
     }
 
     /**
-     * Deletes all cache files for this source by removing the entire
-     * source-specific cache subdirectory. This removes both cached entries and
-     * their corresponding files on disk.
+     * Deletes all cache files for this source by removing the entire source-specific cache subdirectory. This removes
+     * both cached entries and their corresponding files on disk.
      */
     private void deleteCacheFiles() {
         // Delete the entire source-specific cache directory
@@ -645,8 +627,7 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
     }
 
     /**
-     * Loading function for Caffeine cache. Loads a range from the delegate reader
-     * and caches it.
+     * Loading function for Caffeine cache. Loads a range from the delegate reader and caches it.
      *
      * @param key The cache key
      * @return Path to the cached file
@@ -706,11 +687,10 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
     }
 
     /**
-     * Weighs a cache entry for Caffeine's eviction policy based on file size.
-     * Since we validate that cache entries don't exceed Integer.MAX_VALUE,
-     * we can safely cast to int.
+     * Weighs a cache entry for Caffeine's eviction policy based on file size. Since we validate that cache entries
+     * don't exceed Integer.MAX_VALUE, we can safely cast to int.
      *
-     * @param key  The cache key
+     * @param key The cache key
      * @param path The path to the cached file
      * @return The weight of the cache entry (file size in bytes)
      */
@@ -795,9 +775,7 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
         return new Builder(delegate);
     }
 
-    /**
-     * Builder for DiskCachingRangeReader.
-     */
+    /** Builder for DiskCachingRangeReader. */
     public static class Builder {
         private final RangeReader delegate;
         private Path cacheDirectory;
@@ -810,11 +788,10 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
         }
 
         /**
-         * Sets the cache directory. If not set, defaults to a subdirectory
-         * {@literal tileverse-rangereader-cache} in the system temporary directory.
+         * Sets the cache directory. If not set, defaults to a subdirectory {@literal tileverse-rangereader-cache} in
+         * the system temporary directory.
          *
-         * @param cacheDirectoryRoot the root directory for caches (a subdirectory will
-         *                           be created)
+         * @param cacheDirectoryRoot the root directory for caches (a subdirectory will be created)
          * @return this builder
          */
         public Builder cacheDirectory(Path cacheDirectoryRoot) {
@@ -823,9 +800,8 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
         }
 
         /**
-         * Sets the cache directory from a string path. If not set, defaults to a
-         * subdirectory {@literal tileverse-rangereader-cache} in the system temporary
-         * directory.
+         * Sets the cache directory from a string path. If not set, defaults to a subdirectory
+         * {@literal tileverse-rangereader-cache} in the system temporary directory.
          *
          * @param cacheDirectoryPath the directory path as a string
          * @return this builder
@@ -851,9 +827,8 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
         }
 
         /**
-         * Sets whether to delete cached files when the reader is closed. This is useful
-         * for temporary caching scenarios where you want to clean up after processing
-         * is complete.
+         * Sets whether to delete cached files when the reader is closed. This is useful for temporary caching scenarios
+         * where you want to clean up after processing is complete.
          *
          * @param deleteOnClose true to delete cached files on close, false to keep them
          * @return this builder
@@ -864,8 +839,8 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
         }
 
         /**
-         * Configures the reader to delete cached files when closed. This is equivalent
-         * to calling {@code deleteOnClose(true)}.
+         * Configures the reader to delete cached files when closed. This is equivalent to calling
+         * {@code deleteOnClose(true)}.
          *
          * @return this builder
          */
@@ -874,13 +849,11 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
         }
 
         /**
-         * Sets the block size for internal block alignment. When set, the cache will
-         * align reads to block boundaries for better cache efficiency and reduced
-         * cache fragmentation.
-         * <p>
-         * For example, if block size is 1MB and you request 1 byte at offset 500000,
-         * the cache will read and store the entire 1MB block containing that byte,
-         * but only return the requested 1 byte to the caller.
+         * Sets the block size for internal block alignment. When set, the cache will align reads to block boundaries
+         * for better cache efficiency and reduced cache fragmentation.
+         *
+         * <p>For example, if block size is 1MB and you request 1 byte at offset 500000, the cache will read and store
+         * the entire 1MB block containing that byte, but only return the requested 1 byte to the caller.
          *
          * @param blockSize the block size in bytes (must be positive, 0 disables alignment)
          * @return this builder
@@ -895,8 +868,8 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
         }
 
         /**
-         * Enables block alignment with the default block size (1MB).
-         * This is equivalent to calling {@code blockSize(DEFAULT_BLOCK_SIZE)}.
+         * Enables block alignment with the default block size (1MB). This is equivalent to calling
+         * {@code blockSize(DEFAULT_BLOCK_SIZE)}.
          *
          * @return this builder
          */
@@ -905,8 +878,7 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
         }
 
         /**
-         * Disables block alignment by setting block size to 0.
-         * This is equivalent to calling {@code blockSize(0)}.
+         * Disables block alignment by setting block size to 0. This is equivalent to calling {@code blockSize(0)}.
          *
          * @return this builder
          */
@@ -918,7 +890,7 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
          * Builds the DiskCachingRangeReader.
          *
          * @return a new DiskCachingRangeReader instance
-         * @throws IOException           if an error occurs during construction
+         * @throws IOException if an error occurs during construction
          * @throws IllegalStateException if required parameters are not set
          */
         public DiskCachingRangeReader build() throws IOException {

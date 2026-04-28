@@ -26,16 +26,15 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Standard implementation of TileMatrixSet that provides coordinate
- * transformation between tile space and map space using composition with a
- * TilePyramid.
+ * Standard implementation of TileMatrixSet that provides coordinate transformation between tile space and map space
+ * using composition with a TilePyramid.
  *
- * <p>
- * This implementation supports common tiling schemes such as:
+ * <p>This implementation supports common tiling schemes such as:
+ *
  * <ul>
- * <li>Web Mercator (EPSG:3857) - Google/OSM style tiling</li>
- * <li>Geographic (EPSG:4326) - WGS84 longitude/latitude</li>
- * <li>Custom projected coordinate systems</li>
+ *   <li>Web Mercator (EPSG:3857) - Google/OSM style tiling
+ *   <li>Geographic (EPSG:4326) - WGS84 longitude/latitude
+ *   <li>Custom projected coordinate systems
  * </ul>
  *
  * @param tilePyramid the tile pyramid defining the tiling structure
@@ -169,10 +168,7 @@ public record StandardTileMatrixSet(
         return TileMatrixSetView.subset(this, minZoomLevel, maxZoomLevel);
     }
 
-    /**
-     * Creates a TileMatrix from a TileRange and this matrixset's spatial
-     * properties.
-     */
+    /** Creates a TileMatrix from a TileRange and this matrixset's spatial properties. */
     private TileMatrix createTileMatrix(TileRange tileRange) {
         int z = tileRange.zoomLevel();
 
@@ -204,8 +200,8 @@ public record StandardTileMatrixSet(
     }
 
     /**
-     * Applies floor function with epsilon adjustment to handle floating-point precision issues.
-     * Follows OGC TileMatrixSet specification Annex I recommendations.
+     * Applies floor function with epsilon adjustment to handle floating-point precision issues. Follows OGC
+     * TileMatrixSet specification Annex I recommendations.
      *
      * @param value the floating-point value to floor
      * @return the floor value with epsilon compensation for precision

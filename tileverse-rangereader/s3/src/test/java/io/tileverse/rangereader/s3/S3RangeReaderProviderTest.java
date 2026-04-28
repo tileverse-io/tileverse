@@ -40,9 +40,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import software.amazon.awssdk.regions.Region;
 
-/**
- * Tests for {@link S3RangeReaderProvider}
- */
+/** Tests for {@link S3RangeReaderProvider} */
 class S3RangeReaderProviderTest {
 
     private S3RangeReaderProvider provider = new S3RangeReaderProvider();

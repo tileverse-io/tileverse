@@ -15,9 +15,7 @@
  */
 package io.tileverse.pmtiles;
 
-/**
- * Exception thrown when a PMTiles header is invalid.
- */
+/** Exception thrown when a PMTiles header is invalid. */
 @SuppressWarnings("serial")
 public class InvalidHeaderException extends RuntimeException {
 

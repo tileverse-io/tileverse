@@ -23,9 +23,7 @@ import java.nio.file.Path;
 import java.util.Random;
 import org.apache.commons.io.FileUtils;
 
-/**
- * Utilities for creating test files and validating results.
- */
+/** Utilities for creating test files and validating results. */
 public class TestUtil {
 
     private TestUtil() {
@@ -34,9 +32,9 @@ public class TestUtil {
 
     /**
      * Creates a mock test file for testing range readers.
-     * <p>
-     * This creates a binary file with a simple header followed by random data,
-     * which is suitable for testing range reading operations.
+     *
+     * <p>This creates a binary file with a simple header followed by random data, which is suitable for testing range
+     * reading operations.
      *
      * @param path The path to create the file at
      * @param size The size of the file in bytes

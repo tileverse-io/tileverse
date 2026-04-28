@@ -30,47 +30,44 @@ import java.util.Set;
 
 /**
  * {@link RangeReaderProvider} implementation for Google Cloud Storage.
- * <p>
- * The {@link RangeReaderConfig#uri() URI} is used to extract the bucket and object name from a GCS URI.
- * <p>
- * A GCS URL, or Google Cloud Storage Uniform Resource Locator, refers to the
- * address used to access resources stored within Google Cloud Storage. There
- * are several forms of GCS URLs, depending on the context and desired access
- * method:
+ *
+ * <p>The {@link RangeReaderConfig#uri() URI} is used to extract the bucket and object name from a GCS URI.
+ *
+ * <p>A GCS URL, or Google Cloud Storage Uniform Resource Locator, refers to the address used to access resources stored
+ * within Google Cloud Storage. There are several forms of GCS URLs, depending on the context and desired access method:
  *
  * <ul>
- * <li>{@code gs://} URI: This is the canonical URI format for referencing
- * objects within Cloud Storage. It is commonly used within Google Cloud
- * services, tools, and libraries for internal referencing. For example:
- * <pre>
+ *   <li>{@code gs://} URI: This is the canonical URI format for referencing objects within Cloud Storage. It is
+ *       commonly used within Google Cloud services, tools, and libraries for internal referencing. For example:
+ *       <pre>
  * {@literal gs://your-bucket-name/your-object-name}
  * </pre>
- * <li>Public HTTP/HTTPS URLs: If an object is configured for public access, it
- * can be accessed directly via a standard HTTP or HTTPS URL. These URLs are
- * typically in the format:
- * <pre>
+ *   <li>Public HTTP/HTTPS URLs: If an object is configured for public access, it can be accessed directly via a
+ *       standard HTTP or HTTPS URL. These URLs are typically in the format:
+ *       <pre>
  * {@literal https://storage.googleapis.com/your-bucket-name/your-object-name}
  * </pre>
  * </ul>
- * When {@code http/s} URL schemes are used, {@link #canProcessHeaders(URI, Map)} disambiguates
- * by checking if a header starting with {@code x-goog-} was returned from the HEAD request.
+ *
+ * When {@code http/s} URL schemes are used, {@link #canProcessHeaders(URI, Map)} disambiguates by checking if a header
+ * starting with {@code x-goog-} was returned from the HEAD request.
  */
 public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderProvider {
 
     /**
      * Key used as environment variable name to disable this range reader provider
+     *
      * <pre>
      * {@code export IO_TILEVERSE_RANGEREADER_GCS=false}
      * </pre>
      */
     public static final String ENABLED_KEY = "IO_TILEVERSE_RANGEREADER_GCS";
-    /**
-     * This range reader implementation's {@link #getId() unique identifier}
-     */
+    /** This range reader implementation's {@link #getId() unique identifier} */
     public static final String ID = "gcs";
 
     /**
      * Creates a new GoogleCloudStorageRangeReaderProvider with support for caching parameters
+     *
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_ENABLED
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_BLOCK_ALIGNED
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_BLOCK_SIZE
@@ -79,14 +76,11 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
         super(true);
     }
 
-    /**
-     * Project ID is a unique, user-defined identifier for a Google Cloud project.
-     */
+    /** Project ID is a unique, user-defined identifier for a Google Cloud project. */
     public static final RangeReaderParameter<String> GCS_PROJECT_ID = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.gcs.project-id")
             .title("Google Cloud project ID")
-            .description(
-                    """
+            .description("""
                     Project ID is a unique, user-defined identifier for a Google Cloud project.
 
                     If no project ID is set, an attempt to obtain a default project ID from the \
@@ -104,14 +98,11 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
             .group(ID)
             .build();
 
-    /**
-     * Quota ProjectId that specifies the project used for quota and billing purposes.
-     */
+    /** Quota ProjectId that specifies the project used for quota and billing purposes. */
     public static final RangeReaderParameter<String> GCS_QUOTA_PROJECT_ID = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.gcs.quota-project-id")
             .title("Quota Project ID")
-            .description(
-                    """
+            .description("""
                     Quota ProjectId that specifies the project used for quota and billing purposes.
 
                     The caller must have serviceusage.services.use permission on the project.
@@ -120,15 +111,12 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
             .group(ID)
             .build();
 
-    /**
-     * Use the default application credentials chain, defaults to {@code false}
-     */
+    /** Use the default application credentials chain, defaults to {@code false} */
     public static final RangeReaderParameter<Boolean> GCS_USE_DEFAULT_APPLICTION_CREDENTIALS =
             RangeReaderParameter.builder()
                     .key("io.tileverse.rangereader.gcs.default-credentials-chain")
                     .title("Use the default application credentials chain")
-                    .description(
-                            """
+                    .description("""
                     Whether to use the default application credentials chain.
 
                     To set up Application Default Credentials for your environment, \
@@ -210,9 +198,7 @@ public class GoogleCloudStorageRangeReaderProvider extends AbstractRangeReaderPr
         return path != null && path.startsWith("/storage/v1/b/");
     }
 
-    /**
-     *
-     */
+    /** */
     @Override
     protected RangeReader createInternal(RangeReaderConfig opts) throws IOException {
         URI uri = opts.uri();

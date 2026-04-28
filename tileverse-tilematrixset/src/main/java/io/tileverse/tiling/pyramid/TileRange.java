@@ -25,12 +25,13 @@ import java.util.stream.Stream;
 
 /**
  * Represents a rectangular range of tiles at a specific zoom level.
- * <p>
- * Combines 2D spatial bounds with zoom level information for complete tile range definition.
- * Provides methods for counting tiles and traversing tiles.
- * <p>
- * A {@code TileRange} may be <strong>{@linkplain #isSparse() sparse}</strong> as the result of a {@link #union(TileRange)}
- * with another {@code TileRange}.
+ *
+ * <p>Combines 2D spatial bounds with zoom level information for complete tile range definition. Provides methods for
+ * counting tiles and traversing tiles.
+ *
+ * <p>A {@code TileRange} may be <strong>{@linkplain #isSparse() sparse}</strong> as the result of a
+ * {@link #union(TileRange)} with another {@code TileRange}.
+ *
  * @since 1.0
  */
 public sealed interface TileRange extends Comparable<TileRange> permits TileRangeImpl, SparseTileRange {
@@ -39,26 +40,30 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
             Comparator.comparing(TileRange::min).thenComparing(TileRange::max);
 
     /**
-     * Returns {@code true} if this {@code TileRange} represents a non-contiguous
-     * array of {@link TileIndex tile indices}.
-     * <p>
-     * A sparse {@link TileRange} is composed of two or more tile ranges and covers exactly the union of
-     * tile indices of its parts, with the same {@link #cornerOfOrigin()} and {@link #zoomLevel()}.
-     * <p>
-     * The bound-related method may return tile indices that lay outside the actual tile indices:
+     * Returns {@code true} if this {@code TileRange} represents a non-contiguous array of {@link TileIndex tile
+     * indices}.
+     *
+     * <p>A sparse {@link TileRange} is composed of two or more tile ranges and covers exactly the union of tile indices
+     * of its parts, with the same {@link #cornerOfOrigin()} and {@link #zoomLevel()}.
+     *
+     * <p>The bound-related method may return tile indices that lay outside the actual tile indices:
+     *
      * <ul>
-     * <li> {@link #minx()}, {@link #miny()}, {@link #maxx()}, {@link #maxy()}
-     * <li> {@link #min()}, {@link #max()}
-     * <li> {@link #topLeft()}, {@link #topRight()}, {@link #bottomLeft()}, {@link #bottomRight()}
-     * <li> {@link #spanX()}, {@link #spanY()}
+     *   <li>{@link #minx()}, {@link #miny()}, {@link #maxx()}, {@link #maxy()}
+     *   <li>{@link #min()}, {@link #max()}
+     *   <li>{@link #topLeft()}, {@link #topRight()}, {@link #bottomLeft()}, {@link #bottomRight()}
+     *   <li>{@link #spanX()}, {@link #spanY()}
      * </ul>
-     * The navigation-related methods will though only traverse the tile indices covered by its parts, with no duplication
-     * even if the parts intersect themselves:
+     *
+     * The navigation-related methods will though only traverse the tile indices covered by its parts, with no
+     * duplication even if the parts intersect themselves:
+     *
      * <ul>
-     * <li> {@link #first()}, {@link #last()}
-     * <li> {@link #next(TileIndex)}, {@link #prev(TileIndex)}
-     * <li> {@link #all()}
+     *   <li>{@link #first()}, {@link #last()}
+     *   <li>{@link #next(TileIndex)}, {@link #prev(TileIndex)}
+     *   <li>{@link #all()}
      * </ul>
+     *
      * {@link #count()} will return the actual tile count.
      *
      * @return
@@ -75,14 +80,12 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     int zoomLevel();
 
     /**
-     * Returns the minimum tile coordinates of this range.
-     * Always returns (minx, miny) regardless of axis origin or traversal order.
-     * This is a simple accessor for the range's minimum X and Y values.
+     * Returns the minimum tile coordinates of this range. Always returns (minx, miny) regardless of axis origin or
+     * traversal order. This is a simple accessor for the range's minimum X and Y values.
      *
-     * <p><strong>Warning:</strong> Do NOT use this method as a starting point for traversal
-     * with {@link #next(TileIndex)} or {@link #prev(TileIndex)}. The traversal methods are
-     * designed to work with axis-origin-aware positions. Use {@link #first()} instead for
-     * the correct forward traversal starting position.
+     * <p><strong>Warning:</strong> Do NOT use this method as a starting point for traversal with
+     * {@link #next(TileIndex)} or {@link #prev(TileIndex)}. The traversal methods are designed to work with
+     * axis-origin-aware positions. Use {@link #first()} instead for the correct forward traversal starting position.
      *
      * @return the minimum tile coordinates as a TileIndex
      * @see #first() for forward traversal start position
@@ -93,14 +96,13 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Returns the maximum tile coordinates of this range.
-     * Always returns (maxx, maxy) regardless of axis origin or traversal order.
-     * This is a simple accessor for the range's maximum X and Y values.
+     * Returns the maximum tile coordinates of this range. Always returns (maxx, maxy) regardless of axis origin or
+     * traversal order. This is a simple accessor for the range's maximum X and Y values.
      *
-     * <p><strong>Warning:</strong> Do NOT use this method as a starting point for traversal
-     * with {@link #next(TileIndex)} or {@link #prev(TileIndex)}. The traversal methods are
-     * designed to work with axis-origin-aware positions. Use {@link #last()} instead for
-     * the correct reverse-order traversal starting position.
+     * <p><strong>Warning:</strong> Do NOT use this method as a starting point for traversal with
+     * {@link #next(TileIndex)} or {@link #prev(TileIndex)}. The traversal methods are designed to work with
+     * axis-origin-aware positions. Use {@link #last()} instead for the correct reverse-order traversal starting
+     * position.
      *
      * @return the maximum tile coordinates as a TileIndex
      * @see #last() for reverse-order traversal starting position
@@ -111,8 +113,7 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Returns the lower-left corner as a TileIndex.
-     * Delegates to the grid origin for coordinate calculation.
+     * Returns the lower-left corner as a TileIndex. Delegates to the grid origin for coordinate calculation.
      *
      * @return the lower-left corner tile index
      */
@@ -121,8 +122,7 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Returns the upper-right corner as a TileIndex.
-     * Delegates to the grid origin for coordinate calculation.
+     * Returns the upper-right corner as a TileIndex. Delegates to the grid origin for coordinate calculation.
      *
      * @return the upper-right corner tile index
      */
@@ -131,8 +131,7 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Returns the lower-right corner as a TileIndex.
-     * Delegates to the grid origin for coordinate calculation.
+     * Returns the lower-right corner as a TileIndex. Delegates to the grid origin for coordinate calculation.
      *
      * @return the lower-right corner tile index
      */
@@ -141,8 +140,7 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Returns the upper-left corner as a TileIndex.
-     * Delegates to the grid origin for coordinate calculation.
+     * Returns the upper-left corner as a TileIndex. Delegates to the grid origin for coordinate calculation.
      *
      * @return the upper-left corner tile index
      */
@@ -206,9 +204,8 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Returns the first tile in natural traversal order.
-     * Always starts from the minimum coordinates (minx, miny) regardless of grid origin.
-     * The grid origin affects spatial interpretation, not traversal order.
+     * Returns the first tile in natural traversal order. Always starts from the minimum coordinates (minx, miny)
+     * regardless of grid origin. The grid origin affects spatial interpretation, not traversal order.
      *
      * @return the first tile index in traversal order
      * @see #min() for minimum tile coordinates
@@ -218,9 +215,8 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Returns the last tile in natural traversal order.
-     * Always ends at the maximum coordinates (maxx, maxy) regardless of grid origin.
-     * The grid origin affects spatial interpretation, not traversal order.
+     * Returns the last tile in natural traversal order. Always ends at the maximum coordinates (maxx, maxy) regardless
+     * of grid origin. The grid origin affects spatial interpretation, not traversal order.
      *
      * @return the last tile index in traversal order
      * @see #max() for maximum tile coordinates
@@ -229,11 +225,10 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
         return TileIndex.xyz(maxx(), maxy(), zoomLevel());
     }
     /**
-     * Returns the next tile in natural traversal order after the given tile.
-     * Uses standard left-to-right, top-to-bottom row-major ordering in grid coordinate space:
-     * - Increments X first (left-to-right in coordinate space)
-     * - When X reaches maxx, wraps to next row at minx and increments Y
-     * - Grid origin affects spatial interpretation, not traversal order
+     * Returns the next tile in natural traversal order after the given tile. Uses standard left-to-right, top-to-bottom
+     * row-major ordering in grid coordinate space: - Increments X first (left-to-right in coordinate space) - When X
+     * reaches maxx, wraps to next row at minx and increments Y - Grid origin affects spatial interpretation, not
+     * traversal order
      *
      * @param current the current tile index
      * @return the next tile index, or empty if current is the last tile or outside range
@@ -257,11 +252,10 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Returns the previous tile in natural traversal order before the given tile.
-     * Uses standard left-to-right, top-to-bottom row-major ordering in reverse:
-     * - Decrements X first (right-to-left in coordinate space)
-     * - When X reaches minx, wraps to previous row at maxx and decrements Y
-     * - Grid origin affects spatial interpretation, not traversal order
+     * Returns the previous tile in natural traversal order before the given tile. Uses standard left-to-right,
+     * top-to-bottom row-major ordering in reverse: - Decrements X first (right-to-left in coordinate space) - When X
+     * reaches minx, wraps to previous row at maxx and decrements Y - Grid origin affects spatial interpretation, not
+     * traversal order
      *
      * @param current the current tile index
      * @return the previous tile index, or empty if current is the first tile or outside range
@@ -299,8 +293,8 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Tests whether this tile range contains the given tile index.
-     * The tile must be at the same zoom level and within the coordinate bounds.
+     * Tests whether this tile range contains the given tile index. The tile must be at the same zoom level and within
+     * the coordinate bounds.
      *
      * @param tile the tile index to test
      * @return true if this range contains the tile, false otherwise
@@ -319,9 +313,8 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Returns the intersection of this tile range with another tile range.
-     * The intersection contains only tiles that are present in both ranges.
-     * Both ranges must be at the same zoom level. If ranges have different grid origins,
+     * Returns the intersection of this tile range with another tile range. The intersection contains only tiles that
+     * are present in both ranges. Both ranges must be at the same zoom level. If ranges have different grid origins,
      * the other range is automatically transformed to match this range's grid origin.
      *
      * @param other the other tile range to intersect with
@@ -352,23 +345,20 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Returns a <strong>possibly sparse</strong> {@link TileRange} that's the union of this range with the {@code other}
+     * Returns a <strong>possibly sparse</strong> {@link TileRange} that's the union of this range with the
+     * {@code other}
      */
     default TileRange union(TileRange other) {
         return TileRangeUtil.union(this, other);
     }
 
-    /**
-     * Returns the axis origin for this tile range.
-     * Defines where the (0,0) coordinate is conceptually positioned.
-     */
+    /** Returns the axis origin for this tile range. Defines where the (0,0) coordinate is conceptually positioned. */
     CornerOfOrigin cornerOfOrigin();
 
     /**
-     * Returns a new tile range with a different grid origin.
-     * Transforms coordinates to preserve the same spatial area within the zoom level grid.
-     * A range representing the "top-left quarter" will remain the top-left quarter
-     * after transformation, just expressed in the new coordinate system.
+     * Returns a new tile range with a different grid origin. Transforms coordinates to preserve the same spatial area
+     * within the zoom level grid. A range representing the "top-left quarter" will remain the top-left quarter after
+     * transformation, just expressed in the new coordinate system.
      *
      * @param targetOrigin the target grid origin
      * @return a new TileRange with transformed coordinates and the specified grid origin
@@ -398,22 +388,22 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Compares this tile range with another for ordering.
-     * The natural ordering is:
+     * Compares this tile range with another for ordering. The natural ordering is:
+     *
      * <ol>
-     * <li>Primary: zoom level (ascending) - lower zoom levels come first</li>
-     * <li>Secondary: minimum X coordinate (ascending)</li>
-     * <li>Tertiary: minimum Y coordinate (ascending)</li>
-     * <li>Quaternary: maximum X coordinate (ascending)</li>
-     * <li>Quinary: maximum Y coordinate (ascending)</li>
+     *   <li>Primary: zoom level (ascending) - lower zoom levels come first
+     *   <li>Secondary: minimum X coordinate (ascending)
+     *   <li>Tertiary: minimum Y coordinate (ascending)
+     *   <li>Quaternary: maximum X coordinate (ascending)
+     *   <li>Quinary: maximum Y coordinate (ascending)
      * </ol>
      *
-     * This ordering ensures that tile ranges are naturally sorted by zoom level first,
-     * then by spatial position from lower-left to upper-right.
+     * This ordering ensures that tile ranges are naturally sorted by zoom level first, then by spatial position from
+     * lower-left to upper-right.
      *
      * @param o the tile range to compare with
-     * @return a negative integer, zero, or a positive integer as this range is less than,
-     *         equal to, or greater than the specified range
+     * @return a negative integer, zero, or a positive integer as this range is less than, equal to, or greater than the
+     *     specified range
      */
     @Override
     default int compareTo(TileRange o) {
@@ -450,8 +440,7 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Factory method to create a TileRange from corner indices.
-     * Both tile indices must have the same zoom level.
+     * Factory method to create a TileRange from corner indices. Both tile indices must have the same zoom level.
      *
      * @param lowerLeft the lower-left corner tile index
      * @param upperRight the upper-right corner tile index
@@ -473,8 +462,8 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Factory method to create a TileRange from minimum and maximum tile coordinates with axis origin.
-     * Both tile indices must have the same zoom level.
+     * Factory method to create a TileRange from minimum and maximum tile coordinates with axis origin. Both tile
+     * indices must have the same zoom level.
      *
      * @param minimum the minimum tile coordinates (minx, miny)
      * @param maximum the maximum tile coordinates (maxx, maxy)
@@ -490,8 +479,7 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
         return new TileRangeImpl(minimum.x(), minimum.y(), maximum.x(), maximum.y(), minimum.z(), cornerOfOrigin);
     }
     /**
-     * Static equals method for TileRange instances.
-     * Two tile ranges are equal if they represent the same tile space.
+     * Static equals method for TileRange instances. Two tile ranges are equal if they represent the same tile space.
      *
      * @param range1 the first tile range
      * @param range2 the second tile range
@@ -515,8 +503,8 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
     }
 
     /**
-     * Static hashCode method for TileRange instances.
-     * Computes hash code based on coordinates, zoom level, axis origin, and tile dimensions.
+     * Static hashCode method for TileRange instances. Computes hash code based on coordinates, zoom level, axis origin,
+     * and tile dimensions.
      *
      * @param range the tile range
      * @return the hash code

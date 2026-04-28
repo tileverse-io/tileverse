@@ -75,7 +75,7 @@
     <sortpom.action>sort</sortpom.action>
     <spotless.skip>${fmt.skip}</spotless.skip>
     <spotless.action>apply</spotless.action>
-    <palantirJavaFormat.version>2.73.0</palantirJavaFormat.version>
+    <palantirJavaFormat.version>2.90.0</palantirJavaFormat.version>
 
     <!-- Dependency versions -->
     <cloud-dependencies-bom.version>1.0.2</cloud-dependencies-bom.version>
@@ -596,6 +596,7 @@
           <java>
             <palantirJavaFormat>
               <version>${palantirJavaFormat.version}</version>
+              <formatJavadoc>true</formatJavadoc>
             </palantirJavaFormat>
             <indent>
               <spaces>true</spaces>

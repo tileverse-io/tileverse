@@ -18,9 +18,7 @@ package io.tileverse.tiling.matrix;
 import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.pyramid.TileIndex;
 
-/**
- * Builder for creating Tile instances.
- */
+/** Builder for creating Tile instances. */
 public class TileBuilder {
     private TileIndex tileIndex;
     private BoundingBox2D extent;

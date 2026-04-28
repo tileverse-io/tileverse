@@ -6,19 +6,20 @@
 package io.tileverse.vectortile.mvt;
 
 /**
- * Not this class was generated with the {@literal io.github.ascopes:protobuf-maven-plugin}
- * for the protobuf "Lite" profile, but copied from {@code target/generated-sources} to comment out
- * the generated {@code newBuilder()} methods that cause errors like
- * {@literal Cannot cast from GeneratedMessageLite.Builder<GeneratedMessageLite<GeneratedMessageLite<MessageType2,GeneratedMessageLite.Builder<MessageType2,BuilderType2>>,GeneratedMessageLite.Builder<GeneratedMessageLite<MessageType2,BuilderType2>,BuilderType2>>,GeneratedMessageLite.Builder<GeneratedMessageLite<GeneratedMessageLite<MessageType2,BuilderType2>,BuilderType2>,BuilderType2>> to VectorTile.Tile.Value.Builder}
- * and replace them by working methods, like in:
+ * Not this class was generated with the {@literal io.github.ascopes:protobuf-maven-plugin} for the protobuf "Lite"
+ * profile, but copied from {@code target/generated-sources} to comment out the generated {@code newBuilder()} methods
+ * that cause errors like {@literal Cannot cast from
+ * GeneratedMessageLite.Builder<GeneratedMessageLite<GeneratedMessageLite<MessageType2,GeneratedMessageLite.Builder<MessageType2,BuilderType2>>,GeneratedMessageLite.Builder<GeneratedMessageLite<MessageType2,BuilderType2>,BuilderType2>>,GeneratedMessageLite.Builder<GeneratedMessageLite<GeneratedMessageLite<MessageType2,BuilderType2>,BuilderType2>,BuilderType2>>
+ * to VectorTile.Tile.Value.Builder} and replace them by working methods, like in:
+ *
  * <pre>{@code
- *   //    public static Builder newBuilder() {
- *   //      return (Builder) DEFAULT_INSTANCE.createBuilder();
- *   //    }
- *       public static Builder newBuilder() {
- *         return DEFAULT_INSTANCE.createBuilder();
- *       }
- *}</pre>
+ * //    public static Builder newBuilder() {
+ * //      return (Builder) DEFAULT_INSTANCE.createBuilder();
+ * //    }
+ *     public static Builder newBuilder() {
+ *       return DEFAULT_INSTANCE.createBuilder();
+ *     }
+ * }</pre>
  */
 @com.google.protobuf.Generated
 final class VectorTileProto {
@@ -31,22 +32,14 @@ final class VectorTileProto {
             // @@protoc_insertion_point(interface_extends:io.tileverse.vectortile.mvt.Tile)
             com.google.protobuf.GeneratedMessageLite.ExtendableMessageOrBuilder<Tile, Tile.Builder> {
 
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         java.util.List<io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer> getLayersList();
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer getLayers(int index);
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         int getLayersCount();
     }
-    /**
-     * Protobuf type {@code io.tileverse.vectortile.mvt.Tile}
-     */
+    /** Protobuf type {@code io.tileverse.vectortile.mvt.Tile} */
     public static final class Tile
             extends com.google.protobuf.GeneratedMessageLite.ExtendableMessage<Tile, Tile.Builder>
             implements
@@ -56,6 +49,8 @@ final class VectorTileProto {
             layers_ = emptyProtobufList();
         }
         /**
+         *
+         *
          * <pre>
          * GeomType is described in section 4.3.4 of the specification
          * </pre>
@@ -63,39 +58,23 @@ final class VectorTileProto {
          * Protobuf enum {@code io.tileverse.vectortile.mvt.Tile.GeomType}
          */
         public enum GeomType implements com.google.protobuf.Internal.EnumLite {
-            /**
-             * <code>UNKNOWN = 0;</code>
-             */
+            /** <code>UNKNOWN = 0;</code> */
             UNKNOWN(0),
-            /**
-             * <code>POINT = 1;</code>
-             */
+            /** <code>POINT = 1;</code> */
             POINT(1),
-            /**
-             * <code>LINESTRING = 2;</code>
-             */
+            /** <code>LINESTRING = 2;</code> */
             LINESTRING(2),
-            /**
-             * <code>POLYGON = 3;</code>
-             */
+            /** <code>POLYGON = 3;</code> */
             POLYGON(3),
             ;
 
-            /**
-             * <code>UNKNOWN = 0;</code>
-             */
+            /** <code>UNKNOWN = 0;</code> */
             public static final int UNKNOWN_VALUE = 0;
-            /**
-             * <code>POINT = 1;</code>
-             */
+            /** <code>POINT = 1;</code> */
             public static final int POINT_VALUE = 1;
-            /**
-             * <code>LINESTRING = 2;</code>
-             */
+            /** <code>LINESTRING = 2;</code> */
             public static final int LINESTRING_VALUE = 2;
-            /**
-             * <code>POLYGON = 3;</code>
-             */
+            /** <code>POLYGON = 3;</code> */
             public static final int POLYGON_VALUE = 3;
 
             @java.lang.Override
@@ -169,100 +148,123 @@ final class VectorTileProto {
                 com.google.protobuf.GeneratedMessageLite.ExtendableMessageOrBuilder<Value, Value.Builder> {
 
             /**
+             *
+             *
              * <pre>
              * Exactly one of these values must be present in a valid message
              * </pre>
              *
              * <code>optional string string_value = 1;</code>
+             *
              * @return Whether the stringValue field is set.
              */
             boolean hasStringValue();
             /**
+             *
+             *
              * <pre>
              * Exactly one of these values must be present in a valid message
              * </pre>
              *
              * <code>optional string string_value = 1;</code>
+             *
              * @return The stringValue.
              */
             java.lang.String getStringValue();
             /**
+             *
+             *
              * <pre>
              * Exactly one of these values must be present in a valid message
              * </pre>
              *
              * <code>optional string string_value = 1;</code>
+             *
              * @return The bytes for stringValue.
              */
             com.google.protobuf.ByteString getStringValueBytes();
 
             /**
              * <code>optional float float_value = 2;</code>
+             *
              * @return Whether the floatValue field is set.
              */
             boolean hasFloatValue();
             /**
              * <code>optional float float_value = 2;</code>
+             *
              * @return The floatValue.
              */
             float getFloatValue();
 
             /**
              * <code>optional double double_value = 3;</code>
+             *
              * @return Whether the doubleValue field is set.
              */
             boolean hasDoubleValue();
             /**
              * <code>optional double double_value = 3;</code>
+             *
              * @return The doubleValue.
              */
             double getDoubleValue();
 
             /**
              * <code>optional int64 int_value = 4;</code>
+             *
              * @return Whether the intValue field is set.
              */
             boolean hasIntValue();
             /**
              * <code>optional int64 int_value = 4;</code>
+             *
              * @return The intValue.
              */
             long getIntValue();
 
             /**
              * <code>optional uint64 uint_value = 5;</code>
+             *
              * @return Whether the uintValue field is set.
              */
             boolean hasUintValue();
             /**
              * <code>optional uint64 uint_value = 5;</code>
+             *
              * @return The uintValue.
              */
             long getUintValue();
 
             /**
              * <code>optional sint64 sint_value = 6;</code>
+             *
              * @return Whether the sintValue field is set.
              */
             boolean hasSintValue();
             /**
              * <code>optional sint64 sint_value = 6;</code>
+             *
              * @return The sintValue.
              */
             long getSintValue();
 
             /**
              * <code>optional bool bool_value = 7;</code>
+             *
              * @return Whether the boolValue field is set.
              */
             boolean hasBoolValue();
             /**
              * <code>optional bool bool_value = 7;</code>
+             *
              * @return The boolValue.
              */
             boolean getBoolValue();
         }
         /**
+         *
+         *
          * <pre>
          * Variant type encoding
          * The use of values is described in section 4.1 of the specification
@@ -283,11 +285,14 @@ final class VectorTileProto {
             public static final int STRING_VALUE_FIELD_NUMBER = 1;
             private java.lang.String stringValue_;
             /**
+             *
+             *
              * <pre>
              * Exactly one of these values must be present in a valid message
              * </pre>
              *
              * <code>optional string string_value = 1;</code>
+             *
              * @return Whether the stringValue field is set.
              */
             @java.lang.Override
@@ -295,11 +300,14 @@ final class VectorTileProto {
                 return ((bitField0_ & 0x00000001) != 0);
             }
             /**
+             *
+             *
              * <pre>
              * Exactly one of these values must be present in a valid message
              * </pre>
              *
              * <code>optional string string_value = 1;</code>
+             *
              * @return The stringValue.
              */
             @java.lang.Override
@@ -307,11 +315,14 @@ final class VectorTileProto {
                 return stringValue_;
             }
             /**
+             *
+             *
              * <pre>
              * Exactly one of these values must be present in a valid message
              * </pre>
              *
              * <code>optional string string_value = 1;</code>
+             *
              * @return The bytes for stringValue.
              */
             @java.lang.Override
@@ -319,11 +330,14 @@ final class VectorTileProto {
                 return com.google.protobuf.ByteString.copyFromUtf8(stringValue_);
             }
             /**
+             *
+             *
              * <pre>
              * Exactly one of these values must be present in a valid message
              * </pre>
              *
              * <code>optional string string_value = 1;</code>
+             *
              * @param value The stringValue to set.
              */
             @java.lang.SuppressWarnings("ReturnValueIgnored")
@@ -333,6 +347,8 @@ final class VectorTileProto {
                 stringValue_ = value;
             }
             /**
+             *
+             *
              * <pre>
              * Exactly one of these values must be present in a valid message
              * </pre>
@@ -344,11 +360,14 @@ final class VectorTileProto {
                 stringValue_ = getDefaultInstance().getStringValue();
             }
             /**
+             *
+             *
              * <pre>
              * Exactly one of these values must be present in a valid message
              * </pre>
              *
              * <code>optional string string_value = 1;</code>
+             *
              * @param value The bytes for stringValue to set.
              */
             private void setStringValueBytes(com.google.protobuf.ByteString value) {
@@ -360,6 +379,7 @@ final class VectorTileProto {
             private float floatValue_;
             /**
              * <code>optional float float_value = 2;</code>
+             *
              * @return Whether the floatValue field is set.
              */
             @java.lang.Override
@@ -368,6 +388,7 @@ final class VectorTileProto {
             }
             /**
              * <code>optional float float_value = 2;</code>
+             *
              * @return The floatValue.
              */
             @java.lang.Override
@@ -376,15 +397,14 @@ final class VectorTileProto {
             }
             /**
              * <code>optional float float_value = 2;</code>
+             *
              * @param value The floatValue to set.
              */
             private void setFloatValue(float value) {
                 bitField0_ |= 0x00000002;
                 floatValue_ = value;
             }
-            /**
-             * <code>optional float float_value = 2;</code>
-             */
+            /** <code>optional float float_value = 2;</code> */
             private void clearFloatValue() {
                 bitField0_ = (bitField0_ & ~0x00000002);
                 floatValue_ = 0F;
@@ -394,6 +414,7 @@ final class VectorTileProto {
             private double doubleValue_;
             /**
              * <code>optional double double_value = 3;</code>
+             *
              * @return Whether the doubleValue field is set.
              */
             @java.lang.Override
@@ -402,6 +423,7 @@ final class VectorTileProto {
             }
             /**
              * <code>optional double double_value = 3;</code>
+             *
              * @return The doubleValue.
              */
             @java.lang.Override
@@ -410,15 +432,14 @@ final class VectorTileProto {
             }
             /**
              * <code>optional double double_value = 3;</code>
+             *
              * @param value The doubleValue to set.
              */
             private void setDoubleValue(double value) {
                 bitField0_ |= 0x00000004;
                 doubleValue_ = value;
             }
-            /**
-             * <code>optional double double_value = 3;</code>
-             */
+            /** <code>optional double double_value = 3;</code> */
             private void clearDoubleValue() {
                 bitField0_ = (bitField0_ & ~0x00000004);
                 doubleValue_ = 0D;
@@ -428,6 +449,7 @@ final class VectorTileProto {
             private long intValue_;
             /**
              * <code>optional int64 int_value = 4;</code>
+             *
              * @return Whether the intValue field is set.
              */
             @java.lang.Override
@@ -436,6 +458,7 @@ final class VectorTileProto {
             }
             /**
              * <code>optional int64 int_value = 4;</code>
+             *
              * @return The intValue.
              */
             @java.lang.Override
@@ -444,15 +467,14 @@ final class VectorTileProto {
             }
             /**
              * <code>optional int64 int_value = 4;</code>
+             *
              * @param value The intValue to set.
              */
             private void setIntValue(long value) {
                 bitField0_ |= 0x00000008;
                 intValue_ = value;
             }
-            /**
-             * <code>optional int64 int_value = 4;</code>
-             */
+            /** <code>optional int64 int_value = 4;</code> */
             private void clearIntValue() {
                 bitField0_ = (bitField0_ & ~0x00000008);
                 intValue_ = 0L;
@@ -462,6 +484,7 @@ final class VectorTileProto {
             private long uintValue_;
             /**
              * <code>optional uint64 uint_value = 5;</code>
+             *
              * @return Whether the uintValue field is set.
              */
             @java.lang.Override
@@ -470,6 +493,7 @@ final class VectorTileProto {
             }
             /**
              * <code>optional uint64 uint_value = 5;</code>
+             *
              * @return The uintValue.
              */
             @java.lang.Override
@@ -478,15 +502,14 @@ final class VectorTileProto {
             }
             /**
              * <code>optional uint64 uint_value = 5;</code>
+             *
              * @param value The uintValue to set.
              */
             private void setUintValue(long value) {
                 bitField0_ |= 0x00000010;
                 uintValue_ = value;
             }
-            /**
-             * <code>optional uint64 uint_value = 5;</code>
-             */
+            /** <code>optional uint64 uint_value = 5;</code> */
             private void clearUintValue() {
                 bitField0_ = (bitField0_ & ~0x00000010);
                 uintValue_ = 0L;
@@ -496,6 +519,7 @@ final class VectorTileProto {
             private long sintValue_;
             /**
              * <code>optional sint64 sint_value = 6;</code>
+             *
              * @return Whether the sintValue field is set.
              */
             @java.lang.Override
@@ -504,6 +528,7 @@ final class VectorTileProto {
             }
             /**
              * <code>optional sint64 sint_value = 6;</code>
+             *
              * @return The sintValue.
              */
             @java.lang.Override
@@ -512,15 +537,14 @@ final class VectorTileProto {
             }
             /**
              * <code>optional sint64 sint_value = 6;</code>
+             *
              * @param value The sintValue to set.
              */
             private void setSintValue(long value) {
                 bitField0_ |= 0x00000020;
                 sintValue_ = value;
             }
-            /**
-             * <code>optional sint64 sint_value = 6;</code>
-             */
+            /** <code>optional sint64 sint_value = 6;</code> */
             private void clearSintValue() {
                 bitField0_ = (bitField0_ & ~0x00000020);
                 sintValue_ = 0L;
@@ -530,6 +554,7 @@ final class VectorTileProto {
             private boolean boolValue_;
             /**
              * <code>optional bool bool_value = 7;</code>
+             *
              * @return Whether the boolValue field is set.
              */
             @java.lang.Override
@@ -538,6 +563,7 @@ final class VectorTileProto {
             }
             /**
              * <code>optional bool bool_value = 7;</code>
+             *
              * @return The boolValue.
              */
             @java.lang.Override
@@ -546,15 +572,14 @@ final class VectorTileProto {
             }
             /**
              * <code>optional bool bool_value = 7;</code>
+             *
              * @param value The boolValue to set.
              */
             private void setBoolValue(boolean value) {
                 bitField0_ |= 0x00000040;
                 boolValue_ = value;
             }
-            /**
-             * <code>optional bool bool_value = 7;</code>
-             */
+            /** <code>optional bool bool_value = 7;</code> */
             private void clearBoolValue() {
                 bitField0_ = (bitField0_ & ~0x00000040);
                 boolValue_ = false;
@@ -639,6 +664,8 @@ final class VectorTileProto {
             }
 
             /**
+             *
+             *
              * <pre>
              * Variant type encoding
              * The use of values is described in section 4.1 of the specification
@@ -658,11 +685,14 @@ final class VectorTileProto {
                 }
 
                 /**
+                 *
+                 *
                  * <pre>
                  * Exactly one of these values must be present in a valid message
                  * </pre>
                  *
                  * <code>optional string string_value = 1;</code>
+                 *
                  * @return Whether the stringValue field is set.
                  */
                 @java.lang.Override
@@ -670,11 +700,14 @@ final class VectorTileProto {
                     return instance.hasStringValue();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Exactly one of these values must be present in a valid message
                  * </pre>
                  *
                  * <code>optional string string_value = 1;</code>
+                 *
                  * @return The stringValue.
                  */
                 @java.lang.Override
@@ -682,11 +715,14 @@ final class VectorTileProto {
                     return instance.getStringValue();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Exactly one of these values must be present in a valid message
                  * </pre>
                  *
                  * <code>optional string string_value = 1;</code>
+                 *
                  * @return The bytes for stringValue.
                  */
                 @java.lang.Override
@@ -694,11 +730,14 @@ final class VectorTileProto {
                     return instance.getStringValueBytes();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Exactly one of these values must be present in a valid message
                  * </pre>
                  *
                  * <code>optional string string_value = 1;</code>
+                 *
                  * @param value The stringValue to set.
                  * @return This builder for chaining.
                  */
@@ -708,11 +747,14 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Exactly one of these values must be present in a valid message
                  * </pre>
                  *
                  * <code>optional string string_value = 1;</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearStringValue() {
@@ -721,11 +763,14 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Exactly one of these values must be present in a valid message
                  * </pre>
                  *
                  * <code>optional string string_value = 1;</code>
+                 *
                  * @param value The bytes for stringValue to set.
                  * @return This builder for chaining.
                  */
@@ -737,6 +782,7 @@ final class VectorTileProto {
 
                 /**
                  * <code>optional float float_value = 2;</code>
+                 *
                  * @return Whether the floatValue field is set.
                  */
                 @java.lang.Override
@@ -745,6 +791,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional float float_value = 2;</code>
+                 *
                  * @return The floatValue.
                  */
                 @java.lang.Override
@@ -753,6 +800,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional float float_value = 2;</code>
+                 *
                  * @param value The floatValue to set.
                  * @return This builder for chaining.
                  */
@@ -763,6 +811,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional float float_value = 2;</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearFloatValue() {
@@ -773,6 +822,7 @@ final class VectorTileProto {
 
                 /**
                  * <code>optional double double_value = 3;</code>
+                 *
                  * @return Whether the doubleValue field is set.
                  */
                 @java.lang.Override
@@ -781,6 +831,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional double double_value = 3;</code>
+                 *
                  * @return The doubleValue.
                  */
                 @java.lang.Override
@@ -789,6 +840,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional double double_value = 3;</code>
+                 *
                  * @param value The doubleValue to set.
                  * @return This builder for chaining.
                  */
@@ -799,6 +851,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional double double_value = 3;</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearDoubleValue() {
@@ -809,6 +862,7 @@ final class VectorTileProto {
 
                 /**
                  * <code>optional int64 int_value = 4;</code>
+                 *
                  * @return Whether the intValue field is set.
                  */
                 @java.lang.Override
@@ -817,6 +871,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional int64 int_value = 4;</code>
+                 *
                  * @return The intValue.
                  */
                 @java.lang.Override
@@ -825,6 +880,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional int64 int_value = 4;</code>
+                 *
                  * @param value The intValue to set.
                  * @return This builder for chaining.
                  */
@@ -835,6 +891,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional int64 int_value = 4;</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearIntValue() {
@@ -845,6 +902,7 @@ final class VectorTileProto {
 
                 /**
                  * <code>optional uint64 uint_value = 5;</code>
+                 *
                  * @return Whether the uintValue field is set.
                  */
                 @java.lang.Override
@@ -853,6 +911,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional uint64 uint_value = 5;</code>
+                 *
                  * @return The uintValue.
                  */
                 @java.lang.Override
@@ -861,6 +920,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional uint64 uint_value = 5;</code>
+                 *
                  * @param value The uintValue to set.
                  * @return This builder for chaining.
                  */
@@ -871,6 +931,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional uint64 uint_value = 5;</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearUintValue() {
@@ -881,6 +942,7 @@ final class VectorTileProto {
 
                 /**
                  * <code>optional sint64 sint_value = 6;</code>
+                 *
                  * @return Whether the sintValue field is set.
                  */
                 @java.lang.Override
@@ -889,6 +951,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional sint64 sint_value = 6;</code>
+                 *
                  * @return The sintValue.
                  */
                 @java.lang.Override
@@ -897,6 +960,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional sint64 sint_value = 6;</code>
+                 *
                  * @param value The sintValue to set.
                  * @return This builder for chaining.
                  */
@@ -907,6 +971,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional sint64 sint_value = 6;</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearSintValue() {
@@ -917,6 +982,7 @@ final class VectorTileProto {
 
                 /**
                  * <code>optional bool bool_value = 7;</code>
+                 *
                  * @return Whether the boolValue field is set.
                  */
                 @java.lang.Override
@@ -925,6 +991,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional bool bool_value = 7;</code>
+                 *
                  * @return The boolValue.
                  */
                 @java.lang.Override
@@ -933,6 +1000,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional bool bool_value = 7;</code>
+                 *
                  * @param value The boolValue to set.
                  * @return This builder for chaining.
                  */
@@ -943,6 +1011,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional bool bool_value = 7;</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearBoolValue() {
@@ -1045,16 +1114,20 @@ final class VectorTileProto {
 
             /**
              * <code>optional uint64 id = 1 [default = 0];</code>
+             *
              * @return Whether the id field is set.
              */
             boolean hasId();
             /**
              * <code>optional uint64 id = 1 [default = 0];</code>
+             *
              * @return The id.
              */
             long getId();
 
             /**
+             *
+             *
              * <pre>
              * Tags of this feature are encoded as repeated pairs of
              * integers.
@@ -1063,10 +1136,13 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 tags = 2 [packed = true];</code>
+             *
              * @return A list containing the tags.
              */
             java.util.List<java.lang.Integer> getTagsList();
             /**
+             *
+             *
              * <pre>
              * Tags of this feature are encoded as repeated pairs of
              * integers.
@@ -1075,10 +1151,13 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 tags = 2 [packed = true];</code>
+             *
              * @return The count of tags.
              */
             int getTagsCount();
             /**
+             *
+             *
              * <pre>
              * Tags of this feature are encoded as repeated pairs of
              * integers.
@@ -1087,31 +1166,40 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 tags = 2 [packed = true];</code>
+             *
              * @param index The index of the element to return.
              * @return The tags at the given index.
              */
             int getTags(int index);
 
             /**
+             *
+             *
              * <pre>
              * The type of geometry stored in this feature.
              * </pre>
              *
              * <code>optional .io.tileverse.vectortile.mvt.Tile.GeomType type = 3 [default = UNKNOWN];</code>
+             *
              * @return Whether the type field is set.
              */
             boolean hasType();
             /**
+             *
+             *
              * <pre>
              * The type of geometry stored in this feature.
              * </pre>
              *
              * <code>optional .io.tileverse.vectortile.mvt.Tile.GeomType type = 3 [default = UNKNOWN];</code>
+             *
              * @return The type.
              */
             io.tileverse.vectortile.mvt.VectorTileProto.Tile.GeomType getType();
 
             /**
+             *
+             *
              * <pre>
              * Contains a stream of commands and parameters (vertices).
              * A detailed description on geometry encoding is located in
@@ -1119,10 +1207,13 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 geometry = 4 [packed = true];</code>
+             *
              * @return A list containing the geometry.
              */
             java.util.List<java.lang.Integer> getGeometryList();
             /**
+             *
+             *
              * <pre>
              * Contains a stream of commands and parameters (vertices).
              * A detailed description on geometry encoding is located in
@@ -1130,10 +1221,13 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 geometry = 4 [packed = true];</code>
+             *
              * @return The count of geometry.
              */
             int getGeometryCount();
             /**
+             *
+             *
              * <pre>
              * Contains a stream of commands and parameters (vertices).
              * A detailed description on geometry encoding is located in
@@ -1141,12 +1235,15 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 geometry = 4 [packed = true];</code>
+             *
              * @param index The index of the element to return.
              * @return The geometry at the given index.
              */
             int getGeometry(int index);
         }
         /**
+         *
+         *
          * <pre>
          * Features are described in section 4.2 of the specification
          * </pre>
@@ -1167,6 +1264,7 @@ final class VectorTileProto {
             private long id_;
             /**
              * <code>optional uint64 id = 1 [default = 0];</code>
+             *
              * @return Whether the id field is set.
              */
             @java.lang.Override
@@ -1175,6 +1273,7 @@ final class VectorTileProto {
             }
             /**
              * <code>optional uint64 id = 1 [default = 0];</code>
+             *
              * @return The id.
              */
             @java.lang.Override
@@ -1183,15 +1282,14 @@ final class VectorTileProto {
             }
             /**
              * <code>optional uint64 id = 1 [default = 0];</code>
+             *
              * @param value The id to set.
              */
             private void setId(long value) {
                 bitField0_ |= 0x00000001;
                 id_ = value;
             }
-            /**
-             * <code>optional uint64 id = 1 [default = 0];</code>
-             */
+            /** <code>optional uint64 id = 1 [default = 0];</code> */
             private void clearId() {
                 bitField0_ = (bitField0_ & ~0x00000001);
                 id_ = 0L;
@@ -1200,6 +1298,8 @@ final class VectorTileProto {
             public static final int TAGS_FIELD_NUMBER = 2;
             private com.google.protobuf.Internal.IntList tags_;
             /**
+             *
+             *
              * <pre>
              * Tags of this feature are encoded as repeated pairs of
              * integers.
@@ -1208,6 +1308,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 tags = 2 [packed = true];</code>
+             *
              * @return A list containing the tags.
              */
             @java.lang.Override
@@ -1215,6 +1316,8 @@ final class VectorTileProto {
                 return tags_;
             }
             /**
+             *
+             *
              * <pre>
              * Tags of this feature are encoded as repeated pairs of
              * integers.
@@ -1223,6 +1326,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 tags = 2 [packed = true];</code>
+             *
              * @return The count of tags.
              */
             @java.lang.Override
@@ -1230,6 +1334,8 @@ final class VectorTileProto {
                 return tags_.size();
             }
             /**
+             *
+             *
              * <pre>
              * Tags of this feature are encoded as repeated pairs of
              * integers.
@@ -1238,6 +1344,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 tags = 2 [packed = true];</code>
+             *
              * @param index The index of the element to return.
              * @return The tags at the given index.
              */
@@ -1255,6 +1362,8 @@ final class VectorTileProto {
                 }
             }
             /**
+             *
+             *
              * <pre>
              * Tags of this feature are encoded as repeated pairs of
              * integers.
@@ -1263,6 +1372,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 tags = 2 [packed = true];</code>
+             *
              * @param index The index to set the value at.
              * @param value The tags to set.
              */
@@ -1271,6 +1381,8 @@ final class VectorTileProto {
                 tags_.setInt(index, value);
             }
             /**
+             *
+             *
              * <pre>
              * Tags of this feature are encoded as repeated pairs of
              * integers.
@@ -1279,6 +1391,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 tags = 2 [packed = true];</code>
+             *
              * @param value The tags to add.
              */
             private void addTags(int value) {
@@ -1286,6 +1399,8 @@ final class VectorTileProto {
                 tags_.addInt(value);
             }
             /**
+             *
+             *
              * <pre>
              * Tags of this feature are encoded as repeated pairs of
              * integers.
@@ -1294,6 +1409,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 tags = 2 [packed = true];</code>
+             *
              * @param values The tags to add.
              */
             private void addAllTags(java.lang.Iterable<? extends java.lang.Integer> values) {
@@ -1301,6 +1417,8 @@ final class VectorTileProto {
                 com.google.protobuf.AbstractMessageLite.addAll(values, tags_);
             }
             /**
+             *
+             *
              * <pre>
              * Tags of this feature are encoded as repeated pairs of
              * integers.
@@ -1317,11 +1435,14 @@ final class VectorTileProto {
             public static final int TYPE_FIELD_NUMBER = 3;
             private int type_;
             /**
+             *
+             *
              * <pre>
              * The type of geometry stored in this feature.
              * </pre>
              *
              * <code>optional .io.tileverse.vectortile.mvt.Tile.GeomType type = 3 [default = UNKNOWN];</code>
+             *
              * @return Whether the type field is set.
              */
             @java.lang.Override
@@ -1329,11 +1450,14 @@ final class VectorTileProto {
                 return ((bitField0_ & 0x00000002) != 0);
             }
             /**
+             *
+             *
              * <pre>
              * The type of geometry stored in this feature.
              * </pre>
              *
              * <code>optional .io.tileverse.vectortile.mvt.Tile.GeomType type = 3 [default = UNKNOWN];</code>
+             *
              * @return The type.
              */
             @java.lang.Override
@@ -1343,11 +1467,14 @@ final class VectorTileProto {
                 return result == null ? io.tileverse.vectortile.mvt.VectorTileProto.Tile.GeomType.UNKNOWN : result;
             }
             /**
+             *
+             *
              * <pre>
              * The type of geometry stored in this feature.
              * </pre>
              *
              * <code>optional .io.tileverse.vectortile.mvt.Tile.GeomType type = 3 [default = UNKNOWN];</code>
+             *
              * @param value The type to set.
              */
             private void setType(io.tileverse.vectortile.mvt.VectorTileProto.Tile.GeomType value) {
@@ -1355,6 +1482,8 @@ final class VectorTileProto {
                 bitField0_ |= 0x00000002;
             }
             /**
+             *
+             *
              * <pre>
              * The type of geometry stored in this feature.
              * </pre>
@@ -1369,6 +1498,8 @@ final class VectorTileProto {
             public static final int GEOMETRY_FIELD_NUMBER = 4;
             private com.google.protobuf.Internal.IntList geometry_;
             /**
+             *
+             *
              * <pre>
              * Contains a stream of commands and parameters (vertices).
              * A detailed description on geometry encoding is located in
@@ -1376,6 +1507,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 geometry = 4 [packed = true];</code>
+             *
              * @return A list containing the geometry.
              */
             @java.lang.Override
@@ -1383,6 +1515,8 @@ final class VectorTileProto {
                 return geometry_;
             }
             /**
+             *
+             *
              * <pre>
              * Contains a stream of commands and parameters (vertices).
              * A detailed description on geometry encoding is located in
@@ -1390,6 +1524,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 geometry = 4 [packed = true];</code>
+             *
              * @return The count of geometry.
              */
             @java.lang.Override
@@ -1397,6 +1532,8 @@ final class VectorTileProto {
                 return geometry_.size();
             }
             /**
+             *
+             *
              * <pre>
              * Contains a stream of commands and parameters (vertices).
              * A detailed description on geometry encoding is located in
@@ -1404,6 +1541,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 geometry = 4 [packed = true];</code>
+             *
              * @param index The index of the element to return.
              * @return The geometry at the given index.
              */
@@ -1421,6 +1559,8 @@ final class VectorTileProto {
                 }
             }
             /**
+             *
+             *
              * <pre>
              * Contains a stream of commands and parameters (vertices).
              * A detailed description on geometry encoding is located in
@@ -1428,6 +1568,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 geometry = 4 [packed = true];</code>
+             *
              * @param index The index to set the value at.
              * @param value The geometry to set.
              */
@@ -1436,6 +1577,8 @@ final class VectorTileProto {
                 geometry_.setInt(index, value);
             }
             /**
+             *
+             *
              * <pre>
              * Contains a stream of commands and parameters (vertices).
              * A detailed description on geometry encoding is located in
@@ -1443,6 +1586,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 geometry = 4 [packed = true];</code>
+             *
              * @param value The geometry to add.
              */
             private void addGeometry(int value) {
@@ -1450,6 +1594,8 @@ final class VectorTileProto {
                 geometry_.addInt(value);
             }
             /**
+             *
+             *
              * <pre>
              * Contains a stream of commands and parameters (vertices).
              * A detailed description on geometry encoding is located in
@@ -1457,6 +1603,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>repeated uint32 geometry = 4 [packed = true];</code>
+             *
              * @param values The geometry to add.
              */
             private void addAllGeometry(java.lang.Iterable<? extends java.lang.Integer> values) {
@@ -1464,6 +1611,8 @@ final class VectorTileProto {
                 com.google.protobuf.AbstractMessageLite.addAll(values, geometry_);
             }
             /**
+             *
+             *
              * <pre>
              * Contains a stream of commands and parameters (vertices).
              * A detailed description on geometry encoding is located in
@@ -1555,6 +1704,8 @@ final class VectorTileProto {
             }
 
             /**
+             *
+             *
              * <pre>
              * Features are described in section 4.2 of the specification
              * </pre>
@@ -1574,6 +1725,7 @@ final class VectorTileProto {
 
                 /**
                  * <code>optional uint64 id = 1 [default = 0];</code>
+                 *
                  * @return Whether the id field is set.
                  */
                 @java.lang.Override
@@ -1582,6 +1734,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional uint64 id = 1 [default = 0];</code>
+                 *
                  * @return The id.
                  */
                 @java.lang.Override
@@ -1590,6 +1743,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional uint64 id = 1 [default = 0];</code>
+                 *
                  * @param value The id to set.
                  * @return This builder for chaining.
                  */
@@ -1600,6 +1754,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>optional uint64 id = 1 [default = 0];</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearId() {
@@ -1609,6 +1764,8 @@ final class VectorTileProto {
                 }
 
                 /**
+                 *
+                 *
                  * <pre>
                  * Tags of this feature are encoded as repeated pairs of
                  * integers.
@@ -1617,6 +1774,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 tags = 2 [packed = true];</code>
+                 *
                  * @return A list containing the tags.
                  */
                 @java.lang.Override
@@ -1624,6 +1782,8 @@ final class VectorTileProto {
                     return java.util.Collections.unmodifiableList(instance.getTagsList());
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Tags of this feature are encoded as repeated pairs of
                  * integers.
@@ -1632,6 +1792,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 tags = 2 [packed = true];</code>
+                 *
                  * @return The count of tags.
                  */
                 @java.lang.Override
@@ -1639,6 +1800,8 @@ final class VectorTileProto {
                     return instance.getTagsCount();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Tags of this feature are encoded as repeated pairs of
                  * integers.
@@ -1647,6 +1810,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 tags = 2 [packed = true];</code>
+                 *
                  * @param index The index of the element to return.
                  * @return The tags at the given index.
                  */
@@ -1655,6 +1819,8 @@ final class VectorTileProto {
                     return instance.getTags(index);
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Tags of this feature are encoded as repeated pairs of
                  * integers.
@@ -1663,6 +1829,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 tags = 2 [packed = true];</code>
+                 *
                  * @param value The tags to set.
                  * @return This builder for chaining.
                  */
@@ -1672,6 +1839,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Tags of this feature are encoded as repeated pairs of
                  * integers.
@@ -1680,6 +1849,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 tags = 2 [packed = true];</code>
+                 *
                  * @param value The tags to add.
                  * @return This builder for chaining.
                  */
@@ -1689,6 +1859,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Tags of this feature are encoded as repeated pairs of
                  * integers.
@@ -1697,6 +1869,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 tags = 2 [packed = true];</code>
+                 *
                  * @param values The tags to add.
                  * @return This builder for chaining.
                  */
@@ -1706,6 +1879,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Tags of this feature are encoded as repeated pairs of
                  * integers.
@@ -1714,6 +1889,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 tags = 2 [packed = true];</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearTags() {
@@ -1723,11 +1899,14 @@ final class VectorTileProto {
                 }
 
                 /**
+                 *
+                 *
                  * <pre>
                  * The type of geometry stored in this feature.
                  * </pre>
                  *
                  * <code>optional .io.tileverse.vectortile.mvt.Tile.GeomType type = 3 [default = UNKNOWN];</code>
+                 *
                  * @return Whether the type field is set.
                  */
                 @java.lang.Override
@@ -1735,11 +1914,14 @@ final class VectorTileProto {
                     return instance.hasType();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The type of geometry stored in this feature.
                  * </pre>
                  *
                  * <code>optional .io.tileverse.vectortile.mvt.Tile.GeomType type = 3 [default = UNKNOWN];</code>
+                 *
                  * @return The type.
                  */
                 @java.lang.Override
@@ -1747,11 +1929,14 @@ final class VectorTileProto {
                     return instance.getType();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The type of geometry stored in this feature.
                  * </pre>
                  *
                  * <code>optional .io.tileverse.vectortile.mvt.Tile.GeomType type = 3 [default = UNKNOWN];</code>
+                 *
                  * @param value The enum numeric value on the wire for type to set.
                  * @return This builder for chaining.
                  */
@@ -1761,11 +1946,14 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The type of geometry stored in this feature.
                  * </pre>
                  *
                  * <code>optional .io.tileverse.vectortile.mvt.Tile.GeomType type = 3 [default = UNKNOWN];</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearType() {
@@ -1775,6 +1963,8 @@ final class VectorTileProto {
                 }
 
                 /**
+                 *
+                 *
                  * <pre>
                  * Contains a stream of commands and parameters (vertices).
                  * A detailed description on geometry encoding is located in
@@ -1782,6 +1972,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 geometry = 4 [packed = true];</code>
+                 *
                  * @return A list containing the geometry.
                  */
                 @java.lang.Override
@@ -1789,6 +1980,8 @@ final class VectorTileProto {
                     return java.util.Collections.unmodifiableList(instance.getGeometryList());
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Contains a stream of commands and parameters (vertices).
                  * A detailed description on geometry encoding is located in
@@ -1796,6 +1989,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 geometry = 4 [packed = true];</code>
+                 *
                  * @return The count of geometry.
                  */
                 @java.lang.Override
@@ -1803,6 +1997,8 @@ final class VectorTileProto {
                     return instance.getGeometryCount();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Contains a stream of commands and parameters (vertices).
                  * A detailed description on geometry encoding is located in
@@ -1810,6 +2006,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 geometry = 4 [packed = true];</code>
+                 *
                  * @param index The index of the element to return.
                  * @return The geometry at the given index.
                  */
@@ -1818,6 +2015,8 @@ final class VectorTileProto {
                     return instance.getGeometry(index);
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Contains a stream of commands and parameters (vertices).
                  * A detailed description on geometry encoding is located in
@@ -1825,6 +2024,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 geometry = 4 [packed = true];</code>
+                 *
                  * @param value The geometry to set.
                  * @return This builder for chaining.
                  */
@@ -1834,6 +2034,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Contains a stream of commands and parameters (vertices).
                  * A detailed description on geometry encoding is located in
@@ -1841,6 +2043,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 geometry = 4 [packed = true];</code>
+                 *
                  * @param value The geometry to add.
                  * @return This builder for chaining.
                  */
@@ -1850,6 +2053,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Contains a stream of commands and parameters (vertices).
                  * A detailed description on geometry encoding is located in
@@ -1857,6 +2062,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 geometry = 4 [packed = true];</code>
+                 *
                  * @param values The geometry to add.
                  * @return This builder for chaining.
                  */
@@ -1866,6 +2072,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Contains a stream of commands and parameters (vertices).
                  * A detailed description on geometry encoding is located in
@@ -1873,6 +2081,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>repeated uint32 geometry = 4 [packed = true];</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearGeometry() {
@@ -1968,6 +2177,8 @@ final class VectorTileProto {
                 com.google.protobuf.GeneratedMessageLite.ExtendableMessageOrBuilder<Layer, Layer.Builder> {
 
             /**
+             *
+             *
              * <pre>
              * Any compliant implementation must first read the version
              * number encoded in this message and choose the correct
@@ -1976,10 +2187,13 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>required uint32 version = 15 [default = 1];</code>
+             *
              * @return Whether the version field is set.
              */
             boolean hasVersion();
             /**
+             *
+             *
              * <pre>
              * Any compliant implementation must first read the version
              * number encoded in this message and choose the correct
@@ -1988,27 +2202,33 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>required uint32 version = 15 [default = 1];</code>
+             *
              * @return The version.
              */
             int getVersion();
 
             /**
              * <code>required string name = 1;</code>
+             *
              * @return Whether the name field is set.
              */
             boolean hasName();
             /**
              * <code>required string name = 1;</code>
+             *
              * @return The name.
              */
             java.lang.String getName();
             /**
              * <code>required string name = 1;</code>
+             *
              * @return The bytes for name.
              */
             com.google.protobuf.ByteString getNameBytes();
 
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2017,6 +2237,8 @@ final class VectorTileProto {
              */
             java.util.List<io.tileverse.vectortile.mvt.VectorTileProto.Tile.Feature> getFeaturesList();
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2025,6 +2247,8 @@ final class VectorTileProto {
              */
             io.tileverse.vectortile.mvt.VectorTileProto.Tile.Feature getFeatures(int index);
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2034,45 +2258,59 @@ final class VectorTileProto {
             int getFeaturesCount();
 
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for keys
              * </pre>
              *
              * <code>repeated string keys = 3;</code>
+             *
              * @return A list containing the keys.
              */
             java.util.List<java.lang.String> getKeysList();
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for keys
              * </pre>
              *
              * <code>repeated string keys = 3;</code>
+             *
              * @return The count of keys.
              */
             int getKeysCount();
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for keys
              * </pre>
              *
              * <code>repeated string keys = 3;</code>
+             *
              * @param index The index of the element to return.
              * @return The keys at the given index.
              */
             java.lang.String getKeys(int index);
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for keys
              * </pre>
              *
              * <code>repeated string keys = 3;</code>
+             *
              * @param index The index of the element to return.
              * @return The keys at the given index.
              */
             com.google.protobuf.ByteString getKeysBytes(int index);
 
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2081,6 +2319,8 @@ final class VectorTileProto {
              */
             java.util.List<io.tileverse.vectortile.mvt.VectorTileProto.Tile.Value> getValuesList();
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2089,6 +2329,8 @@ final class VectorTileProto {
              */
             io.tileverse.vectortile.mvt.VectorTileProto.Tile.Value getValues(int index);
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2098,27 +2340,35 @@ final class VectorTileProto {
             int getValuesCount();
 
             /**
+             *
+             *
              * <pre>
              * Although this is an "optional" field it is required by the specification.
              * See https://github.com/mapbox/vector-tile-spec/issues/47
              * </pre>
              *
              * <code>optional uint32 extent = 5 [default = 4096];</code>
+             *
              * @return Whether the extent field is set.
              */
             boolean hasExtent();
             /**
+             *
+             *
              * <pre>
              * Although this is an "optional" field it is required by the specification.
              * See https://github.com/mapbox/vector-tile-spec/issues/47
              * </pre>
              *
              * <code>optional uint32 extent = 5 [default = 4096];</code>
+             *
              * @return The extent.
              */
             int getExtent();
         }
         /**
+         *
+         *
          * <pre>
          * Layers are described in section 4.1 of the specification
          * </pre>
@@ -2143,6 +2393,8 @@ final class VectorTileProto {
             public static final int VERSION_FIELD_NUMBER = 15;
             private int version_;
             /**
+             *
+             *
              * <pre>
              * Any compliant implementation must first read the version
              * number encoded in this message and choose the correct
@@ -2151,6 +2403,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>required uint32 version = 15 [default = 1];</code>
+             *
              * @return Whether the version field is set.
              */
             @java.lang.Override
@@ -2158,6 +2411,8 @@ final class VectorTileProto {
                 return ((bitField0_ & 0x00000001) != 0);
             }
             /**
+             *
+             *
              * <pre>
              * Any compliant implementation must first read the version
              * number encoded in this message and choose the correct
@@ -2166,6 +2421,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>required uint32 version = 15 [default = 1];</code>
+             *
              * @return The version.
              */
             @java.lang.Override
@@ -2173,6 +2429,8 @@ final class VectorTileProto {
                 return version_;
             }
             /**
+             *
+             *
              * <pre>
              * Any compliant implementation must first read the version
              * number encoded in this message and choose the correct
@@ -2181,6 +2439,7 @@ final class VectorTileProto {
              * </pre>
              *
              * <code>required uint32 version = 15 [default = 1];</code>
+             *
              * @param value The version to set.
              */
             private void setVersion(int value) {
@@ -2188,6 +2447,8 @@ final class VectorTileProto {
                 version_ = value;
             }
             /**
+             *
+             *
              * <pre>
              * Any compliant implementation must first read the version
              * number encoded in this message and choose the correct
@@ -2206,6 +2467,7 @@ final class VectorTileProto {
             private java.lang.String name_;
             /**
              * <code>required string name = 1;</code>
+             *
              * @return Whether the name field is set.
              */
             @java.lang.Override
@@ -2214,6 +2476,7 @@ final class VectorTileProto {
             }
             /**
              * <code>required string name = 1;</code>
+             *
              * @return The name.
              */
             @java.lang.Override
@@ -2222,6 +2485,7 @@ final class VectorTileProto {
             }
             /**
              * <code>required string name = 1;</code>
+             *
              * @return The bytes for name.
              */
             @java.lang.Override
@@ -2230,6 +2494,7 @@ final class VectorTileProto {
             }
             /**
              * <code>required string name = 1;</code>
+             *
              * @param value The name to set.
              */
             @java.lang.SuppressWarnings("ReturnValueIgnored")
@@ -2238,15 +2503,14 @@ final class VectorTileProto {
                 bitField0_ |= 0x00000002;
                 name_ = value;
             }
-            /**
-             * <code>required string name = 1;</code>
-             */
+            /** <code>required string name = 1;</code> */
             private void clearName() {
                 bitField0_ = (bitField0_ & ~0x00000002);
                 name_ = getDefaultInstance().getName();
             }
             /**
              * <code>required string name = 1;</code>
+             *
              * @param value The bytes for name to set.
              */
             private void setNameBytes(com.google.protobuf.ByteString value) {
@@ -2258,6 +2522,8 @@ final class VectorTileProto {
             private com.google.protobuf.Internal.ProtobufList<io.tileverse.vectortile.mvt.VectorTileProto.Tile.Feature>
                     features_;
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2269,6 +2535,8 @@ final class VectorTileProto {
                 return features_;
             }
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2280,6 +2548,8 @@ final class VectorTileProto {
                 return features_;
             }
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2291,6 +2561,8 @@ final class VectorTileProto {
                 return features_.size();
             }
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2302,6 +2574,8 @@ final class VectorTileProto {
                 return features_.get(index);
             }
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2321,6 +2595,8 @@ final class VectorTileProto {
             }
 
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2334,6 +2610,8 @@ final class VectorTileProto {
                 features_.set(index, value);
             }
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2347,6 +2625,8 @@ final class VectorTileProto {
                 features_.add(value);
             }
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2360,6 +2640,8 @@ final class VectorTileProto {
                 features_.add(index, value);
             }
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2372,6 +2654,8 @@ final class VectorTileProto {
                 com.google.protobuf.AbstractMessageLite.addAll(values, features_);
             }
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2382,6 +2666,8 @@ final class VectorTileProto {
                 features_ = emptyProtobufList();
             }
             /**
+             *
+             *
              * <pre>
              * The actual features in this tile.
              * </pre>
@@ -2396,11 +2682,14 @@ final class VectorTileProto {
             public static final int KEYS_FIELD_NUMBER = 3;
             private com.google.protobuf.Internal.ProtobufList<java.lang.String> keys_;
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for keys
              * </pre>
              *
              * <code>repeated string keys = 3;</code>
+             *
              * @return A list containing the keys.
              */
             @java.lang.Override
@@ -2408,11 +2697,14 @@ final class VectorTileProto {
                 return keys_;
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for keys
              * </pre>
              *
              * <code>repeated string keys = 3;</code>
+             *
              * @return The count of keys.
              */
             @java.lang.Override
@@ -2420,11 +2712,14 @@ final class VectorTileProto {
                 return keys_.size();
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for keys
              * </pre>
              *
              * <code>repeated string keys = 3;</code>
+             *
              * @param index The index of the element to return.
              * @return The keys at the given index.
              */
@@ -2433,11 +2728,14 @@ final class VectorTileProto {
                 return keys_.get(index);
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for keys
              * </pre>
              *
              * <code>repeated string keys = 3;</code>
+             *
              * @param index The index of the value to return.
              * @return The bytes of the keys at the given index.
              */
@@ -2453,11 +2751,14 @@ final class VectorTileProto {
                 }
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for keys
              * </pre>
              *
              * <code>repeated string keys = 3;</code>
+             *
              * @param index The index to set the value at.
              * @param value The keys to set.
              */
@@ -2468,11 +2769,14 @@ final class VectorTileProto {
                 keys_.set(index, value);
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for keys
              * </pre>
              *
              * <code>repeated string keys = 3;</code>
+             *
              * @param value The keys to add.
              */
             @java.lang.SuppressWarnings("ReturnValueIgnored")
@@ -2482,11 +2786,14 @@ final class VectorTileProto {
                 keys_.add(value);
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for keys
              * </pre>
              *
              * <code>repeated string keys = 3;</code>
+             *
              * @param values The keys to add.
              */
             private void addAllKeys(java.lang.Iterable<java.lang.String> values) {
@@ -2494,6 +2801,8 @@ final class VectorTileProto {
                 com.google.protobuf.AbstractMessageLite.addAll(values, keys_);
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for keys
              * </pre>
@@ -2504,11 +2813,14 @@ final class VectorTileProto {
                 keys_ = com.google.protobuf.GeneratedMessageLite.emptyProtobufList();
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for keys
              * </pre>
              *
              * <code>repeated string keys = 3;</code>
+             *
              * @param value The bytes of the keys to add.
              */
             private void addKeysBytes(com.google.protobuf.ByteString value) {
@@ -2520,6 +2832,8 @@ final class VectorTileProto {
             private com.google.protobuf.Internal.ProtobufList<io.tileverse.vectortile.mvt.VectorTileProto.Tile.Value>
                     values_;
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2531,6 +2845,8 @@ final class VectorTileProto {
                 return values_;
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2542,6 +2858,8 @@ final class VectorTileProto {
                 return values_;
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2553,6 +2871,8 @@ final class VectorTileProto {
                 return values_.size();
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2564,6 +2884,8 @@ final class VectorTileProto {
                 return values_.get(index);
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2583,6 +2905,8 @@ final class VectorTileProto {
             }
 
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2596,6 +2920,8 @@ final class VectorTileProto {
                 values_.set(index, value);
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2609,6 +2935,8 @@ final class VectorTileProto {
                 values_.add(value);
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2622,6 +2950,8 @@ final class VectorTileProto {
                 values_.add(index, value);
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2634,6 +2964,8 @@ final class VectorTileProto {
                 com.google.protobuf.AbstractMessageLite.addAll(values, values_);
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2644,6 +2976,8 @@ final class VectorTileProto {
                 values_ = emptyProtobufList();
             }
             /**
+             *
+             *
              * <pre>
              * Dictionary encoding for values
              * </pre>
@@ -2658,12 +2992,15 @@ final class VectorTileProto {
             public static final int EXTENT_FIELD_NUMBER = 5;
             private int extent_;
             /**
+             *
+             *
              * <pre>
              * Although this is an "optional" field it is required by the specification.
              * See https://github.com/mapbox/vector-tile-spec/issues/47
              * </pre>
              *
              * <code>optional uint32 extent = 5 [default = 4096];</code>
+             *
              * @return Whether the extent field is set.
              */
             @java.lang.Override
@@ -2671,12 +3008,15 @@ final class VectorTileProto {
                 return ((bitField0_ & 0x00000004) != 0);
             }
             /**
+             *
+             *
              * <pre>
              * Although this is an "optional" field it is required by the specification.
              * See https://github.com/mapbox/vector-tile-spec/issues/47
              * </pre>
              *
              * <code>optional uint32 extent = 5 [default = 4096];</code>
+             *
              * @return The extent.
              */
             @java.lang.Override
@@ -2684,12 +3024,15 @@ final class VectorTileProto {
                 return extent_;
             }
             /**
+             *
+             *
              * <pre>
              * Although this is an "optional" field it is required by the specification.
              * See https://github.com/mapbox/vector-tile-spec/issues/47
              * </pre>
              *
              * <code>optional uint32 extent = 5 [default = 4096];</code>
+             *
              * @param value The extent to set.
              */
             private void setExtent(int value) {
@@ -2697,6 +3040,8 @@ final class VectorTileProto {
                 extent_ = value;
             }
             /**
+             *
+             *
              * <pre>
              * Although this is an "optional" field it is required by the specification.
              * See https://github.com/mapbox/vector-tile-spec/issues/47
@@ -2788,6 +3133,8 @@ final class VectorTileProto {
             }
 
             /**
+             *
+             *
              * <pre>
              * Layers are described in section 4.1 of the specification
              * </pre>
@@ -2806,6 +3153,8 @@ final class VectorTileProto {
                 }
 
                 /**
+                 *
+                 *
                  * <pre>
                  * Any compliant implementation must first read the version
                  * number encoded in this message and choose the correct
@@ -2814,6 +3163,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>required uint32 version = 15 [default = 1];</code>
+                 *
                  * @return Whether the version field is set.
                  */
                 @java.lang.Override
@@ -2821,6 +3171,8 @@ final class VectorTileProto {
                     return instance.hasVersion();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Any compliant implementation must first read the version
                  * number encoded in this message and choose the correct
@@ -2829,6 +3181,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>required uint32 version = 15 [default = 1];</code>
+                 *
                  * @return The version.
                  */
                 @java.lang.Override
@@ -2836,6 +3189,8 @@ final class VectorTileProto {
                     return instance.getVersion();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Any compliant implementation must first read the version
                  * number encoded in this message and choose the correct
@@ -2844,6 +3199,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>required uint32 version = 15 [default = 1];</code>
+                 *
                  * @param value The version to set.
                  * @return This builder for chaining.
                  */
@@ -2853,6 +3209,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Any compliant implementation must first read the version
                  * number encoded in this message and choose the correct
@@ -2861,6 +3219,7 @@ final class VectorTileProto {
                  * </pre>
                  *
                  * <code>required uint32 version = 15 [default = 1];</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearVersion() {
@@ -2871,6 +3230,7 @@ final class VectorTileProto {
 
                 /**
                  * <code>required string name = 1;</code>
+                 *
                  * @return Whether the name field is set.
                  */
                 @java.lang.Override
@@ -2879,6 +3239,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>required string name = 1;</code>
+                 *
                  * @return The name.
                  */
                 @java.lang.Override
@@ -2887,6 +3248,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>required string name = 1;</code>
+                 *
                  * @return The bytes for name.
                  */
                 @java.lang.Override
@@ -2895,6 +3257,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>required string name = 1;</code>
+                 *
                  * @param value The name to set.
                  * @return This builder for chaining.
                  */
@@ -2905,6 +3268,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>required string name = 1;</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearName() {
@@ -2914,6 +3278,7 @@ final class VectorTileProto {
                 }
                 /**
                  * <code>required string name = 1;</code>
+                 *
                  * @param value The bytes for name to set.
                  * @return This builder for chaining.
                  */
@@ -2924,6 +3289,8 @@ final class VectorTileProto {
                 }
 
                 /**
+                 *
+                 *
                  * <pre>
                  * The actual features in this tile.
                  * </pre>
@@ -2935,6 +3302,8 @@ final class VectorTileProto {
                     return java.util.Collections.unmodifiableList(instance.getFeaturesList());
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The actual features in this tile.
                  * </pre>
@@ -2946,6 +3315,8 @@ final class VectorTileProto {
                     return instance.getFeaturesCount();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The actual features in this tile.
                  * </pre>
@@ -2957,6 +3328,8 @@ final class VectorTileProto {
                     return instance.getFeatures(index);
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The actual features in this tile.
                  * </pre>
@@ -2969,6 +3342,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The actual features in this tile.
                  * </pre>
@@ -2982,6 +3357,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The actual features in this tile.
                  * </pre>
@@ -2994,6 +3371,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The actual features in this tile.
                  * </pre>
@@ -3006,6 +3385,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The actual features in this tile.
                  * </pre>
@@ -3019,6 +3400,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The actual features in this tile.
                  * </pre>
@@ -3032,6 +3415,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The actual features in this tile.
                  * </pre>
@@ -3045,6 +3430,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The actual features in this tile.
                  * </pre>
@@ -3057,6 +3444,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * The actual features in this tile.
                  * </pre>
@@ -3070,11 +3459,14 @@ final class VectorTileProto {
                 }
 
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for keys
                  * </pre>
                  *
                  * <code>repeated string keys = 3;</code>
+                 *
                  * @return A list containing the keys.
                  */
                 @java.lang.Override
@@ -3082,11 +3474,14 @@ final class VectorTileProto {
                     return java.util.Collections.unmodifiableList(instance.getKeysList());
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for keys
                  * </pre>
                  *
                  * <code>repeated string keys = 3;</code>
+                 *
                  * @return The count of keys.
                  */
                 @java.lang.Override
@@ -3094,11 +3489,14 @@ final class VectorTileProto {
                     return instance.getKeysCount();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for keys
                  * </pre>
                  *
                  * <code>repeated string keys = 3;</code>
+                 *
                  * @param index The index of the element to return.
                  * @return The keys at the given index.
                  */
@@ -3107,11 +3505,14 @@ final class VectorTileProto {
                     return instance.getKeys(index);
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for keys
                  * </pre>
                  *
                  * <code>repeated string keys = 3;</code>
+                 *
                  * @param index The index of the value to return.
                  * @return The bytes of the keys at the given index.
                  */
@@ -3120,11 +3521,14 @@ final class VectorTileProto {
                     return instance.getKeysBytes(index);
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for keys
                  * </pre>
                  *
                  * <code>repeated string keys = 3;</code>
+                 *
                  * @param index The index to set the value at.
                  * @param value The keys to set.
                  * @return This builder for chaining.
@@ -3135,11 +3539,14 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for keys
                  * </pre>
                  *
                  * <code>repeated string keys = 3;</code>
+                 *
                  * @param value The keys to add.
                  * @return This builder for chaining.
                  */
@@ -3149,11 +3556,14 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for keys
                  * </pre>
                  *
                  * <code>repeated string keys = 3;</code>
+                 *
                  * @param values The keys to add.
                  * @return This builder for chaining.
                  */
@@ -3163,11 +3573,14 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for keys
                  * </pre>
                  *
                  * <code>repeated string keys = 3;</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearKeys() {
@@ -3176,11 +3589,14 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for keys
                  * </pre>
                  *
                  * <code>repeated string keys = 3;</code>
+                 *
                  * @param value The bytes of the keys to add.
                  * @return This builder for chaining.
                  */
@@ -3191,6 +3607,8 @@ final class VectorTileProto {
                 }
 
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for values
                  * </pre>
@@ -3202,6 +3620,8 @@ final class VectorTileProto {
                     return java.util.Collections.unmodifiableList(instance.getValuesList());
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for values
                  * </pre>
@@ -3213,6 +3633,8 @@ final class VectorTileProto {
                     return instance.getValuesCount();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for values
                  * </pre>
@@ -3224,6 +3646,8 @@ final class VectorTileProto {
                     return instance.getValues(index);
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for values
                  * </pre>
@@ -3236,6 +3660,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for values
                  * </pre>
@@ -3249,6 +3675,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for values
                  * </pre>
@@ -3261,6 +3689,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for values
                  * </pre>
@@ -3273,6 +3703,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for values
                  * </pre>
@@ -3286,6 +3718,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for values
                  * </pre>
@@ -3299,6 +3733,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for values
                  * </pre>
@@ -3312,6 +3748,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for values
                  * </pre>
@@ -3324,6 +3762,8 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Dictionary encoding for values
                  * </pre>
@@ -3337,12 +3777,15 @@ final class VectorTileProto {
                 }
 
                 /**
+                 *
+                 *
                  * <pre>
                  * Although this is an "optional" field it is required by the specification.
                  * See https://github.com/mapbox/vector-tile-spec/issues/47
                  * </pre>
                  *
                  * <code>optional uint32 extent = 5 [default = 4096];</code>
+                 *
                  * @return Whether the extent field is set.
                  */
                 @java.lang.Override
@@ -3350,12 +3793,15 @@ final class VectorTileProto {
                     return instance.hasExtent();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Although this is an "optional" field it is required by the specification.
                  * See https://github.com/mapbox/vector-tile-spec/issues/47
                  * </pre>
                  *
                  * <code>optional uint32 extent = 5 [default = 4096];</code>
+                 *
                  * @return The extent.
                  */
                 @java.lang.Override
@@ -3363,12 +3809,15 @@ final class VectorTileProto {
                     return instance.getExtent();
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Although this is an "optional" field it is required by the specification.
                  * See https://github.com/mapbox/vector-tile-spec/issues/47
                  * </pre>
                  *
                  * <code>optional uint32 extent = 5 [default = 4096];</code>
+                 *
                  * @param value The extent to set.
                  * @return This builder for chaining.
                  */
@@ -3378,12 +3827,15 @@ final class VectorTileProto {
                     return this;
                 }
                 /**
+                 *
+                 *
                  * <pre>
                  * Although this is an "optional" field it is required by the specification.
                  * See https://github.com/mapbox/vector-tile-spec/issues/47
                  * </pre>
                  *
                  * <code>optional uint32 extent = 5 [default = 4096];</code>
+                 *
                  * @return This builder for chaining.
                  */
                 public Builder clearExtent() {
@@ -3482,37 +3934,27 @@ final class VectorTileProto {
         public static final int LAYERS_FIELD_NUMBER = 3;
         private com.google.protobuf.Internal.ProtobufList<io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer>
                 layers_;
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         @java.lang.Override
         public java.util.List<io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer> getLayersList() {
             return layers_;
         }
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         public java.util.List<? extends io.tileverse.vectortile.mvt.VectorTileProto.Tile.LayerOrBuilder>
                 getLayersOrBuilderList() {
             return layers_;
         }
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         @java.lang.Override
         public int getLayersCount() {
             return layers_.size();
         }
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         @java.lang.Override
         public io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer getLayers(int index) {
             return layers_.get(index);
         }
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         public io.tileverse.vectortile.mvt.VectorTileProto.Tile.LayerOrBuilder getLayersOrBuilder(int index) {
             return layers_.get(index);
         }
@@ -3525,50 +3967,38 @@ final class VectorTileProto {
             }
         }
 
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         @java.lang.SuppressWarnings("ReturnValueIgnored")
         private void setLayers(int index, io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer value) {
             value.getClass(); // minimal bytecode null check
             ensureLayersIsMutable();
             layers_.set(index, value);
         }
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         @java.lang.SuppressWarnings("ReturnValueIgnored")
         private void addLayers(io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer value) {
             value.getClass(); // minimal bytecode null check
             ensureLayersIsMutable();
             layers_.add(value);
         }
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         @java.lang.SuppressWarnings("ReturnValueIgnored")
         private void addLayers(int index, io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer value) {
             value.getClass(); // minimal bytecode null check
             ensureLayersIsMutable();
             layers_.add(index, value);
         }
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         private void addAllLayers(
                 java.lang.Iterable<? extends io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer> values) {
             ensureLayersIsMutable();
             com.google.protobuf.AbstractMessageLite.addAll(values, layers_);
         }
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         private void clearLayers() {
             layers_ = emptyProtobufList();
         }
-        /**
-         * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-         */
+        /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
         private void removeLayers(int index) {
             ensureLayersIsMutable();
             layers_.remove(index);
@@ -3651,9 +4081,7 @@ final class VectorTileProto {
             return DEFAULT_INSTANCE.createBuilder(prototype);
         }
 
-        /**
-         * Protobuf type {@code io.tileverse.vectortile.mvt.Tile}
-         */
+        /** Protobuf type {@code io.tileverse.vectortile.mvt.Tile} */
         public static final class Builder
                 extends com.google.protobuf.GeneratedMessageLite.ExtendableBuilder<
                         io.tileverse.vectortile.mvt.VectorTileProto.Tile, Builder>
@@ -3665,97 +4093,73 @@ final class VectorTileProto {
                 super(DEFAULT_INSTANCE);
             }
 
-            /**
-             * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-             */
+            /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
             @java.lang.Override
             public java.util.List<io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer> getLayersList() {
                 return java.util.Collections.unmodifiableList(instance.getLayersList());
             }
-            /**
-             * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-             */
+            /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
             @java.lang.Override
             public int getLayersCount() {
                 return instance.getLayersCount();
             }
-            /**
-             * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-             */
+            /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
             @java.lang.Override
             public io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer getLayers(int index) {
                 return instance.getLayers(index);
             }
-            /**
-             * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-             */
+            /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
             public Builder setLayers(int index, io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer value) {
                 copyOnWrite();
                 instance.setLayers(index, value);
                 return this;
             }
-            /**
-             * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-             */
+            /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
             public Builder setLayers(
                     int index, io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer.Builder builderForValue) {
                 copyOnWrite();
                 instance.setLayers(index, builderForValue.build());
                 return this;
             }
-            /**
-             * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-             */
+            /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
             public Builder addLayers(io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer value) {
                 copyOnWrite();
                 instance.addLayers(value);
                 return this;
             }
-            /**
-             * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-             */
+            /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
             public Builder addLayers(int index, io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer value) {
                 copyOnWrite();
                 instance.addLayers(index, value);
                 return this;
             }
-            /**
-             * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-             */
+            /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
             public Builder addLayers(io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer.Builder builderForValue) {
                 copyOnWrite();
                 instance.addLayers(builderForValue.build());
                 return this;
             }
-            /**
-             * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-             */
+            /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
             public Builder addLayers(
                     int index, io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer.Builder builderForValue) {
                 copyOnWrite();
                 instance.addLayers(index, builderForValue.build());
                 return this;
             }
-            /**
-             * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-             */
+            /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
             public Builder addAllLayers(
                     java.lang.Iterable<? extends io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer> values) {
                 copyOnWrite();
                 instance.addAllLayers(values);
                 return this;
             }
-            /**
-             * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-             */
+            /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
             public Builder clearLayers() {
                 copyOnWrite();
                 instance.clearLayers();
                 return this;
             }
-            /**
-             * <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code>
-             */
+            /** <code>repeated .io.tileverse.vectortile.mvt.Tile.Layer layers = 3;</code> */
             public Builder removeLayers(int index) {
                 copyOnWrite();
                 instance.removeLayers(index);

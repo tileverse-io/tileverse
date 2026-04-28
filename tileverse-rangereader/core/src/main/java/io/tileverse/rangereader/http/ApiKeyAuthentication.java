@@ -21,9 +21,9 @@ import lombok.NonNull;
 
 /**
  * API Key Authentication implementation for HttpRangeReader.
- * <p>
- * This authenticator adds an API key header to requests, which is commonly used
- * for API authentication. It supports different header names and value formats.
+ *
+ * <p>This authenticator adds an API key header to requests, which is commonly used for API authentication. It supports
+ * different header names and value formats.
  */
 public class ApiKeyAuthentication implements HttpAuthentication {
 
@@ -43,9 +43,9 @@ public class ApiKeyAuthentication implements HttpAuthentication {
 
     /**
      * Creates a new API Key Authentication instance with custom header name and value prefix.
-     * <p>
-     * This is useful for APIs that require a specific format for the API key value,
-     * such as "ApiKey " or "Key " followed by the actual key.
+     *
+     * <p>This is useful for APIs that require a specific format for the API key value, such as "ApiKey " or "Key "
+     * followed by the actual key.
      *
      * @param headerName The name of the header to use (e.g., "X-API-Key")
      * @param apiKey The API key value

@@ -17,9 +17,9 @@ package io.tileverse.tiling.pyramid;
 
 /**
  * Memory-optimized TileIndex implementation using 32-bit integers for coordinates.
- * <p>
- * Used when both X and Y coordinates fit within the int range (-2^31 to 2^31-1).
- * This saves 8 bytes per instance compared to the long-based implementation.
+ *
+ * <p>Used when both X and Y coordinates fit within the int range (-2^31 to 2^31-1). This saves 8 bytes per instance
+ * compared to the long-based implementation.
  *
  * @param x the X coordinate (32-bit)
  * @param y the Y coordinate (32-bit)

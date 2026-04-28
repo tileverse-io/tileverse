@@ -33,9 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * Tests for using different block sizes for memory and disk operations.
- */
+/** Tests for using different block sizes for memory and disk operations. */
 class DualBlockSizeRangeReaderTest {
 
     @TempDir

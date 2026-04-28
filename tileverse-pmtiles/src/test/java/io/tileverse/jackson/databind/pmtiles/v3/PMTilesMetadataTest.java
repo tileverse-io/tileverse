@@ -34,9 +34,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * Tests for PMTiles metadata object model following PMTiles v3 specification.
- */
+/** Tests for PMTiles metadata object model following PMTiles v3 specification. */
 class PMTilesMetadataTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -46,8 +44,7 @@ class PMTilesMetadataTest {
 
     @Test
     void testSimpleMetadataDeserialization() throws Exception {
-        String json =
-                """
+        String json = """
             {
                 "name": "Test Tileset",
                 "description": "A test tileset for unit testing",
@@ -70,8 +67,7 @@ class PMTilesMetadataTest {
 
     @Test
     void testVectorTilesetMetadata() throws Exception {
-        String json =
-                """
+        String json = """
             {
                 "name": "Vector Tileset",
                 "description": "A vector tileset with layers",
@@ -140,8 +136,7 @@ class PMTilesMetadataTest {
 
     @Test
     void testMetadataWithUnknownProperties() throws Exception {
-        String json =
-                """
+        String json = """
             {
                 "name": "Test Tileset",
                 "description": "Test description",
@@ -203,8 +198,7 @@ class PMTilesMetadataTest {
     @Test
     void testTilesetTypeEnum() throws Exception {
         // Test baselayer type
-        String baselayerJson =
-                """
+        String baselayerJson = """
             {
                 "name": "Base Map",
                 "type": "baselayer"
@@ -215,8 +209,7 @@ class PMTilesMetadataTest {
         assertEquals(TilesetType.BASELAYER, baselayerMetadata.type());
 
         // Test overlay type
-        String overlayJson =
-                """
+        String overlayJson = """
             {
                 "name": "Overlay Map",
                 "type": "overlay"
@@ -227,8 +220,7 @@ class PMTilesMetadataTest {
         assertEquals(TilesetType.OVERLAY, overlayMetadata.type());
 
         // Test unknown type (should be null for forward compatibility)
-        String unknownJson =
-                """
+        String unknownJson = """
             {
                 "name": "Unknown Map",
                 "type": "unknown_type"

@@ -43,9 +43,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * Tests for {@link DiskCachingRangeReader}.
- */
+/** Tests for {@link DiskCachingRangeReader}. */
 @Disabled("random failures in github actions, revisit")
 class DiskCachingRangeReaderTest {
 
@@ -78,9 +76,8 @@ class DiskCachingRangeReaderTest {
     }
 
     /**
-     * Helper method to count cache files recursively in the cache directory.
-     * This accounts for the new subdirectory structure where cache files are stored
-     * in subdirectories based on source hash.
+     * Helper method to count cache files recursively in the cache directory. This accounts for the new subdirectory
+     * structure where cache files are stored in subdirectories based on source hash.
      */
     private long countCacheFiles(Path cacheDir) throws IOException {
         if (!Files.exists(cacheDir)) {
@@ -91,9 +88,7 @@ class DiskCachingRangeReaderTest {
         }
     }
 
-    /**
-     * Helper method to get all cache file paths recursively.
-     */
+    /** Helper method to get all cache file paths recursively. */
     private Path[] getAllCacheFiles(Path cacheDir) throws IOException {
         if (!Files.exists(cacheDir)) {
             return new Path[0];
@@ -211,8 +206,9 @@ class DiskCachingRangeReaderTest {
             cachingReader.clearCache();
 
             assertEquals(0, cachingReader.getCacheEntryCount(), "Should have 0 cache entries after clearing");
-            await().atMost(2, SECONDS).untilAsserted(() -> assertThat(cachingReader.getEstimatedCacheSizeBytes())
-                    .isZero());
+            await().atMost(2, SECONDS)
+                    .untilAsserted(() -> assertThat(cachingReader.getEstimatedCacheSizeBytes())
+                            .isZero());
 
             // Verify no files in cache directory
             await().atMost(2, SECONDS)
@@ -648,8 +644,8 @@ class DiskCachingRangeReaderTest {
     }
 
     /**
-     * Test that DiskCachingRangeReader is resilient to all cache files being deleted externally.
-     * This simulates a scenario where a user manually deletes all files from the cache directory.
+     * Test that DiskCachingRangeReader is resilient to all cache files being deleted externally. This simulates a
+     * scenario where a user manually deletes all files from the cache directory.
      */
     @Test
     void testResilienceToAllCacheFilesDeleted() throws IOException {
@@ -769,8 +765,8 @@ class DiskCachingRangeReaderTest {
     }
 
     /**
-     * Test that DiskCachingRangeReader is resilient to selective cache files being deleted externally.
-     * This simulates a scenario where only some cache files are deleted from the cache directory.
+     * Test that DiskCachingRangeReader is resilient to selective cache files being deleted externally. This simulates a
+     * scenario where only some cache files are deleted from the cache directory.
      */
     @Test
     void testResilienceToSelectiveCacheFileDeletion() throws IOException {
@@ -878,9 +874,8 @@ class DiskCachingRangeReaderTest {
     }
 
     /**
-     * Test that DiskCachingRangeReader properly maintains its cache size tracking when
-     * files are deleted externally. This ensures cache eviction works correctly even after
-     * external file deletions.
+     * Test that DiskCachingRangeReader properly maintains its cache size tracking when files are deleted externally.
+     * This ensures cache eviction works correctly even after external file deletions.
      */
     @Test
     void testCacheSizeAccountingAfterFileDeletion() throws IOException {

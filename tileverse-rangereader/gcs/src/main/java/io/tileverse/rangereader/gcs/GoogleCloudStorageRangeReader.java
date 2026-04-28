@@ -40,9 +40,9 @@ import java.util.logging.Logger;
 
 /**
  * A RangeReader implementation that reads from Google Cloud Storage.
- * <p>
- * This class enables reading data stored in Google Cloud Storage buckets using the
- * Google Cloud Storage client library for Java.
+ *
+ * <p>This class enables reading data stored in Google Cloud Storage buckets using the Google Cloud Storage client
+ * library for Java.
  */
 public class GoogleCloudStorageRangeReader extends AbstractRangeReader implements RangeReader {
 
@@ -159,9 +159,7 @@ public class GoogleCloudStorageRangeReader extends AbstractRangeReader implement
         return new Builder();
     }
 
-    /**
-     * Builder for GoogleCloudStorageRangeReader.
-     */
+    /** Builder for GoogleCloudStorageRangeReader. */
     public static class Builder {
         private Storage storage;
         private String projectId;
@@ -189,18 +187,18 @@ public class GoogleCloudStorageRangeReader extends AbstractRangeReader implement
         }
 
         /**
-         * Sets the project ID. If no project ID is set, an attempt to obtain a default project ID from the environment will be made.
-         *<p>
-         *The default project ID will be obtained by the first available project ID among the
-         * following sources:
+         * Sets the project ID. If no project ID is set, an attempt to obtain a default project ID from the environment
+         * will be made.
+         *
+         * <p>The default project ID will be obtained by the first available project ID among the following sources:
          *
          * <ol>
-         * <li>The project ID specified by the {@code GOOGLE_CLOUD_PROJECT} environment variable
-         * <li>The App Engine project ID
-         * <li>The project ID specified in the JSON credentials file pointed by the
-         * {@code GOOGLE_APPLICATION_CREDENTIALS} environment variable
-         * <li>The Google Cloud SDK project ID
-         * <li>The Compute Engine project ID
+         *   <li>The project ID specified by the {@code GOOGLE_CLOUD_PROJECT} environment variable
+         *   <li>The App Engine project ID
+         *   <li>The project ID specified in the JSON credentials file pointed by the
+         *       {@code GOOGLE_APPLICATION_CREDENTIALS} environment variable
+         *   <li>The Google Cloud SDK project ID
+         *   <li>The Compute Engine project ID
          * </ol>
          *
          * @param projectId the project ID
@@ -213,8 +211,9 @@ public class GoogleCloudStorageRangeReader extends AbstractRangeReader implement
 
         /**
          * Sets the bucket name.
-         * <p>
-         * Optionally, use {@link #uri(URI)} to set both bucket and object name
+         *
+         * <p>Optionally, use {@link #uri(URI)} to set both bucket and object name
+         *
          * @param bucket the bucket name
          * @return this builder
          */
@@ -225,8 +224,8 @@ public class GoogleCloudStorageRangeReader extends AbstractRangeReader implement
 
         /**
          * Sets the object name.
-         * <p>
-         * Optionally, use {@link #uri(URI)} to set both bucket and object name
+         *
+         * <p>Optionally, use {@link #uri(URI)} to set both bucket and object name
          *
          * @param objectName the object name
          * @return this builder
@@ -238,8 +237,8 @@ public class GoogleCloudStorageRangeReader extends AbstractRangeReader implement
 
         /**
          * Sets the quotaProjectId that specifies the project used for quota and billing purposes.
-         * <p>
-         * The caller must have {@code serviceusage.services.use} permission on the project
+         *
+         * <p>The caller must have {@code serviceusage.services.use} permission on the project
          *
          * @param quotaProjectId quota project identifier
          * @return this builder
@@ -251,10 +250,11 @@ public class GoogleCloudStorageRangeReader extends AbstractRangeReader implement
         }
         /**
          * Whether to use the default application credentials chain.
-         * <p>
-         * To set up Application Default Credentials for your environment, see https://cloud.google.com/docs/authentication/external/set-up-adc
-         * <p>
-         * Not doing so will lead to an error saying "Your default credentials were not found"
+         *
+         * <p>To set up Application Default Credentials for your environment, see
+         * https://cloud.google.com/docs/authentication/external/set-up-adc
+         *
+         * <p>Not doing so will lead to an error saying "Your default credentials were not found"
          *
          * @param defaultCredentialsChain boolean indicating whether to use the default credentials
          * @return this builder
@@ -266,26 +266,24 @@ public class GoogleCloudStorageRangeReader extends AbstractRangeReader implement
 
         /**
          * Sets the bucket and object from a GCS URI.
-         * <p>
-         * A GCS URL, or Google Cloud Storage Uniform Resource Locator, refers to the
-         * address used to access resources stored within Google Cloud Storage. There
-         * are several forms of GCS URLs, depending on the context and desired access
-         * method:
+         *
+         * <p>A GCS URL, or Google Cloud Storage Uniform Resource Locator, refers to the address used to access
+         * resources stored within Google Cloud Storage. There are several forms of GCS URLs, depending on the context
+         * and desired access method:
          *
          * <ul>
-         * <li>{@code gs://} URI: This is the canonical URI format for referencing
-         * objects within Cloud Storage. It is commonly used within Google Cloud
-         * services, tools, and libraries for internal referencing. For example:
-         * <pre>
+         *   <li>{@code gs://} URI: This is the canonical URI format for referencing objects within Cloud Storage. It is
+         *       commonly used within Google Cloud services, tools, and libraries for internal referencing. For example:
+         *       <pre>
          * {@literal gs://your-bucket-name/your-object-name}
          * </pre>
-         * <li>Public HTTP/HTTPS URLs: If an object is configured for public access, it
-         * can be accessed directly via a standard HTTP or HTTPS URL. These URLs are
-         * typically in the format:
-         * <pre>
+         *   <li>Public HTTP/HTTPS URLs: If an object is configured for public access, it can be accessed directly via a
+         *       standard HTTP or HTTPS URL. These URLs are typically in the format:
+         *       <pre>
          * {@literal https://storage.googleapis.com/your-bucket-name/your-object-name}
          * </pre>
          * </ul>
+         *
          * This method extracts {@link #bucket(String)} and {@link #objectName(String)} from the URI
          *
          * @param uri the GCS URI

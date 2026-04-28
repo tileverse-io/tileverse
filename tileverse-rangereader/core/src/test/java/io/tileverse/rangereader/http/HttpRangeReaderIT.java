@@ -38,13 +38,11 @@ import org.testcontainers.utility.MountableFile;
 
 /**
  * Integration tests for HttpRangeReader using Nginx container.
- * <p>
- * These tests verify that the HttpRangeReader can correctly read ranges of
- * bytes from an HTTP server using range requests. The tests use an Nginx
- * container to serve a static test file that is accessed by the
- * HttpRangeReader.
- * <p>
- * Note: For tests using authentication, see HttpRangeReaderAuthenticationIT.
+ *
+ * <p>These tests verify that the HttpRangeReader can correctly read ranges of bytes from an HTTP server using range
+ * requests. The tests use an Nginx container to serve a static test file that is accessed by the HttpRangeReader.
+ *
+ * <p>Note: For tests using authentication, see HttpRangeReaderAuthenticationIT.
  */
 @Testcontainers(disabledWithoutDocker = true)
 class HttpRangeReaderIT extends AbstractRangeReaderIT {
@@ -91,9 +89,7 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
         return HttpRangeReader.of(testFileUri);
     }
 
-    /**
-     * Additional HTTP-specific tests can go here
-     */
+    /** Additional HTTP-specific tests can go here */
     @Test
     void testHttpRangeReaderBuilder() throws IOException {
         try (RangeReader reader = HttpRangeReader.builder().uri(testFileUri).build()) {

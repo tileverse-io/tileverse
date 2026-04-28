@@ -95,10 +95,7 @@ class DirectoryCache {
         return manager.getCache(SHARED_CACHE_NAME, this::buildCache).subCache(pmtilesUniqueUri);
     }
 
-    /**
-     * Short-lived (expireAfterAccess) cache of directory entries to account for
-     * multiple/concurrent requests
-     */
+    /** Short-lived (expireAfterAccess) cache of directory entries to account for multiple/concurrent requests */
     private io.tileverse.cache.Cache<ByteRange, PMTilesDirectory> buildCache() {
         return CaffeineCache.<ByteRange, PMTilesDirectory>newBuilder()
                 .maxHeapPercent(maxHeapPercent, DirectoryCache::weigh)
@@ -111,9 +108,7 @@ class DirectoryCache {
                 .build();
     }
 
-    /**
-     * {@link #cache} loading function
-     */
+    /** {@link #cache} loading function */
     PMTilesDirectory readDirectory(ByteRange directoryRange) {
         final byte compression = header.internalCompression();
         try (SeekableByteChannel channel = channelSupplier.get();

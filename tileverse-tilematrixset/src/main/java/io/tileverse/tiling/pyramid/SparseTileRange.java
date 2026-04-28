@@ -24,23 +24,27 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * A sparse {@link TileRange} is composed of two or more tile ranges and covers exactly the union of
- * tile indices of its parts, with the same {@link #cornerOfOrigin()} and {@link #zoomLevel()}.
- * <p>
- * The bound-related method may return tile indices that lay outside the actual tile indices:
+ * A sparse {@link TileRange} is composed of two or more tile ranges and covers exactly the union of tile indices of its
+ * parts, with the same {@link #cornerOfOrigin()} and {@link #zoomLevel()}.
+ *
+ * <p>The bound-related method may return tile indices that lay outside the actual tile indices:
+ *
  * <ul>
- * <li> {@link #minx()}, {@link #miny()}, {@link #maxx()}, {@link #maxy()}
- * <li> {@link #min()}, {@link #max()}
- * <li> {@link #topLeft()}, {@link #topRight()}, {@link #bottomLeft()}, {@link #bottomRight()}
- * <li> {@link #spanX()}, {@link #spanY()}
+ *   <li>{@link #minx()}, {@link #miny()}, {@link #maxx()}, {@link #maxy()}
+ *   <li>{@link #min()}, {@link #max()}
+ *   <li>{@link #topLeft()}, {@link #topRight()}, {@link #bottomLeft()}, {@link #bottomRight()}
+ *   <li>{@link #spanX()}, {@link #spanY()}
  * </ul>
+ *
  * The navigation-related methods will though only traverse the tile indices covered by its parts, with no duplication
  * even if the parts intersect themselves:
+ *
  * <ul>
- * <li> {@link #first()}, {@link #last()}
- * <li> {@link #next(TileIndex)}, {@link #prev(TileIndex)}
- * <li> {@link #all()}
+ *   <li>{@link #first()}, {@link #last()}
+ *   <li>{@link #next(TileIndex)}, {@link #prev(TileIndex)}
+ *   <li>{@link #all()}
  * </ul>
+ *
  * {@link #count()} will return the actual tile count.
  *
  * @implNote internally, the list of parts will be split into non-overlapping tile ranges
@@ -76,51 +80,38 @@ record SparseTileRange(List<TileRange> parts) implements TileRange {
         return parts.get(parts.size() - 1);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public boolean isSparse() {
         return true;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public int zoomLevel() {
         return firstRange().zoomLevel();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public CornerOfOrigin cornerOfOrigin() {
         return firstRange().cornerOfOrigin();
     }
 
-    /**
-     * {@inheritDoc}
-     * Note for a sparse tile range the min index may not be {@link #contains(TileIndex) contained}
-     */
+    /** {@inheritDoc} Note for a sparse tile range the min index may not be {@link #contains(TileIndex) contained} */
     @Override
     public TileIndex min() {
         return TileIndex.xyz(minx(), miny(), zoomLevel());
     }
 
-    /**
-     * {@inheritDoc}
-     * Note for a sparse tile range the max index may not be {@link #contains(TileIndex) contained}
-     */
+    /** {@inheritDoc} Note for a sparse tile range the max index may not be {@link #contains(TileIndex) contained} */
     @Override
     public TileIndex max() {
         return TileIndex.xyz(maxx(), maxy(), zoomLevel());
     }
 
     /**
-     * {@inheritDoc}
-     * Note for a sparse tile range the top left index may not be {@link #contains(TileIndex) contained}
+     * {@inheritDoc} Note for a sparse tile range the top left index may not be {@link #contains(TileIndex) contained}
      */
     @Override
     public TileIndex topLeft() {
@@ -128,8 +119,8 @@ record SparseTileRange(List<TileRange> parts) implements TileRange {
     }
 
     /**
-     * {@inheritDoc}
-     * Note for a sparse tile range the bottom left index may not be {@link #contains(TileIndex) contained}
+     * {@inheritDoc} Note for a sparse tile range the bottom left index may not be {@link #contains(TileIndex)
+     * contained}
      */
     @Override
     public TileIndex bottomLeft() {
@@ -137,8 +128,7 @@ record SparseTileRange(List<TileRange> parts) implements TileRange {
     }
 
     /**
-     * {@inheritDoc}
-     * Note for a sparse tile range the top right index may not be {@link #contains(TileIndex) contained}
+     * {@inheritDoc} Note for a sparse tile range the top right index may not be {@link #contains(TileIndex) contained}
      */
     @Override
     public TileIndex topRight() {
@@ -146,73 +136,57 @@ record SparseTileRange(List<TileRange> parts) implements TileRange {
     }
 
     /**
-     * {@inheritDoc}
-     * Note for a sparse tile range the bottom right index may not be {@link #contains(TileIndex) contained}
+     * {@inheritDoc} Note for a sparse tile range the bottom right index may not be {@link #contains(TileIndex)
+     * contained}
      */
     @Override
     public TileIndex bottomRight() {
         return cornerOfOrigin().lowerRight(this);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public long minx() {
         return parts().stream().mapToLong(TileRange::minx).min().orElseThrow();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public long maxx() {
         return parts().stream().mapToLong(TileRange::maxx).max().orElseThrow();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public long miny() {
         return parts().stream().mapToLong(TileRange::miny).min().orElseThrow();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public long maxy() {
         return parts().stream().mapToLong(TileRange::maxy).max().orElseThrow();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public long count() {
         return parts().stream().mapToLong(TileRange::count).sum();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public TileIndex first() {
         return firstRange().first();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public TileIndex last() {
         return lastRange().last();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public Optional<TileIndex> next(TileIndex current) {
         // Find which part contains the current tile
@@ -239,9 +213,7 @@ record SparseTileRange(List<TileRange> parts) implements TileRange {
         return Optional.empty();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public Optional<TileIndex> prev(TileIndex current) {
         // Find which part contains the current tile
@@ -268,25 +240,19 @@ record SparseTileRange(List<TileRange> parts) implements TileRange {
         return Optional.empty();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public Stream<TileIndex> all() {
         return parts().stream().flatMap(TileRange::all);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public boolean contains(TileIndex tile) {
         return parts().stream().anyMatch(range -> range.contains(tile));
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public boolean contains(TileRange range) {
         if (range instanceof SparseTileRange sparse) {
@@ -299,9 +265,7 @@ record SparseTileRange(List<TileRange> parts) implements TileRange {
                 && contains(range.topRight());
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public TileRange withCornerOfOrigin(CornerOfOrigin targetOrigin) {
         if (this.cornerOfOrigin() == targetOrigin) {
@@ -314,9 +278,7 @@ record SparseTileRange(List<TileRange> parts) implements TileRange {
         return new SparseTileRange(newOriginParts);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    /** {@inheritDoc} */
     @Override
     public int compareTo(TileRange o) {
         return COMPARATOR.compare(this, o);

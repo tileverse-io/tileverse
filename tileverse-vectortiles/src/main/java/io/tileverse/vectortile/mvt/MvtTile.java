@@ -28,8 +28,8 @@ import org.locationtech.jts.geom.Envelope;
 
 /**
  * Creates an MvtTile from protobuf data.
- * <p>
- * Coordinates are returned in their natural extent space (0 to extent-1) as stored in the MVT data.
+ *
+ * <p>Coordinates are returned in their natural extent space (0 to extent-1) as stored in the MVT data.
  *
  * @param tileProto the MVT protobuf tile data
  */

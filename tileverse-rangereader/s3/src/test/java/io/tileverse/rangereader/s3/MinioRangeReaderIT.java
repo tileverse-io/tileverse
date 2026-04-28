@@ -41,10 +41,9 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 /**
  * Integration tests for S3RangeReader using MinIO.
- * <p>
- * These tests verify that the S3RangeReader can correctly read ranges of bytes
- * from an S3-compatible storage using MinIO. This demonstrates compatibility
- * with S3-compatible storage systems beyond AWS S3.
+ *
+ * <p>These tests verify that the S3RangeReader can correctly read ranges of bytes from an S3-compatible storage using
+ * MinIO. This demonstrates compatibility with S3-compatible storage systems beyond AWS S3.
  */
 @Testcontainers(disabledWithoutDocker = true)
 class MinIORangeReaderIT extends AbstractRangeReaderIT {
@@ -99,9 +98,7 @@ class MinIORangeReaderIT extends AbstractRangeReaderIT {
                 .build();
     }
 
-    /**
-     * Additional MinIO-specific tests can go here
-     */
+    /** Additional MinIO-specific tests can go here */
     @Test
     void testMinioSpecificConfiguration() throws IOException {
         // use explicit endpoint override and force path style

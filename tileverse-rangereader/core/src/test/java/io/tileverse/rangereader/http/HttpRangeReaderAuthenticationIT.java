@@ -35,10 +35,10 @@ import org.testcontainers.utility.MountableFile;
 
 /**
  * Integration tests for HttpRangeReader authentication mechanisms.
- * <p>
- * Uses an Apache httpd container that supports all authentication types natively:
- * Basic and Digest via {@code mod_auth_basic}/{@code mod_auth_digest}, and
- * Bearer Token, API Key, and Custom Header via {@code mod_rewrite} string comparison.
+ *
+ * <p>Uses an Apache httpd container that supports all authentication types natively: Basic and Digest via
+ * {@code mod_auth_basic}/{@code mod_auth_digest}, and Bearer Token, API Key, and Custom Header via {@code mod_rewrite}
+ * string comparison.
  */
 @Testcontainers(disabledWithoutDocker = true)
 class HttpRangeReaderAuthenticationIT {
@@ -78,10 +78,7 @@ class HttpRangeReaderAuthenticationIT {
     @Container
     @SuppressWarnings("resource")
     static GenericContainer<?> httpd = new GenericContainer<>(DockerImageName.parse("httpd:alpine"))
-            .withCommand(
-                    "sh",
-                    "-c",
-                    """
+            .withCommand("sh", "-c", """
                     dd if=/dev/urandom of=/usr/local/apache2/htdocs/%s bs=1024 count=100 2>/dev/null && \
                     for dir in basic digest bearer apikey custom; do \
                         mkdir -p /usr/local/apache2/htdocs/secured/$dir && \
@@ -91,18 +88,17 @@ class HttpRangeReaderAuthenticationIT {
                     HASH=$(printf '%%s' '%s:%s:%s' | md5sum | cut -d' ' -f1) && \
                     printf '%%s\\n' "%s:%s:$HASH" > /usr/local/apache2/conf/.htdigest && \
                     httpd-foreground
-                    """
-                            .formatted(
-                                    TEST_FILE_NAME,
-                                    TEST_FILE_NAME,
-                                    TEST_FILE_NAME,
-                                    BASIC_AUTH_USER,
-                                    BASIC_AUTH_PASSWORD,
-                                    DIGEST_AUTH_USER,
-                                    DIGEST_AUTH_REALM,
-                                    DIGEST_AUTH_PASSWORD,
-                                    DIGEST_AUTH_USER,
-                                    DIGEST_AUTH_REALM))
+                    """.formatted(
+                            TEST_FILE_NAME,
+                            TEST_FILE_NAME,
+                            TEST_FILE_NAME,
+                            BASIC_AUTH_USER,
+                            BASIC_AUTH_PASSWORD,
+                            DIGEST_AUTH_USER,
+                            DIGEST_AUTH_REALM,
+                            DIGEST_AUTH_PASSWORD,
+                            DIGEST_AUTH_USER,
+                            DIGEST_AUTH_REALM))
             .withExposedPorts(80)
             .withCopyFileToContainer(
                     MountableFile.forClasspathResource("httpd-auth-test.conf"), "/usr/local/apache2/conf/httpd.conf")

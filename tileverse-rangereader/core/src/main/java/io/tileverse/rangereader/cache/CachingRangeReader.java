@@ -31,30 +31,32 @@ import java.util.OptionalLong;
 
 /**
  * A decorator for RangeReader that adds in-memory caching capabilities using Caffeine.
- * <p>
- * This implementation caches recently accessed byte ranges to improve
- * performance for repeated reads, which is common when accessing the same data
- * ranges multiple times.
- * <p>
- * <strong>Cache Configuration:</strong>
- * The cache can be configured with explicit size limits for predictable memory usage:
+ *
+ * <p>This implementation caches recently accessed byte ranges to improve performance for repeated reads, which is
+ * common when accessing the same data ranges multiple times.
+ *
+ * <p><strong>Cache Configuration:</strong> The cache can be configured with explicit size limits for predictable memory
+ * usage:
+ *
  * <ul>
- * <li><strong>Entry-based sizing:</strong> Use {@code maximumSize(long)} to limit the number of cached ranges</li>
- * <li><strong>Memory-based sizing:</strong> Use {@code maximumWeight(long)} or {@code maxSizeBytes(long)}
- *     to limit total memory usage (entries are automatically weighted by ByteBuffer capacity)</li>
- * <li><strong>Adaptive sizing (default):</strong> If no size limits are specified, soft references are used
- *     automatically, allowing the garbage collector to manage cache size based on memory pressure</li>
+ *   <li><strong>Entry-based sizing:</strong> Use {@code maximumSize(long)} to limit the number of cached ranges
+ *   <li><strong>Memory-based sizing:</strong> Use {@code maximumWeight(long)} or {@code maxSizeBytes(long)} to limit
+ *       total memory usage (entries are automatically weighted by ByteBuffer capacity)
+ *   <li><strong>Adaptive sizing (default):</strong> If no size limits are specified, soft references are used
+ *       automatically, allowing the garbage collector to manage cache size based on memory pressure
  * </ul>
- * <p>
- * <strong>Optional Configuration:</strong>
+ *
+ * <p><strong>Optional Configuration:</strong>
+ *
  * <ul>
- * <li><strong>Time-based expiration:</strong> Use {@code expireAfterAccess(duration, unit)} to automatically
- *     remove entries after a period of inactivity</li>
- * <li><strong>Memory pressure handling:</strong> Use {@code softValues()} to allow the garbage collector
- *     to reclaim cache entries when memory is needed</li>
+ *   <li><strong>Time-based expiration:</strong> Use {@code expireAfterAccess(duration, unit)} to automatically remove
+ *       entries after a period of inactivity
+ *   <li><strong>Memory pressure handling:</strong> Use {@code softValues()} to allow the garbage collector to reclaim
+ *       cache entries when memory is needed
  * </ul>
- * <p>
- * <strong>Usage Examples:</strong>
+ *
+ * <p><strong>Usage Examples:</strong>
+ *
  * <pre>{@code
  * // Adaptive cache (default) - GC manages size automatically
  * CachingRangeReader reader = CachingRangeReader.builder(delegate)
@@ -72,18 +74,16 @@ import java.util.OptionalLong;
  *     .withBlockAlignment() // Enable 64KB block alignment
  *     .build();
  * }</pre>
- * <p>
- * <strong>Block Alignment:</strong>
- * The cache supports internal block alignment that can significantly improve cache
- * efficiency by encouraging cache reuse across overlapping ranges. When enabled,
- * the cache aligns reads to block boundaries and caches larger blocks but returns
- * only the requested bytes to the caller.
+ *
+ * <p><strong>Block Alignment:</strong> The cache supports internal block alignment that can significantly improve cache
+ * efficiency by encouraging cache reuse across overlapping ranges. When enabled, the cache aligns reads to block
+ * boundaries and caches larger blocks but returns only the requested bytes to the caller.
+ *
  * <ul>
- * <li><strong>Default behavior:</strong> Block alignment is disabled by default to maintain
- *     backward compatibility</li>
- * <li><strong>Enable with default size:</strong> Use {@code withBlockAlignment()} for 64KB blocks</li>
- * <li><strong>Custom block size:</strong> Use {@code blockSize(int)} to specify a custom block size</li>
- * <li><strong>Explicit disable:</strong> Use {@code withoutBlockAlignment()} to explicitly disable</li>
+ *   <li><strong>Default behavior:</strong> Block alignment is disabled by default to maintain backward compatibility
+ *   <li><strong>Enable with default size:</strong> Use {@code withBlockAlignment()} for 64KB blocks
+ *   <li><strong>Custom block size:</strong> Use {@code blockSize(int)} to specify a custom block size
+ *   <li><strong>Explicit disable:</strong> Use {@code withoutBlockAlignment()} to explicitly disable
  * </ul>
  */
 public class CachingRangeReader extends AbstractRangeReader implements RangeReader {
@@ -102,11 +102,11 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
     private final ByteBuffer header;
 
     /**
-     * Creates a new CachingRangeReader with the provided cache.
-     * Package-private constructor - use the builder pattern instead.
+     * Creates a new CachingRangeReader with the provided cache. Package-private constructor - use the builder pattern
+     * instead.
      *
      * @param delegate The underlying RangeReader to delegate to
-     * @param cache    The cache to use for storing byte ranges
+     * @param cache The cache to use for storing byte ranges
      * @param blockSize The block size for alignment (0 to disable alignment)
      * @param headerSize The size of the header buffer (0 to disable header buffering)
      */
@@ -160,8 +160,8 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
     }
 
     /**
-     * Reads a range with block alignment, potentially spanning multiple single-block cache entries.
-     * Uses parallel loading for multi-block requests to improve performance.
+     * Reads a range with block alignment, potentially spanning multiple single-block cache entries. Uses parallel
+     * loading for multi-block requests to improve performance.
      */
     private int readRangeWithBlockAlignment(final long offset, final int actualLength, ByteBuffer target)
             throws IOException {
@@ -181,9 +181,7 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         }
     }
 
-    /**
-     * Computes the block requests needed to satisfy the given range request.
-     */
+    /** Computes the block requests needed to satisfy the given range request. */
     private List<BlockRequest> computeRequiredBlocks(long offset, int actualLength, int targetRemaining) {
         long currentOffset = offset;
         int remainingBytes = Math.min(actualLength, targetRemaining);
@@ -243,8 +241,8 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
     }
 
     /**
-     * Computes the appropriate block size for a cache key starting at the given offset.
-     * This accounts for EOF by ensuring the block size doesn't extend beyond the file size.
+     * Computes the appropriate block size for a cache key starting at the given offset. This accounts for EOF by
+     * ensuring the block size doesn't extend beyond the file size.
      *
      * @param blockStartOffset the starting offset of the block
      * @return the appropriate block size (may be less than blockSize if near EOF)
@@ -270,18 +268,15 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         }
     }
 
-    /**
-     * Reads a single block and copies the requested portion to the target buffer.
-     */
+    /** Reads a single block and copies the requested portion to the target buffer. */
     private int readSingleBlock(BlockRequest request, ByteBuffer target) throws IOException {
         ByteBuffer cachedBuffer = cache.get(request.key);
         return copyBlockData(cachedBuffer, request, target);
     }
 
     /**
-     * Reads multiple blocks and assembles the result.
-     * Note: With the blocking cache API, parallel loading happens at the cache level
-     * when multiple threads request different blocks.
+     * Reads multiple blocks and assembles the result. Note: With the blocking cache API, parallel loading happens at
+     * the cache level when multiple threads request different blocks.
      */
     private int readBlocksParallel(List<BlockRequest> blockRequests, ByteBuffer target) throws IOException {
         int totalBytesRead = 0;
@@ -298,9 +293,7 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         return totalBytesRead;
     }
 
-    /**
-     * Copies data from a cached block to the target buffer according to the block request.
-     */
+    /** Copies data from a cached block to the target buffer according to the block request. */
     private int copyBlockData(ByteBuffer blockData, BlockRequest request, ByteBuffer target) {
         // Duplicate to avoid affecting the cached version
         ByteBuffer duplicate = blockData.duplicate();
@@ -323,9 +316,7 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         return bytesToCopy;
     }
 
-    /**
-     * Represents a request for data from a specific block.
-     */
+    /** Represents a request for data from a specific block. */
     private record BlockRequest(
             ByteRange key, // The cache key for the block
             int offsetWithinBlock, // Offset within the block to start reading
@@ -333,9 +324,7 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
             int targetPosition // Position in target buffer (for future use)
             ) {}
 
-    /**
-     * Reads a range without block alignment, caching exactly what was requested.
-     */
+    /** Reads a range without block alignment, caching exactly what was requested. */
     private int readRangeWithoutAlignment(final long offset, final int actualLength, ByteBuffer target)
             throws IOException {
         // Create a cache key for the exact range
@@ -372,9 +361,7 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         cache.invalidateAll();
     }
 
-    /**
-     * Clears the cache, forcing subsequent reads to go to the underlying source.
-     */
+    /** Clears the cache, forcing subsequent reads to go to the underlying source. */
     public void clearCache() {
         cache.invalidateAll();
     }
@@ -407,8 +394,7 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
     }
 
     /**
-     * Creates a new builder for CachingRangeReader with the mandatory delegate
-     * parameter.
+     * Creates a new builder for CachingRangeReader with the mandatory delegate parameter.
      *
      * @param delegate the delegate RangeReader to wrap with caching
      * @return a new builder instance with the delegate set
@@ -417,9 +403,7 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         return new Builder(delegate);
     }
 
-    /**
-     * Builder for CachingRangeReader with configurable cache settings.
-     */
+    /** Builder for CachingRangeReader with configurable cache settings. */
     public static class Builder {
         private final RangeReader delegate;
         private Integer blockSize;
@@ -448,13 +432,11 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         }
 
         /**
-         * Sets the block size for internal block alignment. When set, the cache will
-         * align reads to block boundaries for better cache efficiency and reduced
-         * cache fragmentation.
-         * <p>
-         * For example, if block size is 64KB and you request 1 byte at offset 50000,
-         * the cache will read and store the entire 64KB block containing that byte,
-         * but only return the requested 1 byte to the caller.
+         * Sets the block size for internal block alignment. When set, the cache will align reads to block boundaries
+         * for better cache efficiency and reduced cache fragmentation.
+         *
+         * <p>For example, if block size is 64KB and you request 1 byte at offset 50000, the cache will read and store
+         * the entire 64KB block containing that byte, but only return the requested 1 byte to the caller.
          *
          * @param blockSize the block size in bytes (must be positive, 0 disables alignment)
          * @return this builder
@@ -469,8 +451,8 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         }
 
         /**
-         * Enables block alignment with the default block size (64KB).
-         * This is equivalent to calling {@code blockSize(DEFAULT_BLOCK_SIZE)}.
+         * Enables block alignment with the default block size (64KB). This is equivalent to calling
+         * {@code blockSize(DEFAULT_BLOCK_SIZE)}.
          *
          * @return this builder
          */
@@ -479,8 +461,7 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         }
 
         /**
-         * Disables block alignment by setting block size to 0.
-         * This is equivalent to calling {@code blockSize(0)}.
+         * Disables block alignment by setting block size to 0. This is equivalent to calling {@code blockSize(0)}.
          *
          * @return this builder
          */
@@ -489,13 +470,12 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         }
 
         /**
-         * Sets the size of the header buffer for caching the beginning of the file
-         * in memory. When enabled, reads from the beginning of the file (up to the
-         * header size) are served directly from this buffer without going through
+         * Sets the size of the header buffer for caching the beginning of the file in memory. When enabled, reads from
+         * the beginning of the file (up to the header size) are served directly from this buffer without going through
          * the cache.
-         * <p>
-         * This optimization is useful for file formats where metadata is stored at
-         * the beginning of the file and accessed frequently.
+         *
+         * <p>This optimization is useful for file formats where metadata is stored at the beginning of the file and
+         * accessed frequently.
          *
          * @param headerSize the header buffer size in bytes (0 to disable header buffering)
          * @return this builder
@@ -510,8 +490,8 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         }
 
         /**
-         * Enables header buffering with the default header size (128KB).
-         * This is equivalent to calling {@code headerSize(DEFAULT_HEADER_SIZE)}.
+         * Enables header buffering with the default header size (128KB). This is equivalent to calling
+         * {@code headerSize(DEFAULT_HEADER_SIZE)}.
          *
          * @return this builder
          */
@@ -520,8 +500,7 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
         }
 
         /**
-         * Disables header buffering by setting header size to 0.
-         * This is equivalent to calling {@code headerSize(0)}.
+         * Disables header buffering by setting header size to 0. This is equivalent to calling {@code headerSize(0)}.
          *
          * @return this builder
          */

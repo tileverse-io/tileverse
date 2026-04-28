@@ -17,9 +17,9 @@ package io.tileverse.tiling.pyramid;
 
 /**
  * TileIndex implementation using 64-bit longs for coordinates.
- * <p>
- * Used when either X or Y coordinates exceed the int range.
- * Provides full long precision for very large coordinate values.
+ *
+ * <p>Used when either X or Y coordinates exceed the int range. Provides full long precision for very large coordinate
+ * values.
  *
  * @param x the X coordinate (64-bit)
  * @param y the Y coordinate (64-bit)

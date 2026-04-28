@@ -36,9 +36,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Integration tests for GoogleCloudStorageRangeReader using Google Cloud Storage emulator.
- * <p>
- * These tests verify that the {@link GoogleCloudStorageRangeReader} can correctly read ranges of bytes
- * from a GCS bucket using the Google Cloud Storage API against a local emulator container.
+ *
+ * <p>These tests verify that the {@link GoogleCloudStorageRangeReader} can correctly read ranges of bytes from a GCS
+ * bucket using the Google Cloud Storage API against a local emulator container.
  */
 @Testcontainers(disabledWithoutDocker = true)
 public class GoogleCloudStorageRangeReaderIT extends AbstractRangeReaderIT {

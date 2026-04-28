@@ -22,9 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * Tests for TilesetType enum following TileJSON v3.0.0 specification.
- */
+/** Tests for TilesetType enum following TileJSON v3.0.0 specification. */
 class TilesetTypeTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -104,8 +102,7 @@ class TilesetTypeTest {
     @Test
     void testJacksonInObjectContext() throws Exception {
         // Test TilesetType within a JSON object context
-        String json =
-                """
+        String json = """
             {
                 "name": "Test Map",
                 "type": "baselayer"
@@ -127,8 +124,7 @@ class TilesetTypeTest {
     @Test
     void testJacksonInObjectContextUnknownValue() throws Exception {
         // Test unknown value in object context (should be null)
-        String json =
-                """
+        String json = """
             {
                 "name": "Test Map",
                 "type": "unknown_type"

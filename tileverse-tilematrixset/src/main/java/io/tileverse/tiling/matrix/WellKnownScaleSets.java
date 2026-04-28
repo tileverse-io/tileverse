@@ -18,9 +18,8 @@ package io.tileverse.tiling.matrix;
 public class WellKnownScaleSets {
 
     /**
-     * This WKSS has been defined for global cartographic products. Rounded scales
-     * have been chosen for intuitive cartographic representation of vector data.
-     * The scale denominator is only accurate near the Equator.
+     * This WKSS has been defined for global cartographic products. Rounded scales have been chosen for intuitive
+     * cartographic representation of vector data. The scale denominator is only accurate near the Equator.
      */
     public static ScaleSet GlobalCRS84Scale = ScaleSet.builder()
             .uri("http://www.opengis.net/def/wkss/OGC/1.0/GlobalCRS84Scale")
@@ -52,12 +51,10 @@ public class WellKnownScaleSets {
             .build();
 
     /**
-     * This WKSS has been defined for global cartographic products. Rounded cell
-     * sizes have been chosen for intuitive cartographic representation of raster
-     * data. Some values have been chosen to coincide with original cell size of
-     * commonly used global products like STRM (1” and 3”), GTOPO (30”) or ETOPO (2’
-     * and 5’). The scale denominator and approximated cell size in meters are only
-     * accurate near the Equator.
+     * This WKSS has been defined for global cartographic products. Rounded cell sizes have been chosen for intuitive
+     * cartographic representation of raster data. Some values have been chosen to coincide with original cell size of
+     * commonly used global products like STRM (1” and 3”), GTOPO (30”) or ETOPO (2’ and 5’). The scale denominator and
+     * approximated cell size in meters are only accurate near the Equator.
      */
     public static ScaleSet GlobalCRS84Pixel = ScaleSet.builder()
             .uri("http://www.opengis.net/def/wkss/OGC/1.0/GlobalCRS84Pixel")
@@ -86,15 +83,16 @@ public class WellKnownScaleSets {
             .build();
 
     /**
-     * This WKSS has been defined to allow quadtree pyramids in CRS84. The scale denominator is only accurate near the equator.
-     * <p>
-     * <strong>NOTE 1</strong>: The first scale denominator allows representation of the whole world in a single tile
-     * of 256×256 cells, where 128 lines of the tile are left blank. The latter is the reason why in the
-     * Annex D “World CRS84 Quad TileMatrixSet definition” this level is not used. The next level
-     * allows representation of the whole world in 2×1 tiles of 256×256 cells and so on in powers of 2.
-     * <p>
-     * <strong>NOTE 2</strong>: Selecting the word “Google” for this WKSS id is maintained for backwards compatibility
-     * even if the authors recognize that it was an unfortunate selection and might result in confusion
+     * This WKSS has been defined to allow quadtree pyramids in CRS84. The scale denominator is only accurate near the
+     * equator.
+     *
+     * <p><strong>NOTE 1</strong>: The first scale denominator allows representation of the whole world in a single tile
+     * of 256×256 cells, where 128 lines of the tile are left blank. The latter is the reason why in the Annex D “World
+     * CRS84 Quad TileMatrixSet definition” this level is not used. The next level allows representation of the whole
+     * world in 2×1 tiles of 256×256 cells and so on in powers of 2.
+     *
+     * <p><strong>NOTE 2</strong>: Selecting the word “Google” for this WKSS id is maintained for backwards
+     * compatibility even if the authors recognize that it was an unfortunate selection and might result in confusion
      * since the “Google-like” tiles do not use CRS84.
      */
     public static ScaleSet GoogleCRS84Quad = ScaleSet.builder()
@@ -125,14 +123,14 @@ public class WellKnownScaleSets {
             .build();
 
     /**
-     * This well-known scale set (a.k.a {@literal GoogleMapsCompatible}), has been defined to be compatible with many mass marked
-     * implementations such as Google Maps, Microsoft Bing Maps (formerly Microsoft Live Maps) and
-     * Open Street Map tiles. The scale denominator and cell size are only accurate near the equator.
-     * <p>
-     * <strong>NOTE</strong>: Level 0 allows representing most of the world (limited to latitudes between
-     * approximately +-85 degrees) in a single tile of 256×256 cells (Mercator projection cannot cover
-     * the whole world because mathematically the poles are at infinity). The next level represents
-     * most of the world in 2×2 tiles of 256×256 cells and so on in powers of 2.
+     * This well-known scale set (a.k.a {@literal GoogleMapsCompatible}), has been defined to be compatible with many
+     * mass marked implementations such as Google Maps, Microsoft Bing Maps (formerly Microsoft Live Maps) and Open
+     * Street Map tiles. The scale denominator and cell size are only accurate near the equator.
+     *
+     * <p><strong>NOTE</strong>: Level 0 allows representing most of the world (limited to latitudes between
+     * approximately +-85 degrees) in a single tile of 256×256 cells (Mercator projection cannot cover the whole world
+     * because mathematically the poles are at infinity). The next level represents most of the world in 2×2 tiles of
+     * 256×256 cells and so on in powers of 2.
      */
     public static ScaleSet WebMercatorQuad = ScaleSet.builder()
             .uri("http://www.opengis.net/def/wkss/OGC/1.0/GoogleMapsCompatible")
@@ -168,26 +166,22 @@ public class WellKnownScaleSets {
             .build();
 
     /**
-     * This well-known scale set has been defined as similar to
-     * {@link #WebMercatorQuad Google Maps} and Microsoft Bing Maps but using
-     * the WGS84 ellipsoid. The scale denominator and cell size are only accurate
-     * near the equator.
-     * <p>
-     * <strong>NOTE 1</strong>: Level 0 allows representing most of the world
-     * (limited to latitudes between approximately +-85 degrees) in a single tile of
-     * 256×256 cells (Mercator projection cannot cover the whole world because
-     * mathematically the poles are at infinity). The next level represents most of
-     * the world in 2×2 tiles of 256×256 cells and so on in powers of 2.
-     * <p>
-     * <strong>NOTE 2</strong>: Mercator projection distorts the cell size closer to
-     * the poles. The cell sizes provided here are only valid next to the equator.
-     * <p>
-     * <strong>NOTE 3</strong>: The scales and cell sizes of {@literal WorldMercatorWGS84} and
-     * {@linkplain #WebMercatorQuad GoogleMapsCompatible} are identical, but the two WKSS reference a different
-     * CRS. This WorldMercatorWGS84 WKSS was introduced in the first version of this
-     * standard and not present in the WMTS 1.0.0 specifications Annex E. However,
-     * WKSS are obsolete and not required to define a TileMatrixSet, so the introduction
-     * of this new WKSS was not necessary to define the WorldMercatorWGS84Quad TileMatrixSet
+     * This well-known scale set has been defined as similar to {@link #WebMercatorQuad Google Maps} and Microsoft Bing
+     * Maps but using the WGS84 ellipsoid. The scale denominator and cell size are only accurate near the equator.
+     *
+     * <p><strong>NOTE 1</strong>: Level 0 allows representing most of the world (limited to latitudes between
+     * approximately +-85 degrees) in a single tile of 256×256 cells (Mercator projection cannot cover the whole world
+     * because mathematically the poles are at infinity). The next level represents most of the world in 2×2 tiles of
+     * 256×256 cells and so on in powers of 2.
+     *
+     * <p><strong>NOTE 2</strong>: Mercator projection distorts the cell size closer to the poles. The cell sizes
+     * provided here are only valid next to the equator.
+     *
+     * <p><strong>NOTE 3</strong>: The scales and cell sizes of {@literal WorldMercatorWGS84} and
+     * {@linkplain #WebMercatorQuad GoogleMapsCompatible} are identical, but the two WKSS reference a different CRS.
+     * This WorldMercatorWGS84 WKSS was introduced in the first version of this standard and not present in the WMTS
+     * 1.0.0 specifications Annex E. However, WKSS are obsolete and not required to define a TileMatrixSet, so the
+     * introduction of this new WKSS was not necessary to define the WorldMercatorWGS84Quad TileMatrixSet
      */
     public static ScaleSet WorldMercatorWGS84 = WebMercatorQuad.toBuilder()
             .uri("http://www.opengis.net/def/wkss/OGC/1.0/WorldMercatorWGS84")

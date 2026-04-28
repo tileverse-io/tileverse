@@ -26,9 +26,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * Tests for VectorLayer following TileJSON v3.0.0 specification.
- */
+/** Tests for VectorLayer following TileJSON v3.0.0 specification. */
 class VectorLayerTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -163,8 +161,7 @@ class VectorLayerTest {
 
     @Test
     void testJSONDeserialization() throws Exception {
-        String json =
-                """
+        String json = """
             {
                 "id": "roads",
                 "fields": {

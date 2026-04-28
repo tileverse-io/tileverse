@@ -25,6 +25,7 @@ import org.assertj.core.api.Assertions;
  * AssertJ-style fluent assertions for MVT tiles.
  *
  * <p>Usage example:
+ *
  * <pre>{@code
  * Tile tile = ...;
  * TileAssertions.assertThat(tile)
@@ -39,16 +40,12 @@ class TileAssertions extends AbstractAssert<TileAssertions, VectorTile> {
         super(actual, TileAssertions.class);
     }
 
-    /**
-     * Entry point for fluent assertions on MVT tiles.
-     */
+    /** Entry point for fluent assertions on MVT tiles. */
     public static TileAssertions assertThat(VectorTile actual) {
         return new TileAssertions(actual);
     }
 
-    /**
-     * Assert that the tile has the specified number of layers.
-     */
+    /** Assert that the tile has the specified number of layers. */
     public TileAssertions hasLayerCount(int expectedCount) {
         isNotNull();
         Assertions.assertThat(actual.getLayers())
@@ -59,9 +56,7 @@ class TileAssertions extends AbstractAssert<TileAssertions, VectorTile> {
         return this;
     }
 
-    /**
-     * Assert that the tile has a layer with the specified name.
-     */
+    /** Assert that the tile has a layer with the specified name. */
     public TileAssertions hasLayer(String layerName) {
         isNotNull();
         Assertions.assertThat(actual.getLayerNames())
@@ -71,9 +66,7 @@ class TileAssertions extends AbstractAssert<TileAssertions, VectorTile> {
         return this;
     }
 
-    /**
-     * Assert that the tile has layers with the specified names (in any order).
-     */
+    /** Assert that the tile has layers with the specified names (in any order). */
     public TileAssertions hasLayers(String... layerNames) {
         isNotNull();
         Assertions.assertThat(actual.getLayerNames())
@@ -84,9 +77,7 @@ class TileAssertions extends AbstractAssert<TileAssertions, VectorTile> {
         return this;
     }
 
-    /**
-     * Assert that the tile has exactly the specified layers (in any order).
-     */
+    /** Assert that the tile has exactly the specified layers (in any order). */
     public TileAssertions hasExactLayers(String... layerNames) {
         isNotNull();
         Assertions.assertThat(actual.getLayerNames())
@@ -98,8 +89,8 @@ class TileAssertions extends AbstractAssert<TileAssertions, VectorTile> {
     }
 
     /**
-     * Navigate to layer assertions for the specified layer name.
-     * This preserves the tile context for downstream assertions.
+     * Navigate to layer assertions for the specified layer name. This preserves the tile context for downstream
+     * assertions.
      */
     public LayerAssertions layer(String layerName) {
         Layer layer = actual.getLayer(layerName).orElse(null);

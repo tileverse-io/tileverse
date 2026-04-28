@@ -31,18 +31,24 @@ class GoogleCloudStorageRangeReaderBuilderTest {
 
     @Test
     void testNullValidationOnSetters() {
-        assertThrows(NullPointerException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .storage(null));
-        assertThrows(NullPointerException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .projectId(null));
-        assertThrows(NullPointerException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .bucket(null));
-        assertThrows(NullPointerException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .objectName(null));
-        assertThrows(NullPointerException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .quotaProjectId(null));
-        assertThrows(NullPointerException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .uri(null));
+        assertThrows(
+                NullPointerException.class,
+                () -> GoogleCloudStorageRangeReader.builder().storage(null));
+        assertThrows(
+                NullPointerException.class,
+                () -> GoogleCloudStorageRangeReader.builder().projectId(null));
+        assertThrows(
+                NullPointerException.class,
+                () -> GoogleCloudStorageRangeReader.builder().bucket(null));
+        assertThrows(
+                NullPointerException.class,
+                () -> GoogleCloudStorageRangeReader.builder().objectName(null));
+        assertThrows(
+                NullPointerException.class,
+                () -> GoogleCloudStorageRangeReader.builder().quotaProjectId(null));
+        assertThrows(
+                NullPointerException.class,
+                () -> GoogleCloudStorageRangeReader.builder().uri(null));
     }
 
     @Test
@@ -100,14 +106,19 @@ class GoogleCloudStorageRangeReaderBuilderTest {
 
     @Test
     void testInvalidUrisAndMissingRequiredValues() {
-        assertThrows(IllegalArgumentException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .uri(URI.create("ftp://bucket/file.pmtiles")));
-        assertThrows(IllegalArgumentException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .uri(URI.create("gs:///file.pmtiles")));
-        assertThrows(IllegalArgumentException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .uri(URI.create("https://storage.googleapis.com/bucket")));
-        assertThrows(IllegalArgumentException.class, () -> GoogleCloudStorageRangeReader.builder()
-                .uri(URI.create("https://storage.googleapis.com//file.pmtiles")));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> GoogleCloudStorageRangeReader.builder().uri(URI.create("ftp://bucket/file.pmtiles")));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> GoogleCloudStorageRangeReader.builder().uri(URI.create("gs:///file.pmtiles")));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> GoogleCloudStorageRangeReader.builder().uri(URI.create("https://storage.googleapis.com/bucket")));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> GoogleCloudStorageRangeReader.builder()
+                        .uri(URI.create("https://storage.googleapis.com//file.pmtiles")));
 
         IllegalStateException ex = assertThrows(
                 IllegalStateException.class,
@@ -117,10 +128,12 @@ class GoogleCloudStorageRangeReaderBuilderTest {
 
     @Test
     void testBuildWithoutStorageFallsBackToAnonymousBeforeNetworkAccess() {
-        Throwable ex = assertThrows(Throwable.class, () -> GoogleCloudStorageRangeReader.builder()
-                .bucket("bucket")
-                .objectName("missing-object")
-                .build());
+        Throwable ex = assertThrows(
+                Throwable.class,
+                () -> GoogleCloudStorageRangeReader.builder()
+                        .bucket("bucket")
+                        .objectName("missing-object")
+                        .build());
         assertTrue(ex instanceof IOException || ex instanceof StorageException);
         assertFalse(ex.getMessage().isBlank());
     }

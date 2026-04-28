@@ -40,37 +40,43 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * A thread-safe file-based implementation of {@link RangeReader} that provides efficient random access to local files.
  *
- * <p>This implementation uses NIO {@link FileChannel} with position-based reads ({@link FileChannel#read(ByteBuffer, long)})
- * to ensure thread safety. Unlike traditional stream-based file access, position-based reads allow multiple threads
- * to read from different parts of the same file concurrently without interference, as each read operation specifies
- * its absolute position in the file.
+ * <p>This implementation uses NIO {@link FileChannel} with position-based reads ({@link FileChannel#read(ByteBuffer,
+ * long)}) to ensure thread safety. Unlike traditional stream-based file access, position-based reads allow multiple
+ * threads to read from different parts of the same file concurrently without interference, as each read operation
+ * specifies its absolute position in the file.
  *
  * <h2>NFS Resilience</h2>
+ *
  * <p>This reader is designed for long-running server workloads where files may reside on NFS. It uses lazy channel
  * management with configurable idle timeout to prevent stale NFS file handles:
+ *
  * <ul>
- * <li>The file channel is opened lazily on first read, not at construction time</li>
- * <li>After a configurable idle period (default 60 seconds), the channel is automatically closed</li>
- * <li>Subsequent reads transparently reopen the channel</li>
- * <li>If a read encounters a stale file handle or closed channel, it retries once with a fresh channel</li>
+ *   <li>The file channel is opened lazily on first read, not at construction time
+ *   <li>After a configurable idle period (default 60 seconds), the channel is automatically closed
+ *   <li>Subsequent reads transparently reopen the channel
+ *   <li>If a read encounters a stale file handle or closed channel, it retries once with a fresh channel
  * </ul>
  *
  * <h2>Thread Safety</h2>
+ *
  * <p>This class is fully thread-safe for concurrent read operations. The underlying {@link FileChannel} supports
  * simultaneous reads from multiple threads as long as each operation uses absolute positioning, which this
- * implementation guarantees. Channel open/close transitions are protected by a lock, while the read hot path
- * is lock-free.
+ * implementation guarantees. Channel open/close transitions are protected by a lock, while the read hot path is
+ * lock-free.
  *
  * <h2>Performance Characteristics</h2>
+ *
  * <p>FileRangeReader provides excellent performance for random access patterns typical in tiled data access:
+ *
  * <ul>
- * <li>Zero-copy operations where possible through direct ByteBuffer usage</li>
- * <li>Efficient random access without seek overhead</li>
- * <li>OS-level caching benefits for frequently accessed file regions</li>
- * <li>No synchronization overhead between concurrent read operations</li>
+ *   <li>Zero-copy operations where possible through direct ByteBuffer usage
+ *   <li>Efficient random access without seek overhead
+ *   <li>OS-level caching benefits for frequently accessed file regions
+ *   <li>No synchronization overhead between concurrent read operations
  * </ul>
  *
  * <h2>Usage Example</h2>
+ *
  * <pre>{@code
  * // Create reader for a PMTiles file
  * Path pmtilesFile = Paths.get("data/world.pmtiles");
@@ -114,9 +120,8 @@ public class FileRangeReader extends AbstractRangeReader implements RangeReader 
     /**
      * Creates a new FileRangeReader for the specified file path with the default idle timeout.
      *
-     * <p>The file must exist and be readable, otherwise an {@link IOException} will be thrown.
-     * The file channel is opened lazily on the first read operation and automatically closed
-     * after the default idle timeout of 60 seconds.
+     * <p>The file must exist and be readable, otherwise an {@link IOException} will be thrown. The file channel is
+     * opened lazily on the first read operation and automatically closed after the default idle timeout of 60 seconds.
      *
      * @param path the path to the file to read from (must not be null)
      * @throws IOException if the file does not exist or cannot be accessed
@@ -134,16 +139,15 @@ public class FileRangeReader extends AbstractRangeReader implements RangeReader 
     }
 
     /**
-     * Performs the actual range read operation using thread-safe positioned reads, with
-     * automatic retry on recoverable errors (stale NFS file handles, closed channels).
+     * Performs the actual range read operation using thread-safe positioned reads, with automatic retry on recoverable
+     * errors (stale NFS file handles, closed channels).
      *
-     * <p>This method implements the core reading logic using {@link FileChannel#read(ByteBuffer, long)}
-     * which provides thread-safe access by specifying absolute file positions. Multiple threads can
-     * call this method concurrently without synchronization, as each read operation is independent
-     * and doesn't affect the channel's position.
+     * <p>This method implements the core reading logic using {@link FileChannel#read(ByteBuffer, long)} which provides
+     * thread-safe access by specifying absolute file positions. Multiple threads can call this method concurrently
+     * without synchronization, as each read operation is independent and doesn't affect the channel's position.
      *
-     * <p>If the underlying channel has been closed (by the idle timeout or an NFS stale file handle),
-     * the method transparently reopens it and retries the read once.
+     * <p>If the underlying channel has been closed (by the idle timeout or an NFS stale file handle), the method
+     * transparently reopens it and retries the read once.
      *
      * @param offset the absolute position in the file to start reading from
      * @param actualLength the number of bytes to read
@@ -307,9 +311,8 @@ public class FileRangeReader extends AbstractRangeReader implements RangeReader 
     /**
      * Returns the size of the file in bytes.
      *
-     * <p>The file size is cached at construction time using {@link Files#size(Path)} and does not
-     * depend on the file channel being open. This means size queries work even when the channel
-     * has been idle-closed.
+     * <p>The file size is cached at construction time using {@link Files#size(Path)} and does not depend on the file
+     * channel being open. This means size queries work even when the channel has been idle-closed.
      *
      * @return the size of the file in bytes, never {@link OptionalLong#empty() empty}
      * @throws ClosedChannelException if this reader has been permanently closed via {@link #close()}
@@ -325,8 +328,8 @@ public class FileRangeReader extends AbstractRangeReader implements RangeReader 
     /**
      * Returns a string identifier for this file source.
      *
-     * <p>The identifier is the absolute path of the file, which uniquely identifies
-     * the data source for logging, caching, and debugging purposes.
+     * <p>The identifier is the absolute path of the file, which uniquely identifies the data source for logging,
+     * caching, and debugging purposes.
      *
      * @return the absolute path of the file as a string
      */
@@ -338,15 +341,14 @@ public class FileRangeReader extends AbstractRangeReader implements RangeReader 
     /**
      * Closes this reader and releases any associated system resources.
      *
-     * <p>This method is thread-safe and idempotent - it can be called multiple times
-     * without harm. After closing, any further attempts to read from this FileRangeReader
-     * will result in a {@link ClosedChannelException}.
+     * <p>This method is thread-safe and idempotent - it can be called multiple times without harm. After closing, any
+     * further attempts to read from this FileRangeReader will result in a {@link ClosedChannelException}.
      *
-     * <p>Any errors encountered while closing the underlying file channel are silently
-     * ignored, as this reader may be closing a stale or already-closed channel.
+     * <p>Any errors encountered while closing the underlying file channel are silently ignored, as this reader may be
+     * closing a stale or already-closed channel.
      *
-     * <p>It is recommended to use this FileRangeReader in a try-with-resources statement
-     * to ensure proper resource cleanup.
+     * <p>It is recommended to use this FileRangeReader in a try-with-resources statement to ensure proper resource
+     * cleanup.
      */
     @Override
     public void close() {
@@ -365,9 +367,8 @@ public class FileRangeReader extends AbstractRangeReader implements RangeReader 
     /**
      * Creates a new builder for constructing FileRangeReader instances.
      *
-     * <p>The builder pattern provides a flexible way to configure FileRangeReader
-     * construction with various path specification methods (Path, String, URI)
-     * and an optional idle timeout for NFS resilience.
+     * <p>The builder pattern provides a flexible way to configure FileRangeReader construction with various path
+     * specification methods (Path, String, URI) and an optional idle timeout for NFS resilience.
      *
      * @return a new builder instance for configuring FileRangeReader construction
      */
@@ -377,9 +378,8 @@ public class FileRangeReader extends AbstractRangeReader implements RangeReader 
 
     /**
      * Creates a new FileRangeReader for the specified file path.
-     * <p>
-     * This is a convenience method equivalent to:
-     * {@code FileRangeReader.builder().path(path).build()}
+     *
+     * <p>This is a convenience method equivalent to: {@code FileRangeReader.builder().path(path).build()}
      *
      * @param path the file path
      * @return a new FileRangeReader instance
@@ -389,9 +389,7 @@ public class FileRangeReader extends AbstractRangeReader implements RangeReader 
         return builder().path(path).build();
     }
 
-    /**
-     * Builder for FileRangeReader.
-     */
+    /** Builder for FileRangeReader. */
     public static class Builder {
         private Path path;
         private Duration idleTimeout = DEFAULT_IDLE_TIMEOUT;
@@ -440,12 +438,11 @@ public class FileRangeReader extends AbstractRangeReader implements RangeReader 
         }
 
         /**
-         * Sets the idle timeout after which the underlying file channel will be
-         * automatically closed to prevent stale NFS file handles.
+         * Sets the idle timeout after which the underlying file channel will be automatically closed to prevent stale
+         * NFS file handles.
          *
-         * <p>The channel will be transparently reopened on the next read operation.
-         * Set to {@link Duration#ZERO} to disable idle timeout (channel stays open
-         * until explicitly closed).
+         * <p>The channel will be transparently reopened on the next read operation. Set to {@link Duration#ZERO} to
+         * disable idle timeout (channel stays open until explicitly closed).
          *
          * @param idleTimeout the idle timeout duration (default: 60 seconds)
          * @return this builder

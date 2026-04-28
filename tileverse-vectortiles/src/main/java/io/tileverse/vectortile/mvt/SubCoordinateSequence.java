@@ -20,9 +20,7 @@ import org.locationtech.jts.geom.CoordinateSequence;
 import org.locationtech.jts.geom.CoordinateSequenceFactory;
 import org.locationtech.jts.geom.Envelope;
 
-/**
- * A forwarding sub-sequence coordinate sequence
- */
+/** A forwarding sub-sequence coordinate sequence */
 final class SubCoordinateSequence implements CoordinateSequence {
     private final CoordinateSequence delegate;
     private final int start;

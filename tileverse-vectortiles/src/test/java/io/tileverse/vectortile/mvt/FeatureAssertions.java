@@ -29,6 +29,7 @@ import org.assertj.core.api.Assertions;
  * AssertJ-style fluent assertions for MVT features with proper context for attribute assertions.
  *
  * <p>Usage example:
+ *
  * <pre>{@code
  * assertThat(tile)
  *     .layer("roads")
@@ -56,8 +57,8 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
     }
 
     /**
-     * Assert that the feature has the specified attribute with the given value.
-     * This uses the parent layer context to decode the feature's attributes.
+     * Assert that the feature has the specified attribute with the given value. This uses the parent layer context to
+     * decode the feature's attributes.
      */
     public FeatureAssertions hasAttribute(String name, Object expectedValue) {
         isNotNull();
@@ -70,11 +71,12 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
     }
 
     /**
-     * Assert that the MVT Feature does not have the tag for the given attribute name
-     * This is different from {@link #hasAttribute(String)} in that this method checks the internal {@link VectorTileProto.Tile.Feature#getTagsList}
-     * does not contain a tag for a layer's {@link io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer#getKeysList key}, whereas
-     * {@link #hasAttribute(String)} works on the "unified feature type model" {@link Layer#getAttributeNames()} returning {@code null}
-     * when asking a feature for an attribute whos'e tag it doesn't have
+     * Assert that the MVT Feature does not have the tag for the given attribute name This is different from
+     * {@link #hasAttribute(String)} in that this method checks the internal
+     * {@link VectorTileProto.Tile.Feature#getTagsList} does not contain a tag for a layer's
+     * {@link io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer#getKeysList key}, whereas
+     * {@link #hasAttribute(String)} works on the "unified feature type model" {@link Layer#getAttributeNames()}
+     * returning {@code null} when asking a feature for an attribute whos'e tag it doesn't have
      */
     public FeatureAssertions doesNotHaveTag(String name) {
         isNotNull();
@@ -87,9 +89,7 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
         return this;
     }
 
-    /**
-     * Assert that the feature has an attribute with the specified name (regardless of value).
-     */
+    /** Assert that the feature has an attribute with the specified name (regardless of value). */
     public FeatureAssertions hasAttribute(String name) {
         isNotNull();
         Assertions.assertThat(actual.getAttributes())
@@ -100,9 +100,7 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
         return this;
     }
 
-    /**
-     * Assert that the feature has the specified ID.
-     */
+    /** Assert that the feature has the specified ID. */
     public FeatureAssertions hasId(long expectedId) {
         isNotNull();
         Assertions.assertThat(actual.getId())
@@ -112,31 +110,27 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
     }
 
     /**
-     * Navigate to geometry assertions for this feature's geometry.
-     * This creates a separate assertion context for geometry commands.
+     * Navigate to geometry assertions for this feature's geometry. This creates a separate assertion context for
+     * geometry commands.
      */
     public FeatureGeometryAssertions geometry() {
         isNotNull();
         return new FeatureGeometryAssertions(actual, this);
     }
 
-    /**
-     * Navigate back to the parent layer assertions.
-     */
+    /** Navigate back to the parent layer assertions. */
     public LayerAssertions layer() {
         return parentLayerAssertions;
     }
 
-    /**
-     * Navigate back to the parent tile assertions.
-     */
+    /** Navigate back to the parent tile assertions. */
     public TileAssertions tile() {
         return parentLayerAssertions.tile();
     }
 
     /**
-     * Geometry-specific assertions that handle both JTS geometry operations and MVT command decoding.
-     * Extends the JTS GeometryAssertions to provide unified geometry testing capabilities.
+     * Geometry-specific assertions that handle both JTS geometry operations and MVT command decoding. Extends the JTS
+     * GeometryAssertions to provide unified geometry testing capabilities.
      */
     public static class FeatureGeometryAssertions extends io.tileverse.vectortile.mvt.GeometryAssertions {
         private final Feature feature;
@@ -457,8 +451,8 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
         }
 
         /**
-         * Convenience method that combines JTS geometry validation with MVT command validation.
-         * This demonstrates the integrated assertion capabilities.
+         * Convenience method that combines JTS geometry validation with MVT command validation. This demonstrates the
+         * integrated assertion capabilities.
          *
          * @param expectedGeometry the expected JTS geometry for comparison
          * @return this GeometryAssertions for continued chaining
@@ -473,8 +467,8 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
         }
 
         /**
-         * Assert that the MVT feature has a POINT geometry type.
-         * This checks the protobuf GeomType, complementing the JTS geometry type check from the parent class.
+         * Assert that the MVT feature has a POINT geometry type. This checks the protobuf GeomType, complementing the
+         * JTS geometry type check from the parent class.
          */
         public FeatureGeometryAssertions hasPointMvtType() {
             VectorTileProto.Tile.Feature protoFeature = getProtoFeature();
@@ -486,8 +480,8 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
         }
 
         /**
-         * Assert that the MVT feature has a LINESTRING geometry type.
-         * This checks the protobuf GeomType, complementing the JTS geometry type check from the parent class.
+         * Assert that the MVT feature has a LINESTRING geometry type. This checks the protobuf GeomType, complementing
+         * the JTS geometry type check from the parent class.
          */
         public FeatureGeometryAssertions hasLinestringMvtType() {
             VectorTileProto.Tile.Feature protoFeature = getProtoFeature();
@@ -499,8 +493,8 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
         }
 
         /**
-         * Assert that the MVT feature has a POLYGON geometry type.
-         * This checks the protobuf GeomType, complementing the JTS geometry type check from the parent class.
+         * Assert that the MVT feature has a POLYGON geometry type. This checks the protobuf GeomType, complementing the
+         * JTS geometry type check from the parent class.
          */
         public FeatureGeometryAssertions hasPolygonMvtType() {
             VectorTileProto.Tile.Feature protoFeature = getProtoFeature();
@@ -511,16 +505,12 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
             return this;
         }
 
-        /**
-         * Start expecting a MoveTo command. Use .count(n) for MULTIPOINT or single coordinate for simple cases.
-         */
+        /** Start expecting a MoveTo command. Use .count(n) for MULTIPOINT or single coordinate for simple cases. */
         public MoveToCommand moveTo() {
             return new MoveToCommand(this);
         }
 
-        /**
-         * Expect a MoveTo command to the specified coordinates (for single point geometries).
-         */
+        /** Expect a MoveTo command to the specified coordinates (for single point geometries). */
         public FeatureGeometryAssertions moveTo(int x, int y) {
             expectedCommands.add(new DecodedCommand(GeometryCommand.MoveTo, x, y));
             return this;
@@ -533,25 +523,19 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
             return new LineToCommand(this);
         }
 
-        /**
-         * Expect a LineTo command to the specified coordinates (for single line segments).
-         */
+        /** Expect a LineTo command to the specified coordinates (for single line segments). */
         public FeatureGeometryAssertions lineTo(int x, int y) {
             expectedCommands.add(new DecodedCommand(GeometryCommand.LineTo, x, y));
             return this;
         }
 
-        /**
-         * Expect a ClosePath command.
-         */
+        /** Expect a ClosePath command. */
         public FeatureGeometryAssertions closePath() {
             expectedCommands.add(new DecodedCommand(GeometryCommand.ClosePath, -1, -1));
             return this;
         }
 
-        /**
-         * Finalize the command sequence verification.
-         */
+        /** Finalize the command sequence verification. */
         public FeatureGeometryAssertions matches() {
             VectorTileProto.Tile.Feature protoFeature = getProtoFeature();
             List<DecodedCommand> actualCommands = decodeFeatureCommands(protoFeature);
@@ -597,23 +581,17 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
             return error.toString();
         }
 
-        /**
-         * Navigate back to the parent feature assertions.
-         */
+        /** Navigate back to the parent feature assertions. */
         public FeatureAssertions feature() {
             return parentFeature;
         }
 
-        /**
-         * Navigate back to the parent layer assertions.
-         */
+        /** Navigate back to the parent layer assertions. */
         public LayerAssertions layer() {
             return parentFeature.layer();
         }
 
-        /**
-         * Navigate back to the parent tile assertions.
-         */
+        /** Navigate back to the parent tile assertions. */
         public TileAssertions tile() {
             return parentFeature.tile();
         }
@@ -663,9 +641,7 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
             return cmd >> 3;
         }
 
-        /**
-         * Builder for MoveTo commands supporting both single and multi-point assertions.
-         */
+        /** Builder for MoveTo commands supporting both single and multi-point assertions. */
         public static class MoveToCommand {
             private final FeatureGeometryAssertions parent;
             private int expectedCount = 1;
@@ -674,26 +650,20 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
                 this.parent = parent;
             }
 
-            /**
-             * Set the expected count for this MoveTo command (for MULTIPOINT geometries).
-             */
+            /** Set the expected count for this MoveTo command (for MULTIPOINT geometries). */
             public CoordinateSequence count(int count) {
                 this.expectedCount = count;
                 return new CoordinateSequence(parent, GeometryCommand.MoveTo, count);
             }
 
-            /**
-             * Single coordinate for MoveTo (count=1 implied).
-             */
+            /** Single coordinate for MoveTo (count=1 implied). */
             public FeatureGeometryAssertions coord(int x, int y) {
                 parent.expectedCommands.add(new DecodedCommand(GeometryCommand.MoveTo, x, y));
                 return parent;
             }
         }
 
-        /**
-         * Builder for LineTo commands supporting both single and multi-line assertions.
-         */
+        /** Builder for LineTo commands supporting both single and multi-line assertions. */
         public static class LineToCommand {
             private final FeatureGeometryAssertions parent;
 
@@ -701,25 +671,19 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
                 this.parent = parent;
             }
 
-            /**
-             * Set the expected count for this LineTo command.
-             */
+            /** Set the expected count for this LineTo command. */
             public CoordinateSequence count(int count) {
                 return new CoordinateSequence(parent, GeometryCommand.LineTo, count);
             }
 
-            /**
-             * Single coordinate for LineTo (count=1 implied).
-             */
+            /** Single coordinate for LineTo (count=1 implied). */
             public FeatureGeometryAssertions coord(int x, int y) {
                 parent.expectedCommands.add(new DecodedCommand(GeometryCommand.LineTo, x, y));
                 return parent;
             }
         }
 
-        /**
-         * Coordinate sequence builder for commands with count > 1.
-         */
+        /** Coordinate sequence builder for commands with count > 1. */
         public static class CoordinateSequence {
             private final FeatureGeometryAssertions parent;
             private final int command;
@@ -732,9 +696,7 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
                 this.expectedCount = expectedCount;
             }
 
-            /**
-             * Add a coordinate pair to the sequence.
-             */
+            /** Add a coordinate pair to the sequence. */
             public CoordinateSequence coord(int x, int y) {
                 if (coordinateCount >= expectedCount) {
                     throw new IllegalStateException(String.format(
@@ -746,8 +708,8 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
             }
 
             /**
-             * Finish the coordinate sequence and return to geometry assertions.
-             * Validates that the correct number of coordinates were provided.
+             * Finish the coordinate sequence and return to geometry assertions. Validates that the correct number of
+             * coordinates were provided.
              */
             public FeatureGeometryAssertions done() {
                 if (coordinateCount != expectedCount) {
@@ -760,9 +722,7 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
         }
     }
 
-    /**
-     * Represents a decoded MVT geometry command with absolute coordinates.
-     */
+    /** Represents a decoded MVT geometry command with absolute coordinates. */
     private static class DecodedCommand {
         private final int command;
         private final int x;

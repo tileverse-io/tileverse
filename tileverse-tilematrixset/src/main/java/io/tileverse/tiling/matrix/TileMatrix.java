@@ -27,39 +27,38 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * A tile matrix represents a collection of tiles with the same size and properties
- * placed on a regular grid with no overlapping, within a specific coordinate reference system.
+ * A tile matrix represents a collection of tiles with the same size and properties placed on a regular grid with no
+ * overlapping, within a specific coordinate reference system.
  *
- * <p>A tile matrix combines the discrete tile grid ({@link TileRange}) with the spatial
- * properties needed for coordinate transformations (resolution, origin, extent).
- * This allows spatial operations to be performed directly on the matrix without
- * requiring external coordinate arrays.
+ * <p>A tile matrix combines the discrete tile grid ({@link TileRange}) with the spatial properties needed for
+ * coordinate transformations (resolution, origin, extent). This allows spatial operations to be performed directly on
+ * the matrix without requiring external coordinate arrays.
  *
  * <p>Key properties:
+ *
  * <ul>
- * <li><b>Tile Range</b>: The discrete grid of tiles (X, Y coordinates and zoom level)</li>
- * <li><b>Resolution</b>: Map units per pixel at this zoom level</li>
- * <li><b>Origin</b>: Map space coordinate corresponding to tile (0,0)</li>
- * <li><b>Extent</b>: The map space bounding box covered by this matrix</li>
- * <li><b>CRS</b>: Coordinate reference system identifier</li>
- * <li><b>Tile Size</b>: Pixel dimensions of each tile</li>
+ *   <li><b>Tile Range</b>: The discrete grid of tiles (X, Y coordinates and zoom level)
+ *   <li><b>Resolution</b>: Map units per pixel at this zoom level
+ *   <li><b>Origin</b>: Map space coordinate corresponding to tile (0,0)
+ *   <li><b>Extent</b>: The map space bounding box covered by this matrix
+ *   <li><b>CRS</b>: Coordinate reference system identifier
+ *   <li><b>Tile Size</b>: Pixel dimensions of each tile
  * </ul>
  *
- * @param tileRange the discrete tile grid for this matrix, enabled operations on {@link TileIndex} and provides  {@link #matrixWidth()}, {@link #matrixHeight()}, {@link #cornerOfOrigin()}, and more grid related info and operations
+ * @param tileRange the discrete tile grid for this matrix, enabled operations on {@link TileIndex} and provides
+ *     {@link #matrixWidth()}, {@link #matrixHeight()}, {@link #cornerOfOrigin()}, and more grid related info and
+ *     operations
  * @param resolution map units per pixel
  * @param pointOfOrigin in CRS units for the 0,0 tile corner
  * @param crsId coordinate reference system identifier
  * @param tileWidth tile width in pixels
  * @param tileHeight tile height in pixels
- *
  * @since 1.0
  */
 public record TileMatrix(
         TileRange tileRange, double resolution, Coordinate pointOfOrigin, String crsId, int tileWidth, int tileHeight) {
 
-    /**
-     * Compact constructor with validation.
-     */
+    /** Compact constructor with validation. */
     public TileMatrix {
         if (tileRange == null) {
             throw new IllegalArgumentException("tileRange cannot be null");
@@ -78,10 +77,7 @@ public record TileMatrix(
         }
     }
 
-    /**
-     * Corner of the tile matrix used as the origin for numbering tile rows and
-     * columns.
-     */
+    /** Corner of the tile matrix used as the origin for numbering tile rows and columns. */
     public CornerOfOrigin cornerOfOrigin() {
         return tileRange.cornerOfOrigin();
     }
@@ -205,8 +201,8 @@ public record TileMatrix(
     }
 
     /**
-     * Converts a map space coordinate to the corresponding tile.
-     * If the coordinate falls outside the matrix extent, returns empty.
+     * Converts a map space coordinate to the corresponding tile. If the coordinate falls outside the matrix extent,
+     * returns empty.
      *
      * @param coordinate the map space coordinate
      * @return the tile containing the coordinate, or empty if outside matrix bounds
@@ -237,11 +233,11 @@ public record TileMatrix(
     }
 
     /**
-     * Converts a map space extent to the corresponding tile range within this matrix.
-     * The returned range covers all tiles that intersect with the given extent.
+     * Converts a map space extent to the corresponding tile range within this matrix. The returned range covers all
+     * tiles that intersect with the given extent.
      *
-     * <p>Implements OGC TileMatrixSet specification algorithm with epsilon adjustments
-     * to handle floating-point precision issues per Annex I.
+     * <p>Implements OGC TileMatrixSet specification algorithm with epsilon adjustments to handle floating-point
+     * precision issues per Annex I.
      *
      * @param mapExtent the map space extent
      * @return the tile range covering the extent, intersected with matrix bounds
@@ -311,8 +307,8 @@ public record TileMatrix(
     }
 
     /**
-     * Returns all tiles in this matrix as a stream.
-     * This provides efficient iteration over all tiles without materializing them all at once.
+     * Returns all tiles in this matrix as a stream. This provides efficient iteration over all tiles without
+     * materializing them all at once.
      *
      * @return a stream of all tiles in this matrix
      */
@@ -360,9 +356,9 @@ public record TileMatrix(
     }
 
     /**
-     * Returns true if this matrix contains all tiles that are in the given matrix.
-     * This checks if the given matrix's tile range is completely contained within this matrix's range.
-     * Returns false if the other matrix is empty (empty matrix contains no tiles).
+     * Returns true if this matrix contains all tiles that are in the given matrix. This checks if the given matrix's
+     * tile range is completely contained within this matrix's range. Returns false if the other matrix is empty (empty
+     * matrix contains no tiles).
      *
      * @param other the other tile matrix to check
      * @return true if this matrix contains all tiles in the other matrix
@@ -393,8 +389,8 @@ public record TileMatrix(
     }
 
     /**
-     * Returns a new TileMatrix containing only the tiles that intersect with the given extent.
-     * The returned matrix has the same spatial properties but a filtered tile range.
+     * Returns a new TileMatrix containing only the tiles that intersect with the given extent. The returned matrix has
+     * the same spatial properties but a filtered tile range.
      *
      * @param mapExtent the map space extent to intersect with
      * @return a new TileMatrix containing only intersecting tiles, or empty matrix if no intersection
@@ -404,13 +400,13 @@ public record TileMatrix(
     }
 
     /**
-     * Returns a (potentially sparse) tile matrix whose {@link #tileRange()
-     * TileRange} is the union of this one's with {@code other}'s.
-     * <p>
-     * The two matrices must have the same {@link #zoomLevel()}
-     * <p>
-     * If the {@code other} matrix has a different {@link #cornerOfOrigin()}, the resulting
-     * matrix will have this matrix's corner of origin.
+     * Returns a (potentially sparse) tile matrix whose {@link #tileRange() TileRange} is the union of this one's with
+     * {@code other}'s.
+     *
+     * <p>The two matrices must have the same {@link #zoomLevel()}
+     *
+     * <p>If the {@code other} matrix has a different {@link #cornerOfOrigin()}, the resulting matrix will have this
+     * matrix's corner of origin.
      */
     public TileMatrix union(TileMatrix other) {
         requireNonNull(other);
@@ -419,8 +415,8 @@ public record TileMatrix(
     }
 
     /**
-     * Creates a new TileMatrix with a different tile range but same spatial properties.
-     * Useful for creating subsets or filtered versions of this matrix.
+     * Creates a new TileMatrix with a different tile range but same spatial properties. Useful for creating subsets or
+     * filtered versions of this matrix.
      *
      * @param newRange the new tile range
      * @return a new TileMatrix with the updated range
@@ -441,8 +437,8 @@ public record TileMatrix(
     }
 
     /**
-     * Calculates the map space extent covered by a tile range.
-     * This bridges abstract tile coordinates to real-world spatial coordinates.
+     * Calculates the map space extent covered by a tile range. This bridges abstract tile coordinates to real-world
+     * spatial coordinates.
      */
     private static BoundingBox2D calculateExtent(
             TileRange tileRange, Coordinate origin, double resolution, int tileWidth, int tileHeight) {
@@ -473,8 +469,8 @@ public record TileMatrix(
     }
 
     /**
-     * Applies floor function with epsilon adjustment to handle floating-point precision issues.
-     * Follows OGC TileMatrixSet specification Annex I recommendations.
+     * Applies floor function with epsilon adjustment to handle floating-point precision issues. Follows OGC
+     * TileMatrixSet specification Annex I recommendations.
      *
      * @param value the floating-point value to floor
      * @return the floor value with epsilon compensation for precision
@@ -485,8 +481,8 @@ public record TileMatrix(
     }
 
     /**
-     * Applies floor function with epsilon adjustment for extent-to-range transformations.
-     * Follows OGC TileMatrixSet specification Annex I recommendations.
+     * Applies floor function with epsilon adjustment for extent-to-range transformations. Follows OGC TileMatrixSet
+     * specification Annex I recommendations.
      *
      * @param value the floating-point value to floor
      * @param addEpsilon true to add epsilon (for min values), false to subtract (for max values)

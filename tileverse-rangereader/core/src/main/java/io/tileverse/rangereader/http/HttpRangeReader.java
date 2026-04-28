@@ -53,17 +53,16 @@ import lombok.NonNull;
 
 /**
  * A RangeReader implementation that reads from an HTTP(S) URL using range requests.
- * <p>
- * This class enables reading data from web servers that support HTTP range requests,
- * which is essential for efficient cloud-optimized access to large files.
- * <p>
- * By default, this implementation accepts all SSL certificates, allowing connections to
- * servers with self-signed or otherwise untrusted certificates. This can be controlled
- * through the appropriate constructor.
- * <p>
- * It also supports various authentication methods through the HttpAuthentication interface.
- * <p>
- * Uses the modern Java 11+ {@linkplain HttpClient} API for better performance and features.
+ *
+ * <p>This class enables reading data from web servers that support HTTP range requests, which is essential for
+ * efficient cloud-optimized access to large files.
+ *
+ * <p>By default, this implementation accepts all SSL certificates, allowing connections to servers with self-signed or
+ * otherwise untrusted certificates. This can be controlled through the appropriate constructor.
+ *
+ * <p>It also supports various authentication methods through the HttpAuthentication interface.
+ *
+ * <p>Uses the modern Java 11+ {@linkplain HttpClient} API for better performance and features.
  */
 public class HttpRangeReader extends AbstractRangeReader implements RangeReader {
 
@@ -132,29 +131,26 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
 
     /**
      * Fetches a specific byte range synchronously using {@link HttpClient#send(HttpRequest, BodyHandler)}.
-     * <p>
-     * <b>Memory Efficiency:</b>
-     * This method uses {@link HttpResponse.BodyHandlers#ofInputStream()} to minimize heap pressure.
-     * Unlike {@code ofByteArray()}, which accumulates the entire range into a single contiguous
-     * byte array, the {@code InputStream} approach provides a streaming view over the client's
-     * internal {@code List<ByteBuffer>}. This avoids redundant copies and large heap allocations
-     * during the traversal of massive files.
-     * <p>
-     * <b>Thread Scheduling:</b>
+     *
+     * <p><b>Memory Efficiency:</b> This method uses {@link HttpResponse.BodyHandlers#ofInputStream()} to minimize heap
+     * pressure. Unlike {@code ofByteArray()}, which accumulates the entire range into a single contiguous byte array,
+     * the {@code InputStream} approach provides a streaming view over the client's internal {@code List<ByteBuffer>}.
+     * This avoids redundant copies and large heap allocations during the traversal of massive files.
+     *
+     * <p><b>Thread Scheduling:</b>
+     *
      * <ul>
-     *   <li><b>Virtual Threads (Java 21+):</b> This method is highly efficient. When blocking on I/O,
-     *   the virtual thread is unmounted, freeing the underlying carrier thread for other tasks.
-     *   <li><b>Platform Threads (Java 17):</b> This method blocks the operating system thread
-     *   for the duration of the request. High concurrency with platform threads may lead to
-     *   increased memory usage due to stack overhead and potential thread exhaustion.
+     *   <li><b>Virtual Threads (Java 21+):</b> This method is highly efficient. When blocking on I/O, the virtual
+     *       thread is unmounted, freeing the underlying carrier thread for other tasks.
+     *   <li><b>Platform Threads (Java 17):</b> This method blocks the operating system thread for the duration of the
+     *       request. High concurrency with platform threads may lead to increased memory usage due to stack overhead
+     *       and potential thread exhaustion.
      * </ul>
-     * <p>
-     * <b>Efficiency:</b>
-     * This synchronous approach provides performance parity with {@link HttpClient#sendAsync()}
-     * because both utilize the {@code HttpClient}'s internal NIO-based executor for I/O operations.
-     * By using {@code send()}, the application reduces heap pressure by avoiding
-     * {@code CompletableFuture} allocations and lambda capture states.
-     * </p>
+     *
+     * <p><b>Efficiency:</b> This synchronous approach provides performance parity with {@link HttpClient#sendAsync()}
+     * because both utilize the {@code HttpClient}'s internal NIO-based executor for I/O operations. By using
+     * {@code send()}, the application reduces heap pressure by avoiding {@code CompletableFuture} allocations and
+     * lambda capture states.
      *
      * @param offset The starting byte position.
      * @param length The number of bytes to fetch.
@@ -234,8 +230,8 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
     }
 
     /**
-     * Makes a HEAD request to the server and caches the response for reuse.
-     * This method is thread-safe and ensures the HEAD request is made only once.
+     * Makes a HEAD request to the server and caches the response for reuse. This method is thread-safe and ensures the
+     * HEAD request is made only once.
      *
      * @return the cached HEAD response
      * @throws IOException If an I/O error occurs during the HEAD request
@@ -351,11 +347,11 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
     /**
      * Creates a new HttpRangeReader for the specified URL string with default settings.
      *
-     * <p>This is the simplest way to create an HttpRangeReader for basic HTTP/HTTPS access
-     * without authentication or custom SSL configuration. Uses default SSL certificate
-     * validation (does not trust all certificates).
+     * <p>This is the simplest way to create an HttpRangeReader for basic HTTP/HTTPS access without authentication or
+     * custom SSL configuration. Uses default SSL certificate validation (does not trust all certificates).
      *
      * <p>This is equivalent to:
+     *
      * <pre>{@code
      * HttpRangeReader.builder(url).build();
      * }</pre>
@@ -371,11 +367,11 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
     /**
      * Creates a new HttpRangeReader for the specified URI with default settings.
      *
-     * <p>This is the simplest way to create an HttpRangeReader for basic HTTP/HTTPS access
-     * without authentication or custom SSL configuration. Uses default SSL certificate
-     * validation (does not trust all certificates).
+     * <p>This is the simplest way to create an HttpRangeReader for basic HTTP/HTTPS access without authentication or
+     * custom SSL configuration. Uses default SSL certificate validation (does not trust all certificates).
      *
      * <p>This is equivalent to:
+     *
      * <pre>{@code
      * HttpRangeReader.builder(uri).build();
      * }</pre>
@@ -391,19 +387,19 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
     /**
      * Creates a new HttpRangeReader for the specified URL with default settings.
      *
-     * <p>This is a convenience method for creating an HttpRangeReader from a java.net.URL
-     * instance. The URL is converted to a URI internally. Uses default SSL certificate
-     * validation (does not trust all certificates).
+     * <p>This is a convenience method for creating an HttpRangeReader from a java.net.URL instance. The URL is
+     * converted to a URI internally. Uses default SSL certificate validation (does not trust all certificates).
      *
      * <p>This is equivalent to:
+     *
      * <pre>{@code
      * HttpRangeReader.builder(url.toURI()).build();
      * }</pre>
      *
      * @param url the HTTP or HTTPS URL to read from
      * @return a new HttpRangeReader instance with default configuration
-     * @throws IllegalArgumentException if the URL cannot be converted to a valid URI
-     *                                  or has an unsupported scheme (must be http or https)
+     * @throws IllegalArgumentException if the URL cannot be converted to a valid URI or has an unsupported scheme (must
+     *     be http or https)
      */
     public static HttpRangeReader of(URL url) {
         try {
@@ -424,6 +420,7 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
 
     /**
      * Create a builder for the given URL
+     *
      * @param url the URL to pre configure the builder for
      * @return builder ready for url
      */
@@ -433,6 +430,7 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
 
     /**
      * Create a builder for the given URL
+     *
      * @param url the URL to pre configure the builder for
      * @return builder ready for url
      */
@@ -440,22 +438,16 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
         return new Builder(url);
     }
 
-    /**
-     * Builder for HttpRangeReader.
-     */
+    /** Builder for HttpRangeReader. */
     public static class Builder {
 
-        /**
-         * The default connection timeout for the HTTP client.
-         */
+        /** The default connection timeout for the HTTP client. */
         public static final Duration DEFAULT_CONNECTION_TIMEOUT = Duration.ofSeconds(5);
 
         private URI uri;
         private boolean trustAllCertificates = false;
         private HttpAuthentication authentication = HttpAuthentication.NONE;
-        /**
-         * The connection timeout for the HTTP client.
-         */
+        /** The connection timeout for the HTTP client. */
         private Duration connectionTimeout = DEFAULT_CONNECTION_TIMEOUT;
 
         private HttpClient suppliedHttpClient;
@@ -509,6 +501,7 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
 
         /**
          * Enables or disables trusting all SSL certificates.
+         *
          * @param trustAll whether to trust all SSL certificates
          * @return this builder
          */
@@ -579,6 +572,7 @@ public class HttpRangeReader extends AbstractRangeReader implements RangeReader 
 
         /**
          * Alternative to provide a pre-configured {@link HttpClient}.
+         *
          * @param client The {@link HttpClient} to use.
          * @return this
          */

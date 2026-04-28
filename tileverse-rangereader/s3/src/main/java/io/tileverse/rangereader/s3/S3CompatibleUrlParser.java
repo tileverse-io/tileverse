@@ -21,23 +21,27 @@ import java.net.URISyntaxException;
 /**
  * Parser for S3-compatible URLs that extracts bucket and key components from various URL formats.
  *
- * <p>This parser is required because AWS S3 SDK's {@link software.amazon.awssdk.services.s3.S3Client.Builder}
- * and similar S3-compatible SDKs do not accept complete URLs. Instead, they require separate configuration
- * of endpoints, bucket names, and object keys. The SDK builders typically accept:
+ * <p>This parser is required because AWS S3 SDK's {@link software.amazon.awssdk.services.s3.S3Client.Builder} and
+ * similar S3-compatible SDKs do not accept complete URLs. Instead, they require separate configuration of endpoints,
+ * bucket names, and object keys. The SDK builders typically accept:
+ *
  * <ul>
- * <li>{@code endpointOverride(URI)} - for custom S3-compatible service endpoints</li>
- * <li>{@code forcePathStyle(boolean)} - to control URL style preference</li>
- * </ul>
- * while operations like {@link software.amazon.awssdk.services.s3.model.GetObjectRequest} require:
- * <ul>
- * <li>{@code bucket(String)} - the bucket name component</li>
- * <li>{@code key(String)} - the object key component</li>
+ *   <li>{@code endpointOverride(URI)} - for custom S3-compatible service endpoints
+ *   <li>{@code forcePathStyle(boolean)} - to control URL style preference
  * </ul>
  *
- * <p>This parser bridges the gap between complete S3 URLs (commonly used in configuration files,
- * command-line tools, and data pipelines) and the decomposed parameters required by S3 SDKs.
+ * while operations like {@link software.amazon.awssdk.services.s3.model.GetObjectRequest} require:
+ *
+ * <ul>
+ *   <li>{@code bucket(String)} - the bucket name component
+ *   <li>{@code key(String)} - the object key component
+ * </ul>
+ *
+ * <p>This parser bridges the gap between complete S3 URLs (commonly used in configuration files, command-line tools,
+ * and data pipelines) and the decomposed parameters required by S3 SDKs.
  *
  * <h2>SDK Integration Example</h2>
+ *
  * <pre>{@code
  * // Instead of trying to pass a complete URL to the SDK (which doesn't work):
  * // S3Client.builder().endpointOverride("http://localhost:9000/my-bucket/file.txt") // Invalid
@@ -62,14 +66,15 @@ import java.net.URISyntaxException;
  * GetObjectResponse response = client.getObject(request);
  * }</pre>
  *
- * <p>This parser supports multiple S3 URL formats used across different S3-compatible services
- * including Amazon S3, MinIO, Google Cloud Storage, DigitalOcean Spaces, Wasabi, and other
- * S3 API-compatible storage providers.
+ * <p>This parser supports multiple S3 URL formats used across different S3-compatible services including Amazon S3,
+ * MinIO, Google Cloud Storage, DigitalOcean Spaces, Wasabi, and other S3 API-compatible storage providers.
  *
  * <h2>Supported URL Formats</h2>
  *
  * <h3>S3 URI Format</h3>
+ *
  * <p>The canonical S3 URI format used by AWS CLI and SDKs:
+ *
  * <pre>{@code
  * s3://bucket-name/path/to/object
  * s3://my-bucket/folder/file.txt
@@ -78,7 +83,9 @@ import java.net.URISyntaxException;
  * }</pre>
  *
  * <h3>AWS Virtual Hosted-Style URLs</h3>
+ *
  * <p>AWS S3's preferred HTTP URL format where the bucket name is part of the hostname:
+ *
  * <pre>{@code
  * https://bucket-name.s3.amazonaws.com/path/to/object
  * https://bucket-name.s3.region.amazonaws.com/path/to/object
@@ -88,10 +95,13 @@ import java.net.URISyntaxException;
  * https://my-bucket.s3.us-west-2.amazonaws.com/folder/file.txt
  * https://my-bucket.s3-us-west-2.amazonaws.com/folder/file.txt
  * }</pre>
+ *
  * <p><strong>Note:</strong> This is AWS's recommended format and required for new regions.
  *
  * <h3>AWS Path-Style URLs</h3>
+ *
  * <p>Legacy AWS S3 format where bucket name is part of the path:
+ *
  * <pre>{@code
  * https://s3.amazonaws.com/bucket-name/path/to/object
  * https://s3.region.amazonaws.com/bucket-name/path/to/object
@@ -100,10 +110,13 @@ import java.net.URISyntaxException;
  * https://s3.amazonaws.com/my-bucket/folder/file.txt
  * https://s3.us-west-2.amazonaws.com/my-bucket/folder/file.txt
  * }</pre>
+ *
  * <p><strong>Note:</strong> AWS is deprecating path-style URLs for new buckets and regions.
  *
  * <h3>MinIO and Local Development</h3>
+ *
  * <p>MinIO and other local S3-compatible services typically use path-style URLs with custom endpoints:
+ *
  * <pre>{@code
  * http://localhost:9000/bucket-name/path/to/object
  * https://minio.example.com/bucket-name/path/to/object
@@ -115,7 +128,9 @@ import java.net.URISyntaxException;
  * }</pre>
  *
  * <h3>Other S3-Compatible Services</h3>
+ *
  * <p>Various cloud storage providers offer S3-compatible APIs with their own endpoint formats:
+ *
  * <pre>{@code
  * // Google Cloud Storage (when using S3 compatibility)
  * https://storage.googleapis.com/bucket-name/path/to/object
@@ -133,27 +148,33 @@ import java.net.URISyntaxException;
  * <h2>Parsing Behavior</h2>
  *
  * <h3>Automatic URL Decoding</h3>
+ *
  * <p>The parser automatically decodes percent-encoded characters in object keys:
+ *
  * <pre>{@code
  * "file%20with%20spaces.txt" → "file with spaces.txt"
  * "path%2Bwith%26symbols.txt" → "path+with&symbols.txt"
  * }</pre>
  *
  * <h3>Empty Keys</h3>
+ *
  * <p>URLs pointing to bucket roots return empty string keys:
+ *
  * <pre>{@code
  * s3://my-bucket/     → bucket="my-bucket", key=""
  * s3://my-bucket      → bucket="my-bucket", key=""
  * }</pre>
  *
  * <h3>Detection Strategy</h3>
+ *
  * <ol>
- * <li><strong>S3 URI scheme:</strong> URLs starting with {@code s3://} are parsed as S3 URIs</li>
- * <li><strong>AWS Virtual Hosted-Style:</strong> HTTPS URLs with {@code .s3.} and {@code amazonaws.com} in hostname</li>
- * <li><strong>Path-Style Fallback:</strong> All other HTTP/HTTPS URLs are treated as path-style</li>
+ *   <li><strong>S3 URI scheme:</strong> URLs starting with {@code s3://} are parsed as S3 URIs
+ *   <li><strong>AWS Virtual Hosted-Style:</strong> HTTPS URLs with {@code .s3.} and {@code amazonaws.com} in hostname
+ *   <li><strong>Path-Style Fallback:</strong> All other HTTP/HTTPS URLs are treated as path-style
  * </ol>
  *
  * <h2>Usage Examples</h2>
+ *
  * <pre>{@code
  * // Parse various URL formats
  * S3Location awsUri = S3CompatibleUrlParser.parseS3Url("s3://my-bucket/path/file.txt");
@@ -182,25 +203,29 @@ import java.net.URISyntaxException;
  * }</pre>
  *
  * <h2>Error Handling</h2>
+ *
  * <p>The parser throws {@link IllegalArgumentException} for:
+ *
  * <ul>
- * <li>Unsupported URL schemes (not s3, http, or https)</li>
- * <li>Malformed URLs that cannot be parsed</li>
- * <li>HTTP/HTTPS URLs without bucket information in the path</li>
- * <li>Invalid URI syntax</li>
+ *   <li>Unsupported URL schemes (not s3, http, or https)
+ *   <li>Malformed URLs that cannot be parsed
+ *   <li>HTTP/HTTPS URLs without bucket information in the path
+ *   <li>Invalid URI syntax
  * </ul>
  *
  * <h2>Thread Safety</h2>
+ *
  * <p>This class contains only static methods and is thread-safe.
  *
  * <h2>Limitations</h2>
+ *
  * <ul>
- * <li>Does not validate bucket name compliance with S3 naming rules</li>
- * <li>Does not validate object key length or character restrictions</li>
- * <li>Assumes path-style for ambiguous non-AWS endpoints</li>
- * <li>Does not handle S3 access point ARNs</li>
- * <li>Does not support S3 Transfer Acceleration endpoints</li>
- * <li>Does not automatically configure S3Client - endpoint extraction requires separate logic</li>
+ *   <li>Does not validate bucket name compliance with S3 naming rules
+ *   <li>Does not validate object key length or character restrictions
+ *   <li>Assumes path-style for ambiguous non-AWS endpoints
+ *   <li>Does not handle S3 access point ARNs
+ *   <li>Does not support S3 Transfer Acceleration endpoints
+ *   <li>Does not automatically configure S3Client - endpoint extraction requires separate logic
  * </ul>
  *
  * @see software.amazon.awssdk.services.s3.S3Client.Builder
@@ -416,8 +441,8 @@ class S3CompatibleUrlParser {
     }
 
     /**
-     * Attempts to extract AWS region from hostname by checking if any known region ID appears in the host.
-     * This works for both bucket names and hostnames that contain region identifiers.
+     * Attempts to extract AWS region from hostname by checking if any known region ID appears in the host. This works
+     * for both bucket names and hostnames that contain region identifiers.
      */
     private static String extractRegionFromBucketName(String hostOrBucket) {
         if (hostOrBucket == null) {

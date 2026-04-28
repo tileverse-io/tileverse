@@ -22,10 +22,11 @@ import java.nio.file.Path;
 
 /**
  * Interface for writing PMTiles files.
+ *
  * <p>This is work in progress, not ready for prime time
- * <p>
- * A PMTilesWriter is used to create PMTiles files by adding tiles and metadata,
- * then finalizing the file with the complete() method.
+ *
+ * <p>A PMTilesWriter is used to create PMTiles files by adding tiles and metadata, then finalizing the file with the
+ * complete() method.
  */
 interface PMTilesWriter extends Closeable {
 
@@ -49,8 +50,8 @@ interface PMTilesWriter extends Closeable {
     void setMetadata(String metadata) throws IOException;
 
     /**
-     * Completes the writing process and finalizes the PMTiles file.
-     * This must be called to ensure all data is written to disk.
+     * Completes the writing process and finalizes the PMTiles file. This must be called to ensure all data is written
+     * to disk.
      *
      * @throws IOException if an I/O error occurs
      * @throws IllegalStateException if the writer has already been completed
@@ -73,9 +74,7 @@ interface PMTilesWriter extends Closeable {
         return new PMTilesWriterImpl.BuilderImpl();
     }
 
-    /**
-     * Builder interface for creating a PMTilesWriter.
-     */
+    /** Builder interface for creating a PMTilesWriter. */
     interface Builder {
         /**
          * Sets the path where the PMTiles file will be written.
@@ -155,9 +154,7 @@ interface PMTilesWriter extends Closeable {
         PMTilesWriter build() throws IOException;
     }
 
-    /**
-     * Listener for progress updates during PMTiles file creation.
-     */
+    /** Listener for progress updates during PMTiles file creation. */
     interface ProgressListener {
         /**
          * Called when progress is made during the writing process.

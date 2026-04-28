@@ -26,26 +26,26 @@ import java.util.Optional;
 
 /**
  * Example usage of the PMTilesWriter to create a simple PMTiles file.
- * <p>
- * This class demonstrates the complete workflow of creating a PMTiles archive:
+ *
+ * <p>This class demonstrates the complete workflow of creating a PMTiles archive:
+ *
  * <ul>
- *   <li>Configuring the writer with metadata and compression settings</li>
- *   <li>Adding tiles to the archive (including handling duplicate content)</li>
- *   <li>Setting global metadata</li>
- *   <li>Monitoring progress</li>
- *   <li>Finalizing the archive</li>
+ *   <li>Configuring the writer with metadata and compression settings
+ *   <li>Adding tiles to the archive (including handling duplicate content)
+ *   <li>Setting global metadata
+ *   <li>Monitoring progress
+ *   <li>Finalizing the archive
  * </ul>
- * <p>
- * It also shows how to read back the created file using {@link PMTilesReader}.
+ *
+ * <p>It also shows how to read back the created file using {@link PMTilesReader}.
  */
 class PMTilesWriterExample {
 
     /**
      * Example method that demonstrates how to create a PMTiles file.
-     * <p>
-     * This method creates a sample PMTiles file with a few tiles at zoom levels 0-2.
-     * It demonstrates how to reuse tile content (deduplication) which is a key feature
-     * of the PMTiles format.
+     *
+     * <p>This method creates a sample PMTiles file with a few tiles at zoom levels 0-2. It demonstrates how to reuse
+     * tile content (deduplication) which is a key feature of the PMTiles format.
      *
      * @param outputPath the path to write the PMTiles file to
      * @throws IOException if an I/O error occurs during writing
@@ -86,8 +86,7 @@ class PMTilesWriterExample {
             writer.addTile(zxy(2, 3, 3), emptyTile);
 
             // Set metadata
-            writer.setMetadata(
-                    """
+            writer.setMetadata("""
                 {
                   "name": "Example Tileset",
                   "format": "pbf",
@@ -156,8 +155,7 @@ class PMTilesWriterExample {
     }
 
     /**
-     * Creates a sample tile with the given content.
-     * In a real application, this would create actual MVT data.
+     * Creates a sample tile with the given content. In a real application, this would create actual MVT data.
      *
      * @param content the content to include in the tile
      * @return the tile data as a byte array

@@ -21,11 +21,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;
 
 /**
- * Represents a vector layer definition within TileJSON v3.0.0 metadata.
- * Vector layers describe the data fields and zoom range for each layer in a vector tileset.
+ * Represents a vector layer definition within TileJSON v3.0.0 metadata. Vector layers describe the data fields and zoom
+ * range for each layer in a vector tileset.
  *
- * <p>This follows the TileJSON v3.0.0 vector layer specification where each vector layer
- * must have an "id" and "fields" property, with optional "description", "minzoom", and "maxzoom".
+ * <p>This follows the TileJSON v3.0.0 vector layer specification where each vector layer must have an "id" and "fields"
+ * property, with optional "description", "minzoom", and "maxzoom".
  *
  * @since 1.0
  * @see <a href="https://github.com/mapbox/tilejson-spec/tree/master/3.0.0#33-vector_layers">TileJSON Vector Layers</a>
@@ -35,43 +35,33 @@ import java.util.Map;
 public record VectorLayer(
 
         /**
-         * The layer identifier used in the vector tiles.
-         * This corresponds to the layer name in the Mapbox Vector Tile format.
-         * Required by TileJSON v3.0.0 specification.
+         * The layer identifier used in the vector tiles. This corresponds to the layer name in the Mapbox Vector Tile
+         * format. Required by TileJSON v3.0.0 specification.
          */
         @JsonProperty("id") String id,
 
         /**
-         * A mapping of field names to their data types.
-         * Common types include "String", "Number", "Boolean".
-         * Field names correspond to properties in the vector tile features.
-         * Required by TileJSON v3.0.0 specification.
+         * A mapping of field names to their data types. Common types include "String", "Number", "Boolean". Field names
+         * correspond to properties in the vector tile features. Required by TileJSON v3.0.0 specification.
          */
         @JsonProperty("fields") Map<String, String> fields,
 
-        /**
-         * A human-readable description of the layer.
-         * Optional in TileJSON v3.0.0 specification.
-         */
+        /** A human-readable description of the layer. Optional in TileJSON v3.0.0 specification. */
         @JsonProperty("description") String description,
 
         /**
-         * The minimum zoom level at which this layer appears.
-         * Must be between 0 and 30 if specified.
-         * Optional in TileJSON v3.0.0 specification.
+         * The minimum zoom level at which this layer appears. Must be between 0 and 30 if specified. Optional in
+         * TileJSON v3.0.0 specification.
          */
         @JsonProperty("minzoom") Integer minZoom,
 
         /**
-         * The maximum zoom level at which this layer appears.
-         * Must be between 0 and 30 if specified.
-         * Optional in TileJSON v3.0.0 specification.
+         * The maximum zoom level at which this layer appears. Must be between 0 and 30 if specified. Optional in
+         * TileJSON v3.0.0 specification.
          */
         @JsonProperty("maxzoom") Integer maxZoom) {
 
-    /**
-     * Creates a new VectorLayer with all fields.
-     */
+    /** Creates a new VectorLayer with all fields. */
     public VectorLayer {}
 
     /**

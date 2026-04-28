@@ -34,18 +34,16 @@ import software.amazon.awssdk.services.s3.S3Client;
 
 /**
  * Examples of using different authentication methods with cloud storage RangeReaders.
- * <p>
- * This class demonstrates various ways to authenticate with AWS S3 and Azure Blob Storage
- * when creating RangeReader instances.
- * <p>
- * Note: These examples are for illustration purposes only and not meant to be run directly.
- * In a real application, you would use your actual credentials and endpoints.
+ *
+ * <p>This class demonstrates various ways to authenticate with AWS S3 and Azure Blob Storage when creating RangeReader
+ * instances.
+ *
+ * <p>Note: These examples are for illustration purposes only and not meant to be run directly. In a real application,
+ * you would use your actual credentials and endpoints.
  */
 class CloudAuthenticationExample {
 
-    /**
-     * Examples of AWS S3 authentication methods.
-     */
+    /** Examples of AWS S3 authentication methods. */
     public static void s3AuthenticationExamples() throws IOException {
         // Example S3 URI
         URI s3Uri = URI.create("s3://example-bucket/path/to/file.pmtiles");
@@ -96,9 +94,7 @@ class CloudAuthenticationExample {
         explicitReader.close();
     }
 
-    /**
-     * Examples of Azure Blob Storage authentication methods.
-     */
+    /** Examples of Azure Blob Storage authentication methods. */
     public static void azureAuthenticationExamples() throws IOException {
         // Example Azure URI
         URI azureUri = URI.create("https//mystorageaccount.blob.core.windows.net/container/file.pmtiles");
@@ -162,9 +158,7 @@ class CloudAuthenticationExample {
         sasReader.close();
     }
 
-    /**
-     * Example of using a RangeReader with caching and block alignment for better performance.
-     */
+    /** Example of using a RangeReader with caching and block alignment for better performance. */
     public static void performanceOptimizationExample() throws IOException {
         // Example URI
         URI uri = URI.create("s3://example-bucket/path/to/file.pmtiles");
@@ -183,8 +177,8 @@ class CloudAuthenticationExample {
 
     /**
      * Main method for demonstration purposes.
-     * <p>
-     * Note: This is not meant to be run directly as it contains placeholder credentials.
+     *
+     * <p>Note: This is not meant to be run directly as it contains placeholder credentials.
      */
     public static void main(String[] args) {
         try {

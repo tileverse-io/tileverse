@@ -23,15 +23,17 @@ import java.util.List;
 /**
  * Represents a complete TileJSON v3.0.0 specification-compliant metadata object.
  *
- * <p>TileJSON is a format for describing map tilesets. It describes tilesets' metadata,
- * including their bounds, available zoom levels, and vector layer information.
+ * <p>TileJSON is a format for describing map tilesets. It describes tilesets' metadata, including their bounds,
+ * available zoom levels, and vector layer information.
  *
- * <p>This implementation strictly follows the TileJSON v3.0.0 schema specification,
- * including all required and optional fields with proper validation.
+ * <p>This implementation strictly follows the TileJSON v3.0.0 schema specification, including all required and optional
+ * fields with proper validation.
  *
  * @since 1.0
  * @see <a href="https://github.com/mapbox/tilejson-spec/tree/master/3.0.0">TileJSON v3.0.0 Specification</a>
- * @see <a href="https://github.com/mapbox/tilejson-spec/blob/22f5f91e643e8980ef2656674bef84c2869fbe76/3.0.0/schema.json">TileJSON v3.0.0 Schema</a>
+ * @see <a
+ *     href="https://github.com/mapbox/tilejson-spec/blob/22f5f91e643e8980ef2656674bef84c2869fbe76/3.0.0/schema.json">TileJSON
+ *     v3.0.0 Schema</a>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -40,115 +42,82 @@ public record TileJSON(
         // Required fields per TileJSON v3.0.0 specification
 
         /**
-         * The TileJSON specification version number.
-         * Must be a semantic version string (e.g., "3.0.0").
-         * Required by TileJSON v3.0.0 specification.
+         * The TileJSON specification version number. Must be a semantic version string (e.g., "3.0.0"). Required by
+         * TileJSON v3.0.0 specification.
          */
         @JsonProperty("tilejson") String tilejson,
 
         /**
-         * An array of tile endpoints. Each endpoint is a string URL template.
-         * Must contain at least one tile URL.
+         * An array of tile endpoints. Each endpoint is a string URL template. Must contain at least one tile URL.
          * Required by TileJSON v3.0.0 specification.
          */
         @JsonProperty("tiles") List<String> tiles,
 
         /**
-         * Vector layer definitions for vector tilesets.
-         * Each layer describes the data fields and zoom range available.
+         * Vector layer definitions for vector tilesets. Each layer describes the data fields and zoom range available.
          * Required by TileJSON v3.0.0 specification.
          */
         @JsonProperty("vector_layers") List<VectorLayer> vectorLayers,
 
         // Optional fields per TileJSON v3.0.0 specification
 
-        /**
-         * Attribution text to be displayed when the tileset is shown.
-         * Optional in TileJSON v3.0.0 specification.
-         */
+        /** Attribution text to be displayed when the tileset is shown. Optional in TileJSON v3.0.0 specification. */
         @JsonProperty("attribution") String attribution,
 
         /**
-         * The extent of the tileset in WGS84 coordinates: [west, south, east, north].
-         * Must be an array of exactly 4 numbers if specified.
-         * Optional in TileJSON v3.0.0 specification.
+         * The extent of the tileset in WGS84 coordinates: [west, south, east, north]. Must be an array of exactly 4
+         * numbers if specified. Optional in TileJSON v3.0.0 specification.
          */
         @JsonProperty("bounds") List<Double> bounds,
 
         /**
-         * The default latitude and longitude of the tileset center.
-         * Must be an array of 2 or 3 numbers [longitude, latitude] or [longitude, latitude, zoom].
-         * Optional in TileJSON v3.0.0 specification.
+         * The default latitude and longitude of the tileset center. Must be an array of 2 or 3 numbers [longitude,
+         * latitude] or [longitude, latitude, zoom]. Optional in TileJSON v3.0.0 specification.
          */
         @JsonProperty("center") List<Double> center,
 
-        /**
-         * A text description of the tileset.
-         * Optional in TileJSON v3.0.0 specification.
-         */
+        /** A text description of the tileset. Optional in TileJSON v3.0.0 specification. */
         @JsonProperty("description") String description,
 
         /**
-         * The zoom level at which to fill in missing tiles.
-         * Must be between 0 and 30 if specified.
-         * Optional in TileJSON v3.0.0 specification.
+         * The zoom level at which to fill in missing tiles. Must be between 0 and 30 if specified. Optional in TileJSON
+         * v3.0.0 specification.
          */
         @JsonProperty("fillzoom") Integer fillzoom,
 
-        /**
-         * An array of interactivity grid endpoints.
-         * Optional in TileJSON v3.0.0 specification.
-         */
+        /** An array of interactivity grid endpoints. Optional in TileJSON v3.0.0 specification. */
         @JsonProperty("grids") List<String> grids,
 
-        /**
-         * Legend text to be displayed with the tileset.
-         * Optional in TileJSON v3.0.0 specification.
-         */
+        /** Legend text to be displayed with the tileset. Optional in TileJSON v3.0.0 specification. */
         @JsonProperty("legend") String legend,
 
         /**
-         * The maximum zoom level supported by the tileset.
-         * Must be between 0 and 30 if specified.
-         * Optional in TileJSON v3.0.0 specification.
+         * The maximum zoom level supported by the tileset. Must be between 0 and 30 if specified. Optional in TileJSON
+         * v3.0.0 specification.
          */
         @JsonProperty("maxzoom") Integer maxzoom,
 
         /**
-         * The minimum zoom level supported by the tileset.
-         * Must be between 0 and 30 if specified.
-         * Optional in TileJSON v3.0.0 specification.
+         * The minimum zoom level supported by the tileset. Must be between 0 and 30 if specified. Optional in TileJSON
+         * v3.0.0 specification.
          */
         @JsonProperty("minzoom") Integer minzoom,
 
-        /**
-         * A name describing the tileset.
-         * Optional in TileJSON v3.0.0 specification.
-         */
+        /** A name describing the tileset. Optional in TileJSON v3.0.0 specification. */
         @JsonProperty("name") String name,
 
-        /**
-         * The tiling scheme. Either "xyz" (default) or "tms".
-         * Optional in TileJSON v3.0.0 specification.
-         */
+        /** The tiling scheme. Either "xyz" (default) or "tms". Optional in TileJSON v3.0.0 specification. */
         @JsonProperty("scheme") String scheme,
 
-        /**
-         * A mustache template to be used to format interaction data.
-         * Optional in TileJSON v3.0.0 specification.
-         */
+        /** A mustache template to be used to format interaction data. Optional in TileJSON v3.0.0 specification. */
         @JsonProperty("template") String template,
 
         /**
-         * The version of the tileset.
-         * Should be a semantic version string.
-         * Optional in TileJSON v3.0.0 specification.
+         * The version of the tileset. Should be a semantic version string. Optional in TileJSON v3.0.0 specification.
          */
         @JsonProperty("version") String version) {
 
-    /**
-     * Creates a new TileJSON with all fields.
-     */
+    /** Creates a new TileJSON with all fields. */
     public TileJSON {}
 
     /**

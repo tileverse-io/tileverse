@@ -31,17 +31,12 @@ record S3Reference(URI endpoint, String bucket, String key, String region) {
     S3Reference() {
         this(null, null, null, null);
     }
-    /**
-     * Returns true if this location uses the default AWS S3 endpoint.
-     */
+    /** Returns true if this location uses the default AWS S3 endpoint. */
     public boolean isDefaultAwsEndpoint() {
         return endpoint == null;
     }
 
-    /**
-     * Returns true if this location requires path-style access.
-     * HTTP/HTTPS URIs require path-style access.
-     */
+    /** Returns true if this location requires path-style access. HTTP/HTTPS URIs require path-style access. */
     public boolean requiresPathStyle() {
         // If we have an endpoint, it came from an HTTP/HTTPS URI, so use path-style
         return endpoint != null;

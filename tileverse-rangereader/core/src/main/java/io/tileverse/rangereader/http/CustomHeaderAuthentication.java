@@ -23,10 +23,9 @@ import java.util.Objects;
 
 /**
  * Custom HTTP Header Authentication implementation for HttpRangeReader.
- * <p>
- * This authenticator allows arbitrary headers to be added to requests,
- * which is useful for custom authentication schemes or when multiple
- * headers are required.
+ *
+ * <p>This authenticator allows arbitrary headers to be added to requests, which is useful for custom authentication
+ * schemes or when multiple headers are required.
  */
 public class CustomHeaderAuthentication implements HttpAuthentication {
 

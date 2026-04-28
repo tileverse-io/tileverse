@@ -23,20 +23,21 @@ import java.nio.channels.ReadableByteChannel;
 import java.util.Objects;
 
 /**
- * A {@link DataInput} adapter that wraps a {@link ReadableByteChannel} to provide
- * standard Java DataInput semantics for reading primitive data types.
- * <p>
- * This adapter allows ReadableByteChannel instances to be used with any API that expects
- * a DataInput interface, enabling integration with serialization frameworks, data
- * processing libraries, and legacy code that works with DataInput.
- * <p>
- * <strong>Thread Safety:</strong> This class is not thread-safe. External synchronization
- * is required if multiple threads access the same instance concurrently.
- * <p>
- * <strong>Read-Only Adapter:</strong> This adapter only provides reading functionality.
- * It maintains an internal buffer for efficient reading of primitive types.
+ * A {@link DataInput} adapter that wraps a {@link ReadableByteChannel} to provide standard Java DataInput semantics for
+ * reading primitive data types.
  *
- * <p><strong>Usage Example:</strong></p>
+ * <p>This adapter allows ReadableByteChannel instances to be used with any API that expects a DataInput interface,
+ * enabling integration with serialization frameworks, data processing libraries, and legacy code that works with
+ * DataInput.
+ *
+ * <p><strong>Thread Safety:</strong> This class is not thread-safe. External synchronization is required if multiple
+ * threads access the same instance concurrently.
+ *
+ * <p><strong>Read-Only Adapter:</strong> This adapter only provides reading functionality. It maintains an internal
+ * buffer for efficient reading of primitive types.
+ *
+ * <p><strong>Usage Example:</strong>
+ *
  * <pre>{@code
  * try (ReadableByteChannel channel = Files.newByteChannel(path, StandardOpenOption.READ)) {
  *     DataInput dataInput = ReadableByteChannelDataInput.of(channel);
@@ -256,8 +257,8 @@ public class ReadableByteChannelDataInput implements DataInput {
     }
 
     /**
-     * Reads a modified UTF-8 string as used by DataInputStream/DataOutputStream.
-     * This handles the special encoding used by Java's writeUTF/readUTF methods.
+     * Reads a modified UTF-8 string as used by DataInputStream/DataOutputStream. This handles the special encoding used
+     * by Java's writeUTF/readUTF methods.
      *
      * @param bytearr The byte array containing the modified UTF-8 data.
      * @return The decoded String.
@@ -389,16 +390,12 @@ public class ReadableByteChannelDataInput implements DataInput {
         return bytesRead > 0;
     }
 
-    /**
-     * Marks the current position for potential reset (simplified implementation).
-     */
+    /** Marks the current position for potential reset (simplified implementation). */
     protected void mark() {
         buffer.mark();
     }
 
-    /**
-     * Resets to the marked position (simplified implementation).
-     */
+    /** Resets to the marked position (simplified implementation). */
     protected void reset() {
         buffer.reset();
     }

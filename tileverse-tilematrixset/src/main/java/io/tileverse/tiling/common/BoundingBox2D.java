@@ -16,12 +16,11 @@
 package io.tileverse.tiling.common;
 
 /**
- * Represents a 2D bounding box extent in map space (CRS coordinates).
- * This is a simple, GIS-library-agnostic representation that can easily
- * be converted to/from bounding boxes in various GIS libraries.
+ * Represents a 2D bounding box extent in map space (CRS coordinates). This is a simple, GIS-library-agnostic
+ * representation that can easily be converted to/from bounding boxes in various GIS libraries.
  *
- * <p>The extent is defined by minimum and maximum coordinate values,
- * representing a rectangular area in the coordinate reference system.
+ * <p>The extent is defined by minimum and maximum coordinate values, representing a rectangular area in the coordinate
+ * reference system.
  *
  * @param minX the minimum X coordinate (left edge)
  * @param minY the minimum Y coordinate (bottom edge)
@@ -53,8 +52,7 @@ public record BoundingBox2D(double minX, double minY, double maxX, double maxY) 
     }
 
     /**
-     * Creates an extent from two corner coordinates.
-     * The coordinates don't need to be in min/max order - this method
+     * Creates an extent from two corner coordinates. The coordinates don't need to be in min/max order - this method
      * will determine the correct bounds.
      *
      * @param corner1 the first corner coordinate
@@ -133,9 +131,7 @@ public record BoundingBox2D(double minX, double minY, double maxX, double maxY) 
         return new Coordinate(minX, minY);
     }
 
-    /**
-     * @return the top left coordinate
-     */
+    /** @return the top left coordinate */
     public Coordinate upperLeft() {
         return new Coordinate(minX, maxY);
     }
@@ -149,9 +145,7 @@ public record BoundingBox2D(double minX, double minY, double maxX, double maxY) 
         return new Coordinate(maxX, maxY);
     }
 
-    /**
-     * @return the bottom right coordinate
-     */
+    /** @return the bottom right coordinate */
     public Coordinate lowerRight() {
         return new Coordinate(maxX, minY);
     }

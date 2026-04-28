@@ -51,9 +51,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * Comprehensive tests for FileRangeReader.
- */
+/** Comprehensive tests for FileRangeReader. */
 class FileRangeReaderTest {
 
     @TempDir
@@ -67,8 +65,7 @@ class FileRangeReaderTest {
     void setUp() throws IOException {
         // Create a text file with known content
         testFile = tempDir.resolve("test-file.txt");
-        textContent =
-                """
+        textContent = """
                 The quick brown fox jumps over the lazy dog. \
                 ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 \
                 abcdefghijklmnopqrstuvwxyz""";
@@ -98,8 +95,9 @@ class FileRangeReaderTest {
                 .isNotNull()
                 .hasFieldOrPropertyWithValue("path", testFile);
 
-        IllegalArgumentException iae = assertThrows(IllegalArgumentException.class, () -> FileRangeReader.builder()
-                .uri(URI.create("http://test.com/file")));
+        IllegalArgumentException iae = assertThrows(
+                IllegalArgumentException.class,
+                () -> FileRangeReader.builder().uri(URI.create("http://test.com/file")));
         assertThat(iae)
                 .hasRootCauseInstanceOf(FileSystemNotFoundException.class)
                 .hasMessageContainingAll(
@@ -809,8 +807,9 @@ class FileRangeReaderTest {
         void builderIdleTimeoutValidation() {
             assertThatNoException().isThrownBy(() -> FileRangeReader.builder().idleTimeout(Duration.ofSeconds(30)));
             assertThatNoException().isThrownBy(() -> FileRangeReader.builder().idleTimeout(Duration.ZERO));
-            assertThrows(IllegalArgumentException.class, () -> FileRangeReader.builder()
-                    .idleTimeout(Duration.ofSeconds(-1)));
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> FileRangeReader.builder().idleTimeout(Duration.ofSeconds(-1)));
             assertThrows(
                     NullPointerException.class, () -> FileRangeReader.builder().idleTimeout(null));
         }
@@ -906,7 +905,8 @@ class FileRangeReaderTest {
         }
 
         /**
-         * FileChannel wrapper that delegates all operations to a real channel. Tests override specific methods to inject failures.
+         * FileChannel wrapper that delegates all operations to a real channel. Tests override specific methods to
+         * inject failures.
          */
         private static class ForwardingFileChannel extends FileChannel {
             private final FileChannel delegate;

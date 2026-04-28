@@ -28,12 +28,10 @@ import java.util.Arrays;
 
 /**
  * Represents the header of a PMTiles file, based on version 3 of the PMTiles specification.
- * <p>
- * The header is a fixed-length structure of 127 bytes containing metadata and offsets.
- * It provides the layout of the file, including the location of the root directory,
- * metadata, leaf directories, and tile data. It also includes global metadata such as
- * the coordinate bounds, zoom levels, and compression types used.
- * </p>
+ *
+ * <p>The header is a fixed-length structure of 127 bytes containing metadata and offsets. It provides the layout of the
+ * file, including the location of the root directory, metadata, leaf directories, and tile data. It also includes
+ * global metadata such as the coordinate bounds, zoom levels, and compression types used.
  *
  * @param rootDirOffset the byte offset from the start of the archive to the first byte of the root directory
  * @param rootDirBytes the number of bytes in the root directory
@@ -109,6 +107,7 @@ public record PMTilesHeader(
 
     /**
      * Returns the PMTiles format version.
+     *
      * @return The version number (always 3 for this implementation)
      */
     public byte version() {
@@ -127,6 +126,7 @@ public record PMTilesHeader(
 
     /**
      * Returns the minimum longitude as a double value.
+     *
      * @return The minimum longitude in decimal degrees
      */
     public double minLon() {
@@ -135,6 +135,7 @@ public record PMTilesHeader(
 
     /**
      * Returns the minimum latitude as a double value.
+     *
      * @return The minimum latitude in decimal degrees
      */
     public double minLat() {
@@ -143,6 +144,7 @@ public record PMTilesHeader(
 
     /**
      * Returns the maximum longitude as a double value.
+     *
      * @return The maximum longitude in decimal degrees
      */
     public double maxLon() {
@@ -151,6 +153,7 @@ public record PMTilesHeader(
 
     /**
      * Returns the maximum latitude as a double value.
+     *
      * @return The maximum latitude in decimal degrees
      */
     public double maxLat() {
@@ -159,6 +162,7 @@ public record PMTilesHeader(
 
     /**
      * Returns the center longitude as a double value.
+     *
      * @return The center longitude in decimal degrees
      */
     public double centerLon() {
@@ -167,6 +171,7 @@ public record PMTilesHeader(
 
     /**
      * Returns the center latitude as a double value.
+     *
      * @return The center latitude in decimal degrees
      */
     public double centerLat() {
@@ -316,8 +321,8 @@ public record PMTilesHeader(
     }
 
     /**
-     * Deserializes a PMTiles header from a byte array.
-     * This is a convenience method that wraps the byte array in a ByteBuffer.
+     * Deserializes a PMTiles header from a byte array. This is a convenience method that wraps the byte array in a
+     * ByteBuffer.
      *
      * @param bytes The byte array containing the header data.
      * @return A new PMTilesHeader instance.
@@ -341,9 +346,9 @@ public record PMTilesHeader(
 
     /**
      * Builder for PMTilesHeader instances.
-     * <p>
-     * Provides a fluent API for constructing PMTilesHeader objects.
-     * Default values are set for typical use cases (MVT tiles, gzip compression, full world bounds).
+     *
+     * <p>Provides a fluent API for constructing PMTilesHeader objects. Default values are set for typical use cases
+     * (MVT tiles, gzip compression, full world bounds).
      */
     public static class Builder {
         private long rootDirOffset = 127; // Default starts after header
@@ -373,6 +378,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the offset to the root directory.
+         *
          * @param rootDirOffset the offset in bytes
          * @return this builder
          */
@@ -383,6 +389,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the size of the root directory.
+         *
          * @param rootDirBytes the size in bytes
          * @return this builder
          */
@@ -393,6 +400,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the offset to the JSON metadata.
+         *
          * @param jsonMetadataOffset the offset in bytes
          * @return this builder
          */
@@ -403,6 +411,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the size of the JSON metadata.
+         *
          * @param jsonMetadataBytes the size in bytes
          * @return this builder
          */
@@ -413,6 +422,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the offset to the leaf directories section.
+         *
          * @param leafDirsOffset the offset in bytes
          * @return this builder
          */
@@ -423,6 +433,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the size of the leaf directories section.
+         *
          * @param leafDirsBytes the size in bytes
          * @return this builder
          */
@@ -433,6 +444,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the offset to the tile data section.
+         *
          * @param tileDataOffset the offset in bytes
          * @return this builder
          */
@@ -443,6 +455,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the size of the tile data section.
+         *
          * @param tileDataBytes the size in bytes
          * @return this builder
          */
@@ -453,6 +466,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the total count of addressed tiles (before RLE).
+         *
          * @param addressedTilesCount the count
          * @return this builder
          */
@@ -463,6 +477,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the total count of tile entries (where RunLength > 0).
+         *
          * @param tileEntriesCount the count
          * @return this builder
          */
@@ -473,6 +488,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the total count of distinct tile contents.
+         *
          * @param tileContentsCount the count
          * @return this builder
          */
@@ -483,6 +499,7 @@ public record PMTilesHeader(
 
         /**
          * Sets whether the tiles are clustered by TileID.
+         *
          * @param clustered true if clustered
          * @return this builder
          */
@@ -493,6 +510,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the compression type for internal structures.
+         *
          * @param internalCompression the compression type
          * @return this builder
          */
@@ -503,6 +521,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the compression type for tiles.
+         *
          * @param tileCompression the compression type
          * @return this builder
          */
@@ -513,6 +532,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the tile type.
+         *
          * @param tileType the tile type
          * @return this builder
          */
@@ -523,6 +543,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the minimum zoom level.
+         *
          * @param minZoom the zoom level
          * @return this builder
          */
@@ -533,6 +554,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the maximum zoom level.
+         *
          * @param maxZoom the zoom level
          * @return this builder
          */
@@ -543,6 +565,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the minimum longitude in E7 format.
+         *
          * @param minLonE7 the longitude
          * @return this builder
          */
@@ -553,6 +576,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the minimum latitude in E7 format.
+         *
          * @param minLatE7 the latitude
          * @return this builder
          */
@@ -563,6 +587,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the maximum longitude in E7 format.
+         *
          * @param maxLonE7 the longitude
          * @return this builder
          */
@@ -573,6 +598,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the maximum latitude in E7 format.
+         *
          * @param maxLatE7 the latitude
          * @return this builder
          */
@@ -583,6 +609,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the center zoom level.
+         *
          * @param centerZoom the zoom level
          * @return this builder
          */
@@ -593,6 +620,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the center longitude in E7 format.
+         *
          * @param centerLonE7 the longitude
          * @return this builder
          */
@@ -603,6 +631,7 @@ public record PMTilesHeader(
 
         /**
          * Sets the center latitude in E7 format.
+         *
          * @param centerLatE7 the latitude
          * @return this builder
          */
@@ -613,6 +642,7 @@ public record PMTilesHeader(
 
         /**
          * Convenience method for setting the minimum longitude.
+         *
          * @param minLon the longitude in decimal degrees
          * @return this builder
          */
@@ -623,6 +653,7 @@ public record PMTilesHeader(
 
         /**
          * Convenience method for setting the minimum latitude.
+         *
          * @param minLat the latitude in decimal degrees
          * @return this builder
          */
@@ -633,6 +664,7 @@ public record PMTilesHeader(
 
         /**
          * Convenience method for setting the maximum longitude.
+         *
          * @param maxLon the longitude in decimal degrees
          * @return this builder
          */
@@ -643,6 +675,7 @@ public record PMTilesHeader(
 
         /**
          * Convenience method for setting the maximum latitude.
+         *
          * @param maxLat the latitude in decimal degrees
          * @return this builder
          */
@@ -653,6 +686,7 @@ public record PMTilesHeader(
 
         /**
          * Convenience method for setting the center longitude.
+         *
          * @param centerLon the longitude in decimal degrees
          * @return this builder
          */
@@ -663,6 +697,7 @@ public record PMTilesHeader(
 
         /**
          * Convenience method for setting the center latitude.
+         *
          * @param centerLat the latitude in decimal degrees
          * @return this builder
          */
@@ -673,6 +708,7 @@ public record PMTilesHeader(
 
         /**
          * Builds the final header.
+         *
          * @return the constructed PMTilesHeader
          */
         public PMTilesHeader build() {
@@ -704,18 +740,14 @@ public record PMTilesHeader(
         }
     }
 
-    /**
-     * @return The absolute position and length for a leaf directory entry
-     */
+    /** @return The absolute position and length for a leaf directory entry */
     ByteRange leafDirDataRange(PMTilesEntry dirEntry) {
         long offset = leafDirsOffset() + dirEntry.offset();
         int length = dirEntry.length();
         return ByteRange.of(offset, length);
     }
 
-    /**
-     * @return The absolute position and length for a tile data
-     */
+    /** @return The absolute position and length for a tile data */
     ByteRange tileDataRange(PMTilesEntry tileEntry) {
         final long offset = tileDataOffset() + tileEntry.offset();
         final int length = tileEntry.length();

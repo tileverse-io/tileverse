@@ -51,14 +51,12 @@ public class CaffeineCache<K, V> implements Cache<K, V> {
     };
 
     /**
-     * Synchronous {@link com.github.benmanes.caffeine.cache.Cache caches} only use
-     * the executor for background maintenance operations (like eviction and removal
-     * notifications), while {@link AsyncCache} also uses it for loading values and
-     * could hence more easily saturate or even dead-lock if the same executor is
-     * used by multiple caches (especially if loading a value from one cache can
-     * trigger loading a value from another cache).
-     * <p>
-     * We're only creating synchronous caches so it's safe for them to share the maintenance executor service.
+     * Synchronous {@link com.github.benmanes.caffeine.cache.Cache caches} only use the executor for background
+     * maintenance operations (like eviction and removal notifications), while {@link AsyncCache} also uses it for
+     * loading values and could hence more easily saturate or even dead-lock if the same executor is used by multiple
+     * caches (especially if loading a value from one cache can trigger loading a value from another cache).
+     *
+     * <p>We're only creating synchronous caches so it's safe for them to share the maintenance executor service.
      */
     private static final ExecutorService MAINTENANCE_EXECUTOR = Executors.newFixedThreadPool(
             Math.max(1, (Runtime.getRuntime().availableProcessors() / 2)), maintenanceThreadFactory);
@@ -159,14 +157,14 @@ public class CaffeineCache<K, V> implements Cache<K, V> {
 
         /**
          * Estimates the initial capacity to minimize internal hash table resizing.
-         * <p>
-         * While {@code initialCapacity} is a performance hint, setting it too low (default is 16)
-         * causes frequent resizing and object allocation churn (garbage). Conversely,
-         * over-estimating can lead to excessive memory pre-allocation.
-         * <p>
-         * This implementation uses a conservative 80% buffer of the theoretical max items
-         * to ensure that the internal data structures do not outpace the actual heap
-         * availability if the {@code averageWeight} estimate is slightly inaccurate.
+         *
+         * <p>While {@code initialCapacity} is a performance hint, setting it too low (default is 16) causes frequent
+         * resizing and object allocation churn (garbage). Conversely, over-estimating can lead to excessive memory
+         * pre-allocation.
+         *
+         * <p>This implementation uses a conservative 80% buffer of the theoretical max items to ensure that the
+         * internal data structures do not outpace the actual heap availability if the {@code averageWeight} estimate is
+         * slightly inaccurate.
          *
          * @param maxWeight the maximum allowed weight (e.g., total bytes) for the cache
          * @param avgWeight the estimated average weight of a single entry

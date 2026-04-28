@@ -24,20 +24,21 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * A Tile Matrix Set defines the relationship between a tile pyramid's discrete grid
- * and a continuous coordinate reference system (CRS). It bridges the gap between
- * tile space (integer coordinates) and map space (real-world coordinates).
+ * A Tile Matrix Set defines the relationship between a tile pyramid's discrete grid and a continuous coordinate
+ * reference system (CRS). It bridges the gap between tile space (integer coordinates) and map space (real-world
+ * coordinates).
  *
- * <p>This implementation is CRS-agnostic and can work with any coordinate system,
- * making it easy to integrate with various GIS libraries without dependencies.
+ * <p>This implementation is CRS-agnostic and can work with any coordinate system, making it easy to integrate with
+ * various GIS libraries without dependencies.
  *
  * <p>Key concepts:
+ *
  * <ul>
- * <li><b>Tile Space</b>: Discrete grid coordinates (tile X, Y, Z)</li>
- * <li><b>Map Space</b>: Continuous CRS coordinates (longitude/latitude, projected coordinates, etc.)</li>
- * <li><b>Origin</b>: The map space coordinate corresponding to tile (0,0) at each zoom level</li>
- * <li><b>Resolution</b>: Map units per pixel at each zoom level</li>
- * <li><b>Tile Size</b>: Pixel dimensions of each tile (typically 256x256 or 512x512)</li>
+ *   <li><b>Tile Space</b>: Discrete grid coordinates (tile X, Y, Z)
+ *   <li><b>Map Space</b>: Continuous CRS coordinates (longitude/latitude, projected coordinates, etc.)
+ *   <li><b>Origin</b>: The map space coordinate corresponding to tile (0,0) at each zoom level
+ *   <li><b>Resolution</b>: Map units per pixel at each zoom level
+ *   <li><b>Tile Size</b>: Pixel dimensions of each tile (typically 256x256 or 512x512)
  * </ul>
  *
  * @since 1.0
@@ -52,33 +53,30 @@ public interface TileMatrixSet {
     TilePyramid tilePyramid();
 
     /**
-     * Returns the identifier for the coordinate reference system used by this tile matrix set.
-     * This is typically a CRS code like "EPSG:4326", "EPSG:3857", etc., but can be any
-     * string that uniquely identifies the coordinate system.
+     * Returns the identifier for the coordinate reference system used by this tile matrix set. This is typically a CRS
+     * code like "EPSG:4326", "EPSG:3857", etc., but can be any string that uniquely identifies the coordinate system.
      *
      * @return the CRS identifier
      */
     String crsId();
 
     /**
-     * Returns the pixel width of tiles in this matrix set.
-     * This is typically 256 or 512 pixels.
+     * Returns the pixel width of tiles in this matrix set. This is typically 256 or 512 pixels.
      *
      * @return the tile width in pixels
      */
     int tileWidth();
 
     /**
-     * Returns the pixel height of tiles in this matrix set.
-     * This is typically 256 or 512 pixels.
+     * Returns the pixel height of tiles in this matrix set. This is typically 256 or 512 pixels.
      *
      * @return the tile height in pixels
      */
     int tileHeight();
 
     /**
-     * Returns the map space resolution (map units per pixel) at the specified zoom level.
-     * Higher zoom levels typically have smaller (more detailed) resolutions.
+     * Returns the map space resolution (map units per pixel) at the specified zoom level. Higher zoom levels typically
+     * have smaller (more detailed) resolutions.
      *
      * @param zoomLevel the zoom level
      * @return the resolution in map units per pixel
@@ -87,9 +85,8 @@ public interface TileMatrixSet {
     double resolution(int zoomLevel);
 
     /**
-     * Returns the map space extent covered by this tile matrix set.
-     * This defines the bounding box in CRS coordinates that encompasses
-     * all tiles at all zoom levels.
+     * Returns the map space extent covered by this tile matrix set. This defines the bounding box in CRS coordinates
+     * that encompasses all tiles at all zoom levels.
      *
      * @return the map space extent
      */
@@ -123,15 +120,15 @@ public interface TileMatrixSet {
     /**
      * Returns the map space origin coordinate for the all zoom levels.
      *
-     * The origin depends on the tile pyramid's axis origin configuration.
+     * <p>The origin depends on the tile pyramid's axis origin configuration.
      *
      * @return the origin coordinate in map space
      */
     Coordinate origin();
 
     /**
-     * Converts a map space coordinate to the corresponding tile index at the specified zoom level.
-     * If the coordinate falls outside the matrix set extent, returns the nearest edge tile.
+     * Converts a map space coordinate to the corresponding tile index at the specified zoom level. If the coordinate
+     * falls outside the matrix set extent, returns the nearest edge tile.
      *
      * @param coordinate the map space coordinate
      * @param zoomLevel the target zoom level
@@ -141,8 +138,8 @@ public interface TileMatrixSet {
     TileIndex coordinateToTile(Coordinate coordinate, int zoomLevel);
 
     /**
-     * Returns all tile matrices in this set, ordered by zoom level.
-     * Each TileMatrix combines a TileRange with its spatial properties.
+     * Returns all tile matrices in this set, ordered by zoom level. Each TileMatrix combines a TileRange with its
+     * spatial properties.
      *
      * @return the list of tile matrices
      */
@@ -157,8 +154,7 @@ public interface TileMatrixSet {
     Optional<TileMatrix> tileMatrix(int zoomLevel);
 
     /**
-     * Returns the tile matrix for the specified zoom level.
-     * Throws an exception if the zoom level is not present.
+     * Returns the tile matrix for the specified zoom level. Throws an exception if the zoom level is not present.
      *
      * @param zoomLevel the zoom level
      * @return the tile matrix for the zoom level
@@ -202,9 +198,9 @@ public interface TileMatrixSet {
     }
 
     /**
-     * Returns a new TileMatrixSet containing only the tiles that intersect with the given extent.
-     * Each tile matrix in the result is filtered to include only tiles that intersect with the extent.
-     * Empty matrices (with no intersecting tiles) are excluded from the result.
+     * Returns a new TileMatrixSet containing only the tiles that intersect with the given extent. Each tile matrix in
+     * the result is filtered to include only tiles that intersect with the extent. Empty matrices (with no intersecting
+     * tiles) are excluded from the result.
      *
      * @param mapExtent the map space extent to intersect with
      * @return a new TileMatrixSet containing only intersecting tiles, or empty if no tiles intersect at any zoom level
@@ -212,21 +208,21 @@ public interface TileMatrixSet {
     Optional<TileMatrixSet> intersection(BoundingBox2D mapExtent);
 
     /**
-     * Returns a TileMatrix for the specified zoom level containing only tiles that intersect
-     * with the given extent. This is a convenience method equivalent to calling
-     * {@code getTileMatrix(zoomLevel).intersection(mapExtent)}.
+     * Returns a TileMatrix for the specified zoom level containing only tiles that intersect with the given extent.
+     * This is a convenience method equivalent to calling {@code getTileMatrix(zoomLevel).intersection(mapExtent)}.
      *
      * @param mapExtent the map space extent to intersect with
      * @param zoomLevel the zoom level for the tile matrix
-     * @return a TileMatrix containing only intersecting tiles at the specified zoom level, or empty if no tiles intersect
+     * @return a TileMatrix containing only intersecting tiles at the specified zoom level, or empty if no tiles
+     *     intersect
      */
     default Optional<TileMatrix> intersection(BoundingBox2D mapExtent, int zoomLevel) {
         return getTileMatrix(zoomLevel).intersection(mapExtent);
     }
 
     /**
-     * Returns a subset of this tile matrix set containing only the specified zoom level range.
-     * This creates a view that delegates to the original matrix set.
+     * Returns a subset of this tile matrix set containing only the specified zoom level range. This creates a view that
+     * delegates to the original matrix set.
      *
      * @param minZoomLevel the minimum zoom level (inclusive)
      * @param maxZoomLevel the maximum zoom level (inclusive)
@@ -236,8 +232,8 @@ public interface TileMatrixSet {
     TileMatrixSet subset(int minZoomLevel, int maxZoomLevel);
 
     /**
-     * Returns a subset of this tile matrix set containing tiles that intersect with the given extent
-     * within the specified zoom level range. This combines spatial and zoom filtering.
+     * Returns a subset of this tile matrix set containing tiles that intersect with the given extent within the
+     * specified zoom level range. This combines spatial and zoom filtering.
      *
      * @param mapExtent the map space extent to intersect with
      * @param minZoomLevel the minimum zoom level (inclusive)
@@ -259,8 +255,8 @@ public interface TileMatrixSet {
     }
 
     /**
-     * Creates a builder pre-populated with this tile matrix set's configuration.
-     * Useful for creating variants with different zoom level ranges.
+     * Creates a builder pre-populated with this tile matrix set's configuration. Useful for creating variants with
+     * different zoom level ranges.
      *
      * @return a builder initialized with this tile matrix set's values
      */

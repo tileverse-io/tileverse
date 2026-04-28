@@ -40,9 +40,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-/**
- * Unit tests for {@link AzureBlobRangeReader}.
- */
+/** Unit tests for {@link AzureBlobRangeReader}. */
 @ExtendWith(MockitoExtension.class)
 class AzureBlobRangeReaderTest {
 
@@ -58,9 +56,7 @@ class AzureBlobRangeReaderTest {
 
     private AzureBlobRangeReader reader;
 
-    /**
-     * Creates test data with a predictable pattern.
-     */
+    /** Creates test data with a predictable pattern. */
     private static byte[] createTestData(int size) {
         byte[] data = new byte[size];
         for (int i = 0; i < size; i++) {
@@ -229,15 +225,19 @@ class AzureBlobRangeReaderTest {
 
     @Test
     void testBuilderValidation() {
-        assertThrows(IllegalArgumentException.class, () -> AzureBlobRangeReader.builder()
-                .endpoint(URI.create("s3://bucket/file")));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> AzureBlobRangeReader.builder().endpoint(URI.create("s3://bucket/file")));
 
-        assertThrows(IllegalStateException.class, () -> AzureBlobRangeReader.builder()
-                .build());
+        assertThrows(
+                IllegalStateException.class,
+                () -> AzureBlobRangeReader.builder().build());
 
-        assertThrows(IllegalStateException.class, () -> AzureBlobRangeReader.builder()
-                .connectionString("UseDevelopmentStorage=true")
-                .build());
+        assertThrows(
+                IllegalStateException.class,
+                () -> AzureBlobRangeReader.builder()
+                        .connectionString("UseDevelopmentStorage=true")
+                        .build());
     }
 
     @Test

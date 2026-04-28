@@ -23,9 +23,9 @@ import java.util.Objects;
 
 /**
  * HTTP Basic Authentication implementation for HttpRangeReader.
- * <p>
- * This authenticator adds the standard HTTP Basic Authentication header
- * to requests, which encodes username and password in Base64.
+ *
+ * <p>This authenticator adds the standard HTTP Basic Authentication header to requests, which encodes username and
+ * password in Base64.
  */
 public class BasicAuthentication implements HttpAuthentication {
 

@@ -35,31 +35,30 @@ import software.amazon.awssdk.regions.Region;
 
 /**
  * {@link RangeReaderProvider} implementation for AWS S3.
- * <p>
- * The {@link RangeReaderConfig#uri() URI} is used to extract the bucket and object name from an S3 URI.
- * <p>
- * An S3 URL, or Amazon Simple Storage Service Uniform Resource Locator, refers to the
- * address used to access resources stored within AWS S3. There
- * are several forms of S3 URLs, depending on the context and desired access
+ *
+ * <p>The {@link RangeReaderConfig#uri() URI} is used to extract the bucket and object name from an S3 URI.
+ *
+ * <p>An S3 URL, or Amazon Simple Storage Service Uniform Resource Locator, refers to the address used to access
+ * resources stored within AWS S3. There are several forms of S3 URLs, depending on the context and desired access
  * method:
- * <h2> Path-Style URLs</h2>
+ *
+ * <h2>Path-Style URLs</h2>
  *
  * <ul>
- * <li>{@code s3://} URI: This is the canonical URI format for referencing
- * objects within S3. It is commonly used within AWS
- * services, tools, and libraries for internal referencing. For example:
- * <pre>
+ *   <li>{@code s3://} URI: This is the canonical URI format for referencing objects within S3. It is commonly used
+ *       within AWS services, tools, and libraries for internal referencing. For example:
+ *       <pre>
  * {@literal s3://your-bucket-name/your-object-name}
  * </pre>
- * <li>Public HTTP/HTTPS URLs: If an object is configured for public access, it
- * can be accessed directly via a standard HTTP or HTTPS URL. These URLs are
- * typically in the format:
- * <pre>
+ *   <li>Public HTTP/HTTPS URLs: If an object is configured for public access, it can be accessed directly via a
+ *       standard HTTP or HTTPS URL. These URLs are typically in the format:
+ *       <pre>
  * {@literal https://your-bucket-name.s3.your-aws-region.amazonaws.com/your-object-name}
  * </pre>
  * </ul>
- * When {@code http/s} URL schemes are used, {@link #canProcessHeaders(URI, Map)} disambiguates
- * by checking if a header starting with {@code x-amz-} was returned from the HEAD request.
+ *
+ * When {@code http/s} URL schemes are used, {@link #canProcessHeaders(URI, Map)} disambiguates by checking if a header
+ * starting with {@code x-amz-} was returned from the HEAD request.
  */
 public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
 
@@ -67,18 +66,18 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
 
     /**
      * Key used as environment variable name to disable this range reader provider
+     *
      * <pre>
      * {@code export IO_TILEVERSE_RANGEREADER_S3=false}
      * </pre>
      */
     public static final String ENABLED_KEY = "IO_TILEVERSE_RANGEREADER_S3";
-    /**
-     * This range reader implementation's {@link #getId() unique identifier}
-     */
+    /** This range reader implementation's {@link #getId() unique identifier} */
     public static final String ID = "s3";
 
     /**
      * Creates a new S3RangeReaderProvider with support for caching parameters
+     *
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_ENABLED
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_BLOCK_ALIGNED
      * @see AbstractRangeReaderProvider#MEMORY_CACHE_BLOCK_SIZE
@@ -96,8 +95,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
     public static final RangeReaderParameter<Boolean> S3_FORCE_PATH_STYLE = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.s3.force-path-style")
             .title("Enable S3 path style access")
-            .description(
-                    """
+            .description("""
                 When enabled, requests will use path-style addressing (e.g., https://s3.amazonaws.com/bucket/key).
 
                 When disabled, virtual-hosted-style addressing will be used instead \
@@ -119,8 +117,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
     public static final RangeReaderParameter<String> S3_REGION = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.s3.region")
             .title("Region")
-            .description(
-                    """
+            .description("""
                     Configure the region with which the SDK should communicate.
 
                     If this is not specified, the SDK will attempt to identify the endpoint automatically using the following logic:
@@ -147,13 +144,13 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
             .build();
 
     /**
-     * The AWS access key ID to use for authentication when both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are provided.
+     * The AWS access key ID to use for authentication when both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are
+     * provided.
      */
     public static final RangeReaderParameter<String> S3_AWS_ACCESS_KEY_ID = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.s3.aws-access-key-id")
             .title("AWS Access Key ID")
-            .description(
-                    """
+            .description("""
                     The AWS access key ID to use for authentication.
 
                     This parameter must be used together with AWS_SECRET_ACCESS_KEY. When both are provided, \
@@ -168,13 +165,13 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
             .build();
 
     /**
-     * The AWS secret access key to use for authentication when both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are provided.
+     * The AWS secret access key to use for authentication when both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are
+     * provided.
      */
     public static final RangeReaderParameter<String> S3_AWS_SECRET_ACCESS_KEY = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.s3.aws-secret-access-key")
             .title("AWS Secret Access Key")
-            .description(
-                    """
+            .description("""
                     The AWS secret access key to use for authentication.
 
                     This parameter must be used together with AWS_ACCESS_KEY_ID. When both are provided, \
@@ -194,8 +191,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
             RangeReaderParameter.builder()
                     .key("io.tileverse.rangereader.s3.use-default-credentials-provider")
                     .title("Use Default Credentials Provider")
-                    .description(
-                            """
+                    .description("""
                     When enabled, the AWS default credentials provider chain is used, which looks for credentials \
                     in this order:
                       1. Java System Properties - aws.accessKeyId and aws.secretAccessKey
@@ -217,8 +213,7 @@ public class S3RangeReaderProvider extends AbstractRangeReaderProvider {
     public static final RangeReaderParameter<String> S3_DEFAULT_CREDENTIALS_PROFILE = RangeReaderParameter.builder()
             .key("io.tileverse.rangereader.s3.default-credentials-profile")
             .title("Default Credentials Profile")
-            .description(
-                    """
+            .description("""
                     The AWS credentials profile name to use when USE_DEFAULT_CREDENTIALS_PROVIDER is enabled.
 
                     If not specified, the 'default' profile is used. This parameter is only effective when \

@@ -29,13 +29,13 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Abstract base class for RangeReader integration tests.
- * <p>
- * This class provides a comprehensive set of tests for all RangeReader implementations,
- * along with their decorator combinations (caching, block alignment, etc.).
- * <p>
- * Subclasses only need to implement the createBaseReader() method to provide the
- * specific RangeReader implementation to test. This class handles creating all the
- * decorated versions (with caching, block alignment, etc.) using that base reader.
+ *
+ * <p>This class provides a comprehensive set of tests for all RangeReader implementations, along with their decorator
+ * combinations (caching, block alignment, etc.).
+ *
+ * <p>Subclasses only need to implement the createBaseReader() method to provide the specific RangeReader implementation
+ * to test. This class handles creating all the decorated versions (with caching, block alignment, etc.) using that base
+ * reader.
  */
 public abstract class AbstractRangeReaderIT {
 
@@ -47,11 +47,11 @@ public abstract class AbstractRangeReaderIT {
 
     /**
      * Creates a basic RangeReader implementation for the standard test file.
-     * <p>
-     * This is the base implementation without any decorators.
-     * <p>
-     * This is the only method that subclasses must implement. All other reader types
-     * will be created by decorating this base reader.
+     *
+     * <p>This is the base implementation without any decorators.
+     *
+     * <p>This is the only method that subclasses must implement. All other reader types will be created by decorating
+     * this base reader.
      *
      * @return A basic RangeReader implementation
      * @throws IOException If an error occurs creating the reader
@@ -80,9 +80,9 @@ public abstract class AbstractRangeReaderIT {
 
     /**
      * Creates a RangeReader with both block alignment and memory caching.
-     * <p>
-     * Note: Caching is applied first, then block alignment is applied on top.
-     * This way the cache operates at the block aligned range level.
+     *
+     * <p>Note: Caching is applied first, then block alignment is applied on top. This way the cache operates at the
+     * block aligned range level.
      *
      * @return A RangeReader with block alignment and caching
      * @throws IOException If an error occurs creating the reader
@@ -106,9 +106,9 @@ public abstract class AbstractRangeReaderIT {
 
     /**
      * Creates a RangeReader with custom block size and memory caching.
-     * <p>
-     * Note: Caching is applied first, then block alignment is applied on top.
-     * This way the cache operates at the block aligned range level.
+     *
+     * <p>Note: Caching is applied first, then block alignment is applied on top. This way the cache operates at the
+     * block aligned range level.
      *
      * @param blockSize The block size to use
      * @return A RangeReader with the specified block size and memory caching
@@ -120,9 +120,7 @@ public abstract class AbstractRangeReaderIT {
         return new BlockAlignedRangeReader(cachingReader, blockSize);
     }
 
-    /**
-     * Tests basic read operations of the base RangeReader.
-     */
+    /** Tests basic read operations of the base RangeReader. */
     @Test
     public void testBaseRangeReader() throws IOException {
         try (RangeReader reader = createBaseReader()) {
@@ -161,9 +159,7 @@ public abstract class AbstractRangeReaderIT {
         }
     }
 
-    /**
-     * Tests reading with direct ByteBuffer.
-     */
+    /** Tests reading with direct ByteBuffer. */
     @Test
     public void testReadWithDirectBuffer() throws IOException {
         try (RangeReader reader = createBaseReader()) {
@@ -198,9 +194,7 @@ public abstract class AbstractRangeReaderIT {
         }
     }
 
-    /**
-     * Tests reading with a buffer that has an offset position.
-     */
+    /** Tests reading with a buffer that has an offset position. */
     @Test
     public void testReadWithBufferOffset() throws IOException {
         try (RangeReader reader = createBaseReader()) {
@@ -222,9 +216,7 @@ public abstract class AbstractRangeReaderIT {
         }
     }
 
-    /**
-     * Tests edge cases like reading at EOF, zero-length reads.
-     */
+    /** Tests edge cases like reading at EOF, zero-length reads. */
     @Test
     public void testEdgeCases() throws IOException {
         try (RangeReader reader = createBaseReader()) {
@@ -261,9 +253,7 @@ public abstract class AbstractRangeReaderIT {
         }
     }
 
-    /**
-     * Tests memory caching operations.
-     */
+    /** Tests memory caching operations. */
     @Test
     public void testCaching() throws IOException {
         try (RangeReader reader = createCachingReader()) {
@@ -298,9 +288,7 @@ public abstract class AbstractRangeReaderIT {
         }
     }
 
-    /**
-     * Tests block-aligned reading operations.
-     */
+    /** Tests block-aligned reading operations. */
     @Test
     public void testBlockAlignment() throws IOException {
         try (RangeReader reader = createBlockAlignedReader()) {
@@ -327,9 +315,7 @@ public abstract class AbstractRangeReaderIT {
         }
     }
 
-    /**
-     * Tests combined block alignment and caching.
-     */
+    /** Tests combined block alignment and caching. */
     @Test
     public void testBlockAlignmentAndCaching() throws IOException {
         try (RangeReader reader = createBlockAlignedCachingReader()) {
@@ -363,9 +349,7 @@ public abstract class AbstractRangeReaderIT {
         }
     }
 
-    /**
-     * Tests reading operations with a custom block size.
-     */
+    /** Tests reading operations with a custom block size. */
     @Test
     public void testCustomBlockSize() throws IOException {
         try (RangeReader reader = createCustomBlockSizeReader(LARGE_BLOCK_SIZE)) {
@@ -388,9 +372,7 @@ public abstract class AbstractRangeReaderIT {
         }
     }
 
-    /**
-     * Tests combined custom block size and caching.
-     */
+    /** Tests combined custom block size and caching. */
     @Test
     public void testCustomBlockSizeAndCaching() throws IOException {
         try (RangeReader reader = createCustomBlockSizeCachingReader(LARGE_BLOCK_SIZE)) {
@@ -424,9 +406,7 @@ public abstract class AbstractRangeReaderIT {
         }
     }
 
-    /**
-     * Tests randomized reads to ensure general correctness.
-     */
+    /** Tests randomized reads to ensure general correctness. */
     @Test
     public void testRandomizedReads() throws IOException {
         try (RangeReader reader = createBlockAlignedCachingReader()) {

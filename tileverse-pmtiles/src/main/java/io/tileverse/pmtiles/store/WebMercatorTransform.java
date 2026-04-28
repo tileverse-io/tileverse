@@ -22,31 +22,23 @@ import io.tileverse.tiling.pyramid.TileIndex;
 /**
  * High-precision Web Mercator (EPSG:3857) coordinate transformations.
  *
- * <p>This class provides accurate transformations between geographic coordinates
- * (EPSG:4326) and Web Mercator projected coordinates (EPSG:3857), as well as
- * tile coordinate calculations following the standard used by web mapping services.
+ * <p>This class provides accurate transformations between geographic coordinates (EPSG:4326) and Web Mercator projected
+ * coordinates (EPSG:3857), as well as tile coordinate calculations following the standard used by web mapping services.
  *
- * <p>The transformations use the precise mathematical formulas for the Spherical
- * Mercator projection, ensuring accuracy across all zoom levels and coordinate ranges.
+ * <p>The transformations use the precise mathematical formulas for the Spherical Mercator projection, ensuring accuracy
+ * across all zoom levels and coordinate ranges.
  *
  * @since 1.0
  */
 final class WebMercatorTransform {
 
-    /**
-     * Earth radius in meters (WGS84 semi-major axis).
-     */
+    /** Earth radius in meters (WGS84 semi-major axis). */
     private static final double EARTH_RADIUS = 6378137.0;
 
-    /**
-     * Half circumference of Earth in Web Mercator projection.
-     */
+    /** Half circumference of Earth in Web Mercator projection. */
     private static final double ORIGIN_SHIFT = Math.PI * EARTH_RADIUS;
 
-    /**
-     * Maximum latitude supported by Web Mercator projection.
-     * Beyond this latitude, the projection becomes infinite.
-     */
+    /** Maximum latitude supported by Web Mercator projection. Beyond this latitude, the projection becomes infinite. */
     private static final double MAX_LATITUDE = 85.0511287798;
 
     private WebMercatorTransform() {
@@ -57,9 +49,10 @@ final class WebMercatorTransform {
      * Converts geographic coordinates (EPSG:4326) to Web Mercator coordinates (EPSG:3857).
      *
      * <p>Uses the standard Spherical Mercator projection formulas:
+     *
      * <ul>
-     * <li>x = a * λ (where λ is longitude in radians)</li>
-     * <li>y = a * ln[tan(π/4 + φ/2)] (where φ is latitude in radians)</li>
+     *   <li>x = a * λ (where λ is longitude in radians)
+     *   <li>y = a * ln[tan(π/4 + φ/2)] (where φ is latitude in radians)
      * </ul>
      *
      * @param longitude longitude in decimal degrees
@@ -85,9 +78,10 @@ final class WebMercatorTransform {
      * Converts Web Mercator coordinates (EPSG:3857) to geographic coordinates (EPSG:4326).
      *
      * <p>Uses the inverse Spherical Mercator projection formulas:
+     *
      * <ul>
-     * <li>λ = x / a (longitude in radians)</li>
-     * <li>φ = π/2 - 2 * atan(e^(-y/a)) (latitude in radians)</li>
+     *   <li>λ = x / a (longitude in radians)
+     *   <li>φ = π/2 - 2 * atan(e^(-y/a)) (latitude in radians)
      * </ul>
      *
      * @param x Web Mercator X coordinate in meters
@@ -118,10 +112,11 @@ final class WebMercatorTransform {
      * Converts Web Mercator coordinates to tile coordinates at a specific zoom level.
      *
      * <p>This uses the standard XYZ/Google tile scheme where:
+     *
      * <ul>
-     * <li>Tile (0,0) is at the top-left (northwest) corner</li>
-     * <li>X increases eastward</li>
-     * <li>Y increases southward (inverted from geographic coordinates)</li>
+     *   <li>Tile (0,0) is at the top-left (northwest) corner
+     *   <li>X increases eastward
+     *   <li>Y increases southward (inverted from geographic coordinates)
      * </ul>
      *
      * @param x Web Mercator X coordinate in meters

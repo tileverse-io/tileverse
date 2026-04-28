@@ -34,16 +34,16 @@ import org.locationtech.jts.geom.Envelope;
 
 /**
  * A VectorTileStore implementation backed by a PMTiles file.
- * <p>
- * This store provides access to vector tiles stored in a PMTiles archive. It uses
- * a {@link PMTilesReader} to fetch the raw tile data and decodes it into
- * {@link VectorTile} objects.
- * <p>
- * Features:
+ *
+ * <p>This store provides access to vector tiles stored in a PMTiles archive. It uses a {@link PMTilesReader} to fetch
+ * the raw tile data and decodes it into {@link VectorTile} objects.
+ *
+ * <p>Features:
+ *
  * <ul>
- *   <li>Efficient tile access using the PMTiles directory structure</li>
- *   <li>Caching of decoded {@link VectorTile} objects</li>
- *   <li>Integration with the {@link VectorTileStore} abstraction</li>
+ *   <li>Efficient tile access using the PMTiles directory structure
+ *   <li>Caching of decoded {@link VectorTile} objects
+ *   <li>Integration with the {@link VectorTileStore} abstraction
  * </ul>
  */
 @NullMarked
@@ -53,9 +53,9 @@ public class PMTilesVectorTileStore extends VectorTileStore {
 
     /**
      * Short-lived (expireAfterAccess) {@link VectorTile} cache to account for consecutive single-layer requests.
-     * <p>
-     * Since {@link VectorTile} objects are immutable and relatively expensive to decode,
-     * caching them improves performance when multiple layers are requested for the same tile.
+     *
+     * <p>Since {@link VectorTile} objects are immutable and relatively expensive to decode, caching them improves
+     * performance when multiple layers are requested for the same tile.
      */
     private final VectorTileCache vectorTileCache;
 
@@ -72,7 +72,8 @@ public class PMTilesVectorTileStore extends VectorTileStore {
     }
 
     /**
-     * @throws UncheckedIOException if an IO exception happens when obtaining the {@link PMTilesMetadata} containing the list of {@link VectorLayer}
+     * @throws UncheckedIOException if an IO exception happens when obtaining the {@link PMTilesMetadata} containing the
+     *     list of {@link VectorLayer}
      */
     @Override
     public List<VectorLayer> getVectorLayersMetadata() {
@@ -85,6 +86,7 @@ public class PMTilesVectorTileStore extends VectorTileStore {
 
     /**
      * {@inheritDoc}
+     *
      * @return the extent declared in the {@link PMTilesReader#getHeader() PMTiles header}, converted to WebMercator
      */
     @Override
@@ -94,8 +96,8 @@ public class PMTilesVectorTileStore extends VectorTileStore {
     }
 
     /**
-     * Delegates to {@link PMTilesReader#getTile(long, io.tileverse.io.IOFunction)} with a decoding function to parse the
-     * {@link InputStream}  blob as a {@link VectorTile}.
+     * Delegates to {@link PMTilesReader#getTile(long, io.tileverse.io.IOFunction)} with a decoding function to parse
+     * the {@link InputStream} blob as a {@link VectorTile}.
      */
     @Override
     public Optional<TileData<VectorTile>> loadTile(Tile tile) {

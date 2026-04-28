@@ -27,20 +27,20 @@ import org.locationtech.jts.geom.GeometryFactory;
 
 /**
  * Codec for serializing and deserializing vector tiles between model objects and byte representations.
- * <p>
- * This class handles the conversion between the abstract {@link VectorTile} model and the MVT protobuf format,
+ *
+ * <p>This class handles the conversion between the abstract {@link VectorTile} model and the MVT protobuf format,
  * without any coordinate transformations or scaling logic. The codec simply reads and writes data as-is.
  *
  * <h2>Design Philosophy</h2>
- * <p>
- * The codec has no configuration parameters - it simply converts between
- * the model and protobuf representations. Coordinates are always preserved in their natural extent space
- * as stored in the protobuf data.
+ *
+ * <p>The codec has no configuration parameters - it simply converts between the model and protobuf representations.
+ * Coordinates are always preserved in their natural extent space as stored in the protobuf data.
  *
  * <h2>Geometry Reading Customization</h2>
- * <p>
- * For advanced geometry reading with custom factories or transformations, use {@link #newGeometryReader()}
- * to create a configurable {@link GeometryReader}:
+ *
+ * <p>For advanced geometry reading with custom factories or transformations, use {@link #newGeometryReader()} to create
+ * a configurable {@link GeometryReader}:
+ *
  * <pre>{@code
  * // Create custom geometry reader with specific factory and transformations
  * GeometryFactory customFactory = new GeometryFactory(new CoordinateArraySequenceFactory());
@@ -54,6 +54,7 @@ import org.locationtech.jts.geom.GeometryFactory;
  * }</pre>
  *
  * <h2>Usage</h2>
+ *
  * <pre>{@code
  * // Create codec instance
  * VectorTileCodec codec = new VectorTileCodec();
@@ -69,17 +70,15 @@ import org.locationtech.jts.geom.GeometryFactory;
  * }</pre>
  *
  * <h2>Thread Safety</h2>
- * <p>
- * This class is thread-safe and can be shared across multiple threads.
+ *
+ * <p>This class is thread-safe and can be shared across multiple threads.
  *
  * @see VectorTileBuilder for creating tile models
  * @see GeometryReader for custom geometry reading configuration
  */
 public class VectorTileCodec {
 
-    /**
-     * Constructs a new VectorTileCodec.
-     */
+    /** Constructs a new VectorTileCodec. */
     public VectorTileCodec() {
         // Default constructor
     }
@@ -88,8 +87,9 @@ public class VectorTileCodec {
 
     /**
      * Encodes a tile model to a byte array.
-     * <p>
-     * Use {@link #encode(VectorTile, OutputStream)} or {@link #encode(VectorTile, ByteBuffer)} for better performance.
+     *
+     * <p>Use {@link #encode(VectorTile, OutputStream)} or {@link #encode(VectorTile, ByteBuffer)} for better
+     * performance.
      *
      * @param tile the tile model to encode
      * @return the encoded vector tile as a byte array
@@ -100,8 +100,8 @@ public class VectorTileCodec {
     }
 
     /**
-     * Encodes a tile model to an OutputStream, avoiding intermediate byte array allocation.
-     * This is the recommended method for better performance and memory efficiency.
+     * Encodes a tile model to an OutputStream, avoiding intermediate byte array allocation. This is the recommended
+     * method for better performance and memory efficiency.
      *
      * @param tile the tile model to encode
      * @param outputStream the stream to write the encoded tile to
@@ -114,13 +114,13 @@ public class VectorTileCodec {
 
     /**
      * Encodes a tile model to a ByteBuffer.
-     * <p>
-     * The caller must ensure the ByteBuffer has sufficient remaining capacity.
+     *
+     * <p>The caller must ensure the ByteBuffer has sufficient remaining capacity.
      *
      * @param tile the tile model to encode
      * @param buffer the ByteBuffer to write the encoded tile to
-     * @throws InsufficientBufferException if the buffer has insufficient space,
-     *         containing the {@link InsufficientBufferException#getSerializedSize() required size} for proper buffer allocation
+     * @throws InsufficientBufferException if the buffer has insufficient space, containing the
+     *     {@link InsufficientBufferException#getSerializedSize() required size} for proper buffer allocation
      * @throws IOException if encoding fails for other reasons
      */
     public void encode(VectorTile tile, ByteBuffer buffer) throws InsufficientBufferException, IOException {
@@ -139,9 +139,9 @@ public class VectorTileCodec {
 
     /**
      * Returns the serialized size of the encoded tile without actually encoding it.
-     * <p>
-     * <strong>Note:</strong> This method requires building the entire protobuf structure internally,
-     * which involves computational overhead. Use judiciously.
+     *
+     * <p><strong>Note:</strong> This method requires building the entire protobuf structure internally, which involves
+     * computational overhead. Use judiciously.
      *
      * @param tile the tile model to calculate size for
      * @return the size in bytes that the encoded tile will occupy
@@ -155,8 +155,8 @@ public class VectorTileCodec {
 
     /**
      * Decodes a byte array to a tile model.
-     * <p>
-     * Coordinates are returned in their natural extent space (0 to extent-1) as stored in the MVT data.
+     *
+     * <p>Coordinates are returned in their natural extent space (0 to extent-1) as stored in the MVT data.
      *
      * @param data the encoded MVT data
      * @return the decoded tile model
@@ -167,8 +167,8 @@ public class VectorTileCodec {
     }
     /**
      * Decodes a ByteBuffer to a tile model.
-     * <p>
-     * Coordinates are returned in their natural extent space (0 to extent-1) as stored in the MVT data.
+     *
+     * <p>Coordinates are returned in their natural extent space (0 to extent-1) as stored in the MVT data.
      *
      * @param data the encoded MVT data
      * @return the decoded tile model
@@ -181,10 +181,10 @@ public class VectorTileCodec {
 
     /**
      * Decodes an InputStream to a tile model.
-     * <p>
-     * Coordinates are returned in their natural extent space (0 to extent-1) as stored in the MVT data.
-     * <p>
-     * <strong>Warning:</strong> The input stream is consumed fully due to protocol buffer requirements.
+     *
+     * <p>Coordinates are returned in their natural extent space (0 to extent-1) as stored in the MVT data.
+     *
+     * <p><strong>Warning:</strong> The input stream is consumed fully due to protocol buffer requirements.
      *
      * @param data the encoded MVT data stream
      * @return the decoded tile model
@@ -213,14 +213,16 @@ public class VectorTileCodec {
 
     /**
      * Creates a new configurable geometry reader for advanced geometry processing.
-     * <p>
-     * The returned {@link GeometryReader} can be customized with:
+     *
+     * <p>The returned {@link GeometryReader} can be customized with:
+     *
      * <ul>
-     * <li>{@link GeometryReader#withGeometryFactory(GeometryFactory)} - specify a custom JTS GeometryFactory</li>
-     * <li>{@link GeometryReader#withGeometryTransformation(UnaryOperator)} - apply coordinate transformations</li>
+     *   <li>{@link GeometryReader#withGeometryFactory(GeometryFactory)} - specify a custom JTS GeometryFactory
+     *   <li>{@link GeometryReader#withGeometryTransformation(UnaryOperator)} - apply coordinate transformations
      * </ul>
      *
      * <h4>Usage Examples</h4>
+     *
      * <pre>{@code
      * // Custom GeometryFactory with specific coordinate sequence implementation
      * GeometryFactory customFactory = new GeometryFactory(new CoordinateArraySequenceFactory());

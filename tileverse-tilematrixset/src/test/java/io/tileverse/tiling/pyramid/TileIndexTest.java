@@ -21,9 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
-/**
- * Test class for TileIndex functionality combining 2D and 3D operations.
- */
+/** Test class for TileIndex functionality combining 2D and 3D operations. */
 class TileIndexTest {
 
     @Test

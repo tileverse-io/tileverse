@@ -27,16 +27,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 /**
- * Unit tests for the HilbertCurve class, validating tile ID conversion,
- * round-trip conversion, and PMTiles compatibility.
+ * Unit tests for the HilbertCurve class, validating tile ID conversion, round-trip conversion, and PMTiles
+ * compatibility.
  */
 class HilbertCurveTest {
 
     private HilbertCurve hilbertCurve = new HilbertCurve();
 
-    /**
-     * Test round-trip conversion from TileIndex to tileId and back.
-     */
+    /** Test round-trip conversion from TileIndex to tileId and back. */
     @ParameterizedTest
     @CsvSource({
         "0, 0, 0",
@@ -66,8 +64,8 @@ class HilbertCurveTest {
     }
 
     /**
-     * Test tile ID conversion with actual tiles from pmtiles.io viewer.
-     * These are the ACTUAL tiles that should exist in the Andorra PMTiles file.
+     * Test tile ID conversion with actual tiles from pmtiles.io viewer. These are the ACTUAL tiles that should exist in
+     * the Andorra PMTiles file.
      */
     @Test
     void testActualAndorraTilesWithHilbertCurve() {
@@ -105,9 +103,7 @@ class HilbertCurveTest {
         }
     }
 
-    /**
-     * Test edge cases for tile ID conversion.
-     */
+    /** Test edge cases for tile ID conversion. */
     @Test
     void testTileIdEdgeCases() {
         // Test zoom level 0 (single tile)
@@ -130,9 +126,7 @@ class HilbertCurveTest {
         }
     }
 
-    /**
-     * Test tileIdToTileIndex with invalid inputs.
-     */
+    /** Test tileIdToTileIndex with invalid inputs. */
     @Test
     void testTileIdToTileIndexInvalidInputs() {
         // Test negative tile ID
@@ -142,9 +136,7 @@ class HilbertCurveTest {
         assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIdToTileIndex(Long.MAX_VALUE));
     }
 
-    /**
-     * Test tileIndexToTileId with zoom level that's too large.
-     */
+    /** Test tileIndexToTileId with zoom level that's too large. */
     @Test
     void testTileIdZoomTooLarge() {
         // Test that zoom level > 26 throws exception
@@ -158,8 +150,8 @@ class HilbertCurveTest {
     }
 
     /**
-     * Test spatial locality property of Hilbert curve.
-     * Adjacent tiles in 2D space should have relatively close tile IDs.
+     * Test spatial locality property of Hilbert curve. Adjacent tiles in 2D space should have relatively close tile
+     * IDs.
      */
     @Test
     void testSpatialLocality() {
@@ -187,9 +179,7 @@ class HilbertCurveTest {
         assertTrue(Math.abs(downId - centerId) < maxTilesAtZoom, "Adjacent tiles should have reasonably close IDs");
     }
 
-    /**
-     * Test that tile IDs are unique for different coordinates at the same zoom level.
-     */
+    /** Test that tile IDs are unique for different coordinates at the same zoom level. */
     @Test
     void testUniqueTileIds() {
         int z = 3; // Use a small zoom level for exhaustive testing
@@ -218,9 +208,7 @@ class HilbertCurveTest {
                 "Should have exactly " + expectedTileCount + " unique tile IDs at zoom " + z);
     }
 
-    /**
-     * Test coordinate validation for tile index conversion.
-     */
+    /** Test coordinate validation for tile index conversion. */
     @Test
     void testCoordinateValidation() {
         // Test coordinates beyond valid range for zoom level
@@ -234,9 +222,7 @@ class HilbertCurveTest {
         assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIndexToTileId(tileIndex3));
     }
 
-    /**
-     * Test specific PMTiles tile ID calculations that were problematic.
-     */
+    /** Test specific PMTiles tile ID calculations that were problematic. */
     @Test
     void testSpecificProblemCases() {
         // These were problematic coordinates mentioned in previous tests

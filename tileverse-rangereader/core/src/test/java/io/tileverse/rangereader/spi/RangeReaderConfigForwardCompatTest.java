@@ -23,9 +23,9 @@ import java.util.Properties;
 import org.junit.jupiter.api.Test;
 
 /**
- * Verifies that {@link RangeReaderConfig} accepts the {@code storage.*} parameter prefix used by tileverse 2.x
- * and translates it to the canonical {@code io.tileverse.rangereader.*} prefix used by 1.x. This forward
- * compatibility lets a tileverse 1.4+ runtime read configuration persisted by a future 2.x consumer.
+ * Verifies that {@link RangeReaderConfig} accepts the {@code storage.*} parameter prefix used by tileverse 2.x and
+ * translates it to the canonical {@code io.tileverse.rangereader.*} prefix used by 1.x. This forward compatibility lets
+ * a tileverse 1.4+ runtime read configuration persisted by a future 2.x consumer.
  */
 class RangeReaderConfigForwardCompatTest {
 

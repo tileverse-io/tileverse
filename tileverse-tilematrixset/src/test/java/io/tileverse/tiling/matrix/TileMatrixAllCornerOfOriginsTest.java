@@ -33,8 +33,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 /**
- * Comprehensive tests for TileMatrix functionality across all axis origins.
- * Uses simple, understandable spatial extents and tile ranges.
+ * Comprehensive tests for TileMatrix functionality across all axis origins. Uses simple, understandable spatial extents
+ * and tile ranges.
  */
 class TileMatrixAllCornerOfOriginsTest {
 
@@ -43,9 +43,7 @@ class TileMatrixAllCornerOfOriginsTest {
     private static final double SIMPLE_RESOLUTION = 10.0; // 10 map units per pixel
     private static final int TILE_SIZE = 10; // 10x10 pixel tiles = 100x100 map units each
 
-    /**
-     * Test TileMatrix creation and basic properties for all axis origins.
-     */
+    /** Test TileMatrix creation and basic properties for all axis origins. */
     @ParameterizedTest
     @EnumSource(CornerOfOrigin.class)
     void testTileMatrixCreationAllOrigins(CornerOfOrigin origin) {
@@ -64,8 +62,8 @@ class TileMatrixAllCornerOfOriginsTest {
     }
 
     /**
-     * Test tile extent calculation for different axis origins.
-     * Each axis origin should map the same abstract tile coordinates to different geographic locations.
+     * Test tile extent calculation for different axis origins. Each axis origin should map the same abstract tile
+     * coordinates to different geographic locations.
      */
     @Test
     void testTileExtentsByCornerOfOrigin() {
@@ -97,9 +95,7 @@ class TileMatrixAllCornerOfOriginsTest {
         assertThat(lowerLeftExtent.maxY()).isEqualTo(0.0);
     }
 
-    /**
-     * Test coordinate-to-tile mapping for different axis origins.
-     */
+    /** Test coordinate-to-tile mapping for different axis origins. */
     @ParameterizedTest
     @EnumSource(CornerOfOrigin.class)
     void testCoordinateToTileAllOrigins(CornerOfOrigin origin) {
@@ -127,9 +123,7 @@ class TileMatrixAllCornerOfOriginsTest {
         }
     }
 
-    /**
-     * Test extent-to-range mapping for different axis origins.
-     */
+    /** Test extent-to-range mapping for different axis origins. */
     @ParameterizedTest
     @EnumSource(CornerOfOrigin.class)
     void testExtentToRangeAllOrigins(CornerOfOrigin origin) {
@@ -151,9 +145,7 @@ class TileMatrixAllCornerOfOriginsTest {
         assertTrue(matrixRange.intersection(result).isPresent());
     }
 
-    /**
-     * Test tile intersection with spatial extents for different axis origins.
-     */
+    /** Test tile intersection with spatial extents for different axis origins. */
     @ParameterizedTest
     @EnumSource(CornerOfOrigin.class)
     void testTileIntersectionAllOrigins(CornerOfOrigin origin) {
@@ -170,9 +162,7 @@ class TileMatrixAllCornerOfOriginsTest {
         assertTrue(result.tileRange().count() > 0);
     }
 
-    /**
-     * Create a simple TileMatrix for testing with understandable parameters.
-     */
+    /** Create a simple TileMatrix for testing with understandable parameters. */
     private TileMatrix createSimpleMatrix(TileRange range) {
         return TileMatrix.builder()
                 .tileRange(range)

@@ -23,16 +23,16 @@ import io.tileverse.tiling.pyramid.TilePyramid;
 import io.tileverse.tiling.pyramid.TileRange;
 
 /**
- * Standard tile matrix sets commonly used in web mapping applications.
- * Provides constants and factory methods for creating tile matrix sets compatible
- * with GeoWebCache, OGC TMS specifications, and PMTiles.
+ * Standard tile matrix sets commonly used in web mapping applications. Provides constants and factory methods for
+ * creating tile matrix sets compatible with GeoWebCache, OGC TMS specifications, and PMTiles.
  *
  * <p>This class includes the most commonly used tile matrix sets:
+ *
  * <ul>
- * <li>EPSG:4326 (WGS84) - Geographic coordinate system</li>
- * <li>EPSG:3857 (Web Mercator) - Spherical Mercator projection</li>
- * <li>OGC TMS WebMercatorQuad - Official OGC Tile Matrix Set</li>
- * <li>OGC TMS WorldCRS84Quad - Official OGC geographic Tile Matrix Set</li>
+ *   <li>EPSG:4326 (WGS84) - Geographic coordinate system
+ *   <li>EPSG:3857 (Web Mercator) - Spherical Mercator projection
+ *   <li>OGC TMS WebMercatorQuad - Official OGC Tile Matrix Set
+ *   <li>OGC TMS WorldCRS84Quad - Official OGC geographic Tile Matrix Set
  * </ul>
  *
  * @since 1.0
@@ -131,55 +131,44 @@ public class DefaultTileMatrixSets {
     // Default constants
 
     /**
-     * EPSG:4326 (WGS84) tile matrix set - GlobalCRS84Geometric/EPSG:4326.
-     * Two tiles at zoom 0 (2x1), standard 256px tiles.
-     * Uses UPPER_LEFT axis origin compatible with PMTiles indexing.
+     * EPSG:4326 (WGS84) tile matrix set - GlobalCRS84Geometric/EPSG:4326. Two tiles at zoom 0 (2x1), standard 256px
+     * tiles. Uses UPPER_LEFT axis origin compatible with PMTiles indexing.
      */
     public static final TileMatrixSet WORLD_EPSG4326 = createEPSG4326(256);
 
     /**
-     * EPSG:4326 (WGS84) tile matrix set with 512px tiles.
-     * Uses UPPER_LEFT axis origin compatible with PMTiles indexing.
+     * EPSG:4326 (WGS84) tile matrix set with 512px tiles. Uses UPPER_LEFT axis origin compatible with PMTiles indexing.
      */
     public static final TileMatrixSet WORLD_EPSG4326x2 = createEPSG4326(512);
 
     /**
-     * EPSG:3857 (WebMercator) tile matrix set - GoogleMapsCompatible/EPSG:3857.
-     * Uses common practice resolutions, 256px tiles.
-     * Uses UPPER_LEFT axis origin compatible with PMTiles indexing.
+     * EPSG:3857 (WebMercator) tile matrix set - GoogleMapsCompatible/EPSG:3857. Uses common practice resolutions, 256px
+     * tiles. Uses UPPER_LEFT axis origin compatible with PMTiles indexing.
      */
     public static final TileMatrixSet WORLD_EPSG3857 = createEPSG3857(256);
 
     /**
-     * EPSG:3857 (WebMercator) tile matrix set with 512px tiles.
-     * Uses UPPER_LEFT axis origin compatible with PMTiles indexing.
+     * EPSG:3857 (WebMercator) tile matrix set with 512px tiles. Uses UPPER_LEFT axis origin compatible with PMTiles
+     * indexing.
      */
     public static final TileMatrixSet WORLD_EPSG3857x2 = createEPSG3857(512);
 
     /**
-     * OGC TMS WebMercatorQuad - official OGC Tile Matrix Set.
-     * EPSG:3857 with precise scale denominators, 256px tiles.
+     * OGC TMS WebMercatorQuad - official OGC Tile Matrix Set. EPSG:3857 with precise scale denominators, 256px tiles.
      * Uses UPPER_LEFT axis origin compatible with PMTiles indexing.
      */
     public static final TileMatrixSet WEB_MERCATOR_QUAD = createWebMercatorQuad(256);
 
-    /**
-     * OGC TMS WebMercatorQuad with 512px tiles.
-     * Uses UPPER_LEFT axis origin compatible with PMTiles indexing.
-     */
+    /** OGC TMS WebMercatorQuad with 512px tiles. Uses UPPER_LEFT axis origin compatible with PMTiles indexing. */
     public static final TileMatrixSet WEB_MERCATOR_QUADx2 = createWebMercatorQuad(512);
 
     /**
-     * OGC TMS WorldCRS84Quad - official OGC Tile Matrix Set.
-     * EPSG:4326 with precise scale denominators, 256px tiles.
+     * OGC TMS WorldCRS84Quad - official OGC Tile Matrix Set. EPSG:4326 with precise scale denominators, 256px tiles.
      * Uses UPPER_LEFT axis origin compatible with PMTiles indexing.
      */
     public static final TileMatrixSet WORLD_CRS84_QUAD = createWorldCRS84Quad(256);
 
-    /**
-     * OGC TMS WorldCRS84Quad with 512px tiles.
-     * Uses UPPER_LEFT axis origin compatible with PMTiles indexing.
-     */
+    /** OGC TMS WorldCRS84Quad with 512px tiles. Uses UPPER_LEFT axis origin compatible with PMTiles indexing. */
     public static final TileMatrixSet WORLD_CRS84_QUADx2 = createWorldCRS84Quad(512);
 
     // Factory methods

@@ -18,9 +18,7 @@ package io.tileverse.tiling.matrix;
 import io.tileverse.tiling.common.Coordinate;
 import io.tileverse.tiling.pyramid.TileRange;
 
-/**
- * Builder for creating TileMatrix instances.
- */
+/** Builder for creating TileMatrix instances. */
 public class TileMatrixBuilder {
     private TileRange tileRange;
     private double resolution;

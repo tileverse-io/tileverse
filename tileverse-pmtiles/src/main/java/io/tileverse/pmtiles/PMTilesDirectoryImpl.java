@@ -24,9 +24,7 @@ import java.util.stream.Stream;
 
 class PMTilesDirectoryImpl implements PMTilesDirectory {
 
-    /**
-     * Size of {@code tileId + offset + length + runLength}
-     */
+    /** Size of {@code tileId + offset + length + runLength} */
     static final int SERIALIZED_ENTRY_SIZE = Long.BYTES + Long.BYTES + Integer.BYTES + Integer.BYTES;
 
     private static final int ID_OFFSET = 0;
@@ -34,20 +32,16 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
     private static final int LENGTH_OFFSET = 16;
     private static final int RUNLENGTH_OFFSET = 20;
 
-    /**
-     * The number of entries contained in the directory (MUST be greater than 0)
-     */
+    /** The number of entries contained in the directory (MUST be greater than 0) */
     private final int size;
 
-    /**
-     * Unpacked representation of entries (see {@link ByteBufferEntry})
-     */
+    /** Unpacked representation of entries (see {@link ByteBufferEntry}) */
     final ByteBuffer unpacked;
 
     /**
      * Constructs a PMTilesDirectory from a buffer of unpacked entries.
      *
-     * @param size            the number of entries in the directory
+     * @param size the number of entries in the directory
      * @param unpackedEntries the buffer containing the unpacked entries
      */
     private PMTilesDirectoryImpl(int size, ByteBuffer unpackedEntries) {
@@ -76,8 +70,7 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
     }
 
     /**
-     * Finds the index of the entry with the given tileId using binary search.
-     * This method allocates NO memory.
+     * Finds the index of the entry with the given tileId using binary search. This method allocates NO memory.
      *
      * @param tileId the tile ID to search for
      * @return the index of the entry, or -1 if not found
@@ -162,17 +155,13 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
         return getEntry(size - 1);
     }
 
-    /**
-     * @return all entries
-     */
+    /** @return all entries */
     @Override
     public Stream<PMTilesEntry> entries() {
         return IntStream.range(0, size).mapToObj(this::getEntry);
     }
 
-    /**
-     * @return only directory entries
-     */
+    /** @return only directory entries */
     @Override
     public Stream<PMTilesEntry> directoryEntries() {
         return IntStream.range(0, size)
@@ -187,9 +176,7 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
                 .count();
     }
 
-    /**
-     * @return only tile entries
-     */
+    /** @return only tile entries */
     @Override
     public Stream<PMTilesEntry> tileEntries() {
         return IntStream.range(0, size)
@@ -220,8 +207,8 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
      * Sets the tile ID in the byte buffer.
      *
      * @param entryIndex index of the entry in the directory buffer
-     * @param directory  the byte buffer
-     * @param tileId     the tile ID to set
+     * @param directory the byte buffer
+     * @param tileId the tile ID to set
      */
     private static void setId(int entryIndex, ByteBuffer directory, long tileId) {
         directory.putLong(entryOffset(entryIndex) + ID_OFFSET, tileId);
@@ -242,8 +229,8 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
      * Sets the offset in the byte buffer.
      *
      * @param entryIndex index of the entry in the directory buffer
-     * @param directory  the byte buffer
-     * @param offset     the offset to set
+     * @param directory the byte buffer
+     * @param offset the offset to set
      */
     private static void setOffset(int entryIndex, ByteBuffer directory, long offset) {
         directory.putLong(entryOffset(entryIndex) + OFFSET_OFFSET, offset);
@@ -264,8 +251,8 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
      * Sets the length in the byte buffer.
      *
      * @param entryIndex index of the entry in the directory buffer
-     * @param directory  the byte buffer
-     * @param length     the length to set
+     * @param directory the byte buffer
+     * @param length the length to set
      */
     private static void setLength(int entryIndex, ByteBuffer directory, int length) {
         directory.putInt(entryOffset(entryIndex) + LENGTH_OFFSET, length);
@@ -287,7 +274,7 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
      *
      * @param entryIndex index of the entry in the directory buffer
      * @param entrySlice the byte buffer
-     * @param runLength  the run length to set
+     * @param runLength the run length to set
      */
     private static void setRunLength(int enrtyIndex, ByteBuffer entrySlice, int runLength) {
         entrySlice.putInt(entryOffset(enrtyIndex) + RUNLENGTH_OFFSET, runLength);
@@ -312,9 +299,7 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
         return !PMTilesDirectoryImpl.isLeaf(entryIndex, entrySlice);
     }
 
-    /**
-     * Builder for creating PMTilesDirectory instances.
-     */
+    /** Builder for creating PMTilesDirectory instances. */
     static class Builder {
 
         private final int numEntries;
@@ -347,7 +332,7 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
         /**
          * Sets the tile ID for the entry at the specified index.
          *
-         * @param index  the index of the entry
+         * @param index the index of the entry
          * @param tileId the tile ID
          * @return this builder
          */
@@ -359,7 +344,7 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
         /**
          * Sets the run length for the entry at the specified index.
          *
-         * @param index     the index of the entry
+         * @param index the index of the entry
          * @param runLength the run length
          * @return this builder
          */
@@ -371,7 +356,7 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
         /**
          * Sets the offset for the entry at the specified index.
          *
-         * @param index  the index of the entry
+         * @param index the index of the entry
          * @param offset the offset
          * @return this builder
          */
@@ -383,7 +368,7 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
         /**
          * Sets the length for the entry at the specified index.
          *
-         * @param index  the index of the entry
+         * @param index the index of the entry
          * @param length the length
          * @return this builder
          */
@@ -416,9 +401,7 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
     @SuppressWarnings("unused")
     private static final record ByteBufferEntry(int index, ByteBuffer directory) implements PMTilesEntry {
 
-        /**
-         * Factory method from an unpacked entry
-         */
+        /** Factory method from an unpacked entry */
         public static PMTilesEntry valueOf(int index, ByteBuffer directory) {
             return new ByteBufferEntry(index, directory);
         }

@@ -40,9 +40,9 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 /**
  * Integration tests for S3RangeReader using LocalStack.
- * <p>
- * These tests verify that the S3RangeReader can correctly read ranges of bytes
- * from an S3 bucket using the AWS S3 API against a LocalStack container.
+ *
+ * <p>These tests verify that the S3RangeReader can correctly read ranges of bytes from an S3 bucket using the AWS S3
+ * API against a LocalStack container.
  */
 @Testcontainers(disabledWithoutDocker = true)
 class S3RangeReaderLocalStackIT extends AbstractRangeReaderIT {
@@ -104,9 +104,7 @@ class S3RangeReaderLocalStackIT extends AbstractRangeReaderIT {
                 .build();
     }
 
-    /**
-     * Additional S3-specific tests can go here
-     */
+    /** Additional S3-specific tests can go here */
     @Test
     void testS3SpecificBuilder() throws IOException {
 

@@ -19,20 +19,19 @@ import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.pyramid.TileRange;
 
 /**
- * Defines the coordinate system origin for tile pyramids and ranges.
- * Specifies where the (0,0) coordinate is conceptually positioned,
- * which affects how traversal and query algorithms interpret coordinates.
+ * Defines the coordinate system origin for tile pyramids and ranges. Specifies where the (0,0) coordinate is
+ * conceptually positioned, which affects how traversal and query algorithms interpret coordinates.
  *
  * @since 1.0
  */
 public enum CornerOfOrigin {
 
     /**
-     * Origin at upper-left corner.
-     * Y=0 represents the top/north, Y increases downward/southward.
-     * Used by XYZ/Google/Slippy Map tiles and PMTiles.
+     * Origin at upper-left corner. Y=0 represents the top/north, Y increases downward/southward. Used by
+     * XYZ/Google/Slippy Map tiles and PMTiles.
      *
-     * Visual representation:
+     * <p>Visual representation:
+     *
      * <pre>
      * (0,0) (1,0) (2,0)  ← Y=0 at top
      * (0,1) (1,1) (2,1)
@@ -63,11 +62,11 @@ public enum CornerOfOrigin {
     },
 
     /**
-     * Origin at lower-left corner.
-     * Y=0 represents the bottom/south, Y increases upward/northward.
-     * Used by TMS (Tile Map Service) and traditional GIS coordinate systems.
+     * Origin at lower-left corner. Y=0 represents the bottom/south, Y increases upward/northward. Used by TMS (Tile Map
+     * Service) and traditional GIS coordinate systems.
      *
-     * Visual representation:
+     * <p>Visual representation:
+     *
      * <pre>
      * (0,2) (1,2) (2,2)
      * (0,1) (1,1) (2,1)
@@ -130,9 +129,8 @@ public enum CornerOfOrigin {
     public abstract TileIndex upperLeft(TileRange range);
 
     /**
-     * Returns the point of origin coordinate for tile (0,0) within the given extent.
-     * The point of origin is the coordinate that corresponds to tile (0,0)
-     * according to this corner of origin.
+     * Returns the point of origin coordinate for tile (0,0) within the given extent. The point of origin is the
+     * coordinate that corresponds to tile (0,0) according to this corner of origin.
      *
      * @param extent the spatial extent
      * @return the coordinate for tile (0,0) based on this corner of origin
@@ -145,8 +143,7 @@ public enum CornerOfOrigin {
     }
 
     /**
-     * Returns true if this axis origin requires Y-coordinate flipping
-     * when converting to the target axis origin.
+     * Returns true if this axis origin requires Y-coordinate flipping when converting to the target axis origin.
      *
      * @param target the target axis origin
      * @return true if Y-coordinate transformation is needed

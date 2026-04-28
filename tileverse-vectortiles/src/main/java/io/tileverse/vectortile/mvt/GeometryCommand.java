@@ -18,23 +18,15 @@
  */
 package io.tileverse.vectortile.mvt;
 
-/**
- * MVT command constants for geometry encoding.
- */
+/** MVT command constants for geometry encoding. */
 final class GeometryCommand {
-    /**
-     * MoveTo: 1. (2 parameters follow)
-     */
+    /** MoveTo: 1. (2 parameters follow) */
     public static final int MoveTo = 1;
 
-    /**
-     * LineTo: 2. (2 parameters follow)
-     */
+    /** LineTo: 2. (2 parameters follow) */
     public static final int LineTo = 2;
 
-    /**
-     * ClosePath: 7. (no parameters follow)
-     */
+    /** ClosePath: 7. (no parameters follow) */
     public static final int ClosePath = 7;
 
     private GeometryCommand() {}
@@ -45,8 +37,8 @@ final class GeometryCommand {
 
     /**
      * Extracts the command type from an MVT command integer.
-     * <p>
-     * MVT commands encode both command type (lower 3 bits) and count (upper bits).
+     *
+     * <p>MVT commands encode both command type (lower 3 bits) and count (upper bits).
      *
      * @param cmd the packed command integer
      * @return command type (1=MoveTo, 2=LineTo, 7=ClosePath)
@@ -57,8 +49,8 @@ final class GeometryCommand {
 
     /**
      * Extracts the parameter count from an MVT command integer.
-     * <p>
-     * MVT commands encode both command type (lower 3 bits) and count (upper bits).
+     *
+     * <p>MVT commands encode both command type (lower 3 bits) and count (upper bits).
      *
      * @param cmd the packed command integer
      * @return number of coordinate pairs that follow this command

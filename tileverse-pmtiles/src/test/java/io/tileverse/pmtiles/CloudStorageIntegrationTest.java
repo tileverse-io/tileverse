@@ -38,16 +38,14 @@ import software.amazon.awssdk.regions.Region;
 
 /**
  * Integration tests for cloud storage access with PMTilesReader using RangeReaderBuilder.
- * <p>
- * These tests demonstrate accessing PMTiles files from different cloud storage providers
- * using the RangeReaderBuilder and PMTilesReader.
- * <p>
- * NOTE: These tests require actual cloud storage access, so they are marked with the
- * "integration" tag and are skipped by default. To run them, you need to:
- * 1. Have the necessary cloud storage credentials configured
- * 2. Have test PMTiles files uploaded to the appropriate locations
- * 3. Configure the test properties via environment variables
- * 4. Run Maven with the integration profile: mvn test -Pintegration
+ *
+ * <p>These tests demonstrate accessing PMTiles files from different cloud storage providers using the
+ * RangeReaderBuilder and PMTilesReader.
+ *
+ * <p>NOTE: These tests require actual cloud storage access, so they are marked with the "integration" tag and are
+ * skipped by default. To run them, you need to: 1. Have the necessary cloud storage credentials configured 2. Have test
+ * PMTiles files uploaded to the appropriate locations 3. Configure the test properties via environment variables 4. Run
+ * Maven with the integration profile: mvn test -Pintegration
  */
 @Tag("integration")
 class CloudStorageIntegrationTest {
@@ -81,12 +79,10 @@ class CloudStorageIntegrationTest {
 
     /**
      * Test reading a PMTiles file from S3 using the RangeReaderBuilder.
-     * <p>
-     * This test demonstrates:
-     * - Creating an S3 RangeReader with the builder pattern
-     * - Configuring region and credentials
-     * - Adding performance optimizations (caching and block alignment)
-     * - Reading the PMTiles header and a tile
+     *
+     * <p>This test demonstrates: - Creating an S3 RangeReader with the builder pattern - Configuring region and
+     * credentials - Adding performance optimizations (caching and block alignment) - Reading the PMTiles header and a
+     * tile
      */
     @Test
     void testReadPMTilesFromS3() throws IOException {
@@ -123,12 +119,10 @@ class CloudStorageIntegrationTest {
 
     /**
      * Test reading a PMTiles file from Azure Blob Storage using the RangeReaderBuilder.
-     * <p>
-     * This test demonstrates:
-     * - Creating an Azure Blob RangeReader with the builder pattern
-     * - Configuring connection string and container/blob path
-     * - Adding performance optimizations (caching and block alignment)
-     * - Reading the PMTiles header and metadata
+     *
+     * <p>This test demonstrates: - Creating an Azure Blob RangeReader with the builder pattern - Configuring connection
+     * string and container/blob path - Adding performance optimizations (caching and block alignment) - Reading the
+     * PMTiles header and metadata
      */
     @Test
     void testReadPMTilesFromAzure() throws IOException {
@@ -160,12 +154,10 @@ class CloudStorageIntegrationTest {
 
     /**
      * Test reading a PMTiles file from an HTTP URL using the RangeReaderBuilder.
-     * <p>
-     * This test demonstrates:
-     * - Creating an HTTP RangeReader with the builder pattern
-     * - Configuring to trust all certificates (for self-signed certs)
-     * - Adding caching for performance
-     * - Reading the PMTiles header and a specific tile
+     *
+     * <p>This test demonstrates: - Creating an HTTP RangeReader with the builder pattern - Configuring to trust all
+     * certificates (for self-signed certs) - Adding caching for performance - Reading the PMTiles header and a specific
+     * tile
      */
     @Test
     void testReadPMTilesFromHttp() throws IOException {

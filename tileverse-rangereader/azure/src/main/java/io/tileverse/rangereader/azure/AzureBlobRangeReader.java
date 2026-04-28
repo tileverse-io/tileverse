@@ -43,9 +43,8 @@ import java.util.logging.Logger;
 
 /**
  * A RangeReader implementation that reads from an Azure Blob Storage container.
- * <p>
- * This class enables reading data stored in Azure Blob Storage using the
- * Azure Storage Blob client library for Java.
+ *
+ * <p>This class enables reading data stored in Azure Blob Storage using the Azure Storage Blob client library for Java.
  */
 public class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
     private static final Logger LOGGER = Logger.getLogger(AzureBlobRangeReader.class.getName());
@@ -145,8 +144,8 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
     /**
      * Creates a new AzureBlobRangeReader for a pre-configured BlobClient.
      *
-     * <p>This is the simplest way to create an AzureBlobRangeReader when you already
-     * have a configured BlobClient instance with authentication, connection settings, etc.
+     * <p>This is the simplest way to create an AzureBlobRangeReader when you already have a configured BlobClient
+     * instance with authentication, connection settings, etc.
      *
      * @param blobClient the pre-configured Azure BlobClient
      * @return a new AzureBlobRangeReader instance
@@ -160,10 +159,11 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
     /**
      * Creates a new builder for AzureBlobRangeReader configuration-based construction.
      *
-     * <p>Use the builder when you need to construct the BlobClient from connection parameters.
-     * The builder supports several authentication patterns:
+     * <p>Use the builder when you need to construct the BlobClient from connection parameters. The builder supports
+     * several authentication patterns:
      *
      * <h4>Connection String Authentication</h4>
+     *
      * <pre>{@code
      * AzureBlobRangeReader reader = AzureBlobRangeReader.builder()
      *     .connectionString("DefaultEndpointsProtocol=https;AccountName=...")
@@ -173,6 +173,7 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
      * }</pre>
      *
      * <h4>Account Name + Key Authentication</h4>
+     *
      * <pre>{@code
      * AzureBlobRangeReader reader = AzureBlobRangeReader.builder()
      *     .accountName("mystorageaccount")
@@ -183,6 +184,7 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
      * }</pre>
      *
      * <h4>SAS Token Authentication</h4>
+     *
      * <pre>{@code
      * AzureBlobRangeReader reader = AzureBlobRangeReader.builder()
      *     .accountName("mystorageaccount")
@@ -193,6 +195,7 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
      * }</pre>
      *
      * <h4>Azure AD Token Credential Authentication</h4>
+     *
      * <pre>{@code
      * TokenCredential credential = new DefaultAzureCredentialBuilder().build();
      * AzureBlobRangeReader reader = AzureBlobRangeReader.builder()
@@ -209,9 +212,7 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
         return new Builder();
     }
 
-    /**
-     * Builder for AzureBlobRangeReader.
-     */
+    /** Builder for AzureBlobRangeReader. */
     public static class Builder {
         private TokenCredential tokenCredential;
         private String accountName;
@@ -221,7 +222,9 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
         private String blobName;
         private String sasToken;
         /**
-         * If provided, superseeds {@link #accountName}, {@link #containerName}, and {@link #blobName(String)} if provided in the URI
+         * If provided, superseeds {@link #accountName}, {@link #containerName}, and {@link #blobName(String)} if
+         * provided in the URI
+         *
          * @see BlobClientBuilder#endpoint(String)
          */
         private URI endpoint;
@@ -323,9 +326,8 @@ public class AzureBlobRangeReader extends AbstractRangeReader implements RangeRe
         /**
          * Sets the retry options for the underlying Azure Storage client.
          *
-         * <p>Controls how failed requests are retried (number of attempts, delay between retries,
-         * timeout per attempt, etc.). If not set, the Azure SDK defaults apply (4 tries,
-         * exponential backoff starting at 4 seconds).
+         * <p>Controls how failed requests are retried (number of attempts, delay between retries, timeout per attempt,
+         * etc.). If not set, the Azure SDK defaults apply (4 tries, exponential backoff starting at 4 seconds).
          *
          * @param retryOptions the retry options
          * @return this builder

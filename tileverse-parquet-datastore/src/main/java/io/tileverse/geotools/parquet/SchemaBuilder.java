@@ -67,15 +67,15 @@ import org.locationtech.jts.geom.Geometry;
 /**
  * Converts a Parquet {@link MessageType} schema to a GeoTools {@link SimpleFeatureType}.
  *
- * <p>The schema is traversed recursively. Primitive fields become attributes whose Java binding class is determined by a
- * two-step process:
+ * <p>The schema is traversed recursively. Primitive fields become attributes whose Java binding class is determined by
+ * a two-step process:
  *
  * <ol>
  *   <li>If the column carries a {@link LogicalTypeAnnotation}, it is resolved via {@link BindingClassVisitor} (e.g.
  *       {@code STRING -> String}, {@code DATE -> LocalDate}, {@code TIMESTAMP(UTC) -> Instant}, {@code GEOMETRY ->
  *       Geometry}).
- *   <li>Otherwise, the {@linkplain #defaultBinding(PrimitiveTypeName) primitive-type default} is used (e.g. {@code
- *       INT32 -> Integer}, {@code BINARY -> byte[]}).
+ *   <li>Otherwise, the {@linkplain #defaultBinding(PrimitiveTypeName) primitive-type default} is used (e.g.
+ *       {@code INT32 -> Integer}, {@code BINARY -> byte[]}).
  * </ol>
  *
  * <p>Group types are handled as follows:
@@ -191,9 +191,9 @@ class SchemaBuilder {
     /**
      * Decodes a CRS identifier string into a {@link CoordinateReferenceSystem}.
      *
-     * <p>Attempts {@link CRS#decode(String, boolean) CRS.decode} first, then {@link CRS#parseWKT(String)
-     * CRS.parseWKT} as a fallback. Returns {@link DefaultGeographicCRS#WGS84 WGS84} if the code is {@code null},
-     * empty, or cannot be parsed.
+     * <p>Attempts {@link CRS#decode(String, boolean) CRS.decode} first, then {@link CRS#parseWKT(String) CRS.parseWKT}
+     * as a fallback. Returns {@link DefaultGeographicCRS#WGS84 WGS84} if the code is {@code null}, empty, or cannot be
+     * parsed.
      */
     static CoordinateReferenceSystem decodeCrs(@Nullable String code) {
         if (code == null || code.isEmpty()) {

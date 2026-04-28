@@ -23,8 +23,7 @@ import org.apache.parquet.schema.MessageType;
 /**
  * Reads row groups from a Parquet file, returning page data for column assembly.
  *
- * <p>Implementations may apply filter pushdown to skip row groups or pages that cannot
- * match the configured predicate.
+ * <p>Implementations may apply filter pushdown to skip row groups or pages that cannot match the configured predicate.
  */
 public interface ParquetRowGroupReader extends Closeable {
     /**

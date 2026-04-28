@@ -26,8 +26,8 @@ import org.locationtech.jts.geom.Envelope;
  *
  * <p>Adapted from the GeoTools GeoParquet module (LGPL 2.1, authored by the same contributor).
  *
- * @see <a href="https://github.com/opengeospatial/geoparquet/blob/main/format-specs/metadata.md">
- *     GeoParquet Metadata Specification</a>
+ * @see <a href="https://github.com/opengeospatial/geoparquet/blob/main/format-specs/metadata.md">GeoParquet Metadata
+ *     Specification</a>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class GeometryColumnMetadata {

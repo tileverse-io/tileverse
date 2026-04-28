@@ -26,15 +26,15 @@ import org.apache.parquet.io.SeekableInputStream;
 
 /**
  * A {@link SeekableInputStream} backed by a {@link RangeReaderSeekableByteChannel}.
- * <p>
- * All read operations delegate directly to the channel, which in turn delegates
- * to the thread-safe {@link RangeReader#readRange} method. The channel maintains
- * the current position, so this stream does not need its own position tracking.
- * <p>
- * This class is not thread-safe. Parquet readers create one stream per read context.
- * <p>
- * Closing this stream closes the channel view but does <strong>not</strong> close
- * the underlying {@code RangeReader}.
+ *
+ * <p>All read operations delegate directly to the channel, which in turn delegates to the thread-safe
+ * {@link RangeReader#readRange} method. The channel maintains the current position, so this stream does not need its
+ * own position tracking.
+ *
+ * <p>This class is not thread-safe. Parquet readers create one stream per read context.
+ *
+ * <p>Closing this stream closes the channel view but does <strong>not</strong> close the underlying
+ * {@code RangeReader}.
  */
 class RangeReaderSeekableInputStream extends SeekableInputStream {
 

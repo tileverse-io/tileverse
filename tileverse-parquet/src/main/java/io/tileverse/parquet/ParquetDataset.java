@@ -39,19 +39,20 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * High-level, stateless facade for reading a Parquet file's schema, metadata, and records.
- * <p>
- * This class caches file metadata (schema, key-value metadata, record count) from an initial
- * core footer read. Each {@link #read()} call opens a fresh row-group reader internally,
- * allowing multiple concurrent reads from the same {@code ParquetDataset}.
  *
- * <p><strong>Default record type:</strong> Avro {@link GenericRecord}, which handles nested
- * schemas natively. Use {@link #readGroups()} for backward-compatible {@link Group}-based reading.
+ * <p>This class caches file metadata (schema, key-value metadata, record count) from an initial core footer read. Each
+ * {@link #read()} call opens a fresh row-group reader internally, allowing multiple concurrent reads from the same
+ * {@code ParquetDataset}.
  *
- * <p><strong>Filtering:</strong> All read methods have overloads accepting a {@link FilterPredicate}
- * for four-tier predicate pushdown: statistics-based row group pruning, dictionary-based row group
- * pruning, column-index page-level skipping, and record-level filtering.
+ * <p><strong>Default record type:</strong> Avro {@link GenericRecord}, which handles nested schemas natively. Use
+ * {@link #readGroups()} for backward-compatible {@link Group}-based reading.
  *
- * <p><strong>Usage example:</strong></p>
+ * <p><strong>Filtering:</strong> All read methods have overloads accepting a {@link FilterPredicate} for four-tier
+ * predicate pushdown: statistics-based row group pruning, dictionary-based row group pruning, column-index page-level
+ * skipping, and record-level filtering.
+ *
+ * <p><strong>Usage example:</strong>
+ *
  * <pre>{@code
  * InputFile inputFile = new RangeReaderInputFile(reader);
  * ParquetDataset dataset = ParquetDataset.open(inputFile);
@@ -90,8 +91,8 @@ public class ParquetDataset {
 
     /**
      * Opens a Parquet file for reading with default options.
-     * <p>
-     * Reads the file footer to cache schema and metadata, then closes the reader.
+     *
+     * <p>Reads the file footer to cache schema and metadata, then closes the reader.
      *
      * @param inputFile the Parquet file to open
      * @return a new stateless {@code ParquetDataset}
@@ -103,11 +104,11 @@ public class ParquetDataset {
 
     /**
      * Opens a Parquet file for reading with the given options.
-     * <p>
-     * Reads the file footer to cache schema and metadata, then closes the reader.
+     *
+     * <p>Reads the file footer to cache schema and metadata, then closes the reader.
      *
      * @param inputFile the Parquet file to open
-     * @param options   read options (codec factory, filters, etc.)
+     * @param options read options (codec factory, filters, etc.)
      * @return a new stateless {@code ParquetDataset}
      * @throws IOException if the file cannot be opened or its footer cannot be read
      */
@@ -119,23 +120,17 @@ public class ParquetDataset {
                 inputFile, options, footer.schema(), footer.keyValueMetadata(), footer.recordCount(), footer);
     }
 
-    /**
-     * Returns the file's Parquet schema.
-     */
+    /** Returns the file's Parquet schema. */
     public MessageType getSchema() {
         return schema;
     }
 
-    /**
-     * Returns the file-level key-value metadata as an unmodifiable map.
-     */
+    /** Returns the file-level key-value metadata as an unmodifiable map. */
     public Map<String, String> getKeyValueMetadata() {
         return Collections.unmodifiableMap(keyValueMetadata);
     }
 
-    /**
-     * Returns the total number of records in the file.
-     */
+    /** Returns the total number of records in the file. */
     public long getRecordCount() {
         return recordCount;
     }
@@ -153,8 +148,7 @@ public class ParquetDataset {
     }
 
     /**
-     * Returns a lazy iterator over records as Avro {@link GenericRecord} with only the
-     * requested columns materialized.
+     * Returns a lazy iterator over records as Avro {@link GenericRecord} with only the requested columns materialized.
      *
      * @param columns the set of column names to read
      * @return a closeable iterator over projected records
@@ -177,10 +171,9 @@ public class ParquetDataset {
     }
 
     /**
-     * Returns a lazy iterator over filtered records as Avro {@link GenericRecord} with
-     * column projection.
+     * Returns a lazy iterator over filtered records as Avro {@link GenericRecord} with column projection.
      *
-     * @param filter  the filter predicate
+     * @param filter the filter predicate
      * @param columns the set of column names to read
      * @return a closeable iterator over filtered, projected records
      * @throws IllegalArgumentException if any column name is not found in the schema
@@ -196,7 +189,7 @@ public class ParquetDataset {
      * Returns a lazy iterator over all records using a custom materializer.
      *
      * @param provider the materializer provider
-     * @param <T>      the record type
+     * @param <T> the record type
      * @return a closeable iterator over all records
      * @throws IOException if the file cannot be opened for reading
      */
@@ -208,8 +201,8 @@ public class ParquetDataset {
      * Returns a lazy iterator over records using a custom materializer with column projection.
      *
      * @param provider the materializer provider
-     * @param columns  the set of column names to read (empty for all columns)
-     * @param <T>      the record type
+     * @param columns the set of column names to read (empty for all columns)
+     * @param <T> the record type
      * @return a closeable iterator over projected records
      * @throws IllegalArgumentException if any column name is not found in the schema
      * @throws IOException if the file cannot be opened for reading
@@ -223,8 +216,8 @@ public class ParquetDataset {
      * Returns a lazy iterator over filtered records using a custom materializer.
      *
      * @param provider the materializer provider
-     * @param filter   the filter predicate
-     * @param <T>      the record type
+     * @param filter the filter predicate
+     * @param <T> the record type
      * @return a closeable iterator over filtered records
      * @throws IOException if the file cannot be opened for reading
      */
@@ -234,13 +227,12 @@ public class ParquetDataset {
     }
 
     /**
-     * Returns a lazy iterator over filtered records using a custom materializer with
-     * column projection.
+     * Returns a lazy iterator over filtered records using a custom materializer with column projection.
      *
      * @param provider the materializer provider
-     * @param filter   the filter predicate
-     * @param columns  the set of column names to read (empty for all columns)
-     * @param <T>      the record type
+     * @param filter the filter predicate
+     * @param columns the set of column names to read (empty for all columns)
+     * @param <T> the record type
      * @return a closeable iterator over filtered, projected records
      * @throws IllegalArgumentException if any column name is not found in the schema
      * @throws IOException if the file cannot be opened for reading
@@ -263,8 +255,7 @@ public class ParquetDataset {
     }
 
     /**
-     * Returns a lazy iterator over records as {@link Group} with only the requested
-     * columns materialized.
+     * Returns a lazy iterator over records as {@link Group} with only the requested columns materialized.
      *
      * @param columns the set of column names to read
      * @return a closeable iterator over projected records
@@ -289,7 +280,7 @@ public class ParquetDataset {
     /**
      * Returns a lazy iterator over filtered records as {@link Group} with column projection.
      *
-     * @param filter  the filter predicate
+     * @param filter the filter predicate
      * @param columns the set of column names to read
      * @return a closeable iterator over filtered, projected records
      * @throws IllegalArgumentException if any column name is not found in the schema
@@ -331,7 +322,7 @@ public class ParquetDataset {
     /**
      * Builds a projected {@link MessageType} containing only the specified columns.
      *
-     * @param schema  the full file schema
+     * @param schema the full file schema
      * @param columns the column names to include
      * @return a new {@code MessageType} with only the requested fields
      * @throws IllegalArgumentException if any column name is not found in the schema

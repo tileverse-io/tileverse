@@ -30,11 +30,11 @@ import org.xerial.snappy.Snappy;
 /**
  * Decompresses Parquet page data for all supported codecs.
  *
- * <p>Supported codecs: UNCOMPRESSED, SNAPPY, GZIP, ZSTD, LZ4_RAW, LZ4 (legacy Hadoop framing),
- * and BROTLI. LZO is not supported and will throw {@link IOException}.
+ * <p>Supported codecs: UNCOMPRESSED, SNAPPY, GZIP, ZSTD, LZ4_RAW, LZ4 (legacy Hadoop framing), and BROTLI. LZO is not
+ * supported and will throw {@link IOException}.
  *
- * <p>Where possible, direct byte-array APIs are used for performance (Snappy, ZSTD, LZ4). Stream-
- * based decompression via commons-compress is used for GZIP and Brotli.
+ * <p>Where possible, direct byte-array APIs are used for performance (Snappy, ZSTD, LZ4). Stream- based decompression
+ * via commons-compress is used for GZIP and Brotli.
  */
 final class CompressionUtil {
 
@@ -74,6 +74,7 @@ final class CompressionUtil {
      * Decompresses data using the legacy Hadoop LZ4 block framing format.
      *
      * <p>Frame layout (all integers are big-endian):
+     *
      * <pre>
      * [4 bytes: total uncompressed size]
      * [4 bytes: compressed block size][4 bytes: uncompressed block size][compressed data]

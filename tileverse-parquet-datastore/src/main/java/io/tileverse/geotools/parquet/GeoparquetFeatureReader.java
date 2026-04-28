@@ -47,8 +47,8 @@ import org.locationtech.jts.io.ParseException;
 import org.locationtech.jts.io.WKBReader;
 
 /**
- * Streaming {@link SimpleFeatureReader} that converts Avro {@link GenericRecord}s from a Parquet
- * source to GeoTools {@link SimpleFeature}s.
+ * Streaming {@link SimpleFeatureReader} that converts Avro {@link GenericRecord}s from a Parquet source to GeoTools
+ * {@link SimpleFeature}s.
  */
 class GeoparquetFeatureReader implements SimpleFeatureReader {
 

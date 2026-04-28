@@ -86,8 +86,7 @@ class GeometryColumnMetadataTest {
 
     @Test
     void deserialization_readsNestedCoveringStructure() throws Exception {
-        String json =
-                """
+        String json = """
                 {
                   "encoding": "WKB",
                   "geometry_types": ["Polygon"],

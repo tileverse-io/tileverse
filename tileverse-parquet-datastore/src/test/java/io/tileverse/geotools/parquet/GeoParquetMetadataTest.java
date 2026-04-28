@@ -27,8 +27,7 @@ class GeoParquetMetadataTest {
 
     @Test
     void readValue_supportsKnownAndUnknownVersions() throws Exception {
-        GeoParquetMetadata known = GeoParquetMetadata.readValue(
-                """
+        GeoParquetMetadata known = GeoParquetMetadata.readValue("""
                 {
                   "version": "1.2.0-dev",
                   "primary_column": "geometry",
@@ -43,8 +42,7 @@ class GeoParquetMetadataTest {
         assertThat(known).isInstanceOf(GeoParquetMetadata.V1_2_0Dev.class);
         assertThat(known.getVersion()).isEqualTo("1.2.0-dev");
 
-        GeoParquetMetadata unknown = GeoParquetMetadata.readValue(
-                """
+        GeoParquetMetadata unknown = GeoParquetMetadata.readValue("""
                 {
                   "version": "9.9.9",
                   "primary_column": "geometry",

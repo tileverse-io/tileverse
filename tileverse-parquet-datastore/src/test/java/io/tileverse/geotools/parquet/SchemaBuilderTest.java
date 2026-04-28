@@ -44,8 +44,7 @@ class SchemaBuilderTest {
 
     @Test
     void typeName_isSetCorrectly() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message myType {
                   required int32 id;
                 }
@@ -56,8 +55,7 @@ class SchemaBuilderTest {
 
     @Test
     void primitiveTypes_defaultBindings() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required boolean flag;
                   required int32 intVal;
@@ -80,8 +78,7 @@ class SchemaBuilderTest {
 
     @Test
     void stringLogicalType() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required binary name (UTF8);
                 }
@@ -92,8 +89,7 @@ class SchemaBuilderTest {
 
     @Test
     void dateLogicalType() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required int32 birthDate (DATE);
                 }
@@ -104,8 +100,7 @@ class SchemaBuilderTest {
 
     @Test
     void timestampUtc_mapsToInstant() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required int64 created (TIMESTAMP(MILLIS,true));
                 }
@@ -116,8 +111,7 @@ class SchemaBuilderTest {
 
     @Test
     void timestampNonUtc_mapsToLocalDateTime() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required int64 localTs (TIMESTAMP(MILLIS,false));
                 }
@@ -128,8 +122,7 @@ class SchemaBuilderTest {
 
     @Test
     void timeLogicalType() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required int32 timeMillis (TIME(MILLIS,true));
                   required int64 timeMicros (TIME(MICROS,true));
@@ -142,8 +135,7 @@ class SchemaBuilderTest {
 
     @Test
     void decimalLogicalType() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required binary amount (DECIMAL(9,2));
                 }
@@ -154,8 +146,7 @@ class SchemaBuilderTest {
 
     @Test
     void uuidLogicalType() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required fixed_len_byte_array(16) uuid (UUID);
                 }
@@ -166,8 +157,7 @@ class SchemaBuilderTest {
 
     @Test
     void intSignedSubtypes() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required int32 byteVal (INTEGER(8,true));
                   required int32 shortVal (INTEGER(16,true));
@@ -184,8 +174,7 @@ class SchemaBuilderTest {
 
     @Test
     void intUnsignedSubtypes() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required int32 u8 (INTEGER(8,false));
                   required int32 u16 (INTEGER(16,false));
@@ -202,8 +191,7 @@ class SchemaBuilderTest {
 
     @Test
     void geometryLogicalType() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required binary geom (GEOMETRY);
                 }
@@ -214,8 +202,7 @@ class SchemaBuilderTest {
 
     @Test
     void geographyLogicalType() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required binary geog (GEOGRAPHY);
                 }
@@ -235,8 +222,7 @@ class SchemaBuilderTest {
 
     @Test
     void requiredField_isNotNillable() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required int32 id;
                 }
@@ -247,8 +233,7 @@ class SchemaBuilderTest {
 
     @Test
     void optionalField_isNillable() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   optional int32 id;
                 }
@@ -259,8 +244,7 @@ class SchemaBuilderTest {
 
     @Test
     void nestedGroup_dotJoinedAttributeName() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required group address {
                     required binary street (UTF8);
@@ -277,8 +261,7 @@ class SchemaBuilderTest {
 
     @Test
     void multipleAttributes_correctCount() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required int32 id;
                   required binary name (UTF8);
@@ -307,8 +290,7 @@ class SchemaBuilderTest {
 
     @Test
     void unknownLogicalType_fallsBackToPrimitiveDefaultBinding() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required binary doc (BSON);
                 }

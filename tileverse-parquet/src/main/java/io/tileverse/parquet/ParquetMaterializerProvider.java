@@ -20,8 +20,7 @@ import org.apache.parquet.io.api.RecordMaterializer;
 import org.apache.parquet.schema.MessageType;
 
 /**
- * Factory for creating a {@link RecordMaterializer} that converts Parquet column data into
- * records of type {@code T}.
+ * Factory for creating a {@link RecordMaterializer} that converts Parquet column data into records of type {@code T}.
  *
  * @param <T> the record type produced by the materializer
  * @see GroupMaterializerProvider
@@ -35,9 +34,9 @@ public interface ParquetMaterializerProvider<T> {
      *
      * <p>The returned materializer is reused across all row groups in the file.
      *
-     * @param fileSchema      the full Parquet file schema
+     * @param fileSchema the full Parquet file schema
      * @param requestedSchema the projected schema (subset of columns to materialize)
-     * @param fileMetadata    the file-level key-value metadata
+     * @param fileMetadata the file-level key-value metadata
      * @return a materializer that converts column data into records of type {@code T}
      */
     RecordMaterializer<T> createMaterializer(

@@ -29,11 +29,11 @@ import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType;
 
 /**
- * Implements {@link ColumnIndexStore} by reading column and offset indexes from a Parquet file
- * using the offsets stored in {@link CoreColumnChunkMeta}.
+ * Implements {@link ColumnIndexStore} by reading column and offset indexes from a Parquet file using the offsets stored
+ * in {@link CoreColumnChunkMeta}.
  *
- * <p>Replaces {@code ColumnIndexStoreImpl} from parquet-hadoop. Reads all indexes eagerly in a
- * single stream pass for efficient I/O, especially over cloud storage.
+ * <p>Replaces {@code ColumnIndexStoreImpl} from parquet-hadoop. Reads all indexes eagerly in a single stream pass for
+ * efficient I/O, especially over cloud storage.
  */
 final class CoreColumnIndexStore implements ColumnIndexStore {
 
@@ -62,8 +62,8 @@ final class CoreColumnIndexStore implements ColumnIndexStore {
     /**
      * Creates a {@link ColumnIndexStore} by reading indexes for the requested columns.
      *
-     * <p>Returns a no-op store if any required offset index is missing or an I/O error occurs,
-     * since column-index filtering is an optimization and must not block reading.
+     * <p>Returns a no-op store if any required offset index is missing or an I/O error occurs, since column-index
+     * filtering is an optimization and must not block reading.
      */
     static ColumnIndexStore create(
             InputFile inputFile, CoreRowGroupMeta rowGroup, MessageType fileSchema, Set<ColumnPath> paths) {

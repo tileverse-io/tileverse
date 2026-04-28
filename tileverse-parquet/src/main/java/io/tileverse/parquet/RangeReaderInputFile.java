@@ -23,17 +23,16 @@ import org.apache.parquet.io.SeekableInputStream;
 
 /**
  * An {@link InputFile} implementation backed by a {@link RangeReader}.
- * <p>
- * This adapter enables Apache Parquet readers ({@code ParquetFileReader}, {@code ParquetReader})
- * to read from any source supported by the tileverse-rangereader library: local files, HTTP
- * servers, and cloud storage (S3, Azure, GCS).
- * <p>
- * <strong>Lifecycle:</strong> This class does not take ownership of the underlying
- * {@code RangeReader}. The caller is responsible for closing the {@code RangeReader}
- * when it is no longer needed. Multiple streams can be created from the same
- * {@code RangeReaderInputFile} concurrently, as {@code RangeReader} is thread-safe.
  *
- * <p><strong>Usage example:</strong></p>
+ * <p>This adapter enables Apache Parquet readers ({@code ParquetFileReader}, {@code ParquetReader}) to read from any
+ * source supported by the tileverse-rangereader library: local files, HTTP servers, and cloud storage (S3, Azure, GCS).
+ *
+ * <p><strong>Lifecycle:</strong> This class does not take ownership of the underlying {@code RangeReader}. The caller
+ * is responsible for closing the {@code RangeReader} when it is no longer needed. Multiple streams can be created from
+ * the same {@code RangeReaderInputFile} concurrently, as {@code RangeReader} is thread-safe.
+ *
+ * <p><strong>Usage example:</strong>
+ *
  * <pre>{@code
  * try (RangeReader reader = HttpRangeReader.of("https://example.com/data.parquet")) {
  *     InputFile inputFile = new RangeReaderInputFile(reader);

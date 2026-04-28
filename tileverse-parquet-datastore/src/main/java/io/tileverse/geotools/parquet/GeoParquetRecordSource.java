@@ -26,8 +26,8 @@ import org.apache.parquet.schema.MessageType;
 /**
  * Abstraction over a GeoParquet record source used by the datastore.
  *
- * <p>This isolates GeoTools-facing code from the underlying Parquet engine so the backend can be
- * swapped without changing datastore behavior.
+ * <p>This isolates GeoTools-facing code from the underlying Parquet engine so the backend can be swapped without
+ * changing datastore behavior.
  */
 interface GeoParquetRecordSource {
 

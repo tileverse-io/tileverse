@@ -33,21 +33,19 @@ import org.geotools.api.data.Parameter;
 import org.geotools.util.Converters;
 
 /**
- * Internal helper for the GeoParquet datastore factory to expose and translate RangeReader
- * parameters.
+ * Internal helper for the GeoParquet datastore factory to expose and translate RangeReader parameters.
  *
- * <p>The GeoParquet datastore is backed by Tileverse {@code RangeReader}s, so it needs to expose
- * the same backend and authentication options understood by the available RangeReader providers.
- * This helper keeps that mapping local to the GeoParquet implementation:
+ * <p>The GeoParquet datastore is backed by Tileverse {@code RangeReader}s, so it needs to expose the same backend and
+ * authentication options understood by the available RangeReader providers. This helper keeps that mapping local to the
+ * GeoParquet implementation:
  *
  * <ul>
- *   <li>it publishes provider-backed parameters as GeoTools {@link Param}s for the factory</li>
- *   <li>it translates the GeoTools connection map back to {@link Properties} for
- *   {@code RangeReaderFactory}</li>
+ *   <li>it publishes provider-backed parameters as GeoTools {@link Param}s for the factory
+ *   <li>it translates the GeoTools connection map back to {@link Properties} for {@code RangeReaderFactory}
  * </ul>
  *
- * <p>If another Tileverse GeoTools datastore ends up needing the same bridge, this class can be
- * extracted to a shared integration package without changing the GeoParquet factory contract.
+ * <p>If another Tileverse GeoTools datastore ends up needing the same bridge, this class can be extracted to a shared
+ * integration package without changing the GeoParquet factory contract.
  */
 final class GeoParquetRangeReaderParams {
 

@@ -32,10 +32,9 @@ import org.geotools.util.logging.Logging;
 /**
  * Read-only GeoParquet datastore factory backed by Tileverse {@code RangeReader}s.
  *
- * <p>Besides the mandatory {@value #URL_PARAM} parameter, this factory exposes the same
- * cloud/backend/authentication parameters used by the PMTiles datastore so GeoParquet can be
- * opened consistently from local files, HTTP, S3-compatible storage, Azure Blob Storage, and
- * Google Cloud Storage.
+ * <p>Besides the mandatory {@value #URL_PARAM} parameter, this factory exposes the same cloud/backend/authentication
+ * parameters used by the PMTiles datastore so GeoParquet can be opened consistently from local files, HTTP,
+ * S3-compatible storage, Azure Blob Storage, and Google Cloud Storage.
  */
 public class GeoParquetFileDataStoreFactory implements FileDataStoreFactorySpi {
 

@@ -23,11 +23,10 @@ import java.util.Objects;
 import org.apache.parquet.schema.MessageType;
 
 /**
- * Parsed Parquet file footer containing the schema, key-value metadata, record count, and
- * row group metadata.
+ * Parsed Parquet file footer containing the schema, key-value metadata, record count, and row group metadata.
  *
- * <p>Produced by {@link CoreParquetFooterReader#read(InputFile)} and consumed by
- * {@link CoreParquetRowGroupReader} and {@link io.tileverse.parquet.ParquetDataset}.
+ * <p>Produced by {@link CoreParquetFooterReader#read(InputFile)} and consumed by {@link CoreParquetRowGroupReader} and
+ * {@link io.tileverse.parquet.ParquetDataset}.
  */
 public final class CoreParquetFooter {
     private final MessageType schema;

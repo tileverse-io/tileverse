@@ -19,9 +19,7 @@ import org.apache.parquet.hadoop.ParquetReader;
 import org.apache.parquet.io.InputFile;
 import org.apache.parquet.schema.MessageType;
 
-/**
- * Hadoop-backed record source for performance comparisons only.
- */
+/** Hadoop-backed record source for performance comparisons only. */
 final class HadoopGeoParquetRecordSource implements GeoParquetRecordSource {
 
     private final InputFile inputFile;

@@ -45,10 +45,7 @@ class GeoparquetContentDataStoreTest {
         assertThat(GeoparquetContentDataStore.parseGeoParquetMetadata(Map.of("geo", "{not-json")))
                 .isNull();
 
-        GeoParquetMetadata metadata = GeoparquetContentDataStore.parseGeoParquetMetadata(
-                Map.of(
-                        "geo",
-                        """
+        GeoParquetMetadata metadata = GeoparquetContentDataStore.parseGeoParquetMetadata(Map.of("geo", """
                 {
                   "version": "1.1.0",
                   "primary_column": "geometry",

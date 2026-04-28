@@ -49,9 +49,9 @@ import org.apache.parquet.schema.Types;
 /**
  * Reads and parses the Parquet file footer directly from an {@link InputFile}, without Hadoop.
  *
- * <p>Validates the PAR1 magic bytes, reads the Thrift-encoded {@code FileMetaData}, and
- * reconstructs the {@link MessageType} schema including all logical types (GeoParquet
- * {@code GEOMETRY}/{@code GEOGRAPHY}, timestamps, decimals, etc.).
+ * <p>Validates the PAR1 magic bytes, reads the Thrift-encoded {@code FileMetaData}, and reconstructs the
+ * {@link MessageType} schema including all logical types (GeoParquet {@code GEOMETRY}/{@code GEOGRAPHY}, timestamps,
+ * decimals, etc.).
  */
 public final class CoreParquetFooterReader {
     private static final int TAIL_SIZE = 8;

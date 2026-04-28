@@ -22,10 +22,7 @@ import org.apache.parquet.io.api.GroupConverter;
 import org.apache.parquet.io.api.RecordMaterializer;
 import org.apache.parquet.schema.MessageType;
 
-/**
- * A {@link ParquetMaterializerProvider} that produces {@link Group} records using
- * {@link GroupRecordConverter}.
- */
+/** A {@link ParquetMaterializerProvider} that produces {@link Group} records using {@link GroupRecordConverter}. */
 class GroupMaterializerProvider implements ParquetMaterializerProvider<Group> {
 
     /** Singleton instance. */

@@ -25,8 +25,8 @@ import org.apache.parquet.format.Type;
 /**
  * Immutable metadata for a single column chunk within a Parquet row group.
  *
- * <p>Holds the column path, physical type, compression codec, byte offsets, statistics,
- * and optional column/offset index locations needed for filter pushdown and I/O.
+ * <p>Holds the column path, physical type, compression codec, byte offsets, statistics, and optional column/offset
+ * index locations needed for filter pushdown and I/O.
  */
 final class CoreColumnChunkMeta {
     private final String path;

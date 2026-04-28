@@ -37,8 +37,7 @@ class FilterPredicateBuilderTest {
 
     private static final FilterFactory ff = CommonFactoryFinder.getFilterFactory(null);
 
-    private static final MessageType SCHEMA = MessageTypeParser.parseMessageType(
-            """
+    private static final MessageType SCHEMA = MessageTypeParser.parseMessageType("""
             message test {
               required int32 id;
               required binary name (UTF8);

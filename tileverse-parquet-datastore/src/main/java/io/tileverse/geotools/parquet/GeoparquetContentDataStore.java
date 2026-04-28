@@ -48,8 +48,8 @@ import org.geotools.util.logging.Logging;
 /**
  * Read-only {@link ContentDataStore} backed by a single GeoParquet file.
  *
- * <p>Implements {@link FileDataStore} to provide single-type convenience methods expected by
- * GeoTools' {@code FileDataStoreFinder} and similar utilities.
+ * <p>Implements {@link FileDataStore} to provide single-type convenience methods expected by GeoTools'
+ * {@code FileDataStoreFinder} and similar utilities.
  */
 public class GeoparquetContentDataStore extends ContentDataStore implements FileDataStore {
 

@@ -53,33 +53,31 @@ import org.apache.parquet.variant.VariantBuilder;
 import org.apache.parquet.variant.VariantConverters;
 
 /**
- * A {@link ParquetMaterializerProvider} that produces Avro {@link GenericRecord} instances
- * through a local converter pipeline, without delegating to parquet-avro's
- * {@code AvroReadSupport}.
+ * A {@link ParquetMaterializerProvider} that produces Avro {@link GenericRecord} instances through a local converter
+ * pipeline, without delegating to parquet-avro's {@code AvroReadSupport}.
  *
  * <h2>Why not use {@code AvroReadSupport}?</h2>
  *
- * <p>Parquet-avro's {@code AvroReadSupport} directly imports {@code org.apache.hadoop.conf.Configuration}
- * and {@code org.apache.hadoop.util.ReflectionUtils}, which means {@code hadoop-common} must be on
- * the classpath at runtime. Although parquet-avro declares {@code hadoop-common} with
- * {@code <scope>provided</scope>}, any code that actually instantiates {@code AvroReadSupport}
- * will fail with {@link NoClassDefFoundError} unless hadoop-common is present.
+ * <p>Parquet-avro's {@code AvroReadSupport} directly imports {@code org.apache.hadoop.conf.Configuration} and
+ * {@code org.apache.hadoop.util.ReflectionUtils}, which means {@code hadoop-common} must be on the classpath at
+ * runtime. Although parquet-avro declares {@code hadoop-common} with {@code <scope>provided</scope>}, any code that
+ * actually instantiates {@code AvroReadSupport} will fail with {@link NoClassDefFoundError} unless hadoop-common is
+ * present.
  *
- * <p>{@code hadoop-common} brings 47 compile-scoped transitive dependencies (Guava, Protobuf, Jetty,
- * Jersey, commons-*, Curator, etc.) — a 100 MB+ dependency tree that conflicts with most modern
- * application stacks and defeats the goal of a Hadoop-free Parquet reader.
+ * <p>{@code hadoop-common} brings 47 compile-scoped transitive dependencies (Guava, Protobuf, Jetty, Jersey, commons-*,
+ * Curator, etc.) — a 100 MB+ dependency tree that conflicts with most modern application stacks and defeats the goal of
+ * a Hadoop-free Parquet reader.
  *
  * <p>This class reimplements Avro materialization using only:
+ *
  * <ul>
- *   <li>Avro APIs ({@link org.apache.avro.Schema}, {@link GenericData.Record})</li>
- *   <li>Parquet column APIs ({@link GroupConverter}, {@link PrimitiveConverter},
- *       {@link RecordMaterializer})</li>
- *   <li>{@link AvroSchemaConverter} from parquet-avro (which itself has no Hadoop imports)</li>
+ *   <li>Avro APIs ({@link org.apache.avro.Schema}, {@link GenericData.Record})
+ *   <li>Parquet column APIs ({@link GroupConverter}, {@link PrimitiveConverter}, {@link RecordMaterializer})
+ *   <li>{@link AvroSchemaConverter} from parquet-avro (which itself has no Hadoop imports)
  * </ul>
  *
- * <p>The result is a fully functional Avro record materializer that supports nested records,
- * arrays (LIST), maps (MAP), all primitive types, and nullable unions — with zero Hadoop
- * classes on the classpath.
+ * <p>The result is a fully functional Avro record materializer that supports nested records, arrays (LIST), maps (MAP),
+ * all primitive types, and nullable unions — with zero Hadoop classes on the classpath.
  */
 class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRecord> {
 
@@ -95,9 +93,7 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         return new SimpleAvroRecordMaterializer(requestedSchema, avroSchema);
     }
 
-    /**
-     * Materializer that assembles Avro {@link GenericRecord}s from Parquet column values.
-     */
+    /** Materializer that assembles Avro {@link GenericRecord}s from Parquet column values. */
     private static final class SimpleAvroRecordMaterializer extends RecordMaterializer<GenericRecord> {
         private final RecordGroupConverter rootConverter;
 
@@ -116,17 +112,13 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         }
     }
 
-    /**
-     * Callback that receives a converted column value.
-     */
+    /** Callback that receives a converted column value. */
     @FunctionalInterface
     interface ValueConsumer {
         void accept(Object value);
     }
 
-    /**
-     * Converter for Parquet group types that assembles Avro {@link GenericData.Record}s.
-     */
+    /** Converter for Parquet group types that assembles Avro {@link GenericData.Record}s. */
     private static final class RecordGroupConverter extends GroupConverter {
         private final Schema schema;
         private final ValueConsumer valueConsumer;
@@ -200,9 +192,7 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         return new RecordGroupConverter(parquetField.asGroupType(), schema, consumer);
     }
 
-    /**
-     * Converter for Parquet LIST-annotated fields, collecting elements into a {@link java.util.List}.
-     */
+    /** Converter for Parquet LIST-annotated fields, collecting elements into a {@link java.util.List}. */
     static final class ArrayFieldConverter extends GroupConverter {
         private final List<Object> elements = new ArrayList<>();
         private final ValueConsumer parentConsumer;
@@ -249,9 +239,7 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         }
     }
 
-    /**
-     * Converter for the repeated element group inside a Parquet LIST structure.
-     */
+    /** Converter for the repeated element group inside a Parquet LIST structure. */
     static final class ListElementGroupConverter extends GroupConverter {
         private final GroupType elementGroupType;
         private final Schema elementSchema;
@@ -350,9 +338,7 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         }
     }
 
-    /**
-     * Converter for Parquet MAP-annotated fields, collecting key-value pairs into a {@link java.util.Map}.
-     */
+    /** Converter for Parquet MAP-annotated fields, collecting key-value pairs into a {@link java.util.Map}. */
     static final class MapFieldConverter extends GroupConverter {
         private final Map<String, Object> map = new LinkedHashMap<>();
         private final ValueConsumer parentConsumer;
@@ -389,9 +375,7 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         }
     }
 
-    /**
-     * Converter for the repeated key-value group inside a Parquet MAP structure.
-     */
+    /** Converter for the repeated key-value group inside a Parquet MAP structure. */
     static final class MapKeyValueGroupConverter extends GroupConverter {
         private final GroupType groupType;
         private final Converter[] converters;
@@ -399,9 +383,7 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
         private String currentKey;
         private Object currentValue;
 
-        /**
-         * Callback that receives a decoded map key-value pair.
-         */
+        /** Callback that receives a decoded map key-value pair. */
         @FunctionalInterface
         interface MapEntryConsumer {
             void put(String key, Object value);
@@ -447,8 +429,7 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
     /**
      * Converter for Parquet primitive values, translating to the corresponding Avro type.
      *
-     * <p>Handles logical type conversions (DECIMAL, UUID, ENUM) and dictionary optimization
-     * for binary-backed types.
+     * <p>Handles logical type conversions (DECIMAL, UUID, ENUM) and dictionary optimization for binary-backed types.
      */
     static final class PrimitiveValueConverter extends PrimitiveConverter {
 
@@ -636,10 +617,9 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
     /**
      * Converter for Parquet groups that represent Avro unions with more than one non-null branch.
      *
-     * <p>Parquet-avro encodes a multi-branch union as a group with one optional child per non-null
-     * branch; at most one child is populated per record. This converter wires one sub-converter per
-     * Parquet child (paired with its matching Avro branch) and emits whichever value arrives to the
-     * parent consumer.
+     * <p>Parquet-avro encodes a multi-branch union as a group with one optional child per non-null branch; at most one
+     * child is populated per record. This converter wires one sub-converter per Parquet child (paired with its matching
+     * Avro branch) and emits whichever value arrives to the parent consumer.
      */
     static final class UnionGroupConverter extends GroupConverter {
         private final Converter[] memberConverters;
@@ -682,14 +662,13 @@ class AvroMaterializerProvider implements ParquetMaterializerProvider<GenericRec
     /**
      * Converter for Parquet groups carrying the {@link VariantLogicalTypeAnnotation}.
      *
-     * <p>Delegates the low-level Variant decoding to {@link VariantConverters} and, on {@code end()},
-     * materializes the resulting {@link Variant} as a Java value tree composed of
-     * {@link java.util.LinkedHashMap}, {@link java.util.ArrayList}, boxed primitives,
-     * {@link BigDecimal}, {@link LocalDate}, {@link LocalTime}, {@link Instant},
-     * {@link LocalDateTime}, {@link java.util.UUID}, {@code byte[]}, or {@code null}.
+     * <p>Delegates the low-level Variant decoding to {@link VariantConverters} and, on {@code end()}, materializes the
+     * resulting {@link Variant} as a Java value tree composed of {@link java.util.LinkedHashMap},
+     * {@link java.util.ArrayList}, boxed primitives, {@link BigDecimal}, {@link LocalDate}, {@link LocalTime},
+     * {@link Instant}, {@link LocalDateTime}, {@link java.util.UUID}, {@code byte[]}, or {@code null}.
      *
-     * <p>Going through {@code Map}/{@code List} rather than exposing the {@code Variant} object
-     * keeps downstream consumers (e.g. the GeoTools datastore) free of any parquet-variant type.
+     * <p>Going through {@code Map}/{@code List} rather than exposing the {@code Variant} object keeps downstream
+     * consumers (e.g. the GeoTools datastore) free of any parquet-variant type.
      */
     static final class AvroVariantGroupConverter extends GroupConverter
             implements VariantConverters.ParentConverter<VariantBuilder> {

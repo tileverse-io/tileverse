@@ -30,23 +30,23 @@ import org.apache.parquet.schema.ColumnOrder.ColumnOrderName;
 import org.apache.parquet.schema.PrimitiveType;
 
 /**
- * Reads Thrift-encoded ColumnIndex and OffsetIndex structures from a Parquet file
- * and converts them to parquet-column internal representations.
+ * Reads Thrift-encoded ColumnIndex and OffsetIndex structures from a Parquet file and converts them to parquet-column
+ * internal representations.
  *
- * <p>This replaces the conversion logic in {@code ParquetMetadataConverter} from parquet-hadoop,
- * removing the Hadoop dependency for index reading.
+ * <p>This replaces the conversion logic in {@code ParquetMetadataConverter} from parquet-hadoop, removing the Hadoop
+ * dependency for index reading.
  */
 final class CoreColumnIndexReader {
 
     private CoreColumnIndexReader() {}
 
     /**
-     * Reads the {@link ColumnIndex} for a column chunk, or returns {@code null} if the index
-     * is absent or the column type does not support min/max statistics.
+     * Reads the {@link ColumnIndex} for a column chunk, or returns {@code null} if the index is absent or the column
+     * type does not support min/max statistics.
      *
-     * @param in         seekable stream positioned within the Parquet file
+     * @param in seekable stream positioned within the Parquet file
      * @param columnMeta metadata for the column chunk
-     * @param type       the primitive type of the column (for stats decoding)
+     * @param type the primitive type of the column (for stats decoding)
      * @return the column index, or {@code null}
      * @throws IOException if an I/O error occurs
      */
@@ -68,7 +68,7 @@ final class CoreColumnIndexReader {
     /**
      * Reads the {@link OffsetIndex} for a column chunk, or returns {@code null} if absent.
      *
-     * @param in         seekable stream positioned within the Parquet file
+     * @param in seekable stream positioned within the Parquet file
      * @param columnMeta metadata for the column chunk
      * @return the offset index, or {@code null}
      * @throws IOException if an I/O error occurs

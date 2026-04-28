@@ -47,8 +47,8 @@ import org.locationtech.jts.io.WKBReader;
  * <p>Execution is opt-in and skipped by default. Configure one or more URLs with:
  *
  * <ul>
- *   <li>system property {@code -Doverture.s3.geoparquet.urls=URL1,URL2}</li>
- *   <li>or environment variable {@code OVERTURE_S3_GEOPARQUET_URLS}</li>
+ *   <li>system property {@code -Doverture.s3.geoparquet.urls=URL1,URL2}
+ *   <li>or environment variable {@code OVERTURE_S3_GEOPARQUET_URLS}
  * </ul>
  *
  * <p>Example:

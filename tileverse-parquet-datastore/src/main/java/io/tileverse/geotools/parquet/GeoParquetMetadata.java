@@ -28,16 +28,15 @@ import java.util.Optional;
 import org.locationtech.jts.geom.Envelope;
 
 /**
- * GeoParquet metadata model parsed from the {@code "geo"} key-value metadata entry in Parquet
- * files.
+ * GeoParquet metadata model parsed from the {@code "geo"} key-value metadata entry in Parquet files.
  *
- * <p>Supports polymorphic deserialization based on the {@code version} field, falling back to
- * version 1.1.0 for unknown or missing versions.
+ * <p>Supports polymorphic deserialization based on the {@code version} field, falling back to version 1.1.0 for unknown
+ * or missing versions.
  *
  * <p>Adapted from the GeoTools GeoParquet module (LGPL 2.1, authored by the same contributor).
  *
- * @see <a href="https://github.com/opengeospatial/geoparquet/blob/main/format-specs/metadata.md">
- *     GeoParquet Metadata Specification</a>
+ * @see <a href="https://github.com/opengeospatial/geoparquet/blob/main/format-specs/metadata.md">GeoParquet Metadata
+ *     Specification</a>
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)

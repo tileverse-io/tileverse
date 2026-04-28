@@ -67,20 +67,20 @@ import org.apache.parquet.schema.PrimitiveType;
  * Reads and decompresses column chunks from a Parquet file, implementing four-tier filter pushdown:
  *
  * <ol>
- *   <li><strong>Statistics-based pruning</strong> — skips entire row groups whose column min/max
- *       statistics prove no records can match the filter.</li>
- *   <li><strong>Dictionary-based pruning</strong> — loads dictionary pages and eliminates row groups
- *       where the filter value is absent from the dictionary.</li>
- *   <li><strong>Column-index pushdown (page-level)</strong> — reads page-level {@code ColumnIndex}
- *       and {@code OffsetIndex} structures to compute matching {@code RowRanges}, then reads only
- *       the pages that may contain matching records.</li>
- *   <li><strong>Record-level filtering</strong> — applies the filter predicate during record
- *       assembly, skipping individual non-matching records.</li>
+ *   <li><strong>Statistics-based pruning</strong> — skips entire row groups whose column min/max statistics prove no
+ *       records can match the filter.
+ *   <li><strong>Dictionary-based pruning</strong> — loads dictionary pages and eliminates row groups where the filter
+ *       value is absent from the dictionary.
+ *   <li><strong>Column-index pushdown (page-level)</strong> — reads page-level {@code ColumnIndex} and
+ *       {@code OffsetIndex} structures to compute matching {@code RowRanges}, then reads only the pages that may
+ *       contain matching records.
+ *   <li><strong>Record-level filtering</strong> — applies the filter predicate during record assembly, skipping
+ *       individual non-matching records.
  * </ol>
  *
- * <p>Each {@link #readRowGroup} call opens a single {@code SeekableInputStream} that is reused
- * across all column chunks in that row group. Dictionary pages read during the pruning phase are
- * cached and reused during the column-read phase, avoiding redundant I/O.
+ * <p>Each {@link #readRowGroup} call opens a single {@code SeekableInputStream} that is reused across all column chunks
+ * in that row group. Dictionary pages read during the pruning phase are cached and reused during the column-read phase,
+ * avoiding redundant I/O.
  */
 public final class CoreParquetRowGroupReader implements ParquetRowGroupReader {
     private final InputFile inputFile;
@@ -95,9 +95,9 @@ public final class CoreParquetRowGroupReader implements ParquetRowGroupReader {
     /**
      * Creates a row group reader for the given Parquet file.
      *
-     * @param inputFile  the Parquet file to read from
-     * @param footer     the parsed file footer
-     * @param options    read options controlling filter pushdown behavior
+     * @param inputFile the Parquet file to read from
+     * @param footer the parsed file footer
+     * @param options read options controlling filter pushdown behavior
      * @param fileSchema the full file schema (used for column descriptors)
      */
     public CoreParquetRowGroupReader(

@@ -28,23 +28,24 @@ import org.apache.parquet.io.api.RecordMaterializer;
 import org.apache.parquet.schema.MessageType;
 
 /**
- * A {@link CloseableIterator} that reads records of type {@code T} from a {@link ParquetRowGroupReader},
- * transparently iterating across row groups.
- * <p>
- * For each row group, a new {@link RecordReader} is created using {@link ColumnIOFactory}
- * and the provided {@link RecordMaterializer}. The materializer is reused across all row groups.
- * Records are decoded lazily on demand.
- * <p>
- * When a {@link FilterCompat.Filter} is provided, filtering is applied at three levels:
+ * A {@link CloseableIterator} that reads records of type {@code T} from a {@link ParquetRowGroupReader}, transparently
+ * iterating across row groups.
+ *
+ * <p>For each row group, a new {@link RecordReader} is created using {@link ColumnIOFactory} and the provided
+ * {@link RecordMaterializer}. The materializer is reused across all row groups. Records are decoded lazily on demand.
+ *
+ * <p>When a {@link FilterCompat.Filter} is provided, filtering is applied at three levels:
+ *
  * <ul>
- *   <li>Row group skipping (via reader initialization and filter planning)</li>
- *   <li>Page skipping (via {@link ParquetRowGroupReader#readNextFilteredRowGroup()})</li>
- *   <li>Record filtering (via {@link MessageColumnIO#getRecordReader(PageReadStore, RecordMaterializer, FilterCompat.Filter)})</li>
+ *   <li>Row group skipping (via reader initialization and filter planning)
+ *   <li>Page skipping (via {@link ParquetRowGroupReader#readNextFilteredRowGroup()})
+ *   <li>Record filtering (via {@link MessageColumnIO#getRecordReader(PageReadStore, RecordMaterializer,
+ *       FilterCompat.Filter)})
  * </ul>
- * <p>
- * Closing this iterator closes the underlying row-group reader.
- * <p>
- * This class is not thread-safe.
+ *
+ * <p>Closing this iterator closes the underlying row-group reader.
+ *
+ * <p>This class is not thread-safe.
  *
  * @param <T> the record type produced by the materializer
  */

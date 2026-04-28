@@ -19,8 +19,8 @@ import java.io.Closeable;
 import java.util.Iterator;
 
 /**
- * An {@link Iterator} that is also {@link Closeable}, for iterating over resources
- * that must be released when no longer needed.
+ * An {@link Iterator} that is also {@link Closeable}, for iterating over resources that must be released when no longer
+ * needed.
  *
  * @param <T> the type of elements returned by this iterator
  */

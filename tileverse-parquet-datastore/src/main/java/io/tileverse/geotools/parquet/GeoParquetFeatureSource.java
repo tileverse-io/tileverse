@@ -39,12 +39,11 @@ import org.jspecify.annotations.Nullable;
 /**
  * {@link ContentFeatureSource} for a single GeoParquet file.
  *
- * <p>Delegates Parquet record reading to the parent {@link GeoparquetContentDataStore} and converts
- * records to {@link SimpleFeature}s via {@link GeoparquetFeatureReader}.
+ * <p>Delegates Parquet record reading to the parent {@link GeoparquetContentDataStore} and converts records to
+ * {@link SimpleFeature}s via {@link GeoparquetFeatureReader}.
  *
- * <p>Parquet filter pushdown is attempted as an optimization; the framework always applies
- * client-side filtering via {@code FilteringFeatureReader} for correctness (since
- * {@link #canFilter()} returns {@code false}).
+ * <p>Parquet filter pushdown is attempted as an optimization; the framework always applies client-side filtering via
+ * {@code FilteringFeatureReader} for correctness (since {@link #canFilter()} returns {@code false}).
  */
 class GeoParquetFeatureSource extends ContentFeatureSource {
 

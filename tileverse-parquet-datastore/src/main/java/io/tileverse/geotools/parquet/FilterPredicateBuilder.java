@@ -159,8 +159,8 @@ class FilterPredicateBuilder {
      * {@link FilterPredicate}.
      *
      * <p>For comparison filters, the visitor extracts the {@link PropertyName} and {@link Literal} from the two
-     * sub-expressions (in either order), looks up the column's {@link PrimitiveType} from the schema, creates the
-     * typed Parquet column via {@link FilterApi}, converts the literal value, and delegates to the appropriate
+     * sub-expressions (in either order), looks up the column's {@link PrimitiveType} from the schema, creates the typed
+     * Parquet column via {@link FilterApi}, converts the literal value, and delegates to the appropriate
      * {@code FilterApi} comparison method.
      */
     public static class FilterToFilterPredicate implements ExpressionVisitor, FilterVisitor {

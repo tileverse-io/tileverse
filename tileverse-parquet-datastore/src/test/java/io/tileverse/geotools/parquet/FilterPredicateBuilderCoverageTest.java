@@ -40,8 +40,7 @@ class FilterPredicateBuilderCoverageTest {
     private static final FilterFactory ff = CommonFactoryFinder.getFilterFactory(null);
     private static final GeometryFactory gf = new GeometryFactory();
 
-    private static final MessageType SCHEMA = MessageTypeParser.parseMessageType(
-            """
+    private static final MessageType SCHEMA = MessageTypeParser.parseMessageType("""
             message test {
               required int32 id;
               required int32 d (DATE);
@@ -131,8 +130,7 @@ class FilterPredicateBuilderCoverageTest {
 
     @Test
     void int96NegativeBigInteger_signExtendsTo12Bytes() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required int96 legacyTs;
                 }
@@ -151,8 +149,7 @@ class FilterPredicateBuilderCoverageTest {
 
     @Test
     void int96ExactWidthBigInteger_keepsRawLength() {
-        MessageType schema = MessageTypeParser.parseMessageType(
-                """
+        MessageType schema = MessageTypeParser.parseMessageType("""
                 message test {
                   required int96 legacyTs;
                 }
@@ -259,8 +256,7 @@ class FilterPredicateBuilderCoverageTest {
         assertThat(builder.convert(ff.equals(ff.property("ratio"), ff.literal(3.5d)), SCHEMA))
                 .isEqualTo(FilterApi.eq(FilterApi.floatColumn("ratio"), 3.5f));
 
-        MessageType numericSchema = MessageTypeParser.parseMessageType(
-                """
+        MessageType numericSchema = MessageTypeParser.parseMessageType("""
                 message test {
                   required double amount;
                 }

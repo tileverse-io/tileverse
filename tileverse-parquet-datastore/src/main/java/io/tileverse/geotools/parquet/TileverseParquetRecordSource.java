@@ -26,10 +26,7 @@ import org.apache.avro.generic.GenericRecord;
 import org.apache.parquet.filter2.predicate.FilterPredicate;
 import org.apache.parquet.schema.MessageType;
 
-/**
- * Default {@link GeoParquetRecordSource} backed by Tileverse {@link RangeReader}-based Parquet
- * access.
- */
+/** Default {@link GeoParquetRecordSource} backed by Tileverse {@link RangeReader}-based Parquet access. */
 final class TileverseParquetRecordSource implements GeoParquetRecordSource {
 
     private final ParquetDataset dataset;

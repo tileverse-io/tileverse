@@ -19,9 +19,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * Immutable metadata for a single row group in a Parquet file.
- */
+/** Immutable metadata for a single row group in a Parquet file. */
 final class CoreRowGroupMeta {
     private final long rowCount;
     private final List<CoreColumnChunkMeta> columns;

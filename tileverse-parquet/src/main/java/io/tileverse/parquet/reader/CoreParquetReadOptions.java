@@ -21,15 +21,15 @@ import org.apache.parquet.filter2.compat.FilterCompat;
  * Immutable configuration for Parquet read behavior.
  *
  * <p>Three filter toggles control which pushdown tiers are enabled during reads:
+ *
  * <ul>
- *   <li>{@code useStatsFilter} — row group pruning via column statistics (default: {@code true})</li>
- *   <li>{@code useDictionaryFilter} — row group pruning via dictionary pages (default: {@code true})</li>
- *   <li>{@code useColumnIndexFilter} — page-level skipping via column/offset indexes
- *       (default: {@code true})</li>
+ *   <li>{@code useStatsFilter} — row group pruning via column statistics (default: {@code true})
+ *   <li>{@code useDictionaryFilter} — row group pruning via dictionary pages (default: {@code true})
+ *   <li>{@code useColumnIndexFilter} — page-level skipping via column/offset indexes (default: {@code true})
  * </ul>
  *
- * <p>Use {@link #builder()} for customized options or {@link #defaults()} for the default
- * configuration with all filters enabled.
+ * <p>Use {@link #builder()} for customized options or {@link #defaults()} for the default configuration with all
+ * filters enabled.
  */
 public final class CoreParquetReadOptions {
     private final boolean useStatsFilter;

@@ -11,7 +11,7 @@
   <groupId>io.tileverse.parquet</groupId>
   <artifactId>tileverse-parquet</artifactId>
   <name>Tileverse Parquet</name>
-  <description>Bridges tileverse-rangereader to Apache Parquet's InputFile abstraction, enabling Parquet file reading from local, HTTP, and cloud storage without Hadoop I/O</description>
+  <description>Bridges tileverse-storage to Apache Parquet's InputFile abstraction, enabling Parquet file reading from local, HTTP, and cloud storage without Hadoop I/O</description>
   <dependencyManagement>
     <dependencies>
       <dependency>
@@ -36,8 +36,8 @@
 
     <!-- Core dependency: RangeReader abstraction -->
     <dependency>
-      <groupId>io.tileverse.rangereader</groupId>
-      <artifactId>tileverse-rangereader-core</artifactId>
+      <groupId>io.tileverse.storage</groupId>
+      <artifactId>tileverse-storage-core</artifactId>
     </dependency>
 
     <!-- Parquet I/O abstractions (InputFile, SeekableInputStream) - hadoop-free -->

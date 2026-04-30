@@ -1,0 +1,2 @@
+io.tileverse.storage.file.FileStorageProvider
+io.tileverse.storage.http.HttpStorageProvider

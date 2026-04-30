@@ -5,7 +5,7 @@ TAG=$(shell ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
 
 .PHONY: help
 help:
-	@echo "Tileverse Range Reader - Available targets:"
+	@echo "Tileverse - Available targets:"
 	@echo ""
 	@echo "Build targets:"
 	@echo "  clean         - Clean all build artifacts"
@@ -135,14 +135,13 @@ deps-analyze:
 # Show project information
 .PHONY: info
 info:
-	@echo "Project: Tileverse Range Reader"
+	@echo "Project: Tileverse"
 	@echo "Version: $(TAG)"
 	@echo "Java version requirement: 17+"
 	@echo "Maven version requirement: 4.0.0-rc-4+"
 	@echo ""
-	@echo "Modules:"
-	@echo "  - src/core: Core interfaces and implementations"
-	@echo "  - src/s3: AWS S3 implementation"
-	@echo "  - src/azure: Azure Blob Storage implementation"
-	@echo "  - src/gcs: Google Cloud Storage implementation"
-	@echo "  - src/all: Aggregator module"
+	@echo "Module groups:"
+	@echo "  - tileverse-storage: I/O abstraction (range reads over local, HTTP, S3, Azure, GCS)"
+	@echo "  - tileverse-vectortiles: Mapbox Vector Tiles <-> JTS"
+	@echo "  - tileverse-tilematrixset: OGC TileMatrixSet math"
+	@echo "  - tileverse-pmtiles: PMTiles v3 reader"

@@ -21,13 +21,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.tileverse.cache.CacheManager;
 import io.tileverse.cache.CacheStats;
-import io.tileverse.rangereader.RangeReader;
-import io.tileverse.rangereader.cache.CachingRangeReader;
-import io.tileverse.rangereader.file.FileRangeReader;
-import io.tileverse.rangereader.http.HttpRangeReader;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.StorageFactory;
+import io.tileverse.storage.cache.CachingRangeReader;
 import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -97,12 +97,14 @@ class PMTilesReaderBigFileIT {
     }
 
     private PMTilesReader fileRangeReader() throws IOException {
-        RangeReader file = FileRangeReader.of(Paths.get("/Users/groldan/wip/pmtiles/data/pmtiles.io/v4.pmtiles"));
+        RangeReader file =
+                StorageFactory.openRangeReader(Paths.get("/Users/groldan/wip/pmtiles/data/pmtiles.io/v4.pmtiles")
+                        .toUri());
         return pmtilesReader(file);
     }
 
-    private RangeReader httpRangeReader() {
-        return HttpRangeReader.of("http://localhost:10000/pmtiles.io/v4.pmtiles");
+    private RangeReader httpRangeReader() throws IOException {
+        return StorageFactory.openRangeReader(URI.create("http://localhost:10000/pmtiles.io/v4.pmtiles"));
     }
 
     @SuppressWarnings("resource")

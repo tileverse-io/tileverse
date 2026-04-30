@@ -33,7 +33,7 @@ Unlike monolithic GIS frameworks, Tileverse modules are designed to be **composa
 
 | Module | Description | Key Capabilities |
 | :--- | :--- | :--- |
-| **[Range Reader](tileverse-rangereader/)** | Unified I/O | Abstract byte-range access across **S3**, **Azure**, **GCS**, **HTTP**, and local files. Includes intelligent multi-level caching and block alignment. |
+| **[Storage](tileverse-storage/)** | Unified I/O | Abstract byte-range access across **S3**, **Azure**, **GCS**, **HTTP**, and local files. Includes intelligent multi-level caching and block alignment. Range-reader lives under `io.tileverse.storage.rangereader.*`. |
 | **[PMTiles](tileverse-pmtiles/)** | Archive Format | Read/write support for the **[PMTiles v3](https://github.com/protomaps/PMTiles)** specification. Leverages `RangeReader` for cloud-optimized random access. |
 | **[Vector Tiles](tileverse-vectortiles/)** | Data Encoding | High-performance encoding and decoding of **Mapbox Vector Tiles (MVT)** to/from JTS Geometries using Protocol Buffers. |
 | **[Tile Matrix Set](tileverse-tilematrixset/)** | Spatial Logic | Implementation of the **OGC Tile Matrix Set** standard. Handles coordinate transforms, bounding box logic, and tile pyramid definitions. |
@@ -50,7 +50,7 @@ Tileverse is available on Maven Central. We recommend using the **Bill of Materi
     <dependency>
       <groupId>io.tileverse</groupId>
       <artifactId>tileverse-bom</artifactId>
-      <version>1.1.0</version>
+      <version>2.0.0</version>
       <type>pom</type>
       <scope>import</scope>
     </dependency>
@@ -60,8 +60,8 @@ Tileverse is available on Maven Central. We recommend using the **Bill of Materi
 <dependencies>
   <!-- I/O Layer -->
   <dependency>
-    <groupId>io.tileverse.rangereader</groupId>
-    <artifactId>tileverse-rangereader-all</artifactId>
+    <groupId>io.tileverse.storage</groupId>
+    <artifactId>tileverse-storage-all</artifactId>
   </dependency>
 
   <!-- Format Support -->
@@ -76,9 +76,9 @@ Tileverse is available on Maven Central. We recommend using the **Bill of Materi
 
 ```gradle
 dependencies {
-    implementation platform('io.tileverse:tileverse-bom:1.1.0')
+    implementation platform('io.tileverse:tileverse-bom:2.0.0')
 
-    implementation 'io.tileverse.rangereader:tileverse-rangereader-all'
+    implementation 'io.tileverse.storage:tileverse-storage-all'
     implementation 'io.tileverse.pmtiles:tileverse-pmtiles'
 }
 ```
@@ -88,8 +88,8 @@ dependencies {
 This example demonstrates how the modules compose to solve a real-world problem: reading a specific map tile from an S3 bucket without downloading the entire archive.
 
 ```java
-import io.tileverse.rangereader.s3.S3RangeReader;
-import io.tileverse.rangereader.cache.CachingRangeReader;
+import io.tileverse.storage.rangereader.s3.S3RangeReader;
+import io.tileverse.storage.rangereader.cache.CachingRangeReader;
 import io.tileverse.pmtiles.PMTilesReader;
 import java.nio.ByteBuffer;
 import java.net.URI;
@@ -120,31 +120,31 @@ try (var reader = new PMTilesReader(cachedSource::asByteChannel)) {
 
 ## Ecosystem Architecture
 
-The libraries are designed to work together but remain independent. `PMTiles` orchestrates the others, while `RangeReader`, `VectorTiles`, and `TileMatrixSet` are standalone utilities.
+The libraries are designed to work together but remain independent. `PMTiles` orchestrates the others, while `Storage`, `VectorTiles`, and `TileMatrixSet` are standalone utilities.
 
 ```mermaid
 graph TD
     App[Your Application]
-    
+
     subgraph "Core I/O"
-        RR[Range Reader]
+        ST[Storage]
     end
-    
+
     subgraph "Formats & Codecs"
         VT[Vector Tiles]
         PMT[PMTiles]
     end
-    
+
     subgraph "Spatial Logic"
         TMS[Tile Matrix Set]
     end
-    
-    App --> RR
+
+    App --> ST
     App --> VT
     App --> PMT
     App --> TMS
-    
-    PMT -.-> RR
+
+    PMT -.-> ST
     PMT -.-> VT
     PMT -.-> TMS
 ```
@@ -154,7 +154,7 @@ graph TD
 Complete documentation is available at **[tileverse.io](https://tileverse.io)**.
 
 - **[Developer Guide](https://tileverse.io/developer-guide/)**: Building, testing, and contributing.
-- **[Range Reader Guide](https://tileverse.io/rangereader/)**: Advanced caching and authentication.
+- **[Storage / Range Reader Guide](https://tileverse.io/rangereader/)**: Advanced caching and authentication.
 - **[Javadoc](https://javadoc.io/doc/io.tileverse)**: API reference.
 
 ## Development

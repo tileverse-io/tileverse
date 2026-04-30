@@ -21,14 +21,14 @@ Add the PMTiles dependency to your project:
     <dependency>
         <groupId>io.tileverse.pmtiles</groupId>
         <artifactId>tileverse-pmtiles</artifactId>
-        <version>1.1.0</version>
+        <version>2.0.0</version>
     </dependency>
 
     <!-- Also add a Range Reader provider -->
     <dependency>
-        <groupId>io.tileverse.rangereader</groupId>
-        <artifactId>tileverse-rangereader-all</artifactId>
-        <version>1.1.0</version>
+        <groupId>io.tileverse.storage</groupId>
+        <artifactId>tileverse-storage-all</artifactId>
+        <version>2.0.0</version>
     </dependency>
     ```
 
@@ -36,8 +36,8 @@ Add the PMTiles dependency to your project:
 
     ```gradle
     dependencies {
-        implementation 'io.tileverse.pmtiles:tileverse-pmtiles:1.1.0'
-        implementation 'io.tileverse.rangereader:tileverse-rangereader-all:1.1.0'
+        implementation 'io.tileverse.pmtiles:tileverse-pmtiles:2.0.0'
+        implementation 'io.tileverse.storage:tileverse-storage-all:2.0.0'
     }
     ```
 

@@ -95,19 +95,23 @@ plugins:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
-  - Range Reader:
-    - Overview: rangereader/index.md
-    - User Guide:
-      - Introduction: rangereader/user-guide/index.md
-      - Installation: rangereader/user-guide/installation.md
-      - Quick Start: rangereader/user-guide/quick-start.md
-      - Configuration: rangereader/user-guide/configuration.md
-      - Authentication: rangereader/user-guide/authentication.md
-      - Troubleshooting: rangereader/user-guide/troubleshooting.md
+  - Storage:
+    - Overview: storage/index.md
+    - Why tileverse-storage?: storage/why.md
+    - Installation: storage/rangereader/user-guide/installation.md
+    - Quick Start: storage/user-guide/quick-start.md
+    - Configuration: storage/rangereader/user-guide/configuration.md
+    - Authentication: storage/rangereader/user-guide/authentication.md
+    - Troubleshooting: storage/rangereader/user-guide/troubleshooting.md
+    - Migrating from 1.4.x: storage/migration-1.4-to-2.0.md
+    - Range Reader:
+      - Overview: storage/rangereader/index.md
+      - User Guide: storage/rangereader/user-guide/index.md
+      - Quick Start: storage/rangereader/user-guide/quick-start.md
     - Internals:
-      - Overview: rangereader/developer-guide/index.md
-      - Architecture: rangereader/developer-guide/architecture.md
-      - Performance: rangereader/developer-guide/performance.md
+      - Overview: storage/rangereader/developer-guide/index.md
+      - Architecture: storage/rangereader/developer-guide/architecture.md
+      - Performance: storage/rangereader/developer-guide/performance.md
   - PMTiles:
     - Overview: pmtiles/index.md
     - User Guide:

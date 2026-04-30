@@ -1,0 +1,2 @@
+io.tileverse.storage.azure.AzureBlobStorageProvider
+io.tileverse.storage.azure.AzureDataLakeStorageProvider

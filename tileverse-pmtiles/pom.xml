@@ -10,7 +10,7 @@
 
   <groupId>io.tileverse.pmtiles</groupId>
   <artifactId>tileverse-pmtiles</artifactId>
-  <name>Tileverse PMTiles</name>
+  <name>Tileverse :: PMTiles</name>
   <description>PMTiles format implementation</description>
 
   <dependencyManagement>
@@ -50,24 +50,24 @@
       <artifactId>tileverse-vectortiles</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.tileverse.rangereader</groupId>
-      <artifactId>tileverse-rangereader-core</artifactId>
+      <groupId>io.tileverse.storage</groupId>
+      <artifactId>tileverse-storage-core</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.tileverse.rangereader</groupId>
-      <artifactId>tileverse-rangereader-s3</artifactId>
+      <groupId>io.tileverse.storage</groupId>
+      <artifactId>tileverse-storage-s3</artifactId>
       <scope>runtime</scope>
       <optional>true</optional>
     </dependency>
     <dependency>
-      <groupId>io.tileverse.rangereader</groupId>
-      <artifactId>tileverse-rangereader-azure</artifactId>
+      <groupId>io.tileverse.storage</groupId>
+      <artifactId>tileverse-storage-azure</artifactId>
       <scope>runtime</scope>
       <optional>true</optional>
     </dependency>
     <dependency>
-      <groupId>io.tileverse.rangereader</groupId>
-      <artifactId>tileverse-rangereader-gcs</artifactId>
+      <groupId>io.tileverse.storage</groupId>
+      <artifactId>tileverse-storage-gcs</artifactId>
       <scope>runtime</scope>
       <optional>true</optional>
     </dependency>

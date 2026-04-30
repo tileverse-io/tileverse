@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.tileverse.storage</groupId>
+    <artifactId>tileverse-storage</artifactId>
+    <version>${revision}</version>
+  </parent>
+
+  <artifactId>tileverse-storage-core</artifactId>
+  <name>Tileverse :: Storage :: Core</name>
+  <description>Core storage interfaces and implementations including file, HTTP, caching, and block alignment</description>
+
+  <dependencies>
+    <!-- Caching -->
+    <dependency>
+      <groupId>com.github.ben-manes.caffeine</groupId>
+      <artifactId>caffeine</artifactId>
+    </dependency>
+
+    <!-- TestContainers for integration tests -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+</project>

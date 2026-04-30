@@ -1,8 +1,8 @@
-workspace "Tileverse Range Reader - Dynamic Views" "Runtime scenarios for the Tileverse Range Reader library" {
+workspace "Tileverse Storage - Dynamic Views" "Runtime scenarios for the Tileverse Storage library" {
 
     model {
         # People and external systems
-        developer = person "Developer" "A developer using the Tileverse Range Reader library"
+        developer = person "Developer" "A developer using the Tileverse Storage library"
         application = person "Application" "An application that uses the library to read data"
 
         # External systems
@@ -11,7 +11,7 @@ workspace "Tileverse Range Reader - Dynamic Views" "Runtime scenarios for the Ti
         awsS3 = softwareSystem "Amazon S3" "AWS S3 and S3-compatible storage"
 
         # Main system
-        rangeReaderLibrary = softwareSystem "Tileverse Range Reader" "Java library for reading byte ranges from various data sources" {
+        storageLibrary = softwareSystem "Tileverse Storage" "Java I/O abstraction over object storage (local files, HTTP, S3, Azure Blob, GCS)" {
             
             # Core module
             coreModule = container "Core Module" "Core interfaces and base implementations" "Java 17, Maven" {
@@ -36,7 +36,7 @@ workspace "Tileverse Range Reader - Dynamic Views" "Runtime scenarios for the Ti
         }
 
         # Relationships for dynamic views
-        application -> rangeReaderLibrary "Uses library to read data"
+        application -> storageLibrary "Uses library to read data"
         application -> coreModule "Uses core functionality"
         application -> s3Module "Uses S3 functionality"
         

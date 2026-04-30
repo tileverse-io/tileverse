@@ -11,63 +11,77 @@ PMTiles is designed to work efficiently with cloud object storage. By using HTTP
 ### Basic S3 Access
 
 ```java
-import io.tileverse.rangereader.s3.S3RangeReader;
-import software.amazon.awssdk.regions.Region;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.StorageFactory;
+import java.net.URI;
+import java.util.Optional;
+import java.util.Properties;
 
-RangeReader s3Reader = S3RangeReader.builder()
-    .uri(URI.create("s3://my-bucket/world.pmtiles"))
-    .region(Region.US_WEST_2)
-    .build();
+Properties props = new Properties();
+props.setProperty("storage.s3.region", "us-west-2");
 
-try (PMTilesReader reader = new PMTilesReader(s3Reader)) {
-    Optional<byte[]> tile = reader.getTile(10, 885, 412);
+try (RangeReader s3Reader = StorageFactory.openRangeReader(
+            URI.create("s3://my-bucket/world.pmtiles"), props);
+        PMTilesReader reader = new PMTilesReader(s3Reader)) {
+    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
 }
 ```
 
 ### With Caching
 
 ```java
-import io.tileverse.rangereader.cache.CachingRangeReader;
+import io.tileverse.storage.cache.CachingRangeReader;
 
-RangeReader cachedReader = CachingRangeReader.builder(s3Reader)
-    .maximumSize(1000)
-    .withBlockAlignment()
-    .build();
-
-try (PMTilesReader reader = new PMTilesReader(cachedReader)) {
+try (RangeReader baseReader = StorageFactory.openRangeReader(
+            URI.create("s3://my-bucket/world.pmtiles"), props);
+        RangeReader cachedReader = CachingRangeReader.builder(baseReader)
+            .maximumSize(1000)
+            .withBlockAlignment()
+            .build();
+        PMTilesReader reader = new PMTilesReader(cachedReader)) {
     // Cached reads
-    Optional<byte[]> tile = reader.getTile(10, 885, 412);
+    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
 }
 ```
 
 ## Azure Blob Storage
 
 ```java
-import io.tileverse.rangereader.azure.AzureBlobRangeReader;
+Properties azureProps = new Properties();
+azureProps.setProperty("storage.azure.connection-string", connectionString);
 
-RangeReader azureReader = AzureBlobRangeReader.builder()
-    .connectionString(connectionString)
-    .containerName("tiles")
-    .blobPath("world.pmtiles")
-    .build();
-
-try (PMTilesReader reader = new PMTilesReader(azureReader)) {
-    Optional<byte[]> tile = reader.getTile(10, 885, 412);
+try (RangeReader azureReader = StorageFactory.openRangeReader(
+            URI.create("https://account.blob.core.windows.net/tiles/world.pmtiles"), azureProps);
+        PMTilesReader reader = new PMTilesReader(azureReader)) {
+    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
 }
 ```
 
 ## Google Cloud Storage
 
 ```java
-import io.tileverse.rangereader.gcs.GoogleCloudStorageRangeReader;
-
-RangeReader gcsReader = GoogleCloudStorageRangeReader.builder()
-    .uri(URI.create("gs://my-bucket/world.pmtiles"))
-    .build();
-
-try (PMTilesReader reader = new PMTilesReader(gcsReader)) {
-    Optional<byte[]> tile = reader.getTile(10, 885, 412);
+try (RangeReader gcsReader = StorageFactory.openRangeReader(URI.create("gs://my-bucket/world.pmtiles"));
+        PMTilesReader reader = new PMTilesReader(gcsReader)) {
+    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
 }
+```
+
+## Pre-built SDK clients (escape hatch)
+
+For Spring-managed SDK clients, custom retry policies, or test fakes that the
+Properties-driven `StorageFactory` route can't express, each backend provider
+exposes a public static factory `XxxStorageProvider.open(URI, sdkClient)` that
+returns a `Storage`. The returned `Storage` borrows the supplied client (close
+is a no-op), so the caller retains lifetime control:
+
+```java
+@Bean Storage tiles(S3Client springS3) {
+    return S3StorageProvider.open(URI.create("s3://my-bucket/tiles/"), springS3);
+}
+
+// elsewhere:
+try (RangeReader r = storage.openRangeReader("00/00.pmtiles");
+        PMTilesReader reader = new PMTilesReader(r)) { ... }
 ```
 
 ## Performance Optimization
@@ -77,18 +91,17 @@ try (PMTilesReader reader = new PMTilesReader(gcsReader)) {
 Combine memory and disk caching for optimal performance:
 
 ```java
-// Disk cache
-RangeReader diskCached = DiskCachingRangeReader.builder(s3Reader)
-    .cacheDirectory(Path.of("/tmp/tile-cache"))
-    .maximumCacheSize(10_000_000_000L)  // 10 GB
-    .build();
+import io.tileverse.storage.cache.DiskCachingRangeReader;
 
-// Memory cache on top
-RangeReader memoryCached = CachingRangeReader.builder(diskCached)
-    .maximumSize(1000)
-    .build();
-
-try (PMTilesReader reader = new PMTilesReader(memoryCached)) {
+try (RangeReader baseReader = StorageFactory.openRangeReader(uri, props);
+        RangeReader diskCached = DiskCachingRangeReader.builder(baseReader)
+            .cacheDirectory(Path.of("/tmp/tile-cache"))
+            .maximumCacheSize(10_000_000_000L)  // 10 GB
+            .build();
+        RangeReader memoryCached = CachingRangeReader.builder(diskCached)
+            .maximumSize(1000)
+            .build();
+        PMTilesReader reader = new PMTilesReader(memoryCached)) {
     // Optimized access
 }
 ```
@@ -98,7 +111,9 @@ try (PMTilesReader reader = new PMTilesReader(memoryCached)) {
 Use block-aligned reads to minimize cloud storage requests:
 
 ```java
-RangeReader alignedReader = BlockAlignedRangeReader.builder(s3Reader)
+import io.tileverse.storage.block.BlockAlignedRangeReader;
+
+RangeReader alignedReader = BlockAlignedRangeReader.builder(baseReader)
     .blockSize(65536)  // 64 KB blocks
     .build();
 ```
@@ -112,5 +127,5 @@ RangeReader alignedReader = BlockAlignedRangeReader.builder(s3Reader)
 
 ## See Also
 
-- [Range Reader Authentication](../../rangereader/user-guide/authentication.md)
-- [Range Reader Performance](../../rangereader/developer-guide/performance.md)
+- [Range Reader Authentication](../../storage/rangereader/user-guide/authentication.md)
+- [Range Reader Performance](../../storage/rangereader/developer-guide/performance.md)

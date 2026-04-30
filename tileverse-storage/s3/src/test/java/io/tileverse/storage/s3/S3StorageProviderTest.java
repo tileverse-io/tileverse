@@ -1,0 +1,261 @@
+/*
+ * (c) Copyright 2025 Multiversio LLC. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *          http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.tileverse.storage.s3;
+
+import static io.tileverse.storage.s3.S3StorageProvider.S3_ANONYMOUS;
+import static io.tileverse.storage.s3.S3StorageProvider.S3_AWS_ACCESS_KEY_ID;
+import static io.tileverse.storage.s3.S3StorageProvider.S3_AWS_SECRET_ACCESS_KEY;
+import static io.tileverse.storage.s3.S3StorageProvider.S3_DEFAULT_CREDENTIALS_PROFILE;
+import static io.tileverse.storage.s3.S3StorageProvider.S3_FORCE_PATH_STYLE;
+import static io.tileverse.storage.s3.S3StorageProvider.S3_REGION;
+import static io.tileverse.storage.s3.S3StorageProvider.S3_USE_DEFAULT_CREDENTIALS_PROVIDER;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import io.tileverse.storage.spi.StorageConfig;
+import io.tileverse.storage.spi.StorageParameter;
+import io.tileverse.storage.spi.StorageProvider;
+import java.net.URI;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
+
+class S3StorageProviderTest {
+
+    private S3StorageProvider provider = new S3StorageProvider();
+
+    @Test
+    @ResourceLock(Resources.SYSTEM_PROPERTIES)
+    void testFactoryLookup() {
+        assertThat(StorageProvider.findProviders().anyMatch(S3StorageProvider.class::isInstance))
+                .isTrue();
+        assertThat(StorageProvider.getAvailableProviders().stream().anyMatch(S3StorageProvider.class::isInstance))
+                .isTrue();
+        assertThat(StorageProvider.findProvider(S3StorageProvider.ID)).isPresent();
+        assertThat(StorageProvider.getProvider(S3StorageProvider.ID, true)).isNotNull();
+
+        System.setProperty(S3StorageProvider.ENABLED_KEY, "false");
+        try {
+            assertThat(StorageProvider.findProviders().anyMatch(S3StorageProvider.class::isInstance))
+                    .isTrue();
+            assertThat(StorageProvider.getAvailableProviders().stream().anyMatch(S3StorageProvider.class::isInstance))
+                    .isFalse();
+            assertThat(StorageProvider.findProvider(S3StorageProvider.ID)).isPresent();
+            IllegalStateException ex = assertThrows(
+                    IllegalStateException.class, () -> StorageProvider.getProvider(S3StorageProvider.ID, true));
+            assertThat(ex.getMessage()).contains("The specified StorageProvider is not available: s3");
+        } finally {
+            System.clearProperty(S3StorageProvider.ENABLED_KEY);
+        }
+    }
+
+    @Test
+    @ResourceLock(Resources.SYSTEM_PROPERTIES)
+    void isAvailable() {
+        assertThat(provider.isAvailable()).isTrue();
+        System.setProperty(S3StorageProvider.ENABLED_KEY, "false");
+        try {
+            assertThat(provider.isAvailable()).isFalse();
+        } finally {
+            System.clearProperty(S3StorageProvider.ENABLED_KEY);
+        }
+    }
+
+    @Test
+    void buildParameters() {
+        List<StorageParameter<?>> parameters = provider.buildParameters();
+        assertThat(parameters)
+                .isEqualTo(List.of(
+                        S3_FORCE_PATH_STYLE,
+                        S3_REGION,
+                        S3_ANONYMOUS,
+                        S3_AWS_ACCESS_KEY_ID,
+                        S3_AWS_SECRET_ACCESS_KEY,
+                        S3_USE_DEFAULT_CREDENTIALS_PROVIDER,
+                        S3_DEFAULT_CREDENTIALS_PROFILE));
+    }
+
+    @Test
+    void defaultConfig() {
+        StorageConfig config = provider.getDefaultConfig();
+        for (StorageParameter<?> param : S3StorageProvider.PARAMS) {
+            Object value = config.getParameter(param).orElse(null);
+            assertThat(value).isEqualTo(param.defaultValue().orElse(null));
+        }
+    }
+
+    @Test
+    void canProcess() {
+        assertThrows(NullPointerException.class, () -> provider.canProcess(null));
+        StorageConfig config = provider.getDefaultConfig();
+        NullPointerException npe = assertThrows(NullPointerException.class, () -> provider.canProcess(config));
+        assertThat(npe.getMessage()).contains("config uri is null");
+
+        // Invalid S3 URIs
+        assertThrows(IllegalArgumentException.class, () -> provider.canProcess(config.uri("s3:")));
+        assertThrows(IllegalArgumentException.class, () -> provider.canProcess(config.uri("s3://")));
+
+        // Unsupported schemes
+        assertThat(provider.canProcess(config.uri("ftp://my-bucket/my-blob"))).isFalse();
+
+        // Empty paths for HTTP URLs should fail
+        assertThat(provider.canProcess(config.uri("http://localhost:9000/"))).isFalse();
+        assertThat(provider.canProcess(config.uri("https://s3.amazonaws.com/"))).isFalse();
+
+        // S3 URIs: bucket-only is accepted (Storage use case); bucket+key is the range-reader case.
+        // The strict bucket+key requirement is preserved only for ambiguous http(s):// URIs above.
+        assertThat(provider.canProcess(config.uri("s3://my-bucket"))).isTrue();
+        assertThat(provider.canProcess(config.uri("s3://my-bucket/"))).isTrue();
+        assertThat(provider.canProcess(config.uri("s3://my-bucket/my-blob"))).isTrue();
+
+        // Valid AWS S3 URLs
+        assertThat(provider.canProcess(config.uri("https://my-bucket.s3.amazonaws.com/my-blob")))
+                .isTrue();
+        assertThat(provider.canProcess(config.uri("https://my-bucket.s3.us-west-2.amazonaws.com/my-blob")))
+                .isTrue();
+        assertThat(provider.canProcess(config.uri("https://s3.amazonaws.com/my-bucket/my-blob")))
+                .isTrue();
+        assertThat(provider.canProcess(config.uri("https://s3.us-west-2.amazonaws.com/my-bucket/my-blob")))
+                .isTrue();
+
+        // Valid MinIO and S3-compatible URLs
+        assertThat(provider.canProcess(config.uri("http://localhost:9000/my-bucket/my-blob")))
+                .isTrue();
+        assertThat(provider.canProcess(config.uri("https://minio.example.com/my-bucket/my-blob")))
+                .isTrue();
+        assertThat(provider.canProcess(config.uri("https://storage.googleapis.com/my-bucket/my-blob")))
+                .isTrue();
+
+        // Bucket root URLs: s3:// scheme is now accepted (Storage use case);
+        // http(s):// without a key remains rejected to fall back to HTTP for ambiguous custom domains.
+        assertThat(provider.canProcess(config.uri("s3://my-bucket/"))).isTrue();
+        assertThat(provider.canProcess(config.uri("http://localhost:9000/my-bucket/")))
+                .isFalse();
+        assertThat(provider.canProcess(config.uri("https://s3.amazonaws.com/my-bucket/")))
+                .isFalse();
+    }
+
+    @Test
+    void canProcessWithSpecialCharacters() {
+        StorageConfig config = provider.getDefaultConfig();
+
+        // URL encoded characters should be handled
+        assertThat(provider.canProcess(config.uri("s3://my-bucket/path/file%20with%20spaces.txt")))
+                .isTrue();
+        assertThat(provider.canProcess(config.uri("https://s3.amazonaws.com/my-bucket/file%2Bwith%26symbols.txt")))
+                .isTrue();
+
+        // Complex nested paths
+        assertThat(provider.canProcess(config.uri("s3://my-bucket/level1/level2/level3/file.json")))
+                .isTrue();
+        assertThat(provider.canProcess(
+                        config.uri("http://localhost:9000/my-bucket/path/to/file-name_with.special+chars.txt")))
+                .isTrue();
+    }
+
+    @Test
+    void canProcessDifferentS3Services() {
+        StorageConfig config = provider.getDefaultConfig();
+
+        // AWS S3 formats
+        assertThat(provider.canProcess(config.uri("s3://my-bucket/file.txt"))).isTrue();
+        assertThat(provider.canProcess(config.uri("https://my-bucket.s3.amazonaws.com/file.txt")))
+                .isTrue();
+        assertThat(provider.canProcess(config.uri("https://my-bucket.s3.us-west-2.amazonaws.com/file.txt")))
+                .isTrue();
+
+        // MinIO
+        assertThat(provider.canProcess(config.uri("http://localhost:9000/my-bucket/file.txt")))
+                .isTrue();
+        assertThat(provider.canProcess(config.uri("http://192.168.1.100:9000/my-bucket/file.txt")))
+                .isTrue();
+
+        // Other S3-compatible services
+        assertThat(provider.canProcess(config.uri("https://storage.googleapis.com/my-bucket/file.txt")))
+                .isTrue();
+        assertThat(provider.canProcess(config.uri("https://digitaloceanspaces.com/my-bucket/file.txt")))
+                .isTrue();
+        assertThat(provider.canProcess(config.uri("https://wasabisys.com/my-bucket/file.txt")))
+                .isTrue();
+        assertThat(provider.canProcess(config.uri("https://s3.company.internal/my-bucket/file.txt")))
+                .isTrue();
+    }
+
+    @Test
+    void canProcessForcePathStyleParameter() {
+        StorageConfig config = provider.getDefaultConfig();
+
+        // The FORCE_PATH_STYLE parameter doesn't affect canProcess() anymore
+        // because the URL parsing now automatically detects the required style
+
+        config.setParameter(S3_FORCE_PATH_STYLE.key(), false);
+        // These should still work because the parser detects the URL format
+        assertThat(provider.canProcess(config.uri("http://localhost:9000/my-bucket/file.txt")))
+                .as("MinIO URLs work regardless of force-path-style setting")
+                .isTrue();
+        assertThat(provider.canProcess(config.uri("https://my-bucket.s3.amazonaws.com/file.txt")))
+                .as("AWS virtual hosted-style URLs work regardless of force-path-style setting")
+                .isTrue();
+
+        config.setParameter(S3_FORCE_PATH_STYLE.key(), true);
+        assertThat(provider.canProcess(config.uri("http://localhost:9000/my-bucket/file.txt")))
+                .as("MinIO URLs work regardless of force-path-style setting")
+                .isTrue();
+        assertThat(provider.canProcess(config.uri("https://my-bucket.s3.amazonaws.com/file.txt")))
+                .as("AWS virtual hosted-style URLs work regardless of force-path-style setting")
+                .isTrue();
+    }
+
+    @Test
+    void canProcessEdgeCases() {
+        StorageConfig config = provider.getDefaultConfig();
+
+        // Endpoint-only URLs (like what MinIO container provides) should fail
+        // because they don't contain bucket/key information
+        assertThat(provider.canProcess(config.uri("http://localhost:9000")))
+                .as("Endpoint-only URLs cannot be processed")
+                .isFalse();
+
+        // Invalid URLs that look like they might be S3
+        assertThat(provider.canProcess(config.uri("http://not-s3-service.com")))
+                .as("URLs without bucket/key path cannot be processed")
+                .isFalse();
+
+        // URLs with only bucket but no key point to bucket root, not files (should use HTTP)
+        assertThat(provider.canProcess(config.uri("http://localhost:9000/my-bucket")))
+                .as("Bucket root URLs should use HTTP, not S3 client")
+                .isFalse();
+    }
+
+    @Test
+    void canProcessHeaders() {
+        URI uri = URI.create("http://localhost:9000/my-bucket/my-object");
+        Map<String, List<String>> headers = Map.of("x-custom-header", List.of(), "x-amz-request-id", List.of());
+        assertThat(provider.canProcessHeaders(uri, headers)).isTrue();
+
+        headers = Map.of("x-custom-header", List.of(), "X-Amz-Request-Id", List.of());
+        assertThat(provider.canProcessHeaders(uri, headers)).isTrue();
+
+        headers = Map.of("x-custom-header", List.of());
+        assertThat(provider.canProcessHeaders(uri, headers)).isFalse();
+    }
+
+    // The legacy create(URI) / create(StorageConfig) / prepareRangeReaderBuilder(...) factory paths
+    // were removed from the SPI; per-key reads now flow through StorageFactory.open(...).openRangeReader(key).
+    // End-to-end coverage of the S3 reader path lives in the S3 module's TCK and ITs.
+}

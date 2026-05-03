@@ -19,11 +19,15 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A root-bound view of a blob storage container (S3 bucket + optional prefix, Azure container + prefix, GCS bucket +
@@ -43,6 +47,11 @@ public interface Storage extends Closeable {
     /**
      * The root URI this Storage is bound to (bucket / container / directory / HTTP base, with optional prefix path).
      * All keys passed to other methods are interpreted as relative to this URI.
+     *
+     * <p>The root URI is always a container -- directory, bucket, or bucket-prefix -- and <strong>never a single
+     * object</strong>. Backends that can detect a leaf-shaped URI at construction (e.g. file backend with an existing
+     * regular file) reject it; cloud backends accept any prefix as-is. Address a leaf object via
+     * {@link #openRangeReader(URI)} or {@link #openRangeReader(String)}.
      *
      * @return the immutable root URI; never null
      */
@@ -132,6 +141,189 @@ public interface Storage extends Closeable {
      * @throws StorageException on transport or authorization failures
      */
     RangeReader openRangeReader(String key);
+
+    /**
+     * Open a {@link RangeReader} from an absolute URI within this Storage's namespace. Equivalent to
+     * {@link #openRangeReader(String)} after deriving the key relative to {@link #baseUri()}; the URI must share the
+     * scheme and authority of {@code baseUri()} and its path must be a strict descendant of {@code baseUri()}'s path.
+     *
+     * <p>This is the entry point for callers who already hold an absolute object URI and want to read it through a
+     * Storage they have already opened, without re-deriving the relative key themselves. The returned reader has the
+     * same lifetime semantics as {@link #openRangeReader(String)}.
+     *
+     * <p>A query string on {@code uri} is preserved into the derived key (load-bearing for HTTP-backed Storages whose
+     * URLs carry signatures, SAS tokens, or routing parameters). A fragment is dropped silently because RFC 3986
+     * fragments are client-only and never reach the server. Backends whose key grammar cannot represent a query string
+     * (File, S3, Azure, GCS path-style) will surface a {@link NotFoundException} from {@link #openRangeReader(String)}
+     * when the resulting key has no matching object.
+     *
+     * <p><b>Path traversal:</b> {@code ..} and {@code .} segments are normalized before the namespace check; URIs whose
+     * normalized path falls outside {@code baseUri()} are rejected. Percent-encoded traversal segments ({@code %2E%2E}
+     * and case variants) are also rejected, since some HTTP servers decode mid-path and would honor them as traversal.
+     *
+     * @param uri absolute URI of an object within this Storage
+     * @return a thread-safe RangeReader bound to the blob
+     * @throws IllegalArgumentException if {@code uri} is not within {@link #baseUri()}, equals {@code baseUri()}, or
+     *     contains a percent-encoded path-traversal segment
+     * @throws NotFoundException if no object exists at the derived key
+     * @throws StorageException on transport or authorization failures
+     */
+    default RangeReader openRangeReader(URI uri) {
+        return openRangeReader(relativizeToKey(uri));
+    }
+
+    /**
+     * Validates that {@code uri} is within this Storage's {@link #baseUri() namespace} and returns the relative key
+     * suitable for the key-based methods on this interface. The default preserves any query string from {@code uri}
+     * into the key and drops the fragment silently (RFC 3986 fragments are client-only and have no server-side
+     * meaning).
+     *
+     * <p>The default also enforces a path-traversal guard: {@link URI#normalize()} collapses literal {@code ..} and
+     * {@code .} segments before the namespace check (so {@code https://server/data/../etc/passwd} is rejected as
+     * outside {@code baseUri()} rather than silently turning into the key {@code ../etc/passwd}), and any percent-
+     * encoded {@code ..} segment in the resulting key is rejected outright (some HTTP servers decode mid-path and would
+     * honor it as traversal even though Java's {@code URI.normalize()} does not).
+     *
+     * <p>Default-method helper for {@link #openRangeReader(URI)}; backends that need to transform the URI before
+     * deriving the key (e.g. GCS stripping {@code ?alt=media} from REST-API URLs) override.
+     */
+    default String relativizeToKey(URI uri) {
+        Objects.requireNonNull(uri, "uri");
+        final URI base = baseUri();
+        checkSameScheme(uri, base);
+        checkSameAuthority(uri, base);
+        // Collapse '.' and '..' segments before the prefix check, so that e.g.
+        // 'https://server/data/../etc/passwd' is detected as outside 'https://server/data/' (post-normalize:
+        // 'https://server/etc/passwd') instead of being accepted with key '../etc/passwd'.
+        URI normalizedBase = base.normalize();
+        URI normalizedLeaf = uri.normalize();
+        final String baseRawPath = normalizedBase.getRawPath();
+        String basePath = baseRawPath == null ? "" : baseRawPath;
+        if (!basePath.endsWith("/")) {
+            basePath += "/";
+        }
+        String leafPath = normalizedLeaf.getRawPath() == null ? "" : normalizedLeaf.getRawPath();
+        if (!leafPath.startsWith(basePath)) {
+            throw new IllegalArgumentException("URI " + uri + " is not within Storage baseUri " + base);
+        }
+        String key = leafPath.substring(basePath.length());
+        if (key.isEmpty()) {
+            throw new IllegalArgumentException("URI must point to a leaf object, not the Storage root: " + uri);
+        }
+        rejectPercentEncodedTraversal(uri, key);
+        if (uri.getRawQuery() != null) {
+            key = key + "?" + uri.getRawQuery();
+        }
+        return key;
+    }
+
+    /**
+     * Defense-in-depth against percent-encoded path traversal: {@link URI#normalize()} collapses literal {@code ..} but
+     * does not decode percent-encoded segments, so {@code %2E%2E} (or any case variant) survives unchanged. Some HTTP
+     * servers decode mid-path before routing and would honor it as traversal. Reject any segment of {@code key} that
+     * decodes to {@code ".."}.
+     */
+    private static void rejectPercentEncodedTraversal(URI uri, String key) {
+        for (String segment : key.split("/")) {
+            if (segment.isEmpty() || !segment.contains("%")) {
+                continue; // Literal '..' is already collapsed by URI.normalize; only encoded forms reach here.
+            }
+            String decoded;
+            try {
+                decoded = URLDecoder.decode(segment, StandardCharsets.UTF_8);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Malformed percent-encoded segment in URI: " + uri, e);
+            }
+            if ("..".equals(decoded)) {
+                throw new IllegalArgumentException("URI contains a percent-encoded path-traversal segment: " + uri);
+            }
+        }
+    }
+
+    private static void checkSameAuthority(URI uri, final URI base) {
+        if (!Objects.equals(base.getAuthority(), uri.getAuthority())) {
+            throw new IllegalArgumentException(
+                    "URI authority '" + uri.getAuthority() + "' does not match Storage baseUri " + base);
+        }
+    }
+
+    private static void checkSameScheme(URI uri, final URI base) {
+        if (!equalsIgnoreCase(base.getScheme(), uri.getScheme())) {
+            throw new IllegalArgumentException(
+                    "URI scheme '" + uri.getScheme() + "' does not match Storage baseUri " + base);
+        }
+    }
+
+    private static boolean equalsIgnoreCase(@Nullable String a, @Nullable String b) {
+        return a == null ? b == null : a.equalsIgnoreCase(b);
+    }
+
+    /**
+     * Validates a key for safe use as a path within a Storage namespace. Implementations of {@link Storage} call this
+     * at the chokepoint where keys are resolved against the backend's root, so every key-accepting method gets the same
+     * protection by construction.
+     *
+     * <p>Rejects, with the documented exception:
+     *
+     * <ul>
+     *   <li>{@code null} key (NullPointerException)
+     *   <li>empty key (IllegalArgumentException; an empty key never addresses an object)
+     *   <li>key starting with {@code "/"} (IllegalArgumentException; keys are relative per the {@link #baseUri()
+     *       contract})
+     *   <li>key containing a {@code NUL} character (IllegalArgumentException; some filesystems treat null as a path
+     *       terminator)
+     *   <li>any path segment (split on {@code "/"}) equal to {@code ".."} or {@code "."} (IllegalArgumentException;
+     *       these are the path-traversal vectors)
+     * </ul>
+     *
+     * <p>Backends that need stronger guarantees against backend-specific traversal (e.g. Windows backslash separators,
+     * symlinks pointing outside the root) should add their own bounds check after resolving; the lexical rule here
+     * catches the universal cases.
+     *
+     * @param key the key to validate
+     * @throws NullPointerException if {@code key} is null
+     * @throws IllegalArgumentException if {@code key} is empty, has a leading slash, contains a NUL character, or has a
+     *     {@code ".."} or {@code "."} segment
+     */
+    static void requireSafeKey(String key) {
+        Objects.requireNonNull(key, "key");
+        if (key.isEmpty()) {
+            throw new IllegalArgumentException("key must not be empty");
+        }
+        rejectUnsafeKeyShape(key, "key");
+    }
+
+    /**
+     * Validates a list pattern for safe use as a glob/prefix within a Storage namespace. Same rules as
+     * {@link #requireSafeKey(String)} but tolerates the empty string (the {@link #list(String) list("")} contract for
+     * root listings).
+     *
+     * @param pattern the pattern to validate
+     * @throws NullPointerException if {@code pattern} is null
+     * @throws IllegalArgumentException if {@code pattern} has a leading slash, contains a NUL character, or has a
+     *     {@code ".."} or {@code "."} segment
+     */
+    static void requireSafePattern(String pattern) {
+        Objects.requireNonNull(pattern, "pattern");
+        if (pattern.isEmpty()) {
+            return; // empty pattern is the documented root-listing contract
+        }
+        rejectUnsafeKeyShape(pattern, "pattern");
+    }
+
+    private static void rejectUnsafeKeyShape(String value, String label) {
+        if (value.startsWith("/")) {
+            throw new IllegalArgumentException(label + " must not start with '/': " + value);
+        }
+        if (value.indexOf('\0') >= 0) {
+            throw new IllegalArgumentException(label + " must not contain NUL: " + value);
+        }
+        for (String segment : value.split("/", -1)) {
+            if ("..".equals(segment) || ".".equals(segment)) {
+                throw new IllegalArgumentException(label + " must not contain a '..' or '.' segment: " + value);
+            }
+        }
+    }
 
     /**
      * Open a sequentially-readable {@link ReadHandle} for the blob at {@code key}, returning the stream together with

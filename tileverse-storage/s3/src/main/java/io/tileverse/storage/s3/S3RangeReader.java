@@ -110,10 +110,6 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
         }
     }
 
-    S3RangeReader(S3Client client, String bucketName, String keyName) {
-        this(client, new S3Reference(null, bucketName, keyName, null));
-    }
-
     @Override
     protected int readRangeNoFlip(final long offset, final int actualLength, ByteBuffer target) {
         long rangeEnd = offset + actualLength - 1;

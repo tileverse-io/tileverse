@@ -17,6 +17,8 @@ package io.tileverse.storage.spi;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageParameter;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

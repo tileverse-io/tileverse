@@ -18,13 +18,17 @@ package io.tileverse.pmtiles;
 import static java.util.Objects.requireNonNull;
 
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageFactory;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.OptionalLong;
 
 public class PMTilesTestData {
 
@@ -40,7 +44,48 @@ public class PMTilesTestData {
     }
 
     public static RangeReader andorraFileRangeReader(Path tmpFolder) throws IOException {
-        return StorageFactory.openRangeReader(andorra(tmpFolder).toUri());
+        Path file = andorra(tmpFolder);
+        URI leaf = file.toUri();
+        URI parent = file.getParent().toUri();
+        Storage storage = StorageFactory.open(parent);
+        try {
+            return bundle(storage.openRangeReader(leaf), storage);
+        } catch (RuntimeException e) {
+            try {
+                storage.close();
+            } catch (IOException ignored) {
+                // best-effort cleanup
+            }
+            throw e;
+        }
+    }
+
+    private static RangeReader bundle(RangeReader delegate, Storage owner) {
+        return new RangeReader() {
+            @Override
+            public int readRange(long offset, int length, ByteBuffer target) {
+                return delegate.readRange(offset, length, target);
+            }
+
+            @Override
+            public OptionalLong size() {
+                return delegate.size();
+            }
+
+            @Override
+            public String getSourceIdentifier() {
+                return delegate.getSourceIdentifier();
+            }
+
+            @Override
+            public void close() throws IOException {
+                try {
+                    delegate.close();
+                } finally {
+                    owner.close();
+                }
+            }
+        };
     }
 
     public static List<String> andorraLayerNames() {

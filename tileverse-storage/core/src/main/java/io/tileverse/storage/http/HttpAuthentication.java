@@ -1,5 +1,5 @@
 /*
- * (c) Copyright 2025 Multiversio LLC. All rights reserved.
+ * (c) Copyright 2026 Multiversio LLC. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,10 @@ import java.net.http.HttpRequest;
  *
  * <p>Implementations of this interface provide authentication for HTTP requests by adding appropriate headers or other
  * authentication mechanisms to the request builder.
+ *
+ * <p>Implementations also produce an {@link HttpAuthFingerprint} that captures their credential identity. The
+ * fingerprint is used to key shared HTTP clients in caches; two authentications with the same fingerprint represent the
+ * same principal and may share an underlying {@link HttpClient}.
  */
 @FunctionalInterface
 public interface HttpAuthentication {
@@ -35,6 +39,18 @@ public interface HttpAuthentication {
      * @return The same request builder with authentication applied
      */
     HttpRequest.Builder authenticate(HttpClient httpClient, HttpRequest.Builder requestBuilder);
+
+    /**
+     * Returns a stable, equality-comparable fingerprint of this authentication's credential identity. Implementations
+     * that hold live state (e.g. {@link DigestAuthentication}'s challenge cache) MUST exclude that state from the
+     * fingerprint so two instances configured with the same credentials compare equal.
+     *
+     * <p>The default returns {@link HttpAuthFingerprint#NONE}, which is the correct value for {@link #NONE} and any
+     * lambda that does not actually authenticate.
+     */
+    default HttpAuthFingerprint fingerprint() {
+        return HttpAuthFingerprint.NONE;
+    }
 
     /** A no-op authentication implementation that does not modify the request. */
     static final HttpAuthentication NONE = (c, b) -> b;

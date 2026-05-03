@@ -39,6 +39,7 @@ import io.tileverse.vectortile.model.VectorTile;
 import io.tileverse.vectortile.mvt.VectorTileCodec;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.List;
@@ -59,14 +60,14 @@ class PMTilesVectorTileStoreTest {
 
     @BeforeEach
     void setup() throws IOException {
-        Path file = PMTilesTestData.andorra(tmpFolder);
+        URI file = PMTilesTestData.andorra(tmpFolder).toUri();
         this.cacheManager = CacheManager.newInstance();
-        this.andorraReader = new PMTilesReader(file).cacheManager(cacheManager);
+        this.andorraReader = PMTilesReader.open(file).cacheManager(cacheManager);
         this.andorraStore = new PMTilesVectorTileStore(andorraReader).cacheManager(cacheManager);
     }
 
     @Test
-    void layerNames() throws IOException {
+    void layerNames() {
 
         PMTilesMetadata metadata = andorraStore.getMetadata();
         List<VectorLayer> vectorLayers = metadata.vectorLayers();

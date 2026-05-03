@@ -15,7 +15,8 @@
  */
 package io.tileverse.storage.spi;
 
-import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.cache.CachingRangeReader;
 import java.util.List;
 
@@ -72,16 +73,5 @@ public abstract class AbstractStorageProvider implements StorageProvider {
     /** Subclass-specific parameters; the caching parameters (if enabled) are appended automatically. */
     protected List<StorageParameter<?>> buildParameters() {
         return List.of();
-    }
-
-    /**
-     * Convenience entry point for subclass {@link #openRangeReader(StorageConfig)} overrides that want to pre-process
-     * {@code config} (e.g. scrub a query string from the URI) and then delegate to the standard split-and-wrap
-     * behavior. Equivalent to calling {@link StorageProvider#openRangeReader(StorageConfig) the interface default}
-     * directly, but accessible via {@code super.openRangeReaderViaStorage(...)} from anywhere in the subclass
-     * hierarchy.
-     */
-    protected final RangeReader openRangeReaderViaStorage(StorageConfig config) {
-        return StorageProvider.super.openRangeReader(config);
     }
 }

@@ -19,14 +19,13 @@ import static java.util.Objects.requireNonNull;
 
 import io.tileverse.io.ByteBufferPool;
 import io.tileverse.io.ByteRange;
-import io.tileverse.io.SeekableByteChannelImageInputStream;
 import io.tileverse.storage.adapters.RangeReaderSeekableByteChannel;
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
 import java.util.OptionalLong;
-import javax.imageio.stream.ImageInputStream;
+import java.util.function.Supplier;
 
 /**
  * Interface for reading ranges of bytes from a source.
@@ -38,7 +37,23 @@ import javax.imageio.stream.ImageInputStream;
  * interference. This is especially important in server environments where multiple requests may be accessing the same
  * reader.
  */
-public interface RangeReader extends Closeable {
+public interface RangeReader extends Closeable, Supplier<SeekableByteChannel> {
+
+    /**
+     * Returns a {@link SeekableByteChannel} view of this {@code RangeReader} as per the
+     * {@code Supplier<SeekableByteChannel>} trait.
+     *
+     * <p>Multiple calls to this method can be performed during the life time of the {@code RangeReader}.
+     *
+     * <p>The returned channel <strong>does not</strong> close the {@code RangeReader}. It is safe to call this method
+     * several times and from multiple threads.
+     *
+     * @return a SeekableByteChannel view of this RangeReader
+     */
+    @Override
+    default SeekableByteChannel get() {
+        return RangeReaderSeekableByteChannel.of(this);
+    }
 
     /**
      * Reads bytes from the source at the specified offset.
@@ -57,7 +72,6 @@ public interface RangeReader extends Closeable {
         // Allocate a new buffer and use our optimized implementation
         ByteBuffer buffer = ByteBuffer.allocate(length);
         int bytesRead = readRange(offset, length, buffer);
-        assert bytesRead <= length;
         assert bytesRead == buffer.position(); // With NIO conventions: position should be advanced by bytesRead
         return buffer;
     }
@@ -129,35 +143,8 @@ public interface RangeReader extends Closeable {
     /**
      * Closes this range reader and releases any underlying resource.This operation is idempotent.
      *
-     * <p>The state of any view acquired through {@link #asByteChannel()} or {@link #asImageInputStream()} in use once
-     * this method is closed becomes undetermined.
+     * <p>The state of any view acquired through {@link #get()} in use once this method is closed becomes undetermined.
      */
     @Override
     public void close() throws IOException;
-
-    /**
-     * Returns a {@link SeekableByteChannel} view of this {@code RangeReader}.
-     *
-     * <p>Multiple calls to this method can be performed during the life time of the {@code RangeReader}.
-     *
-     * <p>The returned channel <strong>does not</strong> close the {@code RangeReader}. It is safe to call this method
-     * several times and from multiple threads.
-     *
-     * @return a SeekableByteChannel view of this RangeReader
-     */
-    default SeekableByteChannel asByteChannel() {
-        return RangeReaderSeekableByteChannel.of(this);
-    }
-    /**
-     * Returns a {@link ImageInputStream} view of this {@code RangeReader}.
-     *
-     * <p>Multiple calls to this method can be performed during the life time of the {@code RangeReader}.
-     *
-     * <p>The returned input stream <strong>does not</strong> close the {@code RangeReader}
-     *
-     * @return an ImageInputStream view of this RangeReader
-     */
-    default ImageInputStream asImageInputStream() {
-        return SeekableByteChannelImageInputStream.of(asByteChannel());
-    }
 }

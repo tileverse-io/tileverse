@@ -6,8 +6,9 @@ This guide details how to configure credentials for cloud storage and secure HTT
 
 For every backend you have a choice of two paths:
 
-- **Properties-driven**: pass a `Properties` map (or a `StorageConfig`) to `StorageFactory.open(URI, Properties)` /
-  `StorageFactory.openRangeReader(URI, Properties)`. This is what GeoTools, GeoServer, and Spring property-binding setups use.
+- **Properties-driven**: pass a `Properties` map (or a `StorageConfig`) to `StorageFactory.open(URI, Properties)` and
+  call `Storage.openRangeReader` (or any other `Storage` method) on the returned handle. This is what GeoTools,
+  GeoServer, and Spring property-binding setups use.
 - **SDK-injection**: build your own SDK client (`HttpClient`, `S3Client`, `BlobServiceClient`, GCS `Storage`) and pass it
   through `XxxStorageProvider.open(URI, sdkClient)`. The returned `Storage` *borrows* the client; closing the `Storage`
   does NOT close the client. Use this when you need configuration that the Properties surface can't express
@@ -51,8 +52,9 @@ The patterns below show both paths for each authentication mode.
     Properties props = new Properties();
     props.setProperty("storage.http.bearer-token", System.getenv("API_TOKEN"));
 
-    try (RangeReader reader = StorageFactory.openRangeReader(
-            URI.create("https://api.example.com/data.bin"), props)) {
+    URI root = URI.create("https://api.example.com/");
+    try (Storage storage = StorageFactory.open(root, props);
+            RangeReader reader = storage.openRangeReader("data.bin")) {
         // ...
     }
     ```
@@ -79,8 +81,9 @@ The patterns below show both paths for each authentication mode.
     // optional value prefix:
     // props.setProperty("storage.http.api-key-value-prefix", "ApiKey ");
 
-    try (RangeReader reader = StorageFactory.openRangeReader(
-            URI.create("https://api.provider.com/data"), props)) {
+    URI root = URI.create("https://api.provider.com/");
+    try (Storage storage = StorageFactory.open(root, props);
+            RangeReader reader = storage.openRangeReader("data")) {
         // ...
     }
     ```
@@ -133,8 +136,8 @@ public buckets).
     props.setProperty("storage.s3.aws-secret-access-key", System.getenv("AWS_SECRET_ACCESS_KEY"));
     props.setProperty("storage.s3.region", "us-west-2");
 
-    try (RangeReader reader = StorageFactory.openRangeReader(
-            URI.create("s3://my-bucket/map.pmtiles"), props)) {
+    try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/"), props);
+            RangeReader reader = storage.openRangeReader("map.pmtiles")) {
         // ...
     }
     ```
@@ -220,8 +223,9 @@ The Properties path always goes through the SPI's full-bundle code path, so `Sto
     Properties props = new Properties();
     props.setProperty("storage.azure.sas-token", "sv=2020-08-04&ss=b&srt=o&sp=r&se=2024-01-01...");
 
-    try (RangeReader reader = StorageFactory.openRangeReader(
-            URI.create("https://account.blob.core.windows.net/container/blob"), props)) {
+    try (Storage storage = StorageFactory.open(
+                URI.create("https://account.blob.core.windows.net/container/"), props);
+            RangeReader reader = storage.openRangeReader("blob")) {
         // ...
     }
     ```
@@ -327,8 +331,8 @@ props.setProperty("storage.gcs.default-credentials-chain", "true");
 // optional — disambiguates billing when multiple projects are accessible:
 // props.setProperty("storage.gcs.project-id", "my-project");
 
-try (RangeReader reader = StorageFactory.openRangeReader(
-        URI.create("gs://my-bucket/data.bin"), props)) {
+try (Storage storage = StorageFactory.open(URI.create("gs://my-bucket/"), props);
+        RangeReader reader = storage.openRangeReader("data.bin")) {
     // ...
 }
 ```
@@ -359,8 +363,8 @@ try (FileInputStream input = new FileInputStream("/path/to/key.json")) {
 Properties props = new Properties();
 props.setProperty("storage.gcs.default-credentials-chain", "false");
 
-try (RangeReader reader = StorageFactory.openRangeReader(
-        URI.create("gs://gcp-public-data-landsat/.../some.tif"), props)) {
+try (Storage storage = StorageFactory.open(URI.create("gs://gcp-public-data-landsat/"), props);
+        RangeReader reader = storage.openRangeReader(".../some.tif")) {
     // ...
 }
 ```

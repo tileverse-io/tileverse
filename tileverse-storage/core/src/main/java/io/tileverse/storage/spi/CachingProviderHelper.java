@@ -15,9 +15,11 @@
  */
 package io.tileverse.storage.spi;
 
-import static io.tileverse.storage.spi.StorageParameter.GROUP_CACHING;
+import static io.tileverse.storage.StorageParameter.GROUP_CACHING;
 
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.cache.CachingRangeReader;
 import io.tileverse.storage.cache.CachingRangeReader.Builder;
 import java.util.ArrayList;

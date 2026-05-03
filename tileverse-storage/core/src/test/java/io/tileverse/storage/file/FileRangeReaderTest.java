@@ -70,7 +70,7 @@ class FileRangeReaderTest {
         Files.writeString(testFile, textContent, StandardOpenOption.CREATE);
 
         // Initialize the reader
-        reader = FileRangeReader.of(testFile);
+        reader = new FileRangeReader(testFile);
     }
 
     @AfterEach
@@ -84,28 +84,28 @@ class FileRangeReaderTest {
     @Test
     void testFactory() throws IOException {
         // Direct construction via the package-private of(Path) factory.
-        assertThat(FileRangeReader.of(testFile)).isNotNull().hasFieldOrPropertyWithValue("path", testFile);
+        assertThat(new FileRangeReader(testFile)).isNotNull().hasFieldOrPropertyWithValue("path", testFile);
         assertThat(new FileRangeReader(testFile)).isNotNull().hasFieldOrPropertyWithValue("path", testFile);
     }
 
     @Test
     void testConstructorWithNullPath() {
-        assertThrows(NullPointerException.class, () -> FileRangeReader.of(null));
+        assertThrows(NullPointerException.class, () -> new FileRangeReader(null));
     }
 
     @Test
     void testNonExistentFile() {
         Path nonExistentFile = tempDir.resolve("non-existent-file.txt");
-        assertThrows(NoSuchFileException.class, () -> FileRangeReader.of(nonExistentFile));
+        assertThrows(NoSuchFileException.class, () -> new FileRangeReader(nonExistentFile));
     }
 
     @Test
-    void testGetSize() throws IOException {
+    void testGetSize() {
         assertEquals(textContent.length(), reader.size().getAsLong());
     }
 
     @Test
-    void testReadEntireFile() throws IOException {
+    void testReadEntireFile() {
         ByteBuffer buffer = reader.readRange(0, textContent.length()).flip();
 
         assertEquals(textContent.length(), buffer.remaining());
@@ -118,7 +118,7 @@ class FileRangeReaderTest {
     }
 
     @Test
-    void testReadRangeFromStart() throws IOException {
+    void testReadRangeFromStart() {
         int length = 10;
         ByteBuffer buffer = reader.readRange(0, length).flip();
 
@@ -132,7 +132,7 @@ class FileRangeReaderTest {
     }
 
     @Test
-    void testReadRangeFromMiddle() throws IOException {
+    void testReadRangeFromMiddle() {
         int offset = 20;
         int length = 15;
         ByteBuffer buffer = reader.readRange(offset, length).flip();
@@ -147,7 +147,7 @@ class FileRangeReaderTest {
     }
 
     @Test
-    void testReadRangeAtEnd() throws IOException {
+    void testReadRangeAtEnd() {
         int offset = textContent.length() - 10;
         int length = 10;
         ByteBuffer buffer = reader.readRange(offset, length);
@@ -162,7 +162,7 @@ class FileRangeReaderTest {
     }
 
     @Test
-    void testReadBeyondEnd() throws IOException {
+    void testReadBeyondEnd() {
         int offset = textContent.length() - 5;
         int length = 20; // Trying to read 20 bytes, but only 5 are available
         ByteBuffer buffer = reader.readRange(offset, length);
@@ -178,7 +178,7 @@ class FileRangeReaderTest {
     }
 
     @Test
-    void testReadStartingBeyondEnd() throws IOException {
+    void testReadStartingBeyondEnd() {
         int offset = textContent.length() + 10; // Start beyond the end of the file
         int length = 10;
         ByteBuffer buffer = reader.readRange(offset, length).flip();
@@ -188,7 +188,7 @@ class FileRangeReaderTest {
     }
 
     @Test
-    void testReadMultipleRanges() throws IOException {
+    void testReadMultipleRanges() {
         // Read multiple ranges and verify they're correct
         ByteBuffer buffer1 = reader.readRange(5, 10).flip();
         ByteBuffer buffer2 = reader.readRange(20, 15).flip();
@@ -212,7 +212,7 @@ class FileRangeReaderTest {
     }
 
     @Test
-    void testReadVeryLargeRange() throws IOException {
+    void testReadVeryLargeRange() {
         // Try to read a range larger than the file (but not unreasonably large)
         int largeSize = textContent.length() * 10; // 10 times the actual file size
         ByteBuffer buffer = reader.readRange(0, largeSize).flip();
@@ -227,7 +227,7 @@ class FileRangeReaderTest {
     }
 
     @Test
-    void testReadWithZeroLength() throws IOException {
+    void testReadWithZeroLength() {
         // Test reading with length = 0
         ByteBuffer buffer = reader.readRange(10, 0);
 
@@ -254,7 +254,7 @@ class FileRangeReaderTest {
         new Random(42).nextBytes(binaryContent); // Use seed 42 for reproducibility
         Files.write(binaryFile, binaryContent, StandardOpenOption.CREATE);
 
-        try (FileRangeReader binaryReader = FileRangeReader.of(binaryFile)) {
+        try (FileRangeReader binaryReader = new FileRangeReader(binaryFile)) {
             // Check size
             assertEquals(binaryContent.length, binaryReader.size().getAsLong());
 
@@ -291,7 +291,7 @@ class FileRangeReaderTest {
 
         Files.write(largeFile, largeContent, StandardOpenOption.CREATE);
 
-        try (FileRangeReader largeReader = FileRangeReader.of(largeFile)) {
+        try (FileRangeReader largeReader = new FileRangeReader(largeFile)) {
             // Check size
             assertEquals(size, largeReader.size().getAsLong());
 
@@ -318,7 +318,7 @@ class FileRangeReaderTest {
         Path emptyFile = tempDir.resolve("empty.txt");
         Files.createFile(emptyFile);
 
-        try (FileRangeReader emptyReader = FileRangeReader.of(emptyFile)) {
+        try (FileRangeReader emptyReader = new FileRangeReader(emptyFile)) {
             // Size should be 0
             assertEquals(0, emptyReader.size().getAsLong());
 
@@ -352,7 +352,7 @@ class FileRangeReaderTest {
         Files.write(concurrentFile, data, StandardOpenOption.CREATE);
 
         // Create a shared reader - our implementation should be thread-safe
-        FileRangeReader sharedReader = FileRangeReader.of(concurrentFile);
+        FileRangeReader sharedReader = new FileRangeReader(concurrentFile);
 
         try {
             // Define regions to read concurrently
@@ -428,7 +428,7 @@ class FileRangeReaderTest {
         Files.write(concurrentFile, data, StandardOpenOption.CREATE);
 
         // Create a shared reader
-        FileRangeReader sharedReader = FileRangeReader.of(concurrentFile);
+        FileRangeReader sharedReader = new FileRangeReader(concurrentFile);
 
         try {
             // Multiple threads will read overlapping regions
@@ -487,8 +487,8 @@ class FileRangeReaderTest {
         String content = "Test content for convenience method";
         Files.write(testFile, content.getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE);
 
-        try (FileRangeReader reader1 = FileRangeReader.of(testFile);
-                FileRangeReader reader2 = FileRangeReader.of(testFile)) {
+        try (FileRangeReader reader1 = new FileRangeReader(testFile);
+                FileRangeReader reader2 = new FileRangeReader(testFile)) {
 
             assertEquals(reader1.size(), reader2.size());
             assertEquals(reader1.getSourceIdentifier(), reader2.getSourceIdentifier());
@@ -519,7 +519,7 @@ class FileRangeReaderTest {
 
     @Test
     void of_withNullPath_throwsNullPointerException() {
-        assertThrows(NullPointerException.class, () -> FileRangeReader.of(null));
+        assertThrows(NullPointerException.class, () -> new FileRangeReader(null));
     }
 
     @Nested
@@ -644,7 +644,7 @@ class FileRangeReaderTest {
 
         @Test
         void retryOnStaleFileHandleIOException() throws Exception {
-            // Same as above but uses a proxy channel that throws IOException("Stale file handle") on read(), exercising
+            // Same as above but uses a proxy channel that ("Stale file handle") on read(), exercising
             // the message-based detection path.
             java.util.concurrent.atomic.AtomicInteger callCount = new java.util.concurrent.atomic.AtomicInteger();
             FileRangeReader r = new FileRangeReader(testFile, Duration.ZERO) {
@@ -687,7 +687,7 @@ class FileRangeReaderTest {
             };
             try (r) {
                 assertThrows(io.tileverse.storage.StorageException.class, () -> r.readRange(0, 10));
-                // Should NOT have retried — only one openChannel call
+                // Should NOT have retried -- only one openChannel call
                 assertThat(callCount.get()).isEqualTo(1);
             }
         }
@@ -766,10 +766,11 @@ class FileRangeReaderTest {
         }
 
         @Test
-        void constructorIdleTimeoutValidation() throws IOException {
+        void constructorIdleTimeoutValidation() {
             assertThatNoException().isThrownBy(() -> new FileRangeReader(testFile, Duration.ofSeconds(30)));
             assertThatNoException().isThrownBy(() -> new FileRangeReader(testFile, Duration.ZERO));
-            assertThrows(IllegalArgumentException.class, () -> new FileRangeReader(testFile, Duration.ofSeconds(-1)));
+            Duration negativeDuration = Duration.ofSeconds(-1);
+            assertThrows(IllegalArgumentException.class, () -> new FileRangeReader(testFile, negativeDuration));
             assertThrows(NullPointerException.class, () -> new FileRangeReader(testFile, null));
         }
 
@@ -838,7 +839,7 @@ class FileRangeReaderTest {
             }
         }
 
-        private String readAsString(FileRangeReader r, int offset, int length) throws IOException {
+        private String readAsString(FileRangeReader r, int offset, int length) {
             ByteBuffer buf = r.readRange(offset, length).flip();
             byte[] bytes = new byte[buf.remaining()];
             buf.get(bytes);

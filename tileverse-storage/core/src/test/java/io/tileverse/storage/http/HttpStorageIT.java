@@ -87,7 +87,7 @@ class HttpStorageIT extends StorageTCK {
     @Override
     protected Storage openStorage() throws IOException {
         URI base = URI.create("http://" + httpd.getHost() + ":" + httpd.getFirstMappedPort() + "/");
-        return new HttpStorage(base, HttpClient.newHttpClient());
+        return new HttpStorage(base, new BorrowedHttpHandle(HttpClient.newHttpClient()), HttpAuthentication.NONE);
     }
 
     @Test

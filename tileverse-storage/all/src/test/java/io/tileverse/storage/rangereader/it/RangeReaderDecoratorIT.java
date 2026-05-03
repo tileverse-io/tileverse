@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.tileverse.storage.RangeReader;
-import io.tileverse.storage.StorageFactory;
+import io.tileverse.storage.RangeReaderTestSupport;
 import io.tileverse.storage.block.BlockAlignedRangeReader;
 import io.tileverse.storage.cache.CachingRangeReader;
 import java.io.IOException;
@@ -65,7 +65,7 @@ class RangeReaderDecoratorIT {
 
     @Test
     void testBlockAlignedReaderBasicFunctionality() throws IOException {
-        RangeReader baseReader = StorageFactory.openRangeReader(testFile.toUri());
+        RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
         try (BlockAlignedRangeReader reader = new BlockAlignedRangeReader(baseReader)) {
             assertEquals(
                     BlockAlignedRangeReader.DEFAULT_BLOCK_SIZE,
@@ -78,7 +78,7 @@ class RangeReaderDecoratorIT {
 
     @Test
     void testBlockAlignedReaderWithCustomBlockSize() throws IOException {
-        RangeReader baseReader = StorageFactory.openRangeReader(testFile.toUri());
+        RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
         try (BlockAlignedRangeReader reader = new BlockAlignedRangeReader(baseReader, CUSTOM_BLOCK_SIZE)) {
             assertEquals(CUSTOM_BLOCK_SIZE, reader.getBlockSize(), "Custom block size should be used");
             assertReadMatchesExpected(reader, CUSTOM_BLOCK_SIZE - 100, 200);
@@ -87,7 +87,7 @@ class RangeReaderDecoratorIT {
 
     @Test
     void testCachingReaderBasicFunctionality() throws IOException {
-        RangeReader baseReader = StorageFactory.openRangeReader(testFile.toUri());
+        RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
         try (CachingRangeReader reader = CachingRangeReader.builder(baseReader).build()) {
             int offset = 1000;
             int length = 100;
@@ -110,7 +110,7 @@ class RangeReaderDecoratorIT {
 
     @Test
     void testBlockAlignedAndCachingReader() throws IOException {
-        try (RangeReader baseReader = StorageFactory.openRangeReader(testFile.toUri())) {
+        try (RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile)) {
             RangeReader reader = CachingRangeReader.builder(baseReader)
                     .blockSize(CUSTOM_BLOCK_SIZE)
                     .build();
@@ -125,7 +125,7 @@ class RangeReaderDecoratorIT {
     @Test
     void testRangeReaderBuilderWithDecorators() throws IOException {
         try (RangeReader reader = CachingRangeReader.builder(
-                        BlockAlignedRangeReader.builder(StorageFactory.openRangeReader(testFile.toUri()))
+                        BlockAlignedRangeReader.builder(RangeReaderTestSupport.fileReader(testFile))
                                 .blockSize(CUSTOM_BLOCK_SIZE)
                                 .build())
                 .build()) {
@@ -143,7 +143,7 @@ class RangeReaderDecoratorIT {
     @Test
     void testLargeBlockAlignedReads() throws IOException {
         int largeBlockSize = 32 * 1024; // 32KB
-        try (RangeReader reader = BlockAlignedRangeReader.builder(StorageFactory.openRangeReader(testFile.toUri()))
+        try (RangeReader reader = BlockAlignedRangeReader.builder(RangeReaderTestSupport.fileReader(testFile))
                 .blockSize(largeBlockSize)
                 .build()) {
             int[] offsets = {0, 100, largeBlockSize - 1000, largeBlockSize, largeBlockSize + 100};
@@ -161,7 +161,7 @@ class RangeReaderDecoratorIT {
     @Test
     void testRandomizedReads() throws IOException {
         try (RangeReader reader = CachingRangeReader.builder(
-                        BlockAlignedRangeReader.builder(StorageFactory.openRangeReader(testFile.toUri()))
+                        BlockAlignedRangeReader.builder(RangeReaderTestSupport.fileReader(testFile))
                                 .blockSize(DEFAULT_BLOCK_SIZE)
                                 .build())
                 .build()) {

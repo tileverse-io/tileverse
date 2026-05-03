@@ -10,18 +10,33 @@ PMTiles is designed to work efficiently with cloud object storage. By using HTTP
 
 ### Basic S3 Access
 
+If the bucket allows the SDK's default credential chain (IAM role, `~/.aws/credentials`, env vars), `PMTilesReader.open(URI)` is a one-liner:
+
 ```java
-import io.tileverse.storage.RangeReader;
-import io.tileverse.storage.StorageFactory;
+import io.tileverse.pmtiles.PMTilesReader;
 import java.net.URI;
 import java.util.Optional;
+
+try (PMTilesReader reader = PMTilesReader.open(URI.create("s3://my-bucket/world.pmtiles"))) {
+    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
+}
+```
+
+When you need explicit configuration (region pinning, credentials, endpoint override), open the parent {@link Storage} with `Properties` and ask it for the reader:
+
+```java
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
 import java.util.Properties;
 
 Properties props = new Properties();
 props.setProperty("storage.s3.region", "us-west-2");
 
-try (RangeReader s3Reader = StorageFactory.openRangeReader(
-            URI.create("s3://my-bucket/world.pmtiles"), props);
+URI bucket = URI.create("s3://my-bucket/");
+URI leaf = URI.create("s3://my-bucket/world.pmtiles");
+try (Storage storage = StorageFactory.open(bucket, props);
+        RangeReader s3Reader = storage.openRangeReader(leaf);
         PMTilesReader reader = new PMTilesReader(s3Reader)) {
     Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
 }
@@ -32,8 +47,8 @@ try (RangeReader s3Reader = StorageFactory.openRangeReader(
 ```java
 import io.tileverse.storage.cache.CachingRangeReader;
 
-try (RangeReader baseReader = StorageFactory.openRangeReader(
-            URI.create("s3://my-bucket/world.pmtiles"), props);
+try (Storage storage = StorageFactory.open(bucket, props);
+        RangeReader baseReader = storage.openRangeReader(leaf);
         RangeReader cachedReader = CachingRangeReader.builder(baseReader)
             .maximumSize(1000)
             .withBlockAlignment()
@@ -50,8 +65,10 @@ try (RangeReader baseReader = StorageFactory.openRangeReader(
 Properties azureProps = new Properties();
 azureProps.setProperty("storage.azure.connection-string", connectionString);
 
-try (RangeReader azureReader = StorageFactory.openRangeReader(
-            URI.create("https://account.blob.core.windows.net/tiles/world.pmtiles"), azureProps);
+URI container = URI.create("https://account.blob.core.windows.net/tiles/");
+URI leaf = URI.create("https://account.blob.core.windows.net/tiles/world.pmtiles");
+try (Storage storage = StorageFactory.open(container, azureProps);
+        RangeReader azureReader = storage.openRangeReader(leaf);
         PMTilesReader reader = new PMTilesReader(azureReader)) {
     Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
 }
@@ -60,8 +77,7 @@ try (RangeReader azureReader = StorageFactory.openRangeReader(
 ## Google Cloud Storage
 
 ```java
-try (RangeReader gcsReader = StorageFactory.openRangeReader(URI.create("gs://my-bucket/world.pmtiles"));
-        PMTilesReader reader = new PMTilesReader(gcsReader)) {
+try (PMTilesReader reader = PMTilesReader.open(URI.create("gs://my-bucket/world.pmtiles"))) {
     Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
 }
 ```
@@ -93,7 +109,8 @@ Combine memory and disk caching for optimal performance:
 ```java
 import io.tileverse.storage.cache.DiskCachingRangeReader;
 
-try (RangeReader baseReader = StorageFactory.openRangeReader(uri, props);
+try (Storage storage = StorageFactory.open(parent, props);
+        RangeReader baseReader = storage.openRangeReader(leaf);
         RangeReader diskCached = DiskCachingRangeReader.builder(baseReader)
             .cacheDirectory(Path.of("/tmp/tile-cache"))
             .maximumCacheSize(10_000_000_000L)  // 10 GB

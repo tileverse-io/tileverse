@@ -97,14 +97,58 @@ class PMTilesReaderBigFileIT {
     }
 
     private PMTilesReader fileRangeReader() throws IOException {
-        RangeReader file =
-                StorageFactory.openRangeReader(Paths.get("/Users/groldan/wip/pmtiles/data/pmtiles.io/v4.pmtiles")
-                        .toUri());
-        return pmtilesReader(file);
+        return pmtilesReader(openRangeReader(
+                Paths.get("/Volumes/geodata/pmtiles/protomaps/v4.pmtiles").toUri()));
     }
 
     private RangeReader httpRangeReader() throws IOException {
-        return StorageFactory.openRangeReader(URI.create("http://localhost:10000/pmtiles.io/v4.pmtiles"));
+        return openRangeReader(URI.create("http://localhost:10000/pmtiles/protomaps/v4.pmtiles"));
+    }
+
+    /**
+     * Open a parent {@link io.tileverse.storage.Storage} for the URI's container and return a {@link RangeReader} for
+     * the leaf, bundled so closing the reader releases the Storage too.
+     */
+    private static RangeReader openRangeReader(URI leaf) throws IOException {
+        String full = leaf.toString();
+        int lastSlash = full.lastIndexOf('/');
+        URI parent = URI.create(full.substring(0, lastSlash + 1));
+        io.tileverse.storage.Storage storage = StorageFactory.open(parent);
+        try {
+            RangeReader inner = storage.openRangeReader(leaf);
+            return new RangeReader() {
+                @Override
+                public int readRange(long offset, int length, ByteBuffer target) {
+                    return inner.readRange(offset, length, target);
+                }
+
+                @Override
+                public java.util.OptionalLong size() {
+                    return inner.size();
+                }
+
+                @Override
+                public String getSourceIdentifier() {
+                    return inner.getSourceIdentifier();
+                }
+
+                @Override
+                public void close() throws IOException {
+                    try {
+                        inner.close();
+                    } finally {
+                        storage.close();
+                    }
+                }
+            };
+        } catch (RuntimeException e) {
+            try {
+                storage.close();
+            } catch (IOException ignored) {
+                // best-effort
+            }
+            throw e;
+        }
     }
 
     @SuppressWarnings("resource")

@@ -18,8 +18,8 @@ package io.tileverse.storage.gcs;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import io.tileverse.storage.spi.StorageConfig;
-import io.tileverse.storage.spi.StorageParameter;
+import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.util.List;
@@ -59,19 +59,20 @@ class GoogleCloudStorageProviderTest {
         assertThrows(NullPointerException.class, () -> provider.canProcess(null));
         assertThrows(NullPointerException.class, () -> provider.canProcess(config));
 
-        assertThat(provider.canProcess(config.uri("gs://bucket/file.pmtiles"))).isTrue();
-        assertThat(provider.canProcess(config.uri("https://storage.googleapis.com/bucket/file.pmtiles")))
+        assertThat(provider.canProcess(config.baseUri("gs://bucket/file.pmtiles")))
                 .isTrue();
-        assertThat(provider.canProcess(config.uri("https://storage.cloud.google.com/bucket/file.pmtiles")))
+        assertThat(provider.canProcess(config.baseUri("https://storage.googleapis.com/bucket/file.pmtiles")))
                 .isTrue();
-        assertThat(provider.canProcess(config.uri("http://localhost:4443/storage/v1/b/bucket/o/file.pmtiles")))
+        assertThat(provider.canProcess(config.baseUri("https://storage.cloud.google.com/bucket/file.pmtiles")))
+                .isTrue();
+        assertThat(provider.canProcess(config.baseUri("http://localhost:4443/storage/v1/b/bucket/o/file.pmtiles")))
                 .isTrue();
 
-        assertThat(provider.canProcess(config.uri("https://example.com/bucket/file.pmtiles")))
+        assertThat(provider.canProcess(config.baseUri("https://example.com/bucket/file.pmtiles")))
                 .isFalse();
-        assertThat(provider.canProcess(config.uri("https://demo-bucket.protomaps.com/v4.pmtiles")))
+        assertThat(provider.canProcess(config.baseUri("https://demo-bucket.protomaps.com/v4.pmtiles")))
                 .isFalse();
-        assertThat(provider.canProcess(config.providerId("http").uri("gs://bucket/file.pmtiles")))
+        assertThat(provider.canProcess(config.providerId("http").baseUri("gs://bucket/file.pmtiles")))
                 .isFalse();
     }
 

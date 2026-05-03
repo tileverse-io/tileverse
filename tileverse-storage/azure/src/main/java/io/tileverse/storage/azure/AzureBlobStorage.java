@@ -85,8 +85,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import lombok.extern.slf4j.Slf4j;
 
 /** Azure Blob Storage implementation of {@link Storage} (flat keyspace + virtual directories). */
+@Slf4j
 final class AzureBlobStorage implements Storage {
 
     private final URI baseUri;
@@ -195,8 +197,11 @@ final class AzureBlobStorage implements Storage {
     @Override
     public Stream<StorageEntry> list(String pattern, ListOptions options) {
         requireOpen();
+        Storage.requireSafePattern(pattern);
         StoragePattern parsed = StoragePattern.parse(pattern);
-        String fullPrefix = location.resolve(parsed.prefix());
+        // Skip resolve() because parsed.prefix() may be empty (legitimate root-listing); requireSafePattern above has
+        // already validated the pattern, so concatenating the container prefix directly is safe.
+        String fullPrefix = location.prefix() + parsed.prefix();
         Predicate<String> matcher = parsed.matcher().orElse(k -> true);
 
         ListBlobsOptions opts = new ListBlobsOptions().setPrefix(fullPrefix);
@@ -209,7 +214,8 @@ final class AzureBlobStorage implements Storage {
                     ? containerClient.listBlobs(opts, null)
                     : containerClient.listBlobsByHierarchy("/", opts, null);
             rawItems = iter.iterator();
-            rawItems.hasNext(); // force first-page fetch to surface auth/region errors here
+            boolean hasNext = rawItems.hasNext(); // force first-page fetch to surface auth/region errors here
+            log.trace("first-page fetch check, has next: {}", hasNext);
         } catch (HttpResponseException e) {
             throw AzureExceptionMapper.map(e, fullPrefix);
         }
@@ -278,7 +284,7 @@ final class AzureBlobStorage implements Storage {
         requireOpen();
         BlobClient client = blobClient(key);
         BlobClient effectiveClient = options.versionId().isPresent()
-                ? client.getVersionClient(options.versionId().get())
+                ? client.getVersionClient(options.versionId().orElseThrow())
                 : client;
         BlobInputStreamOptions inOpts = new BlobInputStreamOptions();
         if (options.offset() > 0L || options.length().isPresent()) {
@@ -394,6 +400,7 @@ final class AzureBlobStorage implements Storage {
     @Override
     public OutputStream openOutputStream(String key, WriteOptions options) {
         requireOpen();
+        Storage.requireSafeKey(key);
         Path tmp;
         OutputStream sink;
         try {
@@ -468,6 +475,7 @@ final class AzureBlobStorage implements Storage {
     @Override
     public DeleteResult deleteAll(Collection<String> keys) {
         requireOpen();
+        keys.forEach(Storage::requireSafeKey);
         Set<String> deleted = new HashSet<>(keys);
         Set<String> didNotExist = new HashSet<>();
         Map<String, StorageException> failed = new HashMap<>();
@@ -566,6 +574,8 @@ final class AzureBlobStorage implements Storage {
     }
 
     private StorageEntry.File copyInternal(String srcKey, AzureBlobStorage dst, String dstKey, CopyOptions options) {
+        Storage.requireSafeKey(srcKey);
+        Storage.requireSafeKey(dstKey);
         if (options.ifNotExistsAtDestination() && dst.stat(dstKey).isPresent()) {
             throw new PreconditionFailedException("Destination already exists: " + dstKey);
         }

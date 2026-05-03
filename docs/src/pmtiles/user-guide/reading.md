@@ -4,17 +4,39 @@ This guide covers advanced topics for reading PMTiles archives.
 
 ## Opening PMTiles Archives
 
-PMTiles archives can be opened from any data source supported by `tileverse-storage`'s [`RangeReader`](../../storage/rangereader/index.md):
+`PMTilesReader.open(URI)` is the one-line entry point: it opens the parent {@link Storage} for the URI's container, gets a `RangeReader` for the leaf, and bundles them so closing the reader releases both. The same call works for any URI scheme.
 
 ```java
+import io.tileverse.pmtiles.PMTilesReader;
+
 // Local file
-RangeReader fileReader = StorageFactory.openRangeReader(Path.of("tiles.pmtiles").toUri());
+PMTilesReader fileReader = PMTilesReader.open(Path.of("tiles.pmtiles").toUri());
 
 // HTTP
-RangeReader httpReader = StorageFactory.openRangeReader(URI.create("https://example.com/tiles.pmtiles"));
+PMTilesReader httpReader = PMTilesReader.open(URI.create("https://example.com/tiles.pmtiles"));
 
-// S3 (with optional Properties for region/credentials)
-RangeReader s3Reader = StorageFactory.openRangeReader(URI.create("s3://bucket/tiles.pmtiles"));
+// S3, GCS, Azure - same shape
+PMTilesReader s3Reader = PMTilesReader.open(URI.create("s3://bucket/tiles.pmtiles"));
+```
+
+For configuration (region, credentials, endpoint overrides, custom HTTP auth), open a `Storage` explicitly with `Properties`, then pass its `RangeReader` to `new PMTilesReader(reader)`:
+
+```java
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
+import java.util.Properties;
+
+Properties props = new Properties();
+props.setProperty("storage.s3.region", "us-west-2");
+
+URI bucket = URI.create("s3://bucket/");
+URI leaf = URI.create("s3://bucket/tiles.pmtiles");
+try (Storage storage = StorageFactory.open(bucket, props);
+        RangeReader reader = storage.openRangeReader(leaf);
+        PMTilesReader pmtiles = new PMTilesReader(reader)) {
+    // ...
+}
 ```
 
 ## Reading Header Information

@@ -285,7 +285,8 @@ class PMTilesMetadataTest {
     @Test
     void testAndorraMetadata() throws Exception {
         // Use the same test file as PMTilesReaderTest
-        PMTilesReader pmtilesReader = new PMTilesReader(PMTilesTestData.andorra(tmpFolder));
+        PMTilesReader pmtilesReader =
+                PMTilesReader.open(PMTilesTestData.andorra(tmpFolder).toUri());
         PMTilesMetadata metadata = pmtilesReader.getMetadata();
         assertNotNull(metadata);
 

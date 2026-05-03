@@ -15,6 +15,7 @@
  */
 package io.tileverse.storage.s3;
 
+import io.tileverse.storage.Storage;
 import java.net.URI;
 
 /**
@@ -37,11 +38,15 @@ record S3StorageBucketKey(String bucket, String prefix) {
         return new S3StorageBucketKey(ref.bucket(), key);
     }
 
-    /** Resolve a relative key to a full S3 key (prefix + relative). */
+    /**
+     * Resolve a relative key to a full S3 key (prefix + relative). Validates the key with
+     * {@link Storage#requireSafeKey}: rejects null, empty, leading slash, NUL bytes, and {@code ..}/{@code .} segments.
+     * Callers that need to address the bare prefix (e.g. listing the root) should concatenate {@link #prefix()}
+     * directly without going through this helper.
+     */
     String resolve(String relativeKey) {
-        if (relativeKey == null || relativeKey.isEmpty()) return prefix;
-        String r = relativeKey.startsWith("/") ? relativeKey.substring(1) : relativeKey;
-        return prefix + r;
+        Storage.requireSafeKey(relativeKey);
+        return prefix + relativeKey;
     }
 
     /** Strip the prefix from a full key to recover the relative key. */

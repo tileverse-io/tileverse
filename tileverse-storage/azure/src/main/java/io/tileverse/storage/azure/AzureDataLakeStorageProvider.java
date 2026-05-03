@@ -16,9 +16,9 @@
 package io.tileverse.storage.azure;
 
 import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.spi.AbstractStorageProvider;
-import io.tileverse.storage.spi.StorageConfig;
-import io.tileverse.storage.spi.StorageParameter;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.util.List;
@@ -84,10 +84,10 @@ public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
 
     @Override
     public boolean canProcess(StorageConfig config) {
-        if (!StorageConfig.matches(config, getId(), "abfs", "abfss", "https", "http")) {
+        if (!matches(config, "abfs", "abfss", "https", "http")) {
             return false;
         }
-        URI uri = config.uri();
+        URI uri = config.baseUri();
         if (uri == null) return false;
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
         if (scheme.equals("abfs") || scheme.equals("abfss")) {
@@ -113,9 +113,9 @@ public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
 
     @Override
     public Storage createStorage(StorageConfig config) {
-        URI uri = config.uri();
+        URI uri = config.baseUri();
         if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.uri() is required for AzureDataLakeStorage");
+            throw new IllegalArgumentException("StorageConfig.baseUri() is required for AzureDataLakeStorage");
         }
         AzureBlobLocation location = AzureBlobLocation.parse(uri);
         AzureClientCache.Lease lease = clientCache.acquire(AzureBlobStorageProvider.keyFor(config, location));

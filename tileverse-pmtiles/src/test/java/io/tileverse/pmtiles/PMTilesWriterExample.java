@@ -125,11 +125,9 @@ class PMTilesWriterExample {
             writer.complete();
         }
 
-        System.out.println("PMTiles file created successfully at: " + outputPath);
-
         // Read back and show some information
         try {
-            PMTilesReader reader = new PMTilesReader(outputPath);
+            PMTilesReader reader = PMTilesReader.open(outputPath.toUri());
             PMTilesHeader header = reader.getHeader();
             System.out.println("\nPMTiles file information:");
             System.out.println("Tile count: " + header.addressedTilesCount());

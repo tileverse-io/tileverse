@@ -32,7 +32,7 @@ import org.junit.jupiter.api.io.TempDir;
 class FileStorageTest {
 
     @Test
-    void putCreatesNestedDirectories(@TempDir Path tmp) throws IOException {
+    void putCreatesNestedDirectories(@TempDir Path tmp) {
         try (FileStorage s = new FileStorage(tmp)) {
             s.put("a/b/c/d.txt", "ok".getBytes(StandardCharsets.UTF_8));
             assertThat(Files.exists(tmp.resolve("a/b/c/d.txt"))).isTrue();
@@ -50,14 +50,14 @@ class FileStorageTest {
     }
 
     @Test
-    void openInputStreamMissingThrowsNotFound(@TempDir Path tmp) throws IOException {
+    void openInputStreamMissingThrowsNotFound(@TempDir Path tmp) {
         try (FileStorage s = new FileStorage(tmp)) {
             assertThatThrownBy(() -> s.read("missing.bin").close()).isInstanceOf(NotFoundException.class);
         }
     }
 
     @Test
-    void putIfNotExistsRejectsExisting(@TempDir Path tmp) throws IOException {
+    void putIfNotExistsRejectsExisting(@TempDir Path tmp) {
         try (FileStorage s = new FileStorage(tmp)) {
             s.put("k", new byte[1]);
             assertThatThrownBy(() -> s.put(

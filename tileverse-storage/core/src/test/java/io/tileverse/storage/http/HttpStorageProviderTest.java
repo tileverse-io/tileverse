@@ -25,7 +25,7 @@ import static io.tileverse.storage.http.HttpStorageProvider.HTTP_CONNECTION_TIME
 import static io.tileverse.storage.http.HttpStorageProvider.HTTP_TRUST_ALL_SSL_CERTIFICATES;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.tileverse.storage.spi.StorageConfig;
+import io.tileverse.storage.StorageConfig;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
@@ -58,7 +58,7 @@ class HttpStorageProviderTest {
                 .as("Default authentication should be NONE")
                 .extracting("authentication")
                 .isEqualTo(HttpAuthentication.NONE);
-        assertThat(storage).extracting("client").isNotNull();
+        assertThat(storage.client()).isNotNull();
     }
 
     @Test

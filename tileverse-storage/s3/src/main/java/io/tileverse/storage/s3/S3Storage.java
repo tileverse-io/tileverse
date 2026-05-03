@@ -233,8 +233,11 @@ final class S3Storage implements Storage {
     @Override
     public Stream<StorageEntry> list(String pattern, ListOptions options) {
         requireOpen();
+        Storage.requireSafePattern(pattern);
         StoragePattern parsed = StoragePattern.parse(pattern);
-        String fullPrefix = resolve(parsed.prefix());
+        // Skip resolve() because parsed.prefix() may be empty (legitimate root-listing); requireSafePattern above has
+        // already validated the pattern, so concatenating the bucket prefix directly is safe.
+        String fullPrefix = ref.prefix() + parsed.prefix();
         Predicate<String> matcher = parsed.matcher().orElse(k -> true);
 
         ListObjectsV2Request.Builder requestBuilder =
@@ -486,6 +489,7 @@ final class S3Storage implements Storage {
     @Override
     public OutputStream openOutputStream(String key, WriteOptions options) {
         requireOpen();
+        Storage.requireSafeKey(key);
         Path tmp;
         OutputStream sink;
         try {

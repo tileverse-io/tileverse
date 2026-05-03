@@ -13,10 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.storage.spi;
+package io.tileverse.storage;
 
 import static java.util.Objects.requireNonNull;
 
+import io.tileverse.storage.spi.StorageProvider;
 import java.util.List;
 import java.util.Optional;
 

@@ -32,6 +32,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 import lombok.extern.slf4j.Slf4j;
 
@@ -110,8 +111,8 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
     private final Duration idleTimeout;
 
     private final ReentrantLock channelLock = new ReentrantLock();
-    private volatile FileChannel channel;
-    private volatile boolean permanentlyClosed;
+    private FileChannel channel;
+    private final AtomicBoolean permanentlyClosed = new AtomicBoolean(false);
     private volatile long lastAccessNanos;
     private ScheduledFuture<?> idleCheckFuture; // guarded by channelLock
 
@@ -166,7 +167,7 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
         try {
             return doRead(offset, actualLength, target);
         } catch (IOException e) {
-            if (!permanentlyClosed && isRecoverableError(e)) {
+            if (!permanentlyClosed.get() && isRecoverableError(e)) {
                 log.info("Recoverable I/O error on {}, retrying with fresh channel: {}", path, e.getMessage());
                 closeStaleChannel();
                 // Reset buffer state for retry
@@ -202,7 +203,7 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     private FileChannel ensureOpen() throws IOException {
-        if (permanentlyClosed) {
+        if (permanentlyClosed.get()) {
             throw new ClosedChannelException();
         }
         FileChannel ch = this.channel;
@@ -211,7 +212,7 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
         }
         channelLock.lock();
         try {
-            if (permanentlyClosed) {
+            if (permanentlyClosed.get()) {
                 throw new ClosedChannelException();
             }
             ch = this.channel;
@@ -252,7 +253,7 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     private void checkIdleAndClose() {
-        if (permanentlyClosed) {
+        if (permanentlyClosed.get()) {
             channelLock.lock();
             try {
                 cancelIdleCheck();
@@ -270,7 +271,7 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
     private void idleClose() {
         channelLock.lock();
         try {
-            if (permanentlyClosed) {
+            if (permanentlyClosed.get()) {
                 return;
             }
             FileChannel ch = this.channel;
@@ -325,7 +326,7 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
      */
     @Override
     public OptionalLong size() {
-        if (permanentlyClosed) {
+        if (permanentlyClosed.get()) {
             throw new IllegalStateException("FileRangeReader is closed");
         }
         return OptionalLong.of(this.size);
@@ -358,30 +359,16 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
      */
     @Override
     public void close() {
-        channelLock.lock();
-        try {
-            permanentlyClosed = true;
-            cancelIdleCheck();
-            FileChannel ch = this.channel;
-            this.channel = null;
-            closeQuietly(ch);
-        } finally {
-            channelLock.unlock();
+        if (permanentlyClosed.compareAndSet(false, true)) {
+            channelLock.lock();
+            try {
+                cancelIdleCheck();
+                FileChannel ch = this.channel;
+                this.channel = null;
+                closeQuietly(ch);
+            } finally {
+                channelLock.unlock();
+            }
         }
-    }
-
-    /**
-     * Creates a new FileRangeReader for the specified file path with the default idle timeout.
-     *
-     * <p>Package-private from 2.0; consumers should obtain a {@link RangeReader} via
-     * {@link io.tileverse.storage.StorageFactory#openRangeReader(java.net.URI)} or via
-     * {@link io.tileverse.storage.Storage#openRangeReader(String)} after opening a Storage on the parent path.
-     *
-     * @param path the file path
-     * @return a new FileRangeReader instance
-     * @throws IOException if an error occurs during construction
-     */
-    static FileRangeReader of(Path path) throws IOException {
-        return new FileRangeReader(path, DEFAULT_IDLE_TIMEOUT);
     }
 }

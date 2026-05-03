@@ -1,5 +1,5 @@
 /*
- * (c) Copyright 2025 Multiversio LLC. All rights reserved.
+ * (c) Copyright 2026 Multiversio LLC. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,48 +17,40 @@ package io.tileverse.storage.http;
 
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest.Builder;
-import lombok.NonNull;
+import java.util.Objects;
 
 /**
- * API Key Authentication implementation for HttpRangeReader.
+ * API Key Authentication implementation for {@link HttpRangeReader}.
  *
- * <p>This authenticator adds an API key header to requests, which is commonly used for API authentication. It supports
- * different header names and value formats.
+ * <p>Sends a single header with a configurable name and an optional value prefix (e.g. {@code "ApiKey "} or
+ * {@code "Token "}) before the key value.
  */
-public class ApiKeyAuthentication implements HttpAuthentication {
+public record ApiKeyAuthentication(String headerName, String apiKey, String valuePrefix) implements HttpAuthentication {
 
-    private final String headerName;
-    private final String apiKey;
-    private final String valuePrefix;
+    public ApiKeyAuthentication {
+        Objects.requireNonNull(headerName, "headerName cannot be null");
+        Objects.requireNonNull(apiKey, "apiKey cannot be null");
+        if (valuePrefix == null) {
+            valuePrefix = "";
+        }
+    }
 
     /**
-     * Creates a new API Key Authentication instance with a custom header name.
-     *
-     * @param headerName The name of the header to use (e.g., "X-API-Key")
-     * @param apiKey The API key value
+     * Convenience constructor for the no-prefix case. Equivalent to {@code new ApiKeyAuthentication(headerName, apiKey,
+     * "")}.
      */
     public ApiKeyAuthentication(String headerName, String apiKey) {
         this(headerName, apiKey, "");
     }
 
-    /**
-     * Creates a new API Key Authentication instance with custom header name and value prefix.
-     *
-     * <p>This is useful for APIs that require a specific format for the API key value, such as "ApiKey " or "Key "
-     * followed by the actual key.
-     *
-     * @param headerName The name of the header to use (e.g., "X-API-Key")
-     * @param apiKey The API key value
-     * @param valuePrefix An optional prefix for the API key value (e.g., "ApiKey ")
-     */
-    public ApiKeyAuthentication(@NonNull String headerName, @NonNull String apiKey, String valuePrefix) {
-        this.headerName = headerName;
-        this.apiKey = apiKey;
-        this.valuePrefix = valuePrefix != null ? valuePrefix : "";
-    }
-
     @Override
     public Builder authenticate(HttpClient httpClient, Builder requestBuilder) {
         return requestBuilder.header(headerName, valuePrefix + apiKey);
+    }
+
+    @Override
+    public HttpAuthFingerprint fingerprint() {
+        String canonical = "apikey:" + headerName + ":" + valuePrefix + ":" + apiKey;
+        return new HttpAuthFingerprint("apikey", HttpAuthFingerprint.sha256Hex(canonical));
     }
 }

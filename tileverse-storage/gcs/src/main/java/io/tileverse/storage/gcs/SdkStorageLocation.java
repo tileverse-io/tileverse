@@ -79,9 +79,8 @@ record SdkStorageLocation(String bucket, String prefix) {
     }
 
     String resolve(String relativeKey) {
-        if (relativeKey == null || relativeKey.isEmpty()) return prefix;
-        String r = relativeKey.startsWith("/") ? relativeKey.substring(1) : relativeKey;
-        return prefix + r;
+        io.tileverse.storage.Storage.requireSafeKey(relativeKey);
+        return prefix + relativeKey;
     }
 
     String relativize(String fullKey) {

@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.tileverse.storage.AccessDeniedException;
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.RangeReaderTestSupport;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -119,7 +120,7 @@ class HttpRangeReaderAuthenticationIT {
 
     @Test
     void publicAccess() throws IOException {
-        try (RangeReader reader = HttpRangeReader.of(publicFileUri)) {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(publicFileUri)) {
             assertEquals(TEST_FILE_SIZE, reader.size().orElseThrow(), "File size should match");
 
             ByteBuffer buffer = reader.readRange(0, 1024);
@@ -129,8 +130,8 @@ class HttpRangeReaderAuthenticationIT {
     }
 
     @Test
-    void basicAuthNoCredentials() {
-        try (HttpRangeReader reader = HttpRangeReader.of(basicAuthUri)) {
+    void basicAuthNoCredentials() throws IOException {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(basicAuthUri)) {
             assertThrows(
                     AccessDeniedException.class,
                     reader::size,
@@ -142,7 +143,7 @@ class HttpRangeReaderAuthenticationIT {
     void basicAuthWithCorrectCredentials() throws IOException {
         BasicAuthentication auth = new BasicAuthentication(BASIC_AUTH_USER, BASIC_AUTH_PASSWORD);
 
-        try (RangeReader reader = HttpRangeReader.of(basicAuthUri, auth)) {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(basicAuthUri, auth)) {
             assertEquals(TEST_FILE_SIZE, reader.size().orElseThrow(), "File size should match");
 
             ByteBuffer buffer = reader.readRange(0, 1024);
@@ -155,7 +156,7 @@ class HttpRangeReaderAuthenticationIT {
     void basicAuthWithIncorrectCredentials() {
         BasicAuthentication auth = new BasicAuthentication(BASIC_AUTH_USER, "wrongpassword");
 
-        HttpRangeReader reader = HttpRangeReader.of(basicAuthUri, auth);
+        RangeReader reader = RangeReaderTestSupport.httpReader(basicAuthUri, auth);
         assertThrows(
                 AccessDeniedException.class,
                 reader::size,
@@ -164,8 +165,8 @@ class HttpRangeReaderAuthenticationIT {
 
     @Test
     void basicAuthWithBuilder() throws IOException {
-        try (RangeReader reader =
-                HttpRangeReader.of(basicAuthUri, new BasicAuthentication(BASIC_AUTH_USER, BASIC_AUTH_PASSWORD))) {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(
+                basicAuthUri, new BasicAuthentication(BASIC_AUTH_USER, BASIC_AUTH_PASSWORD))) {
 
             assertEquals(TEST_FILE_SIZE, reader.size().orElseThrow(), "File size should match");
 
@@ -176,8 +177,8 @@ class HttpRangeReaderAuthenticationIT {
     }
 
     @Test
-    void digestNoCredentials() {
-        try (HttpRangeReader reader = HttpRangeReader.of(digestAuthUri)) {
+    void digestNoCredentials() throws IOException {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(digestAuthUri)) {
             assertThrows(
                     AccessDeniedException.class,
                     reader::size,
@@ -189,7 +190,7 @@ class HttpRangeReaderAuthenticationIT {
     void digestWithCorrectCredentials() throws IOException {
         DigestAuthentication auth = new DigestAuthentication(DIGEST_AUTH_USER, DIGEST_AUTH_PASSWORD);
 
-        try (RangeReader reader = HttpRangeReader.of(digestAuthUri, auth)) {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(digestAuthUri, auth)) {
             assertEquals(TEST_FILE_SIZE, reader.size().orElseThrow(), "File size should match");
 
             ByteBuffer buffer = reader.readRange(0, 1024);
@@ -201,7 +202,7 @@ class HttpRangeReaderAuthenticationIT {
     @Test
     void digestWithIncorrectCredentials() {
         DigestAuthentication auth = new DigestAuthentication(DIGEST_AUTH_USER, "wrongpassword");
-        HttpRangeReader reader = HttpRangeReader.of(digestAuthUri, auth);
+        RangeReader reader = RangeReaderTestSupport.httpReader(digestAuthUri, auth);
         assertThrows(
                 AccessDeniedException.class,
                 reader::size,
@@ -212,7 +213,7 @@ class HttpRangeReaderAuthenticationIT {
     void digestMultipleRangeRequests() throws IOException {
         DigestAuthentication auth = new DigestAuthentication(DIGEST_AUTH_USER, DIGEST_AUTH_PASSWORD);
 
-        try (RangeReader reader = HttpRangeReader.of(digestAuthUri, auth)) {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(digestAuthUri, auth)) {
             for (int i = 0; i < 5; i++) {
                 int offset = i * 5000;
                 int length = 1000;
@@ -225,8 +226,8 @@ class HttpRangeReaderAuthenticationIT {
     }
 
     @Test
-    void bearerTokenNoCredentials() {
-        try (HttpRangeReader reader = HttpRangeReader.of(bearerTokenUri)) {
+    void bearerTokenNoCredentials() throws IOException {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(bearerTokenUri)) {
             assertThrows(
                     AccessDeniedException.class,
                     reader::size,
@@ -238,7 +239,7 @@ class HttpRangeReaderAuthenticationIT {
     void bearerTokenWithCorrectToken() throws IOException {
         BearerTokenAuthentication auth = new BearerTokenAuthentication(BEARER_TOKEN);
 
-        try (RangeReader reader = HttpRangeReader.of(bearerTokenUri, auth)) {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(bearerTokenUri, auth)) {
             assertEquals(TEST_FILE_SIZE, reader.size().orElseThrow(), "File size should match");
 
             ByteBuffer buffer = reader.readRange(0, 1024);
@@ -251,7 +252,7 @@ class HttpRangeReaderAuthenticationIT {
     void bearerTokenWithIncorrectToken() {
         BearerTokenAuthentication auth = new BearerTokenAuthentication("wrong-token");
 
-        HttpRangeReader reader = HttpRangeReader.of(bearerTokenUri, auth);
+        RangeReader reader = RangeReaderTestSupport.httpReader(bearerTokenUri, auth);
         assertThrows(
                 AccessDeniedException.class,
                 reader::size,
@@ -260,7 +261,8 @@ class HttpRangeReaderAuthenticationIT {
 
     @Test
     void bearerTokenWithBuilder() throws IOException {
-        try (RangeReader reader = HttpRangeReader.of(bearerTokenUri, new BearerTokenAuthentication(BEARER_TOKEN))) {
+        try (RangeReader reader =
+                RangeReaderTestSupport.httpReader(bearerTokenUri, new BearerTokenAuthentication(BEARER_TOKEN))) {
 
             assertEquals(TEST_FILE_SIZE, reader.size().orElseThrow(), "File size should match");
 
@@ -271,8 +273,8 @@ class HttpRangeReaderAuthenticationIT {
     }
 
     @Test
-    void apiKeyNoCredentials() {
-        try (HttpRangeReader reader = HttpRangeReader.of(apiKeyUri)) {
+    void apiKeyNoCredentials() throws IOException {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(apiKeyUri)) {
             assertThrows(
                     AccessDeniedException.class,
                     reader::size,
@@ -283,7 +285,7 @@ class HttpRangeReaderAuthenticationIT {
     @Test
     void apiKeyWithCorrectKey() throws IOException {
         try (RangeReader reader =
-                HttpRangeReader.of(apiKeyUri, new ApiKeyAuthentication(API_KEY_HEADER, API_KEY, null))) {
+                RangeReaderTestSupport.httpReader(apiKeyUri, new ApiKeyAuthentication(API_KEY_HEADER, API_KEY, null))) {
             assertEquals(TEST_FILE_SIZE, reader.size().orElseThrow(), "File size should match");
 
             ByteBuffer buffer = reader.readRange(0, 1024);
@@ -293,9 +295,9 @@ class HttpRangeReaderAuthenticationIT {
     }
 
     @Test
-    void apiKeyWithIncorrectKey() {
-        try (HttpRangeReader reader =
-                HttpRangeReader.of(apiKeyUri, new ApiKeyAuthentication(API_KEY_HEADER, "wrong-key", null))) {
+    void apiKeyWithIncorrectKey() throws IOException {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(
+                apiKeyUri, new ApiKeyAuthentication(API_KEY_HEADER, "wrong-key", null))) {
             assertThrows(
                     AccessDeniedException.class,
                     reader::size,
@@ -306,7 +308,7 @@ class HttpRangeReaderAuthenticationIT {
     @Test
     void apiKeyWithBuilder() throws IOException {
         try (RangeReader reader =
-                HttpRangeReader.of(apiKeyUri, new ApiKeyAuthentication(API_KEY_HEADER, API_KEY, null))) {
+                RangeReaderTestSupport.httpReader(apiKeyUri, new ApiKeyAuthentication(API_KEY_HEADER, API_KEY, null))) {
 
             assertEquals(TEST_FILE_SIZE, reader.size().orElseThrow(), "File size should match");
 
@@ -317,8 +319,8 @@ class HttpRangeReaderAuthenticationIT {
     }
 
     @Test
-    void customHeaderNoCredentials() {
-        try (HttpRangeReader reader = HttpRangeReader.of(customHeaderUri)) {
+    void customHeaderNoCredentials() throws IOException {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(customHeaderUri)) {
             assertThrows(
                     AccessDeniedException.class,
                     reader::size,
@@ -332,7 +334,7 @@ class HttpRangeReaderAuthenticationIT {
         headers.put(CUSTOM_HEADER_NAME, CUSTOM_HEADER_VALUE);
         CustomHeaderAuthentication auth = new CustomHeaderAuthentication(headers);
 
-        try (RangeReader reader = HttpRangeReader.of(customHeaderUri, auth)) {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(customHeaderUri, auth)) {
             assertEquals(TEST_FILE_SIZE, reader.size().orElseThrow(), "File size should match");
 
             ByteBuffer buffer = reader.readRange(0, 1024);
@@ -346,7 +348,7 @@ class HttpRangeReaderAuthenticationIT {
         Map<String, String> headers = new HashMap<>();
         headers.put(CUSTOM_HEADER_NAME, "wrong-value");
         CustomHeaderAuthentication auth = new CustomHeaderAuthentication(headers);
-        HttpRangeReader reader = HttpRangeReader.of(customHeaderUri, auth);
+        RangeReader reader = RangeReaderTestSupport.httpReader(customHeaderUri, auth);
         assertThrows(
                 AccessDeniedException.class,
                 reader::size,
@@ -355,8 +357,8 @@ class HttpRangeReaderAuthenticationIT {
 
     @Test
     void testMultipleAuthenticatedRangeRequests() throws IOException {
-        try (RangeReader reader =
-                HttpRangeReader.of(basicAuthUri, new BasicAuthentication(BASIC_AUTH_USER, BASIC_AUTH_PASSWORD))) {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(
+                basicAuthUri, new BasicAuthentication(BASIC_AUTH_USER, BASIC_AUTH_PASSWORD))) {
             for (int i = 0; i < 5; i++) {
                 int offset = i * 5000;
                 int length = 1000;

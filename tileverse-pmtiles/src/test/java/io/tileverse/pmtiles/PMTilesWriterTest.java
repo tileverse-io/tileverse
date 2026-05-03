@@ -87,7 +87,7 @@ class PMTilesWriterTest {
 
         // Read the file back and verify the content
         @SuppressWarnings("resource")
-        PMTilesReader reader = new PMTilesReader(outputPath).cacheManager(cacheManager);
+        PMTilesReader reader = PMTilesReader.open(outputPath.toUri()).cacheManager(cacheManager);
         PMTilesHeader header = reader.getHeader();
 
         // Check header values
@@ -126,7 +126,7 @@ class PMTilesWriterTest {
 
         // Read the file back and verify
         @SuppressWarnings("resource")
-        PMTilesReader reader = new PMTilesReader(outputPath).cacheManager(cacheManager);
+        PMTilesReader reader = PMTilesReader.open(outputPath.toUri()).cacheManager(cacheManager);
         PMTilesHeader header = reader.getHeader();
 
         // Check header values
@@ -174,7 +174,7 @@ class PMTilesWriterTest {
         }
 
         // Read the file back and verify the metadata
-        PMTilesReader reader = new PMTilesReader(outputPath);
+        PMTilesReader reader = PMTilesReader.open(outputPath.toUri());
         String metadataString = reader.getMetadataAsString();
 
         // Verify metadata content

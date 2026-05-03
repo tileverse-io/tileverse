@@ -72,8 +72,8 @@
  *
  * <ul>
  *   <li>{@link io.tileverse.storage.spi} - {@link io.tileverse.storage.spi.StorageProvider} SPI for adding new
- *       backends; configuration types ({@link io.tileverse.storage.spi.StorageConfig},
- *       {@link io.tileverse.storage.spi.StorageParameter}).
+ *       backends; configuration types ({@link io.tileverse.storage.StorageConfig},
+ *       {@link io.tileverse.storage.StorageParameter}).
  * </ul>
  */
 @org.jspecify.annotations.NullMarked

@@ -96,7 +96,7 @@ class AzureBlobRangeReaderIT extends AbstractRangeReaderIT {
         URI containerUri = URI.create("http://localhost:%d/%s/%s/".formatted(port, ACCOUNT_NAME, CONTAINER_NAME));
         io.tileverse.storage.Storage storage = AzureBlobStorageProvider.open(containerUri, blobServiceClient);
         try {
-            return new io.tileverse.storage.spi.OwnedRangeReader(storage.openRangeReader(BLOB_NAME), storage);
+            return io.tileverse.storage.RangeReaderTestSupport.bundle(storage.openRangeReader(BLOB_NAME), storage);
         } catch (RuntimeException e) {
             try {
                 storage.close();

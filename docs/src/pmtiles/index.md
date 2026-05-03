@@ -27,12 +27,9 @@ The `PMTilesReader` accepts either a `RangeReader` or a `Supplier<SeekableByteCh
 ```java
 import io.tileverse.pmtiles.PMTilesHeader;
 import io.tileverse.pmtiles.PMTilesReader;
-import io.tileverse.storage.RangeReader;
-import io.tileverse.storage.StorageFactory;
 import java.nio.file.Path;
 
-try (RangeReader source = StorageFactory.openRangeReader(Path.of("data/map.pmtiles").toUri());
-        PMTilesReader reader = new PMTilesReader(source)) {
+try (PMTilesReader reader = PMTilesReader.open(Path.of("data/map.pmtiles").toUri())) {
     // Get metadata
     PMTilesHeader header = reader.getHeader();
     System.out.println("Min Zoom: " + header.minZoom());

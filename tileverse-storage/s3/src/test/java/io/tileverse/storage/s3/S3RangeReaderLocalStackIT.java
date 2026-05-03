@@ -16,10 +16,10 @@
 package io.tileverse.storage.s3;
 
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.RangeReaderTestSupport;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.it.AbstractRangeReaderIT;
 import io.tileverse.storage.it.TestUtil;
-import io.tileverse.storage.spi.OwnedRangeReader;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
@@ -99,7 +99,7 @@ class S3RangeReaderLocalStackIT extends AbstractRangeReaderIT {
         URI bucketUri = URI.create("s3://" + BUCKET_NAME + "/");
         Storage storage = S3StorageProvider.open(bucketUri, client);
         try {
-            return new OwnedRangeReader(storage.openRangeReader(KEY_NAME), storage);
+            return RangeReaderTestSupport.bundle(storage.openRangeReader(KEY_NAME), storage);
         } catch (RuntimeException e) {
             try {
                 storage.close();

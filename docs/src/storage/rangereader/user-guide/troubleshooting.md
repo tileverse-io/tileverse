@@ -91,10 +91,12 @@ export JAVA_HOME=/path/to/java17
 3. **Use IAM role** (on EC2/ECS):
    ```java
    // No explicit credentials needed - uses instance profile
-   var reader = S3RangeReader.builder()
-       .uri(URI.create("s3://bucket/key"))
-       .region(Region.US_WEST_2)
-       .build();
+   var props = new Properties();
+   props.setProperty("storage.s3.region", "us-west-2");
+   try (var storage = StorageFactory.open(URI.create("s3://bucket/"), props);
+           var reader = storage.openRangeReader("key")) {
+       // ...
+   }
    ```
 
 **Problem**: `S3Exception: Access Denied (Service: S3, Status Code: 403)`
@@ -123,10 +125,12 @@ export JAVA_HOME=/path/to/java17
 3. **Check region**:
    ```java
    // Ensure region matches bucket region
-   var reader = S3RangeReader.builder()
-       .uri(URI.create("s3://bucket/key"))
-       .region(Region.US_WEST_2)  // Correct region
-       .build();
+   var props = new Properties();
+   props.setProperty("storage.s3.region", "us-west-2");  // Correct region
+   try (var storage = StorageFactory.open(URI.create("s3://bucket/"), props);
+           var reader = storage.openRangeReader("key")) {
+       // ...
+   }
    ```
 
 ### Azure Blob Storage Authentication
@@ -276,25 +280,30 @@ export JAVA_HOME=/path/to/java17
 
 **Solutions**:
 
-1. **Increase timeouts**:
+1. **Increase timeouts via Properties**:
    ```java
-   var reader = HttpRangeReader.builder()
-       .uri(uri)
+   var props = new Properties();
+   props.setProperty("storage.http.timeout-millis", "30000");
+
+   try (var storage = StorageFactory.open(parent, props);
+           var reader = storage.openRangeReader(leaf)) {
+       // ...
+   }
+   ```
+
+2. **For deeper customization, build the HttpClient and inject it**:
+   ```java
+   HttpClient client = HttpClient.newBuilder()
        .connectTimeout(Duration.ofSeconds(30))
-       .readTimeout(Duration.ofMinutes(5))
        .build();
+
+   try (var storage = HttpStorageProvider.open(parent, client);
+           var reader = storage.openRangeReader(leaf)) {
+       // ...
+   }
    ```
 
-2. **Configure retries**:
-   ```java
-   var reader = HttpRangeReader.builder()
-       .uri(uri)
-       .maxRetries(3)
-       .retryDelay(Duration.ofSeconds(1))
-       .build();
-   ```
-
-3. **For S3, configure client**:
+3. **For S3, configure the client and inject it**:
    ```java
    var s3Client = S3Client.builder()
        .overrideConfiguration(ClientOverrideConfiguration.builder()
@@ -302,12 +311,11 @@ export JAVA_HOME=/path/to/java17
            .apiCallAttemptTimeout(Duration.ofSeconds(30))
            .build())
        .build();
-   
-   var reader = S3RangeReader.builder()
-       .client(s3Client)
-       .bucket("bucket")
-       .key("key")
-       .build();
+
+   try (var storage = S3StorageProvider.open(URI.create("s3://bucket/"), s3Client);
+           var reader = storage.openRangeReader("key")) {
+       // ...
+   }
    ```
 
 ### Proxy Configuration
@@ -348,10 +356,12 @@ export JAVA_HOME=/path/to/java17
 1. **For development only - disable SSL verification**:
    ```java
    // NOT recommended for production
-   var reader = HttpRangeReader.builder()
-       .uri(uri)
-       .trustAllCertificates(true)
-       .build();
+   var props = new Properties();
+   props.setProperty("storage.http.trust-all-certificates", "true");
+   try (var storage = StorageFactory.open(parent, props);
+           var reader = storage.openRangeReader(leaf)) {
+       // ...
+   }
    ```
 
 2. **Add custom certificate to truststore**:

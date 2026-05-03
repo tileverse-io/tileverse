@@ -73,7 +73,7 @@ class StorageFactoryTest {
 
     @Test
     void findProviderResolvesByUri(@TempDir Path tmp) {
-        io.tileverse.storage.spi.StorageConfig config = new io.tileverse.storage.spi.StorageConfig().uri(tmp.toUri());
+        io.tileverse.storage.StorageConfig config = new io.tileverse.storage.StorageConfig().baseUri(tmp.toUri());
         assertThat(StorageFactory.findProvider(config).getId()).isEqualTo("file");
     }
 
@@ -82,7 +82,8 @@ class StorageFactoryTest {
         byte[] payload = "hello tileverse".getBytes(StandardCharsets.UTF_8);
         Path file = tmp.resolve("greeting.bin");
         Files.write(file, payload);
-        try (RangeReader r = StorageFactory.openRangeReader(file.toUri())) {
+        try (Storage s = StorageFactory.open(tmp.toUri());
+                RangeReader r = s.openRangeReader(file.toUri())) {
             assertThat(r.size()).hasValue((long) payload.length);
             ByteBuffer buf = r.readRange(0, payload.length);
             buf.flip();
@@ -93,33 +94,23 @@ class StorageFactoryTest {
     }
 
     @Test
-    void openRangeReaderRejectsContainerUri(@TempDir Path tmp) {
-        // tmp.toUri() is a directory, not a leaf object.
-        assertThatThrownBy(() -> StorageFactory.openRangeReader(tmp.toUri()))
-                .isInstanceOfAny(IllegalArgumentException.class, IOException.class);
+    void openRangeReaderRejectsContainerUri(@TempDir Path tmp) throws IOException {
+        // tmp.toUri() is a directory, not a leaf object - the URI overload rejects it before any I/O.
+        try (Storage s = StorageFactory.open(tmp.toUri())) {
+            assertThatThrownBy(() -> s.openRangeReader(tmp.toUri())).isInstanceOf(IllegalArgumentException.class);
+        }
     }
 
     @Test
     void openRangeReaderHttpUriBuildsHttpReader() throws IOException {
         // No actual server needed - just verify the dispatch picks the HTTP provider
         // and constructs a reader. size() will fail to fetch but the construction works.
-        URI uri = URI.create("http://127.0.0.1:1/notthere/file.bin");
-        try (RangeReader r = StorageFactory.openRangeReader(uri)) {
+        URI parent = URI.create("http://127.0.0.1:1/notthere/");
+        URI leaf = parent.resolve("file.bin");
+        try (Storage s = StorageFactory.open(parent);
+                RangeReader r = s.openRangeReader(leaf)) {
             assertThat(r).isNotNull();
             assertThat(r.getSourceIdentifier()).contains("file.bin");
         }
-    }
-
-    @Test
-    void openRangeReaderClosesOwnedStorageOnClose(@TempDir Path tmp) throws IOException {
-        Files.write(tmp.resolve("x.bin"), new byte[] {1, 2, 3, 4});
-        RangeReader r = StorageFactory.openRangeReader(tmp.resolve("x.bin").toUri());
-        // Read once to verify the reader is functional, then close.
-        ByteBuffer buf = r.readRange(0, 4);
-        buf.flip();
-        assertThat(buf.remaining()).isEqualTo(4);
-        r.close();
-        // Idempotent close shouldn't blow up.
-        r.close();
     }
 }

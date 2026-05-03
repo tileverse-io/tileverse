@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.storage.spi;
+package io.tileverse.storage;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -64,14 +64,14 @@ class RangeReaderConfigTest {
 
     @Test
     void setParameter_legacyKey_readableAsCanonical() {
-        StorageConfig config = new StorageConfig().uri("file:///tmp/x.pmtiles");
+        StorageConfig config = new StorageConfig().baseUri("file:///tmp/x.pmtiles");
         config.setParameter("io.tileverse.rangereader.s3.region", "eu-west-1");
         assertThat(config.getParameter("storage.s3.region", String.class)).contains("eu-west-1");
     }
 
     @Test
     void setParameter_canonicalKey_readableAsLegacy() {
-        StorageConfig config = new StorageConfig().uri("file:///tmp/x.pmtiles");
+        StorageConfig config = new StorageConfig().baseUri("file:///tmp/x.pmtiles");
         config.setParameter("storage.azure.blob-name", "foo.pmtiles");
         assertThat(config.getParameter("io.tileverse.rangereader.azure.blob-name", String.class))
                 .contains("foo.pmtiles");
@@ -79,7 +79,7 @@ class RangeReaderConfigTest {
 
     @Test
     void setParameter_legacyProviderKey_populatesProviderId() {
-        StorageConfig config = new StorageConfig().uri("file:///tmp/x.pmtiles");
+        StorageConfig config = new StorageConfig().baseUri("file:///tmp/x.pmtiles");
         config.setParameter("io.tileverse.rangereader.provider", "s3");
         assertThat(config.providerId()).contains("s3");
     }
@@ -93,7 +93,7 @@ class RangeReaderConfigTest {
 
         StorageConfig config = StorageConfig.fromProperties(p);
 
-        assertThat(config.uri().toString()).isEqualTo("file:///tmp/x.pmtiles");
+        assertThat(config.baseUri().toString()).isEqualTo("file:///tmp/x.pmtiles");
         assertThat(config.providerId()).contains("s3");
         assertThat(config.getParameter("storage.s3.region", String.class)).contains("us-west-2");
     }
@@ -107,14 +107,14 @@ class RangeReaderConfigTest {
 
         StorageConfig config = StorageConfig.fromProperties(p);
 
-        assertThat(config.uri().toString()).isEqualTo("file:///tmp/x.pmtiles");
+        assertThat(config.baseUri().toString()).isEqualTo("file:///tmp/x.pmtiles");
         assertThat(config.providerId()).contains("s3");
         assertThat(config.getParameter("storage.s3.region", String.class)).contains("us-west-2");
     }
 
     @Test
     void toProperties_emitsOnlyCanonicalKeys() {
-        StorageConfig config = new StorageConfig().uri("file:///tmp/x.pmtiles");
+        StorageConfig config = new StorageConfig().baseUri("file:///tmp/x.pmtiles");
         config.setParameter("io.tileverse.rangereader.s3.region", "us-west-2");
         config.providerId("s3");
 

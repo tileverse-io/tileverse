@@ -134,7 +134,16 @@ final class FileStorage implements Storage {
     }
 
     Path resolve(String key) {
-        return root.resolve(key).normalize();
+        Storage.requireSafeKey(key);
+        Path resolved = root.resolve(key).normalize();
+        // Defense-in-depth: the lexical requireSafeKey check above catches '..' segments split on '/', but on Windows
+        // backslash is also a path separator that Path.resolve interprets, and a key whose normalized form is somehow
+        // outside root (symlink target, ".." that survived because of an unusual key shape) must still be rejected
+        // before we touch the filesystem.
+        if (!resolved.startsWith(root)) {
+            throw new IllegalArgumentException("Key escapes storage root: " + key);
+        }
+        return resolved;
     }
 
     @Override
@@ -163,6 +172,7 @@ final class FileStorage implements Storage {
     @Override
     public Stream<StorageEntry> list(String pattern, ListOptions options) {
         requireOpen();
+        Storage.requireSafePattern(pattern);
         StoragePattern parsed = StoragePattern.parse(pattern);
         Path base = parsed.prefix().isEmpty() ? root : resolve(parsed.prefix());
         if (!Files.exists(base)) {

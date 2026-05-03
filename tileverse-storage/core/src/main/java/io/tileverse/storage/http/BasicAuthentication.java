@@ -1,5 +1,5 @@
 /*
- * (c) Copyright 2025 Multiversio LLC. All rights reserved.
+ * (c) Copyright 2026 Multiversio LLC. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,46 +22,27 @@ import java.util.Base64;
 import java.util.Objects;
 
 /**
- * HTTP Basic Authentication implementation for HttpRangeReader.
+ * HTTP Basic Authentication implementation for {@link HttpRangeReader}.
  *
- * <p>This authenticator adds the standard HTTP Basic Authentication header to requests, which encodes username and
- * password in Base64.
+ * <p>Adds the standard {@code Authorization: Basic <base64(user:password)>} header to every request.
  */
-public class BasicAuthentication implements HttpAuthentication {
+public record BasicAuthentication(String username, String password) implements HttpAuthentication {
 
-    private final String username;
-
-    @SuppressWarnings("unused")
-    private final String password;
-
-    private final String encodedCredentials;
-
-    /**
-     * Creates a new Basic Authentication instance.
-     *
-     * @param username The username
-     * @param password The password
-     */
-    public BasicAuthentication(String username, String password) {
-        this.username = Objects.requireNonNull(username, "Username cannot be null");
-        this.password = Objects.requireNonNull(password, "Password cannot be null");
-
-        // Pre-compute the encoded credentials
-        String credentials = username + ":" + password;
-        this.encodedCredentials = Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
+    public BasicAuthentication {
+        Objects.requireNonNull(username, "Username cannot be null");
+        Objects.requireNonNull(password, "Password cannot be null");
     }
 
     @Override
     public Builder authenticate(HttpClient httpClient, Builder requestBuilder) {
-        return requestBuilder.header("Authorization", "Basic " + encodedCredentials);
+        String credentials = username + ":" + password;
+        String encoded = Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
+        return requestBuilder.header("Authorization", "Basic " + encoded);
     }
 
-    /**
-     * Gets the username.
-     *
-     * @return The username
-     */
-    public String getUsername() {
-        return username;
+    @Override
+    public HttpAuthFingerprint fingerprint() {
+        String canonical = "basic:" + username + ":" + password;
+        return new HttpAuthFingerprint("basic", HttpAuthFingerprint.sha256Hex(canonical));
     }
 }

@@ -24,6 +24,7 @@ import io.tileverse.io.IOFunction;
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageFactory;
 import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
@@ -34,14 +35,15 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+import lombok.NonNull;
 import org.apache.commons.io.IOUtils;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -82,34 +84,15 @@ import tools.jackson.databind.ObjectMapper;
 @NullMarked
 public class PMTilesReader implements AutoCloseable {
 
-    private final HilbertCurve hilbertCurve = new HilbertCurve();
+    private final @Nullable Storage ownedStorage;
+    private final RangeReader rangeReader;
 
-    @Nullable
-    private RangeReader rangeReader;
-
-    private final Supplier<SeekableByteChannel> channelSupplier;
-
-    private final String pmtilesUri;
-
+    private final HilbertCurve hilbertCurve;
     private final DirectoryCache directoryCache;
 
     private final PMTilesHeader header;
 
     private final PMTilesMetadata parsedMetadata;
-
-    /**
-     * Creates a new PMTilesReader for the specified file.
-     *
-     * <p>This constructor creates a {@code Supplier<SeekableByteChannel>} that will open and close the file upon each
-     * I/O operation.
-     *
-     * @param path the path to the PMTiles file
-     * @throws IOException if an I/O error occurs
-     * @throws InvalidHeaderException if the file has an invalid header
-     */
-    public PMTilesReader(Path path) throws IOException {
-        this(StorageFactory.openRangeReader(path.toUri()));
-    }
 
     /**
      * Creates a new PMTilesReader using the specified RangeReader.
@@ -124,9 +107,17 @@ public class PMTilesReader implements AutoCloseable {
      * @throws IOException if an I/O error occurs
      * @throws InvalidHeaderException if the file has an invalid header
      */
-    public PMTilesReader(RangeReader rangeReader) throws IOException {
-        this(rangeReader.getSourceIdentifier(), rangeReader::asByteChannel);
+    public PMTilesReader(@NonNull RangeReader rangeReader) throws IOException {
+        this(null, rangeReader);
+    }
+
+    private PMTilesReader(@Nullable Storage ownedStorage, @NonNull RangeReader rangeReader) throws IOException {
+        this.ownedStorage = ownedStorage;
         this.rangeReader = rangeReader;
+        this.header = PMTilesReader.readHeader(rangeReader);
+        this.hilbertCurve = new HilbertCurve();
+        this.directoryCache = new DirectoryCache(rangeReader.getSourceIdentifier(), header, rangeReader);
+        this.parsedMetadata = parseMetadata();
     }
 
     /**
@@ -143,43 +134,32 @@ public class PMTilesReader implements AutoCloseable {
      * @throws IOException if the URI cannot be opened
      */
     public static PMTilesReader open(URI uri) throws IOException {
-        String full = uri.toString();
-        int lastSlash = full.lastIndexOf('/');
-        if (lastSlash < 0 || lastSlash == full.length() - 1) {
-            throw new IllegalArgumentException("PMTiles URI must include a key: " + uri);
-        }
-        String key = full.substring(lastSlash + 1);
-        URI rootUri = URI.create(full.substring(0, lastSlash + 1));
-        Storage storage = StorageFactory.open(rootUri);
+        return open(new StorageConfig().baseUri(uri));
+    }
+
+    /**
+     * Opens a PMTiles file using a {@link StorageConfig} whose {@link StorageConfig#baseUri() baseUri} addresses the
+     * PMTiles leaf object. Backend-specific tuning (credentials, timeouts, caches) is taken from the supplied config.
+     * The leaf URI is split into a parent root and a tail key; a {@link Storage} is opened at the parent and the
+     * {@link RangeReader} for the tail is acquired from it. The {@code PMTilesReader} owns both and closes them on
+     * {@link #close()}.
+     *
+     * @param config configuration whose {@code baseUri} points at the PMTiles file
+     * @return a new {@code PMTilesReader}
+     * @throws IllegalArgumentException if {@code config.baseUri()} is null or has no key segment
+     * @throws IOException if the URI cannot be opened
+     */
+    @SuppressWarnings("java:S2095") // Storage and RangeReader owned and closed by the PMTilesReader
+    public static PMTilesReader open(StorageConfig config) throws IOException {
+        URI pmtilesUri = config.baseUri();
+        Objects.requireNonNull(pmtilesUri, "config.uri must be provided");
+        URI parent = parentOf(pmtilesUri);
+        StorageConfig parentConfig = config.copy().baseUri(parent);
+        Storage storage = StorageFactory.open(parentConfig);
         try {
-            RangeReader inner = storage.openRangeReader(key);
-            // Wrap so closing the PMTilesReader also closes the parent Storage.
-            return new PMTilesReader(new RangeReader() {
-                @Override
-                public java.util.OptionalLong size() {
-                    return inner.size();
-                }
-
-                @Override
-                public String getSourceIdentifier() {
-                    return inner.getSourceIdentifier();
-                }
-
-                @Override
-                public int readRange(long offset, int length, ByteBuffer target) {
-                    return inner.readRange(offset, length, target);
-                }
-
-                @Override
-                public void close() throws IOException {
-                    try {
-                        inner.close();
-                    } finally {
-                        storage.close();
-                    }
-                }
-            });
-        } catch (RuntimeException e) {
+            RangeReader reader = storage.openRangeReader(pmtilesUri);
+            return new PMTilesReader(storage, reader);
+        } catch (IOException | RuntimeException e) {
             try {
                 storage.close();
             } catch (IOException ignored) {
@@ -190,28 +170,18 @@ public class PMTilesReader implements AutoCloseable {
     }
 
     /**
-     * Creates a new PMTilesReader using the specified {@code channelSupplier}
+     * Returns the parent (container) URI of a leaf URI: the same scheme/authority with the last path segment stripped
+     * and a trailing slash kept.
      *
-     * <p>This constructor allows reading PMTiles from any source providing a {@link SeekableByteChannel} for each read
-     * operation.
-     *
-     * <p>Usually you'd use {@link RangeReader#asByteChannel() RangeReader::asByteChannel)}, though this constructor
-     * allows to use other data sources that don't implement {@code RangeReader}.
-     *
-     * @param pmtilesUri a unique identifier for the PMTiles source (e.g., file path or URI). This identifier is crucial
-     *     for caching, as it allows the internal {@link CacheManager} to share cache entries across multiple reader
-     *     instances pointing to the same resource.
-     * @param channelSupplier supplier of short-lived {@link SeekableByteChannel}s to use on each read operation
-     * @throws IOException if an I/O error occurs
-     * @throws InvalidHeaderException if the file has an invalid header
+     * @throws IllegalArgumentException if {@code uri} has no key segment to strip
      */
-    public PMTilesReader(String pmtilesUri, Supplier<SeekableByteChannel> channelSupplier) throws IOException {
-        requireNonNull(pmtilesUri);
-        this.channelSupplier = requireNonNull(channelSupplier, "rangeReaderSupplier cannot be null");
-        this.header = PMTilesReader.readHeader(channelSupplier);
-        this.directoryCache = new DirectoryCache(pmtilesUri, header, channelSupplier);
-        this.pmtilesUri = pmtilesUri;
-        this.parsedMetadata = parseMetadata();
+    private static URI parentOf(URI uri) {
+        String full = uri.toString();
+        int lastSlash = full.lastIndexOf('/');
+        if (lastSlash < 0 || lastSlash == full.length() - 1) {
+            throw new IllegalArgumentException("PMTiles URI must include a key: " + uri);
+        }
+        return URI.create(full.substring(0, lastSlash + 1));
     }
 
     static PMTilesHeader readHeader(Supplier<? extends ReadableByteChannel> channelSupplier) throws IOException {
@@ -222,8 +192,9 @@ public class PMTilesReader implements AutoCloseable {
 
     @Override
     public void close() throws IOException {
-        if (rangeReader != null) {
-            rangeReader.close();
+        rangeReader.close();
+        if (ownedStorage != null) {
+            ownedStorage.close();
         }
         directoryCache.invalidateAll();
     }
@@ -243,7 +214,7 @@ public class PMTilesReader implements AutoCloseable {
      * @return the unique URI or identifier provided at construction time.
      */
     public String getSourceIdentifier() {
-        return pmtilesUri;
+        return rangeReader.getSourceIdentifier();
     }
 
     /**
@@ -622,7 +593,7 @@ public class PMTilesReader implements AutoCloseable {
 
     private SeekableByteChannel channel() throws IOException {
         try {
-            return channelSupplier.get();
+            return rangeReader.get();
         } catch (UncheckedIOException e) {
             throw e.getCause();
         }

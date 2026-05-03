@@ -15,26 +15,23 @@
  */
 package io.tileverse.storage.gcs;
 
-import static io.tileverse.storage.spi.StorageParameter.SUBGROUP_AUTHENTICATION;
+import static io.tileverse.storage.StorageParameter.SUBGROUP_AUTHENTICATION;
 
-import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.spi.AbstractStorageProvider;
-import io.tileverse.storage.spi.StorageConfig;
-import io.tileverse.storage.spi.StorageParameter;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.Set;
 
 /**
  * {@link StorageProvider} implementation for Google Cloud Storage.
  *
- * <p>The {@link StorageConfig#uri() URI} is used to extract the bucket and object name from a GCS URI.
+ * <p>The {@link StorageConfig#baseUri() URI} is used to extract the bucket and object name from a GCS URI.
  *
  * <p>A GCS URL, or Google Cloud Storage Uniform Resource Locator, refers to the address used to access resources stored
  * within Google Cloud Storage. There are several forms of GCS URLs, depending on the context and desired access method:
@@ -206,12 +203,12 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
 
     @Override
     public boolean canProcess(StorageConfig config) {
-        URI uri = config.uri();
+        URI uri = config.baseUri();
         String scheme = uri.getScheme();
         if ("gs".equalsIgnoreCase(scheme)) {
-            return StorageConfig.matches(config, getId(), "gs");
+            return matches(config, "gs");
         }
-        if (!StorageConfig.matches(config, getId(), "http", "https")) {
+        if (!matches(config, "http", "https")) {
             return false;
         }
         return isRecognizedGcsHttpUri(uri);
@@ -246,9 +243,9 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
 
     @Override
     public Storage createStorage(StorageConfig config) {
-        URI uri = config.uri();
+        URI uri = config.baseUri();
         if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.uri() is required for GoogleCloudStorageStorage");
+            throw new IllegalArgumentException("StorageConfig.baseUri() is required for GoogleCloudStorageStorage");
         }
         SdkStorageLocation location = SdkStorageLocation.parse(uri);
         SdkStorageCache.Lease lease = clientCache.acquire(keyFor(config));
@@ -271,9 +268,9 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
      * explicitly enabled.
      */
     static SdkStorageCache.Key keyFor(StorageConfig config) {
-        URI uri = config.uri();
+        URI uri = config.baseUri();
         if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.uri() is required for GoogleCloudStorageStorage");
+            throw new IllegalArgumentException("StorageConfig.baseUri() is required for GoogleCloudStorageStorage");
         }
         Optional<String> projectId = config.getParameter(GCS_PROJECT_ID);
         Optional<String> hostOverride = config.getParameter(GCS_HOST).filter(s -> !s.isBlank());
@@ -289,32 +286,5 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
                 config.getParameter(GCS_USE_DEFAULT_APPLICTION_CREDENTIALS).orElse(true);
         boolean anonymous = !useDefaultCreds || hostOverride.isPresent();
         return new SdkStorageCache.Key(hostOverride, projectId, Optional.empty(), anonymous);
-    }
-
-    /**
-     * Strip {@code ?alt=media} (or any other query string) from the leaf URI before the default split-into-(parent,
-     * key) machinery runs. GCS REST-API URLs end in {@code ?alt=media} to fetch object content, but the query string is
-     * not part of the object name; without this scrub the default impl would try to stat a blob whose name literally
-     * contains the question mark.
-     */
-    @Override
-    public RangeReader openRangeReader(StorageConfig leafConfig) {
-        URI uri = leafConfig.uri();
-        if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.uri() is required");
-        }
-        if (uri.getRawQuery() == null && uri.getRawFragment() == null) {
-            return openRangeReaderViaStorage(leafConfig);
-        }
-        URI scrubbed;
-        try {
-            scrubbed =
-                    new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(), null /* query */, null /* fragment */);
-        } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Cannot strip query string from URI: " + uri, e);
-        }
-        Properties props = leafConfig.toProperties();
-        props.setProperty(StorageConfig.URI_KEY, scrubbed.toString());
-        return openRangeReaderViaStorage(StorageConfig.fromProperties(props));
     }
 }

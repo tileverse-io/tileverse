@@ -49,6 +49,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.channels.Channels;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -194,8 +195,11 @@ final class GoogleCloudStorage implements Storage {
     @Override
     public Stream<StorageEntry> list(String pattern, ListOptions options) {
         requireOpen();
+        Storage.requireSafePattern(pattern);
         StoragePattern parsed = StoragePattern.parse(pattern);
-        String fullPrefix = location.resolve(parsed.prefix());
+        // Skip resolve() because parsed.prefix() may be empty (legitimate root-listing); requireSafePattern above has
+        // already validated the pattern, so concatenating the bucket prefix directly is safe.
+        String fullPrefix = location.prefix() + parsed.prefix();
         Predicate<String> matcher = parsed.matcher().orElse(k -> true);
 
         List<BlobListOption> opts = new ArrayList<>();
@@ -271,6 +275,24 @@ final class GoogleCloudStorage implements Storage {
             throw new NotFoundException("Blob not found: gs://" + location.bucket() + "/" + location.resolve(key));
         }
         return new GoogleCloudStorageRangeReader(handle.client(), location.bucket(), location.resolve(key));
+    }
+
+    /**
+     * Strip the {@code ?alt=media} query string from the URI before the inherited validation runs. GCS REST-API URLs
+     * end in {@code ?alt=media} when fetching object content, but the query string is not part of the object name.
+     */
+    @Override
+    public String relativizeToKey(URI uri) {
+        if (uri != null && uri.getRawQuery() != null) {
+            try {
+                URI scrubbed = new URI(
+                        uri.getScheme(), uri.getAuthority(), uri.getPath(), null /* query */, uri.getRawFragment());
+                return Storage.super.relativizeToKey(scrubbed);
+            } catch (URISyntaxException e) {
+                throw new IllegalArgumentException("Cannot strip query string from URI: " + uri, e);
+            }
+        }
+        return Storage.super.relativizeToKey(uri);
     }
 
     @Override
@@ -505,6 +527,8 @@ final class GoogleCloudStorage implements Storage {
     }
 
     private StorageEntry.File copyInternal(String srcKey, GoogleCloudStorage dst, String dstKey, CopyOptions options) {
+        io.tileverse.storage.Storage.requireSafeKey(srcKey);
+        io.tileverse.storage.Storage.requireSafeKey(dstKey);
         if (options.ifNotExistsAtDestination() && dst.stat(dstKey).isPresent()) {
             throw new PreconditionFailedException("Destination already exists: " + dstKey);
         }

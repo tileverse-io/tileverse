@@ -15,16 +15,16 @@
  */
 package io.tileverse.storage.azure;
 
-import static io.tileverse.storage.spi.StorageParameter.SUBGROUP_AUTHENTICATION;
+import static io.tileverse.storage.StorageParameter.SUBGROUP_AUTHENTICATION;
 
 import com.azure.storage.blob.BlobClientBuilder;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobUrlParts;
 import com.azure.storage.common.StorageSharedKeyCredential;
 import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.spi.AbstractStorageProvider;
-import io.tileverse.storage.spi.StorageConfig;
-import io.tileverse.storage.spi.StorageParameter;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.time.Duration;
@@ -34,8 +34,8 @@ import java.util.Map;
 /**
  * {@link StorageProvider} implementation for Azure Blob Storage.
  *
- * <p>The {@link StorageConfig#uri() URI} is used to extract the account, container, and blob name from an Azure Blob
- * Storage URI.
+ * <p>The {@link StorageConfig#baseUri() URI} is used to extract the account, container, and blob name from an Azure
+ * Blob Storage URI.
  *
  * <p>An Azure Blob Storage URL, or Uniform Resource Locator, refers to the address used to access resources stored
  * within Azure Blob Storage. There are several forms of Azure Blob Storage URLs, depending on the context and desired
@@ -64,43 +64,9 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
      * </pre>
      */
     public static final String ENABLED_KEY = "IO_TILEVERSE_STORAGE_AZURE";
+
     /** This range reader implementation's {@link #getId() unique identifier} */
     public static final String ID = "azure";
-
-    /**
-     * Creates a new AzureBlobRangeReaderProvider with support for caching parameters
-     *
-     * @see AbstractStorageProvider#MEMORY_CACHE_ENABLED
-     * @see AbstractStorageProvider#MEMORY_CACHE_BLOCK_ALIGNED
-     * @see AbstractStorageProvider#MEMORY_CACHE_BLOCK_SIZE
-     */
-    public AzureBlobStorageProvider() {
-        super(true);
-    }
-
-    /**
-     * Opens a {@link Storage} backed by the supplied {@link BlobServiceClient}, bypassing the SPI configuration path.
-     * Useful for Spring-managed clients, Azurite fixtures, or custom retry-policy configurations expressed via the
-     * typed {@code RequestRetryOptions} (which the SPI parameter set does not cover).
-     *
-     * <p>The returned {@code Storage} <b>borrows</b> the supplied client; closing the {@code Storage} does NOT close
-     * the client. The caller retains ownership.
-     *
-     * @param uri canonical Azure Blob URI down to the container (e.g.
-     *     {@code https://account.blob.core.windows.net/container/[prefix/]})
-     * @param client a pre-configured Blob service client; not closed by the returned {@code Storage}
-     * @return a borrowed-client {@code AzureBlobStorage}
-     */
-    public static Storage open(URI uri, BlobServiceClient client) {
-        if (uri == null) {
-            throw new IllegalArgumentException("uri");
-        }
-        if (client == null) {
-            throw new IllegalArgumentException("client");
-        }
-        AzureBlobLocation location = AzureBlobLocation.parse(uri);
-        return new AzureBlobStorage(uri, location, new BorrowedAzureHandle(client));
-    }
 
     /**
      * Set the blob name if the endpoint points to the account url
@@ -253,16 +219,39 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
             AZURE_MAX_RETRY_DELAY,
             AZURE_TRY_TIMEOUT);
 
-    static AzureRetryConfig retryFromConfig(StorageConfig config) {
-        return new AzureRetryConfig(
-                config.getParameter(AZURE_MAX_RETRIES)
-                        .orElseGet(() -> AZURE_MAX_RETRIES.defaultValue().orElseThrow()),
-                config.getParameter(AZURE_RETRY_DELAY)
-                        .orElseGet(() -> AZURE_RETRY_DELAY.defaultValue().orElseThrow()),
-                config.getParameter(AZURE_MAX_RETRY_DELAY)
-                        .orElseGet(() -> AZURE_MAX_RETRY_DELAY.defaultValue().orElseThrow()),
-                config.getParameter(AZURE_TRY_TIMEOUT)
-                        .orElseGet(() -> AZURE_TRY_TIMEOUT.defaultValue().orElseThrow()));
+    /**
+     * Creates a new AzureBlobRangeReaderProvider with support for caching parameters
+     *
+     * @see AbstractStorageProvider#MEMORY_CACHE_ENABLED
+     * @see AbstractStorageProvider#MEMORY_CACHE_BLOCK_ALIGNED
+     * @see AbstractStorageProvider#MEMORY_CACHE_BLOCK_SIZE
+     */
+    public AzureBlobStorageProvider() {
+        super(true);
+    }
+
+    /**
+     * Opens a {@link Storage} backed by the supplied {@link BlobServiceClient}, bypassing the SPI configuration path.
+     * Useful for Spring-managed clients, Azurite fixtures, or custom retry-policy configurations expressed via the
+     * typed {@code RequestRetryOptions} (which th e SPI parameter set does not cover).
+     *
+     * <p>The returned {@code Storage} <b>borrows</b> the supplied client; closing the {@code Storage} does NOT close
+     * the client. The caller retains ownership.
+     *
+     * @param uri canonical Azure Blob URI down to the container (e.g.
+     *     {@code https://account.blob.core.windows.net/container/[prefix/]})
+     * @param client a pre-configured Blob service client; not closed by the returned {@code Storage}
+     * @return a borrowed-client {@code AzureBlobStorage}
+     */
+    public static Storage open(URI uri, BlobServiceClient client) {
+        if (uri == null) {
+            throw new IllegalArgumentException("uri");
+        }
+        if (client == null) {
+            throw new IllegalArgumentException("client");
+        }
+        AzureBlobLocation location = AzureBlobLocation.parse(uri);
+        return new AzureBlobStorage(uri, location, new BorrowedAzureHandle(client));
     }
 
     @Override
@@ -292,10 +281,10 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
 
     @Override
     public boolean canProcess(StorageConfig config) {
-        if (!StorageConfig.matches(config, getId(), "https", "http", "az")) {
+        if (!matches(config, "https", "http", "az")) {
             return false;
         }
-        URI uri = config.uri();
+        URI uri = config.baseUri();
         if (uri == null) {
             return false;
         }
@@ -341,9 +330,9 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
 
     @Override
     public Storage createStorage(StorageConfig config) {
-        URI uri = config.uri();
+        URI uri = config.baseUri();
         if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.uri() is required for AzureBlobStorage");
+            throw new IllegalArgumentException("StorageConfig.baseUri() is required for AzureBlobStorage");
         }
         AzureBlobLocation location = AzureBlobLocation.parse(uri);
         AzureClientCache.Lease lease = clientCache.acquire(keyFor(config, location));
@@ -365,5 +354,17 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
                 config.getParameter(AZURE_CONNECTION_STRING),
                 anonymous,
                 retryFromConfig(config));
+    }
+
+    static AzureRetryConfig retryFromConfig(StorageConfig config) {
+        return new AzureRetryConfig(
+                config.getParameter(AZURE_MAX_RETRIES)
+                        .orElseGet(() -> AZURE_MAX_RETRIES.defaultValue().orElseThrow()),
+                config.getParameter(AZURE_RETRY_DELAY)
+                        .orElseGet(() -> AZURE_RETRY_DELAY.defaultValue().orElseThrow()),
+                config.getParameter(AZURE_MAX_RETRY_DELAY)
+                        .orElseGet(() -> AZURE_MAX_RETRY_DELAY.defaultValue().orElseThrow()),
+                config.getParameter(AZURE_TRY_TIMEOUT)
+                        .orElseGet(() -> AZURE_TRY_TIMEOUT.defaultValue().orElseThrow()));
     }
 }

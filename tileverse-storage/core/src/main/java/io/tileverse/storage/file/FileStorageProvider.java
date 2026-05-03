@@ -16,12 +16,10 @@
 package io.tileverse.storage.file;
 
 import io.tileverse.storage.Storage;
-import io.tileverse.storage.StorageException;
+import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.spi.AbstractStorageProvider;
-import io.tileverse.storage.spi.StorageConfig;
-import io.tileverse.storage.spi.StorageParameter;
 import io.tileverse.storage.spi.StorageProvider;
-import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,9 +29,13 @@ import java.util.List;
 
 /**
  * {@link StorageProvider} implementation for the local filesystem. Selects on {@code file:} URIs (or filesystem paths
- * convertible to one) and produces a {@link FileStorage} rooted at the given directory or single file. The opened
- * Storage supports the full read/write surface (stat, list, openRangeReader, read, put, delete, copy/move) backed by
- * NIO; presigned URLs are not applicable.
+ * convertible to one) and produces a {@link FileStorage} rooted at an existing directory. The opened Storage supports
+ * the full read/write surface (stat, list, openRangeReader, read, put, delete, copy/move) backed by NIO; presigned URLs
+ * are not applicable.
+ *
+ * <p>The URI must point to an existing directory. URIs that resolve to a regular file are rejected (use the parent
+ * directory and address the file via {@code openRangeReader(key)} or {@code openRangeReader(URI)}). URIs that resolve
+ * to a non-existent path are rejected (the provider does not auto-create the directory).
  */
 public class FileStorageProvider extends AbstractStorageProvider {
 
@@ -99,24 +101,23 @@ public class FileStorageProvider extends AbstractStorageProvider {
 
     @Override
     public boolean canProcess(StorageConfig config) {
-        return StorageConfig.matches(config, getId(), "file", null);
+        return matches(config, "file", null);
     }
 
     @Override
     public Storage createStorage(StorageConfig config) {
-        URI uri = config.uri();
+        URI uri = config.baseUri();
         if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.uri() is required for FileStorage");
+            throw new IllegalArgumentException("StorageConfig.baseUri() is required for FileStorage");
         }
         Path root = Paths.get(uri);
-        if (Files.exists(root) && !Files.isDirectory(root)) {
-            // URI points at a single file; use its parent as the root prefix.
-            root = root.getParent();
+        if (!Files.exists(root)) {
+            throw new IllegalArgumentException(
+                    "Storage URI must point to an existing directory: " + root + " (provider does not auto-create)");
         }
-        try {
-            Files.createDirectories(root);
-        } catch (IOException e) {
-            throw new StorageException("Could not create storage root directory: " + root, e);
+        if (!Files.isDirectory(root)) {
+            throw new IllegalArgumentException("Storage URI must be a directory, got file: " + root
+                    + " (use the parent directory and address the file via openRangeReader(key))");
         }
         Duration idleTimeout = config.getParameter(FILE_IDLE_TIMEOUT)
                 .orElseGet(() -> FILE_IDLE_TIMEOUT.defaultValue().orElseThrow());

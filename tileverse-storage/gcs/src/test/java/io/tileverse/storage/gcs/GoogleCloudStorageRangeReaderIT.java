@@ -127,7 +127,7 @@ public class GoogleCloudStorageRangeReaderIT extends AbstractRangeReaderIT {
         java.net.URI bucketUri = java.net.URI.create("gs://" + BUCKET_NAME + "/");
         io.tileverse.storage.Storage tileverseStorage = GoogleCloudStorageProvider.open(bucketUri, gcsClient);
         try {
-            return new io.tileverse.storage.spi.OwnedRangeReader(
+            return io.tileverse.storage.RangeReaderTestSupport.bundle(
                     tileverseStorage.openRangeReader(OBJECT_NAME), tileverseStorage);
         } catch (RuntimeException e) {
             try {

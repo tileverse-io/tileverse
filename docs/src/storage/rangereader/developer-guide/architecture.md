@@ -40,9 +40,9 @@ This abstract class handles the boilerplate:
 These classes implement the actual network/disk I/O:
 
 *   **`FileRangeReader`**: Wraps `FileChannel`. Uses OS page cache.
-*   **`HttpRangeReader`**: Uses `java.net.http.HttpClient` to issue `GET` requests with `Range` headers.
-*   **`S3RangeReader`**: Wraps AWS SDK v2. Maps exceptions to standard `IOException`.
-*   **`Azure` / `GCS`**: Similar wrappers for their respective SDKs.
+*   **`HttpRangeReader`**: Uses `java.net.http.HttpClient` to issue `GET` requests with `Range` headers. The `HttpClient` is refcounted at the `HttpStorage` level (via `HttpClientCache`) and shared across sibling readers; per-reader `close()` is a no-op, mirroring `S3` / `Azure` / `GCS`. The client shuts down only when the last `HttpStorage` holding a lease closes.
+*   **`S3RangeReader`**: Wraps AWS SDK v2. Maps exceptions to standard `IOException`. Uses an `S3Client` refcounted by `S3ClientCache` at the `S3Storage` level.
+*   **`Azure` / `GCS`**: Similar wrappers for their respective SDKs, with matching refcounted client caches.
 
 ### Decorator Layer
 We use the Decorator pattern to add behaviors without modifying backends.

@@ -179,7 +179,10 @@ class CloudStorageIntegrationTest {
         Properties props = new Properties();
         props.setProperty("storage.http.trust-all-certificates", "true");
 
-        try (RangeReader baseReader = StorageFactory.openRangeReader(httpUri, props);
+        String full = httpUri.toString();
+        URI parent = URI.create(full.substring(0, full.lastIndexOf('/') + 1));
+        try (io.tileverse.storage.Storage storage = StorageFactory.open(parent, props);
+                RangeReader baseReader = storage.openRangeReader(httpUri);
                 RangeReader rangeReader = CachingRangeReader.builder(baseReader).build()) {
 
             PMTilesReader pmTilesReader = new PMTilesReader(rangeReader);

@@ -1,5 +1,5 @@
 /*
- * (c) Copyright 2025 Multiversio LLC. All rights reserved.
+ * (c) Copyright 2026 Multiversio LLC. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,26 +20,23 @@ import java.net.http.HttpRequest.Builder;
 import java.util.Objects;
 
 /**
- * HTTP Bearer Token Authentication implementation for HttpRangeReader.
+ * HTTP Bearer Token Authentication implementation for {@link HttpRangeReader}.
  *
- * <p>This authenticator adds the standard Bearer token Authorization header to requests, which is commonly used for
- * OAuth and JWT tokens.
+ * <p>Adds {@code Authorization: Bearer <token>} to every request. Used for OAuth 2.0 and JWT-based schemes.
  */
-public class BearerTokenAuthentication implements HttpAuthentication {
+public record BearerTokenAuthentication(String token) implements HttpAuthentication {
 
-    private final String token;
-
-    /**
-     * Creates a new Bearer Token Authentication instance.
-     *
-     * @param token The bearer token
-     */
-    public BearerTokenAuthentication(String token) {
-        this.token = Objects.requireNonNull(token, "Token cannot be null");
+    public BearerTokenAuthentication {
+        Objects.requireNonNull(token, "Token cannot be null");
     }
 
     @Override
     public Builder authenticate(HttpClient httpClient, Builder requestBuilder) {
         return requestBuilder.header("Authorization", "Bearer " + token);
+    }
+
+    @Override
+    public HttpAuthFingerprint fingerprint() {
+        return new HttpAuthFingerprint("bearer", HttpAuthFingerprint.sha256Hex("bearer:" + token));
     }
 }

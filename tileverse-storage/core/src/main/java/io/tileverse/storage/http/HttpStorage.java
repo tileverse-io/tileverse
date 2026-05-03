@@ -56,26 +56,21 @@ import java.util.stream.Stream;
 final class HttpStorage implements Storage {
 
     private final URI baseUri;
-    private final HttpClient client;
+    private final HttpClientHandle clientHandle;
     private final HttpAuthentication authentication;
     private final StorageCapabilities capabilities;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    HttpStorage(URI baseUri, HttpClient client) {
-        this(baseUri, client, HttpAuthentication.NONE);
-    }
-
     /**
-     * Construct an {@code HttpStorage} that reuses {@code client} and applies {@code authentication} to every request
-     * issued by {@link #stat}, {@link #read(String, ReadOptions)}, and the {@link HttpRangeReader} returned by
-     * {@link #openRangeReader}. The authentication and the underlying {@code HttpClient} (which may carry
-     * pre-configured SSL trust, connection timeout, and proxy settings) outlive any per-key reader; they're released
-     * when this {@code Storage} is closed.
+     * Construct an {@code HttpStorage} that uses the {@link HttpClient} carried by {@code clientHandle} and applies
+     * {@code authentication} to every request issued by {@link #stat}, {@link #read(String, ReadOptions)}, and the
+     * {@link HttpRangeReader} returned by {@link #openRangeReader}. {@link #close()} closes the handle (which either
+     * releases a cache lease or is a no-op for borrowed clients).
      */
-    HttpStorage(URI baseUri, HttpClient client, HttpAuthentication authentication) {
+    HttpStorage(URI baseUri, HttpClientHandle clientHandle, HttpAuthentication authentication) {
         if (baseUri == null) throw new IllegalArgumentException("baseUri required");
         this.baseUri = baseUri;
-        this.client = client == null ? HttpClient.newHttpClient() : client;
+        this.clientHandle = clientHandle;
         this.authentication = authentication == null ? HttpAuthentication.NONE : authentication;
         this.capabilities = StorageCapabilities.builder()
                 .rangeReads(true)
@@ -97,11 +92,13 @@ final class HttpStorage implements Storage {
 
     @Override
     public void close() {
-        closed.set(true);
+        if (closed.compareAndSet(false, true)) {
+            clientHandle.close();
+        }
     }
 
     HttpClient client() {
-        return client;
+        return clientHandle.client();
     }
 
     @Override
@@ -112,7 +109,7 @@ final class HttpStorage implements Storage {
                         HttpRequest.newBuilder(uri).method("HEAD", HttpRequest.BodyPublishers.noBody()))
                 .build();
         try {
-            HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
+            HttpResponse<Void> response = client().send(request, HttpResponse.BodyHandlers.discarding());
             if (response.statusCode() == 404 || response.statusCode() == 405) {
                 return Optional.empty();
             }
@@ -136,7 +133,7 @@ final class HttpStorage implements Storage {
     @Override
     public RangeReader openRangeReader(String key) {
         requireOpen();
-        return new HttpRangeReader(resolve(key), client, authentication);
+        return new HttpRangeReader(resolve(key), client(), authentication);
     }
 
     @Override
@@ -145,7 +142,7 @@ final class HttpStorage implements Storage {
         URI uri = resolve(key);
         HttpRequest request = buildGetRequest(uri, options);
         try {
-            HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            HttpResponse<InputStream> response = client().send(request, HttpResponse.BodyHandlers.ofInputStream());
             throwOnErrorStatus(uri, response);
             StorageEntry.File metadata = metadataFromHeaders(key, response);
             return new ReadHandle(response.body(), metadata);
@@ -214,6 +211,7 @@ final class HttpStorage implements Storage {
     }
 
     private URI resolve(String key) {
+        Storage.requireSafeKey(key);
         String base = baseUri.toString();
         if (!base.endsWith("/")) {
             base = base + "/";
@@ -223,7 +221,7 @@ final class HttpStorage implements Storage {
     }
 
     private HttpRequest.Builder authenticated(HttpRequest.Builder builder) {
-        return authentication.authenticate(client, builder);
+        return authentication.authenticate(client(), builder);
     }
 
     private HttpRequest buildGetRequest(URI uri, ReadOptions options) {

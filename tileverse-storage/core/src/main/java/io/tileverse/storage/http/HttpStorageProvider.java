@@ -15,24 +15,16 @@
  */
 package io.tileverse.storage.http;
 
-import static io.tileverse.storage.spi.StorageParameter.SUBGROUP_AUTHENTICATION;
+import static io.tileverse.storage.StorageParameter.SUBGROUP_AUTHENTICATION;
 
-import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.spi.AbstractStorageProvider;
-import io.tileverse.storage.spi.StorageConfig;
-import io.tileverse.storage.spi.StorageParameter;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.net.http.HttpClient;
-import java.security.GeneralSecurityException;
-import java.security.SecureRandom;
-import java.security.cert.X509Certificate;
-import java.time.Duration;
 import java.util.Optional;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 
 /**
  * {@link StorageProvider} implementation for read-only HTTP/HTTPS origins. Produces an {@link HttpStorage} that exposes
@@ -326,7 +318,7 @@ public class HttpStorageProvider extends AbstractStorageProvider {
 
     @Override
     public boolean canProcess(StorageConfig config) {
-        return StorageConfig.matches(config, getId(), "http", "https");
+        return matches(config, "http", "https");
     }
 
     /**
@@ -358,74 +350,24 @@ public class HttpStorageProvider extends AbstractStorageProvider {
      * @return a borrowed-client {@code HttpStorage}
      */
     public static Storage open(URI baseUri, HttpClient client, HttpAuthentication authentication) {
-        return new HttpStorage(baseUri, client, authentication);
+        return new HttpStorage(baseUri, new BorrowedHttpHandle(client), authentication);
     }
 
     @Override
     public Storage createStorage(StorageConfig config) {
-        URI uri = config.uri();
+        URI uri = config.baseUri();
         if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.uri() is required for HttpStorage");
+            throw new IllegalArgumentException("StorageConfig.baseUri() is required for HttpStorage");
         }
-        return new HttpStorage(uri, buildClient(config), buildAuthentication(config));
+        HttpClientCache.Lease lease = HttpClientCache.INSTANCE.acquire(cacheKeyFor(config));
+        return new HttpStorage(uri, new LeasedHttpHandle(lease), buildAuthentication(config));
     }
 
-    @Override
-    public RangeReader openRangeReader(StorageConfig leafConfig) {
-        URI uri = leafConfig.uri();
-        if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.uri() is required");
-        }
-        // HTTP doesn't have a container concept; build a reader directly against the leaf URL. The Java HttpClient
-        // doesn't need explicit close, so no OwnedRangeReader wrapping is required.
-        return new HttpRangeReader(uri, buildClient(leafConfig), buildAuthentication(leafConfig));
-    }
-
-    private static HttpClient buildClient(StorageConfig config) {
-        HttpClient.Builder clientBuilder = HttpClient.newBuilder();
-        config.getParameter(HTTP_CONNECTION_TIMEOUT_MILLIS)
-                .map(Duration::ofMillis)
-                .ifPresent(clientBuilder::connectTimeout);
-        if (config.getParameter(HTTP_TRUST_ALL_SSL_CERTIFICATES).orElse(false)) {
-            clientBuilder.sslContext(trustAllSslContext());
-        }
-        return clientBuilder.build();
-    }
-
-    /**
-     * Builds an {@link SSLContext} that accepts any server certificate without chain validation. Only used when
-     * {@link #HTTP_TRUST_ALL_SSL_CERTIFICATES} is enabled (development-only escape hatch for self-signed certs whose
-     * issuing CA isn't in the JDK truststore).
-     *
-     * <p>Note: this disables the certificate-chain check only, not hostname verification. JDK {@link HttpClient}
-     * applies endpoint identification ({@code SSLParameters.endpointIdentificationAlgorithm = "HTTPS"}) regardless, so
-     * a self-signed cert whose subject doesn't match the request host still fails. Importing the cert into a truststore
-     * is the more robust fix for any non-throwaway use; this method exists for the snake-oil-cert case.
-     */
-    private static SSLContext trustAllSslContext() {
-        TrustManager trustAll = new X509TrustManager() {
-            @Override
-            public void checkClientTrusted(X509Certificate[] chain, String authType) {
-                // no-op: accept any client cert (we are the client; this method is unused here)
-            }
-
-            @Override
-            public void checkServerTrusted(X509Certificate[] chain, String authType) {
-                // no-op: accept any server cert without chain validation (the whole point of trust-all)
-            }
-
-            @Override
-            public X509Certificate[] getAcceptedIssuers() {
-                return new X509Certificate[0];
-            }
-        };
-        try {
-            SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(null, new TrustManager[] {trustAll}, new SecureRandom());
-            return sslContext;
-        } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("Failed to configure trust-all SSL context", e);
-        }
+    private static HttpClientCache.Key cacheKeyFor(StorageConfig config) {
+        int timeoutMillis = config.getParameter(HTTP_CONNECTION_TIMEOUT_MILLIS)
+                .orElseGet(() -> HTTP_CONNECTION_TIMEOUT_MILLIS.defaultValue().orElseThrow());
+        boolean trustAll = config.getParameter(HTTP_TRUST_ALL_SSL_CERTIFICATES).orElse(false);
+        return new HttpClientCache.Key(timeoutMillis, trustAll);
     }
 
     private static HttpAuthentication buildAuthentication(StorageConfig config) {

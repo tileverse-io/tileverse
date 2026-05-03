@@ -18,8 +18,8 @@ package io.tileverse.storage.azure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import io.tileverse.storage.spi.StorageConfig;
-import io.tileverse.storage.spi.StorageParameter;
+import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.util.List;
@@ -32,19 +32,19 @@ class AzureBlobStorageProviderTest {
 
     @Test
     void canProcessAcceptsContainerOnlyUri() {
-        assertThat(provider.canProcess(new StorageConfig().uri("https://acct.blob.core.windows.net/my-container")))
+        assertThat(provider.canProcess(new StorageConfig().baseUri("https://acct.blob.core.windows.net/my-container")))
                 .isTrue();
         assertThat(provider.canProcess(
-                        new StorageConfig().uri("https://acct.blob.core.windows.net/my-container/prefix/")))
+                        new StorageConfig().baseUri("https://acct.blob.core.windows.net/my-container/prefix/")))
                 .isTrue();
         assertThat(provider.canProcess(
-                        new StorageConfig().uri("https://acct.blob.core.windows.net/my-container/blob.bin")))
+                        new StorageConfig().baseUri("https://acct.blob.core.windows.net/my-container/blob.bin")))
                 .isTrue();
     }
 
     @Test
     void canProcessRejectsHostWithoutContainer() {
-        assertThat(provider.canProcess(new StorageConfig().uri("https://acct.blob.core.windows.net/")))
+        assertThat(provider.canProcess(new StorageConfig().baseUri("https://acct.blob.core.windows.net/")))
                 .isFalse();
     }
 
@@ -77,34 +77,34 @@ class AzureBlobStorageProviderTest {
 
         assertThrows(NullPointerException.class, () -> provider.canProcess(null));
 
-        assertThat(provider.canProcess(config.uri("https://account.blob.core.windows.net/container/blob.pmtiles")))
+        assertThat(provider.canProcess(config.baseUri("https://account.blob.core.windows.net/container/blob.pmtiles")))
                 .isTrue();
-        assertThat(provider.canProcess(config.uri("http://127.0.0.1:10000/account/container/blob.pmtiles")))
+        assertThat(provider.canProcess(config.baseUri("http://127.0.0.1:10000/account/container/blob.pmtiles")))
                 .isTrue();
 
         // Container-only URIs on real Azure blob hosts are now accepted (Storage use case);
         // the AZURE_BLOB_NAME parameter is no longer required to claim these URIs.
-        assertThat(provider.canProcess(config.uri("https://account.blob.core.windows.net/container")))
+        assertThat(provider.canProcess(config.baseUri("https://account.blob.core.windows.net/container")))
                 .isTrue();
-        assertThat(provider.canProcess(config.uri("https://account.blob.core.windows.net/container")
+        assertThat(provider.canProcess(config.baseUri("https://account.blob.core.windows.net/container")
                         .setParameter(AzureBlobStorageProvider.AZURE_BLOB_NAME.key(), "root-blob.pmtiles")))
                 .isTrue();
 
-        assertThat(provider.canProcess(config.uri("ftp://account.blob.core.windows.net/container/blob.pmtiles")))
+        assertThat(provider.canProcess(config.baseUri("ftp://account.blob.core.windows.net/container/blob.pmtiles")))
                 .isFalse();
-        assertThat(provider.canProcess(config.uri("https://example.com"))).isFalse();
+        assertThat(provider.canProcess(config.baseUri("https://example.com"))).isFalse();
     }
 
     @Test
     void canProcessAcceptsAzScheme() {
-        assertThat(provider.canProcess(new StorageConfig().uri("az://overturemapswestus2/release")))
+        assertThat(provider.canProcess(new StorageConfig().baseUri("az://overturemapswestus2/release")))
                 .isTrue();
-        assertThat(provider.canProcess(new StorageConfig().uri("az://overturemapswestus2/release/2026-03-18.0/")))
+        assertThat(provider.canProcess(new StorageConfig().baseUri("az://overturemapswestus2/release/2026-03-18.0/")))
                 .isTrue();
         // Account without container is rejected
-        assertThat(provider.canProcess(new StorageConfig().uri("az://overturemapswestus2")))
+        assertThat(provider.canProcess(new StorageConfig().baseUri("az://overturemapswestus2")))
                 .isFalse();
-        assertThat(provider.canProcess(new StorageConfig().uri("az://overturemapswestus2/")))
+        assertThat(provider.canProcess(new StorageConfig().baseUri("az://overturemapswestus2/")))
                 .isFalse();
     }
 

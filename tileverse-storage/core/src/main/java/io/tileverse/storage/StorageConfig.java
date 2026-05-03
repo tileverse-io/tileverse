@@ -13,16 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.storage.spi;
+package io.tileverse.storage;
 
 import static java.util.Objects.requireNonNull;
 
+import io.tileverse.storage.spi.StorageProvider;
 import java.io.File;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,6 +32,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Represents the configuration for creating a {@link io.tileverse.storage.RangeReader} instance. This class holds the
@@ -83,13 +84,13 @@ public class StorageConfig {
             .group("advanced")
             .build();
 
-    private URI uri;
+    private @Nullable URI baseUri;
 
     /**
      * Optional provider {@link StorageProvider#getId() id}, useful to force using a given provider when the URI or
      * parameters are not enough to disambiguate.
      */
-    private String providerId;
+    private @Nullable String providerId;
 
     private Map<String, Object> parameterValues = new HashMap<>();
 
@@ -99,35 +100,55 @@ public class StorageConfig {
     }
 
     /**
-     * Returns the URI of the resource to be read.
+     * Returns a deep copy of this configuration. Useful when callers need to derive a variant (e.g. with a different
+     * {@link #baseUri(URI) baseUri}) without mutating the original instance.
      *
-     * @return The URI.
+     * @return a new {@code StorageConfig} with the same baseUri, providerId and parameter values.
      */
-    public URI uri() {
-        return uri;
+    public StorageConfig copy() {
+        StorageConfig clone = new StorageConfig();
+        clone.baseUri = this.baseUri;
+        clone.providerId = this.providerId;
+        clone.parameterValues = new HashMap<>(this.parameterValues);
+        return clone;
     }
 
     /**
-     * Sets the URI of the resource to be read.
+     * Returns the {@link io.tileverse.storage.Storage Storage} root URI: a directory, container, bucket or
+     * bucket-prefix; <strong>never a single object</strong>. Use
+     * {@link io.tileverse.storage.Storage#openRangeReader(URI) Storage.openRangeReader(URI)} or backend-specific
+     * helpers to address a leaf object underneath this root.
      *
-     * @param uri The URI to set.
+     * @return The root URI.
+     */
+    public URI baseUri() {
+        return baseUri;
+    }
+
+    /**
+     * Sets the {@link io.tileverse.storage.Storage Storage} root URI. Must be a directory, container, bucket or
+     * bucket-prefix; not a single object. The {@code FileStorageProvider} rejects URIs pointing at regular files (and
+     * non-existent paths); cloud providers accept any prefix as-is.
+     *
+     * @param baseUri The URI to set.
      * @return This {@code StorageConfig} instance for method chaining.
      * @throws NullPointerException if the provided URI is {@code null}.
      * @throws IllegalArgumentException If the given string violates RFC&nbsp;2396
      */
-    public StorageConfig uri(String uri) {
-        return uri(URI.create(uri));
+    public StorageConfig baseUri(String baseUri) {
+        return baseUri(URI.create(baseUri));
     }
 
     /**
-     * Sets the URI of the resource to be read.
+     * Sets the {@link io.tileverse.storage.Storage Storage} root URI. Must be a directory, container, bucket or
+     * bucket-prefix; not a single object.
      *
-     * @param uri The URI to set.
+     * @param baseUri The URI to set.
      * @return This {@code StorageConfig} instance for method chaining.
      * @throws NullPointerException if the provided URI is {@code null}.
      */
-    public StorageConfig uri(URI uri) {
-        this.uri = requireNonNull(uri, "uri can't be null");
+    public StorageConfig baseUri(URI baseUri) {
+        this.baseUri = requireNonNull(baseUri, "baseUri can't be null");
         return this;
     }
 
@@ -146,7 +167,7 @@ public class StorageConfig {
      * @param providerId The provider ID to set.
      * @return This {@code StorageConfig} instance for method chaining.
      */
-    public StorageConfig providerId(String providerId) {
+    public StorageConfig providerId(@Nullable String providerId) {
         this.providerId = providerId;
         return this;
     }
@@ -163,7 +184,7 @@ public class StorageConfig {
      * @param value The value of the parameter.
      * @return This {@code StorageConfig} instance for method chaining.
      */
-    public StorageConfig setParameter(String key, Object value) {
+    public StorageConfig setParameter(String key, @Nullable Object value) {
         String normalized = normalizeKey(requireNonNull(key, "key"));
         if (FORCE_PROVIDER_ID.key().equals(normalized)) {
             this.providerId = value == null ? null : String.valueOf(value);
@@ -272,8 +293,8 @@ public class StorageConfig {
      */
     public Properties toProperties() {
         Properties properties = new Properties();
-        if (uri != null) {
-            properties.setProperty(URI_KEY, uri.toString());
+        if (baseUri != null) {
+            properties.setProperty(URI_KEY, baseUri.toString());
         }
         if (providerId != null) {
             properties.setProperty(PROVIDER_ID_KEY, providerId);
@@ -305,13 +326,13 @@ public class StorageConfig {
         }
         requireNonNull(urip, "Properties must include " + URI_KEY);
 
-        URI uri = convertToURI(urip);
+        URI baseUri = convertToURI(urip);
         String providerId = properties.getProperty(PROVIDER_ID_KEY);
         if (providerId == null) {
             providerId = properties.getProperty(LEGACY_PROVIDER_ID_KEY);
         }
 
-        StorageConfig config = new StorageConfig().uri(uri);
+        StorageConfig config = new StorageConfig().baseUri(baseUri);
         config.providerId(providerId);
 
         Properties copy = new Properties();
@@ -388,7 +409,7 @@ public class StorageConfig {
             String normalized = KEY_PREFIX + key.substring(LEGACY_KEY_PREFIX.length());
             if (warnedLegacyKeys.add(key)) {
                 log.warn(
-                        "Legacy parameter key '{}' — use '{}'. Legacy keys remain accepted for backwards compatibility; new configurations should use the '{}*' form.",
+                        "Legacy parameter key '{}' -- use '{}'. Legacy keys remain accepted for backwards compatibility; new configurations should use the '{}*' form.",
                         key,
                         normalized,
                         KEY_PREFIX);
@@ -416,7 +437,7 @@ public class StorageConfig {
      * Checks if a string looks like it could be a file path. Returns true if the string contains path separators or
      * starts with path indicators.
      */
-    private static boolean looksLikeFilePath(String str) {
+    private static boolean looksLikeFilePath(@Nullable String str) {
         if (str == null || str.isEmpty()) {
             return false;
         }
@@ -440,29 +461,5 @@ public class StorageConfig {
                 .filter(p -> p.defaultValue().isPresent())
                 .forEach(p -> config.setParameter(p.key(), p.defaultValue().orElseThrow()));
         return config;
-    }
-
-    /**
-     * Checks if a given {@code StorageConfig} matches a specific provider ID and accepted URI schemes.
-     *
-     * @param config The {@code StorageConfig} to check.
-     * @param providerId The ID of the provider to match against.
-     * @param acceptedUriSchemes An array of URI schemes that the provider accepts (e.g., "file", "http"). If
-     *     {@code null}, it matches if the config URI also has a {@code null} scheme.
-     * @return {@code true} if the config matches the provider ID and one of the accepted URI schemes, {@code false}
-     *     otherwise.
-     * @throws NullPointerException if config or providerId is {@code null}.
-     */
-    public static boolean matches(StorageConfig config, String providerId, String... acceptedUriSchemes) {
-        requireNonNull(config, "config parameter is null");
-        requireNonNull(providerId, "providerId parameter is null");
-        requireNonNull(config.uri(), "config uri is null");
-        if (config.providerId().isPresent()
-                && !config.providerId().orElseThrow().equals(providerId)) {
-            return false;
-        }
-        // may be null
-        final String scheme = config.uri().getScheme();
-        return Arrays.asList(acceptedUriSchemes).contains(scheme);
     }
 }

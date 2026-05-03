@@ -30,6 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.RangeReaderTestSupport;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -56,7 +58,7 @@ class HttpRangeReaderTest {
             .build();
 
     private URI testUri;
-    private HttpRangeReader reader;
+    private RangeReader reader;
 
     /** Creates test data with a predictable pattern. */
     private static byte[] createTestData(int size) {
@@ -86,7 +88,7 @@ class HttpRangeReaderTest {
         // Individual range request stubs - we'll create these for each test as needed
 
         // Create reader
-        reader = HttpRangeReader.of(testUri);
+        reader = RangeReaderTestSupport.httpReader(testUri);
     }
 
     @Test
@@ -283,13 +285,13 @@ class HttpRangeReaderTest {
         URI noRangeUri = URI.create("http://localhost:" + wm.getPort() + "/no-range");
 
         // Should throw when readRange() is called (triggering range support initialization)
-        HttpRangeReader reader = HttpRangeReader.of(noRangeUri);
+        RangeReader reader = RangeReaderTestSupport.httpReader(noRangeUri);
         assertThrows(
                 io.tileverse.storage.StorageException.class, () -> reader.readRange(0, 100, ByteBuffer.allocate(100)));
     }
 
     @Test
-    void testServerReturningEntireFileForRangeRequest() {
+    void testServerReturningEntireFileForRangeRequest() throws IOException {
         // Request parameters
         int offset = 1000;
         int length = 200;
@@ -312,7 +314,7 @@ class HttpRangeReaderTest {
         URI ignoreRangeUri = URI.create("http://localhost:" + wm.getPort() + "/ignore-range");
 
         // Should throw StorageException when server doesn't support range requests (returns 200 instead of 206)
-        try (HttpRangeReader ignoreRangeReader = HttpRangeReader.of(ignoreRangeUri)) {
+        try (RangeReader ignoreRangeReader = RangeReaderTestSupport.httpReader(ignoreRangeUri)) {
             assertThrows(
                     io.tileverse.storage.StorageException.class,
                     () -> ignoreRangeReader.readRange(offset, length, ByteBuffer.allocate(length)));
@@ -320,7 +322,7 @@ class HttpRangeReaderTest {
     }
 
     @Test
-    void testServerReturningErrorForRangeRequest() {
+    void testServerReturningErrorForRangeRequest() throws IOException {
         // Specific request parameters
         int offset = 0;
         int length = 100;
@@ -342,7 +344,7 @@ class HttpRangeReaderTest {
         URI errorUri = URI.create("http://localhost:" + wm.getPort() + "/error");
 
         // Should be able to create the reader
-        try (HttpRangeReader errorReader = HttpRangeReader.of(errorUri)) {
+        try (RangeReader errorReader = RangeReaderTestSupport.httpReader(errorUri)) {
             // But reading a range should throw
             assertThrows(
                     io.tileverse.storage.StorageException.class,
@@ -452,7 +454,7 @@ class HttpRangeReaderTest {
 
         URI noContentLengthUri = URI.create("http://localhost:" + wm.getPort() + "/no-content-length");
 
-        try (HttpRangeReader reader = HttpRangeReader.of(noContentLengthUri)) {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(noContentLengthUri)) {
             assertThat(reader.size()).isEmpty();
         }
     }
@@ -471,7 +473,7 @@ class HttpRangeReaderTest {
 
         URI invalidContentLengthUri = URI.create("http://localhost:" + wm.getPort() + "/invalid-content-length");
 
-        HttpRangeReader reader = HttpRangeReader.of(invalidContentLengthUri);
+        RangeReader reader = RangeReaderTestSupport.httpReader(invalidContentLengthUri);
 
         assertThat(reader.size()).isEmpty();
     }
@@ -482,7 +484,7 @@ class HttpRangeReaderTest {
         URI nonExistentUri = URI.create("http://non-existent-host.example/test.pmtiles");
 
         // Should throw when size() is called (triggering initialization)
-        HttpRangeReader reader = HttpRangeReader.of(nonExistentUri);
+        RangeReader reader = RangeReaderTestSupport.httpReader(nonExistentUri);
         assertThrows(io.tileverse.storage.TransientStorageException.class, reader::size);
     }
 
@@ -495,9 +497,34 @@ class HttpRangeReaderTest {
         URI serverErrorUri = URI.create("http://localhost:" + wm.getPort() + "/server-error");
 
         // Should throw when size() is called (triggering initialization)
-        HttpRangeReader reader = HttpRangeReader.of(serverErrorUri);
+        RangeReader reader = RangeReaderTestSupport.httpReader(serverErrorUri);
         io.tileverse.storage.StorageException ex =
                 assertThrows(io.tileverse.storage.StorageException.class, reader::size);
         assertThat(ex.getMessage()).contains("Failed to connect");
+    }
+
+    @Test
+    void openRangeReaderUriPreservesQueryStringOnTheWire() throws IOException {
+        // Pre-signed URL shape: the query string is the authorization. The Storage's URI overload must preserve it
+        // into the resolved leaf URL so the request actually carries the signature.
+        String pathWithoutQuery = "/signed";
+        wm.stubFor(head(urlEqualTo(pathWithoutQuery + "?signature=abc123&expires=42"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Length", String.valueOf(TEST_DATA.length))
+                        .withHeader("Accept-Ranges", "bytes")));
+
+        URI signedUri =
+                URI.create("http://localhost:" + wm.getPort() + pathWithoutQuery + "?signature=abc123&expires=42");
+        URI parent = signedUri.resolve(".");
+        try (io.tileverse.storage.Storage storage = io.tileverse.storage.http.HttpStorageProvider.open(
+                        parent, java.net.http.HttpClient.newHttpClient());
+                RangeReader r = storage.openRangeReader(signedUri)) {
+            // size() triggers the HEAD that the stub above matches on the FULL URL including query params
+            assertThat(r.size()).hasValue((long) TEST_DATA.length);
+        }
+
+        // Verify the HEAD request actually had the query string on the wire.
+        wm.verify(headRequestedFor(urlEqualTo(pathWithoutQuery + "?signature=abc123&expires=42")));
     }
 }

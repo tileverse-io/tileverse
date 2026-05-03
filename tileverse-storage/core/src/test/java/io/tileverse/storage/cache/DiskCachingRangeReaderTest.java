@@ -1025,7 +1025,7 @@ class DiskCachingRangeReaderTest {
     }
 
     @Test
-    void testBuilderValidation() throws IOException {
+    void testBuilderValidation() {
         // Test null delegate
         assertThrows(
                 NullPointerException.class,
@@ -1049,8 +1049,7 @@ class DiskCachingRangeReaderTest {
                 IllegalArgumentException.class,
                 () -> {
                     DiskCachingRangeReader.builder(RangeReaderTestSupport.fileReader(testFile))
-                            .maxCacheSizeBytes(-1)
-                            .build();
+                            .maxCacheSizeBytes(-1);
                 },
                 "Should throw exception for negative max cache size");
     }

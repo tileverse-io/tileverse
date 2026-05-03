@@ -4,17 +4,24 @@ Get started with the `RangeReader` API of `tileverse-storage` in minutes with th
 
 ## Basic Usage
 
+The 2.0 model is uniform across every backend: open a `Storage` for the
+container (parent URI), then ask it for a `RangeReader` for each leaf
+object you want to read.
+
 ### Reading from Local Files
 
 ```java
 import io.tileverse.storage.RangeReader;
-import io.tileverse.storage.file.FileRangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 
-try (RangeReader reader = FileRangeReader.builder()
-        .path(Path.of("data.bin"))
-        .build()) {
+URI dir = Path.of("data").toUri();
+URI leaf = Path.of("data/data.bin").toUri();
+try (Storage storage = StorageFactory.open(dir);
+        RangeReader reader = storage.openRangeReader(leaf)) {
 
     // Read first 1024 bytes
     ByteBuffer header = reader.readRange(0, 1024);
@@ -25,23 +32,26 @@ try (RangeReader reader = FileRangeReader.builder()
     chunk.flip(); // Prepare buffer for reading
 
     // Get total file size
-    long size = reader.size();
+    long size = reader.size().orElseThrow();
 
     System.out.println("File size: " + size + " bytes");
 }
 ```
 
+A `Storage` always points at a directory / container / prefix — never a
+single object. For `file:` URIs the directory must already exist; the
+provider does not auto-create it. To address a single file, open the
+parent and pass the leaf to `openRangeReader` as shown above.
+
 ### Reading from HTTP
 
 ```java
-import io.tileverse.storage.RangeReader;
-import io.tileverse.storage.http.HttpRangeReader;
-import java.net.URI;
-import java.nio.ByteBuffer;
+import java.util.Properties;
 
-try (RangeReader reader = HttpRangeReader.builder()
-        .uri(URI.create("https://example.com/data.bin"))
-        .build()) {
+URI parent = URI.create("https://example.com/");
+URI leaf = URI.create("https://example.com/data.bin");
+try (Storage storage = StorageFactory.open(parent);
+        RangeReader reader = storage.openRangeReader(leaf)) {
 
     // Read range from remote file
     ByteBuffer data = reader.readRange(1000, 500);
@@ -54,16 +64,13 @@ try (RangeReader reader = HttpRangeReader.builder()
 ### Reading from Amazon S3
 
 ```java
-import io.tileverse.storage.RangeReader;
-import io.tileverse.storage.s3.S3RangeReader;
-import software.amazon.awssdk.regions.Region;
-import java.net.URI;
-import java.nio.ByteBuffer;
+Properties props = new Properties();
+props.setProperty("storage.s3.region", "us-west-2");
 
-try (RangeReader reader = S3RangeReader.builder()
-        .uri(URI.create("s3://my-bucket/data.bin"))
-        .region(Region.US_WEST_2)
-        .build()) {
+URI bucket = URI.create("s3://my-bucket/");
+URI leaf = URI.create("s3://my-bucket/data.bin");
+try (Storage storage = StorageFactory.open(bucket, props);
+        RangeReader reader = storage.openRangeReader(leaf)) {
 
     // Read from S3 object
     ByteBuffer data = reader.readRange(0, 1024);
@@ -73,6 +80,11 @@ try (RangeReader reader = S3RangeReader.builder()
 }
 ```
 
+When you read multiple objects from the same S3 bucket, hold the
+`Storage` once and call `openRangeReader(key)` per object — that's what
+the API is designed for, and the SDK client cost is amortized across all
+the readers.
+
 ## Performance Optimization
 
 ### Adding Memory Caching
@@ -80,18 +92,18 @@ try (RangeReader reader = S3RangeReader.builder()
 Memory caching is most beneficial for cloud storage where network latency is significant:
 
 ```java
-import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.cache.CachingRangeReader;
 
-// Use caching with cloud storage for maximum benefit
-RangeReader baseReader = S3RangeReader.builder()
-    .uri(URI.create("s3://my-bucket/large-file.bin"))
-    .region(Region.US_WEST_2)
-    .build();
+Properties props = new Properties();
+props.setProperty("storage.s3.region", "us-west-2");
 
-try (RangeReader cachedReader = CachingRangeReader.builder(baseReader)
-        .maximumSize(1000)  // Cache up to 1000 ranges
-        .build()) {
+URI bucket = URI.create("s3://my-bucket/");
+URI leaf = URI.create("s3://my-bucket/large-file.bin");
+try (Storage storage = StorageFactory.open(bucket, props);
+        RangeReader baseReader = storage.openRangeReader(leaf);
+        RangeReader cachedReader = CachingRangeReader.builder(baseReader)
+            .maximumSize(1000)  // Cache up to 1000 ranges
+            .build()) {
 
     // First read - network request to S3
     ByteBuffer data1 = cachedReader.readRange(0, 1024);
@@ -108,16 +120,15 @@ try (RangeReader cachedReader = CachingRangeReader.builder(baseReader)
 ### Disk Caching for Large Datasets
 
 ```java
-import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.cache.DiskCachingRangeReader;
 
-RangeReader s3Reader = S3RangeReader.builder()
-    .uri(URI.create("s3://bucket/large-file.bin"))
-    .build();
-
-try (RangeReader cachedReader = DiskCachingRangeReader.builder(s3Reader)
-        .maxCacheSizeBytes(1024 * 1024 * 1024)  // 1GB cache
-        .build()) {
+URI bucket = URI.create("s3://bucket/");
+URI leaf = URI.create("s3://bucket/large-file.bin");
+try (Storage storage = StorageFactory.open(bucket);
+        RangeReader baseReader = storage.openRangeReader(leaf);
+        RangeReader cachedReader = DiskCachingRangeReader.builder(baseReader)
+            .maxCacheSizeBytes(1024 * 1024 * 1024)  // 1GB cache
+            .build()) {
 
     // Reads are cached to disk for persistence across sessions
     ByteBuffer data = cachedReader.readRange(100, 500);
@@ -128,16 +139,16 @@ try (RangeReader cachedReader = DiskCachingRangeReader.builder(s3Reader)
 ### Multi-Level Caching
 
 ```java
-// Optimal configuration for cloud storage
-try (RangeReader optimizedReader = CachingRangeReader.builder(
-        DiskCachingRangeReader.builder(
-            S3RangeReader.builder()
-                .uri(URI.create("s3://bucket/data.bin"))
-                .build())
+URI bucket = URI.create("s3://bucket/");
+URI leaf = URI.create("s3://bucket/data.bin");
+try (Storage storage = StorageFactory.open(bucket);
+        RangeReader baseReader = storage.openRangeReader(leaf);
+        RangeReader diskCached = DiskCachingRangeReader.builder(baseReader)
             .maxCacheSizeBytes(10L * 1024 * 1024 * 1024)  // 10GB disk cache
-            .build())
-        .maximumSize(1000)  // 1000 entries in memory
-        .build()) {
+            .build();
+        RangeReader optimizedReader = CachingRangeReader.builder(diskCached)
+            .maximumSize(1000)  // 1000 entries in memory
+            .build()) {
 
     // Highly optimized reads with multiple caching layers
     ByteBuffer data = optimizedReader.readRange(offset, length);
@@ -189,12 +200,13 @@ try {
 ```java
 import java.io.IOException;
 
-try (RangeReader reader = FileRangeReader.builder()
-        .path(Path.of("data.bin"))
-        .build()) {
+URI dir = Path.of("data").toUri();
+URI leaf = Path.of("data/data.bin").toUri();
+try (Storage storage = StorageFactory.open(dir);
+        RangeReader reader = storage.openRangeReader(leaf)) {
     
     // Validate before reading
-    long fileSize = reader.size();
+    long fileSize = reader.size().orElseThrow();
     long offset = 1000;
     int length = 500;
     
@@ -224,17 +236,18 @@ try (RangeReader reader = FileRangeReader.builder()
 
 ```java
 // Read different header formats
-try (RangeReader reader = FileRangeReader.builder()
-        .path(Path.of("image.tiff"))
-        .build()) {
-    
+URI parent = Path.of(".").toUri();
+URI tiff = Path.of("image.tiff").toUri();
+try (Storage storage = StorageFactory.open(parent);
+        RangeReader reader = storage.openRangeReader(tiff)) {
+
     // Read TIFF header
     ByteBuffer header = reader.readRange(0, 16);
     header.flip(); // Prepare buffer for reading
-    
+
     // Check magic number
     short magic = header.getShort();
-    
+
     if (magic == 0x4949 || magic == 0x4D4D) {
         System.out.println("Valid TIFF file");
     }
@@ -246,11 +259,11 @@ try (RangeReader reader = FileRangeReader.builder()
 ```java
 // Process large files in chunks
 public void processLargeFile(Path filePath, int chunkSize) throws IOException {
-    try (var reader = FileRangeReader.builder()
-            .path(filePath)
-            .build()) {
-        
-        long fileSize = reader.size();
+    URI parent = filePath.getParent().toUri();
+    try (Storage storage = StorageFactory.open(parent);
+            RangeReader reader = storage.openRangeReader(filePath.toUri())) {
+
+        long fileSize = reader.size().orElseThrow();
         long processed = 0;
         
         while (processed < fileSize) {

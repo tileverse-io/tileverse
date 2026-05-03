@@ -11,13 +11,18 @@ The API is built around the `RangeReader` interface, which abstracts the underly
 
 ### Supported Backends
 
-| Backend | Class | Description |
+`RangeReader` instances are produced by `Storage.openRangeReader(key)` /
+`Storage.openRangeReader(URI)`. Each backend ships its own `Storage`
+implementation; the per-backend `RangeReader` classes are
+package-private internals selected based on the URI scheme.
+
+| Backend | Provider | Description |
 | :--- | :--- | :--- |
-| **Local File** | `io.tileverse.storage.file.FileRangeReader` | Uses `java.nio.channels.FileChannel` for efficient local reads. |
-| **HTTP/HTTPS** | `io.tileverse.storage.http.HttpRangeReader` | Uses `java.net.http.HttpClient` with `Range` headers. |
-| **AWS S3** | `io.tileverse.storage.s3.S3RangeReader` | Native AWS SDK integration (general-purpose buckets and S3 Express One Zone). |
-| **Azure Blob** | `io.tileverse.storage.azure.AzureBlobRangeReader` | Native Azure SDK integration (Blob Storage and Data Lake Gen2). |
-| **Google Cloud** | `io.tileverse.storage.gcs.GoogleCloudStorageRangeReader` | Native Google Cloud Storage integration (flat and HNS buckets). |
+| **Local File** | `FileStorageProvider` | Uses `java.nio.channels.FileChannel` for efficient local reads. |
+| **HTTP/HTTPS** | `HttpStorageProvider` | Uses `java.net.http.HttpClient` with `Range` headers. |
+| **AWS S3** | `S3StorageProvider` | Native AWS SDK integration (general-purpose buckets and S3 Express One Zone). |
+| **Azure Blob** | `AzureBlobStorageProvider` | Native Azure SDK integration (Blob Storage and Data Lake Gen2). |
+| **Google Cloud** | `GoogleCloudStorageProvider` | Native Google Cloud Storage integration (flat and HNS buckets). |
 
 ## Performance Features
 
@@ -38,24 +43,26 @@ The API is built around the `RangeReader` interface, which abstracts the underly
 
 ```java
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
 import io.tileverse.storage.cache.CachingRangeReader;
-import io.tileverse.storage.s3.S3RangeReader;
 import java.net.URI;
 import java.nio.ByteBuffer;
 
-// 1. Create a basic reader (e.g., S3)
-RangeReader s3Reader = S3RangeReader.builder()
-    .uri(URI.create("s3://bucket/key"))
-    .build();
+// 1. Open a Storage at the bucket / parent URI, get a RangeReader for the leaf
+URI bucket = URI.create("s3://bucket/");
+URI leaf = URI.create("s3://bucket/key");
+try (Storage storage = StorageFactory.open(bucket);
+        RangeReader baseReader = storage.openRangeReader(leaf);
+        // 2. Wrap with performance optimizations
+        RangeReader reader = CachingRangeReader.builder(baseReader)
+            .capacity(1024 * 1024 * 10) // 10 MB cache
+            .build()) {
 
-// 2. Wrap with performance optimizations
-RangeReader reader = CachingRangeReader.builder(s3Reader)
-    .capacity(1024 * 1024 * 10) // 10 MB cache
-    .build();
-
-// 3. Read arbitrary byte ranges
-ByteBuffer header = reader.readRange(0, 127);
-header.flip();
-ByteBuffer slice = reader.readRange(5000, 1000); // Read 1000 bytes at offset 5000
-slice.flip();
+    // 3. Read arbitrary byte ranges
+    ByteBuffer header = reader.readRange(0, 127);
+    header.flip();
+    ByteBuffer slice = reader.readRange(5000, 1000); // Read 1000 bytes at offset 5000
+    slice.flip();
+}
 ```

@@ -16,6 +16,7 @@
 package io.tileverse.pmtiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -27,6 +28,7 @@ import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import org.junit.jupiter.api.AfterEach;
@@ -338,5 +340,22 @@ class PMTilesReaderTest {
                 .contains("Failed to parse PMTiles metadata JSON:")
                 .contains("Unexpected character ('h' (code 104)): was expecting comma to separate Object entries")
                 .contains(rawMetadata);
+    }
+
+    @Test
+    void openWithFileUriDelegatesToFileStorage(@TempDir Path tmp) throws IOException {
+        URI pmtiles = PMTilesTestData.andorra(tmp).toUri();
+        try (PMTilesReader r = PMTilesReader.open(pmtiles)) {
+            assertThat(r.getHeader()).isNotNull();
+            assertThat(r.getHeader().rootDirOffset()).isGreaterThanOrEqualTo(0L);
+        }
+    }
+
+    @Test
+    void openRejectsUriWithoutKey() {
+        URI uri = URI.create("file:///tmp/");
+        assertThatThrownBy(() -> PMTilesReader.open(uri))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("PMTiles URI must include a key");
     }
 }

@@ -18,7 +18,6 @@ package io.tileverse.storage;
 import static java.util.Objects.requireNonNull;
 
 import io.tileverse.storage.http.HttpStorageProvider;
-import io.tileverse.storage.spi.StorageConfig;
 import io.tileverse.storage.spi.StorageProvider;
 import java.io.IOException;
 import java.net.URI;
@@ -57,7 +56,7 @@ final class StorageProviderResolver {
     private StorageProviderResolver() {}
 
     static StorageProvider findBestProvider(StorageConfig config) {
-        URI uri = requireNonNull(config.uri(), "StorageConfig.uri() is required");
+        URI uri = requireNonNull(config.baseUri(), "StorageConfig.baseUri() is required");
 
         if (config.providerId().isPresent()) {
             return StorageProvider.getProvider(config.providerId().orElseThrow(), true);

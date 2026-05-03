@@ -32,7 +32,6 @@ import io.tileverse.storage.gcs.GoogleCloudStorageProvider;
 import io.tileverse.storage.http.HttpStorageProvider;
 import io.tileverse.storage.it.TestUtil;
 import io.tileverse.storage.s3.S3StorageProvider;
-import io.tileverse.storage.spi.StorageConfig;
 import io.tileverse.storage.spi.StorageProvider;
 import java.io.IOException;
 import java.net.URI;
@@ -188,7 +187,7 @@ class StorageFactoryIT {
         String url = "http://" + httpd.getHost() + ":" + httpd.getFirstMappedPort() + "/" + FILE_NAME;
         testFindBestProvider(URI.create(url), HttpStorageProvider.class);
 
-        StorageConfig config = new StorageConfig().uri(URI.create(url));
+        StorageConfig config = new StorageConfig().baseUri(URI.create(url));
         RangeReader reader = testCreate(config);
         assertThat(reader.size()).hasValue(FILE_SIZE);
     }
@@ -230,7 +229,7 @@ class StorageFactoryIT {
 
         testFindBestProvider(URI.create(gcsURL), GoogleCloudStorageProvider.class);
 
-        StorageConfig config = new StorageConfig().uri(gcsURL);
+        StorageConfig config = new StorageConfig().baseUri(gcsURL);
         RangeReader reader = testCreate(config);
         assertThat(reader.size()).hasValue(FILE_SIZE);
     }
@@ -283,7 +282,7 @@ class StorageFactoryIT {
     static RangeReader testAzureBlob(String url, String accountKey) throws IOException {
         testFindBestProvider(URI.create(url), AzureBlobStorageProvider.class);
 
-        StorageConfig config = new StorageConfig().uri(URI.create(url));
+        StorageConfig config = new StorageConfig().baseUri(URI.create(url));
 
         if (accountKey != null) {
             config.setParameter(AzureBlobStorageProvider.AZURE_ACCOUNT_KEY, accountKey);
@@ -307,7 +306,7 @@ class StorageFactoryIT {
     static RangeReader testS3(final URI s3URI, String accessKey, String secretKey, boolean anonymous)
             throws IOException {
         testFindBestProvider(s3URI, S3StorageProvider.class);
-        StorageConfig config = new StorageConfig().uri(s3URI);
+        StorageConfig config = new StorageConfig().baseUri(s3URI);
         if (accessKey != null && secretKey != null) {
             // The negative "no credentials -> IOException" path is environment-sensitive
             // (the AWS DefaultCredentialsProvider may pick up ambient creds), so we only
@@ -322,7 +321,7 @@ class StorageFactoryIT {
     }
 
     static void testFindBestProvider(URI uri, Class<? extends StorageProvider> expected) {
-        StorageConfig config = new StorageConfig().uri(uri);
+        StorageConfig config = new StorageConfig().baseUri(uri);
         testFindBestProvider(config, expected);
     }
 
@@ -334,17 +333,70 @@ class StorageFactoryIT {
     }
 
     /**
-     * Open a single-file RangeReader via {@link StorageFactory#openRangeReader(URI, java.util.Properties)}, verify a
-     * 100-byte read works, and return the reader for further assertions.
-     *
-     * <p>Note: the {@code expectedRangeReaderType} parameter is no longer used to assert the returned class -
-     * {@code openRangeReader} may return a wrapper around the underlying provider's reader. The provider class is
-     * verified separately by {@link #testFindBestProvider}; passing the class here documents intent.
+     * Open a single-file RangeReader for {@code config.baseUri()} via the two-resource pattern
+     * ({@link StorageFactory#open Storage} + {@link Storage#openRangeReader(URI)}), verify a 100-byte read works, and
+     * return a reader that closes both on {@link RangeReader#close()} for caller convenience.
      */
     static RangeReader testCreate(StorageConfig config) throws IOException {
-        RangeReader reader = StorageFactory.openRangeReader(config.uri(), config.toProperties());
+        URI leaf = config.baseUri();
+        URI parent = leaf.resolve(".");
+        // Provider dispatch is driven by the leaf URL's shape (e.g. an S3 path-style URL like
+        // http://host/bucket/key); the parent of that URL alone is ambiguous, so we pin the provider id derived from
+        // the leaf into the parent-rooted config to keep the dispatcher honest.
+        StorageProvider provider = StorageFactory.findProvider(config);
+        java.util.Properties props = config.toProperties();
+        props.setProperty(StorageConfig.URI_KEY, parent.toString());
+        props.setProperty(StorageConfig.PROVIDER_ID_KEY, provider.getId());
+        io.tileverse.storage.Storage storage = StorageFactory.open(StorageConfig.fromProperties(props));
+        RangeReader reader;
+        try {
+            reader = storage.openRangeReader(leaf);
+        } catch (RuntimeException e) {
+            try {
+                storage.close();
+            } catch (IOException suppressed) {
+                e.addSuppressed(suppressed);
+            }
+            throw e;
+        }
         ByteBuffer range = reader.readRange(0, 100);
         assertThat(range.limit()).isEqualTo(100);
-        return reader;
+        return new TestOwningRangeReader(reader, storage);
+    }
+
+    /** Bundles the storage and the reader so the caller has a single closeable. */
+    private static final class TestOwningRangeReader implements RangeReader {
+
+        private final RangeReader delegate;
+        private final io.tileverse.storage.Storage owner;
+
+        TestOwningRangeReader(RangeReader delegate, io.tileverse.storage.Storage owner) {
+            this.delegate = delegate;
+            this.owner = owner;
+        }
+
+        @Override
+        public int readRange(long offset, int length, ByteBuffer target) {
+            return delegate.readRange(offset, length, target);
+        }
+
+        @Override
+        public java.util.OptionalLong size() {
+            return delegate.size();
+        }
+
+        @Override
+        public String getSourceIdentifier() {
+            return delegate.getSourceIdentifier();
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                delegate.close();
+            } finally {
+                owner.close();
+            }
+        }
     }
 }

@@ -81,7 +81,7 @@ public class BlockAlignedRangeReader extends AbstractRangeReader implements Rang
     @Override
     protected int readRangeNoFlip(final long offset, final int actualLength, ByteBuffer target) {
         // Calculate block-aligned range boundaries
-        final long blockMask = blockSize - 1;
+        final long blockMask = blockSize - 1L;
         final long alignedOffset = offset & ~blockMask;
         final long endOffset = offset + actualLength;
         final long alignedEndOffset = (endOffset + blockMask) & ~blockMask;
@@ -168,8 +168,7 @@ public class BlockAlignedRangeReader extends AbstractRangeReader implements Rang
             }
 
             // Calculate how many bytes were actually read
-            int bytesRead = actualLength - bytesRemaining;
-            return bytesRead;
+            return actualLength - bytesRemaining;
         }
     }
 

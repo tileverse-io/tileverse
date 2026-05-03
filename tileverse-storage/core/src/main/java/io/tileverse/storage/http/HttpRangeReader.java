@@ -24,10 +24,7 @@ import io.tileverse.storage.StorageException;
 import io.tileverse.storage.TransientStorageException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Method;
 import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
 import java.net.http.HttpClient;
 import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
@@ -312,101 +309,7 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
 
     @Override
     public void close() {
-        // HttpClient implements AutoCloseable starting with Java 21, but it also gets
-        // shutdown() and shutdownNow(), the later being the one we want to immediately
-        // discard ongoing requests
-        if (httpClient instanceof AutoCloseable closeable) {
-            try {
-                Method shutDownNow = httpClient.getClass().getMethod("shutdownNow");
-                shutDownNow.invoke(httpClient);
-                return;
-            } catch (Exception e) {
-                log.warn("Error shutting down HttpClient for {}", uri, e);
-            }
-            try { // may something had gone wrong, just try close()
-                closeable.close();
-            } catch (Exception e) {
-                log.warn("Error closing HttpClient for {}", uri, e);
-            }
-        }
-    }
-
-    /**
-     * Creates a new HttpRangeReader for the specified URL string with default settings.
-     *
-     * <p>This is the simplest way to create an HttpRangeReader for basic HTTP/HTTPS access without authentication or
-     * custom SSL configuration. Uses default SSL certificate validation (does not trust all certificates).
-     *
-     * <p>This is equivalent to:
-     *
-     * <pre>{@code
-     * HttpRangeReader.builder(url).build();
-     * }</pre>
-     *
-     * @param url the HTTP or HTTPS URL string to read from
-     * @return a new HttpRangeReader instance with default configuration
-     * @throws IllegalArgumentException if the URL is malformed or has an unsupported scheme
-     */
-    static HttpRangeReader of(String url) {
-        return of(URI.create(url));
-    }
-
-    /**
-     * Creates a new HttpRangeReader for the specified URI with default settings.
-     *
-     * <p>This is the simplest way to create an HttpRangeReader for basic HTTP/HTTPS access without authentication or
-     * custom SSL configuration. Uses default SSL certificate validation (does not trust all certificates).
-     *
-     * <p>This is equivalent to:
-     *
-     * <pre>{@code
-     * HttpRangeReader.builder(uri).build();
-     * }</pre>
-     *
-     * @param url the HTTP or HTTPS URI to read from
-     * @return a new HttpRangeReader instance with default configuration
-     * @throws IllegalArgumentException if the URI has an unsupported scheme (must be http or https)
-     */
-    static HttpRangeReader of(URI url) {
-        return of(url, HttpAuthentication.NONE);
-    }
-
-    /**
-     * Creates a new HttpRangeReader for the specified URL with the supplied authentication. Package-private; consumers
-     * should obtain a {@link RangeReader} via {@link io.tileverse.storage.StorageFactory#openRangeReader(java.net.URI,
-     * java.util.Properties)} or via {@link io.tileverse.storage.http.HttpStorageProvider#open(java.net.URI,
-     * java.net.http.HttpClient, HttpAuthentication)}.
-     *
-     * @param url the HTTP or HTTPS URI to read from
-     * @param authentication the authentication strategy; pass {@link HttpAuthentication#NONE} for none
-     * @return a new HttpRangeReader instance
-     */
-    static HttpRangeReader of(URI url, HttpAuthentication authentication) {
-        return new HttpRangeReader(url, HttpClient.newHttpClient(), authentication);
-    }
-
-    /**
-     * Creates a new HttpRangeReader for the specified URL with default settings.
-     *
-     * <p>This is a convenience method for creating an HttpRangeReader from a java.net.URL instance. The URL is
-     * converted to a URI internally. Uses default SSL certificate validation (does not trust all certificates).
-     *
-     * <p>This is equivalent to:
-     *
-     * <pre>{@code
-     * HttpRangeReader.builder(url.toURI()).build();
-     * }</pre>
-     *
-     * @param url the HTTP or HTTPS URL to read from
-     * @return a new HttpRangeReader instance with default configuration
-     * @throws IllegalArgumentException if the URL cannot be converted to a valid URI or has an unsupported scheme (must
-     *     be http or https)
-     */
-    static HttpRangeReader of(URL url) {
-        try {
-            return of(url.toURI());
-        } catch (URISyntaxException e) {
-            throw new IllegalArgumentException(e);
-        }
+        // The HttpClient is owned by HttpStorage (and ultimately by HttpClientCache); per-reader close must not
+        // shut it down. Mirrors S3RangeReader / AzureBlobRangeReader / GoogleCloudStorageRangeReader.
     }
 }

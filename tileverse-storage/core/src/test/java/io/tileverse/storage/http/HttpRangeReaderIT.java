@@ -15,12 +15,11 @@
  */
 package io.tileverse.storage.http;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.RangeReaderTestSupport;
 import io.tileverse.storage.StorageException;
 import io.tileverse.storage.it.AbstractRangeReaderIT;
 import io.tileverse.storage.it.TestUtil;
@@ -89,15 +88,13 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
 
     @Override
     protected RangeReader createBaseReader() throws IOException {
-        return HttpRangeReader.of(testFileUri);
+        return RangeReaderTestSupport.httpReader(testFileUri);
     }
 
     /** Additional HTTP-specific tests can go here */
     @Test
-    void testHttpRangeReaderBuilder() throws IOException {
-        try (RangeReader reader = HttpRangeReader.of(testFileUri)) {
-            assertThat(reader).isInstanceOf(HttpRangeReader.class);
-
+    void testReadFirstTenBytes() throws IOException {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(testFileUri)) {
             assertEquals(TEST_FILE_SIZE, reader.size().getAsLong(), "File size should match");
 
             ByteBuffer buffer = reader.readRange(0, 10).flip();
@@ -111,8 +108,7 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
         // and consumed by HttpStorageProvider.createStorage when going through the SPI; testing it here
         // requires that path. For unit-test simplicity we just verify the simple constructor still works
         // against the (HTTP, not HTTPS) fixture; the trust-all path is exercised indirectly elsewhere.
-        try (RangeReader reader = HttpRangeReader.of(testFileUri)) {
-            assertTrue(reader instanceof HttpRangeReader, "Should be an HttpRangeReader instance");
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(testFileUri)) {
             assertEquals(TEST_FILE_SIZE, reader.size().getAsLong(), "File size should match");
         }
     }
@@ -121,7 +117,7 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
     void testHttpRangeReaderWithInvalidUrl() {
         URI invalidUri = URI.create(testFileUri.toString() + ".does-not-exist");
 
-        HttpRangeReader reader = HttpRangeReader.of(invalidUri);
+        RangeReader reader = RangeReaderTestSupport.httpReader(invalidUri);
 
         assertThrows(
                 StorageException.class,

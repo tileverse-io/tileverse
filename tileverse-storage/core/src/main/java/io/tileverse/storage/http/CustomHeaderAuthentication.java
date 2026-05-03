@@ -1,5 +1,5 @@
 /*
- * (c) Copyright 2025 Multiversio LLC. All rights reserved.
+ * (c) Copyright 2026 Multiversio LLC. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,37 +17,48 @@ package io.tileverse.storage.http;
 
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest.Builder;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * Custom HTTP Header Authentication implementation for HttpRangeReader.
+ * Authentication implementation that adds an arbitrary set of headers to every request.
  *
- * <p>This authenticator allows arbitrary headers to be added to requests, which is useful for custom authentication
- * schemes or when multiple headers are required.
+ * <p>Used for custom authentication schemes or APIs that require multiple authentication headers (e.g. an API key plus
+ * a tenant identifier).
  */
-public class CustomHeaderAuthentication implements HttpAuthentication {
+public record CustomHeaderAuthentication(Map<String, String> headers) implements HttpAuthentication {
 
-    private final Map<String, String> headers;
-
-    /**
-     * Creates a new Custom Header Authentication instance.
-     *
-     * @param headers A map of header names to values
-     */
-    public CustomHeaderAuthentication(Map<String, String> headers) {
-        this.headers = Collections.unmodifiableMap(Objects.requireNonNull(headers, "Headers map cannot be null"));
-
+    public CustomHeaderAuthentication {
+        Objects.requireNonNull(headers, "Headers map cannot be null");
         if (headers.isEmpty()) {
             throw new IllegalArgumentException("Headers map cannot be empty");
         }
+        // Map.copyOf rejects null keys/values, which would otherwise blow up at request-building time.
+        headers = Map.copyOf(headers);
     }
 
     @Override
     public Builder authenticate(HttpClient httpClient, Builder requestBuilder) {
-        // Add all headers to the request builder
         headers.forEach(requestBuilder::header);
         return requestBuilder;
+    }
+
+    @Override
+    public HttpAuthFingerprint fingerprint() {
+        StringBuilder canonical = new StringBuilder("custom-header:");
+        headers.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> appendLengthPrefixed(canonical, entry.getKey(), entry.getValue()));
+        return new HttpAuthFingerprint("custom-header", HttpAuthFingerprint.sha256Hex(canonical.toString()));
+    }
+
+    private static void appendLengthPrefixed(StringBuilder out, String name, String value) {
+        out.append(name.length())
+                .append(':')
+                .append(name)
+                .append(':')
+                .append(value.length())
+                .append(':')
+                .append(value);
     }
 }

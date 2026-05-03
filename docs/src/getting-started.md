@@ -61,22 +61,22 @@ Tileverse is available on Maven Central. You can use the Bill of Materials (BOM)
 
 ### Reading a PMTiles Archive
 
-This example demonstrates how to read a PMTiles file from a local path using `StorageFactory`.
+The simplest form is `PMTilesReader.open(URI)`, which splits the leaf URI
+into parent + key, opens the underlying `Storage`, gets the `RangeReader`,
+and bundles them all so closing the reader releases everything.
 
 ```java
 import io.tileverse.pmtiles.PMTilesReader;
-import io.tileverse.storage.RangeReader;
-import io.tileverse.storage.StorageFactory;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Optional;
 
 public class Example {
     public void readTile() throws Exception {
-        // Open a per-blob RangeReader via the SPI (closing it releases the underlying Storage too).
-        try (RangeReader source = StorageFactory.openRangeReader(
-                Path.of("data/planet.pmtiles").toUri());
-                PMTilesReader reader = new PMTilesReader(source)) {
+        URI leaf = Path.of("data/planet.pmtiles").toUri();
+
+        try (PMTilesReader reader = PMTilesReader.open(leaf)) {
 
             // Fetch a specific tile (z=0, x=0, y=0)
             Optional<ByteBuffer> tile = reader.getTile(0, 0, 0);
@@ -91,20 +91,24 @@ public class Example {
 
 ### Cloud Storage Access
 
-To access files on S3, point `StorageFactory` at an `s3://` URI. The upper-level `PMTilesReader` API remains unchanged.
+To access files on S3, point `StorageFactory.open` at an `s3://` URI for the bucket (or bucket+prefix), then read the leaf URI through the Storage. The upper-level `PMTilesReader` API remains unchanged.
 
 ```java
 import io.tileverse.storage.RangeReader;
-import io.tileverse.storage.cache.CachingRangeReader;
+import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageFactory;
+import io.tileverse.storage.cache.CachingRangeReader;
 import java.net.URI;
 import java.util.Properties;
 
 Properties props = new Properties();
 props.setProperty("storage.s3.region", "us-east-1");
 
-try (RangeReader s3Source = StorageFactory.openRangeReader(
-        URI.create("s3://my-bucket/maps/planet.pmtiles"), props);
+URI bucket = URI.create("s3://my-bucket/maps/");
+URI leaf = URI.create("s3://my-bucket/maps/planet.pmtiles");
+
+try (Storage storage = StorageFactory.open(bucket, props);
+        RangeReader s3Source = storage.openRangeReader(leaf);
 
         // Wrap with in-memory caching for performance
         RangeReader cachedSource = CachingRangeReader.builder(s3Source)

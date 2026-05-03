@@ -28,7 +28,6 @@ import static org.mockito.Mockito.when;
 
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.models.BlobProperties;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.OptionalLong;
@@ -64,7 +63,7 @@ class AzureBlobRangeReaderTest {
     }
 
     @BeforeEach
-    void setUp() throws IOException {
+    void setUp() {
         // Mock direct blob methods instead of trying to mock the complex Azure API responses
         // This approach avoids the class cast exceptions in the API
 
@@ -115,7 +114,7 @@ class AzureBlobRangeReaderTest {
     }
 
     @Test
-    void testGetSize() throws IOException {
+    void testGetSize() {
         // Reset the invocation count for getProperties after setup
         clearInvocations(blobClient);
 
@@ -128,13 +127,13 @@ class AzureBlobRangeReaderTest {
     }
 
     @Test
-    void testConstructorVerifiesExists() throws IOException {
+    void testConstructorVerifiesExists() {
         // Verify the constructor checks if blob exists
         verify(blobClient).exists();
     }
 
     @Test
-    void testReadEntireFile() throws IOException {
+    void testReadEntireFile() {
         ByteBuffer buffer = reader.readRange(0, CONTENT_LENGTH).flip();
 
         assertEquals(CONTENT_LENGTH, buffer.remaining());
@@ -146,7 +145,7 @@ class AzureBlobRangeReaderTest {
     }
 
     @Test
-    void testReadRange() throws IOException {
+    void testReadRange() {
         int offset = 100;
         int length = 500;
 
@@ -162,7 +161,7 @@ class AzureBlobRangeReaderTest {
     }
 
     @Test
-    void testReadRangeBeyondEnd() throws IOException {
+    void testReadRangeBeyondEnd() {
         int offset = CONTENT_LENGTH - 200;
         int length = 500; // Beyond the end
 
@@ -179,7 +178,7 @@ class AzureBlobRangeReaderTest {
     }
 
     @Test
-    void testReadZeroLength() throws IOException {
+    void testReadZeroLength() {
         ByteBuffer buffer = reader.readRange(100, 0).flip();
 
         assertEquals(0, buffer.remaining());
@@ -196,7 +195,7 @@ class AzureBlobRangeReaderTest {
     }
 
     @Test
-    void testReadOffsetBeyondEnd() throws IOException {
+    void testReadOffsetBeyondEnd() {
         ByteBuffer buffer = reader.readRange(CONTENT_LENGTH + 100, 10).flip();
 
         // Should return empty buffer

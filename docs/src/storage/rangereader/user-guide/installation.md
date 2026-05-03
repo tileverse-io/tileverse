@@ -140,7 +140,8 @@ Create a simple test to verify the installation:
 
 ```java
 import io.tileverse.storage.RangeReader;
-import io.tileverse.storage.file.FileRangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -151,10 +152,10 @@ public class InstallationTest {
         Path testFile = Files.createTempFile("test", ".bin");
         Files.write(testFile, "Hello, World!".getBytes());
 
-        // Test the library
-        try (RangeReader reader = FileRangeReader.builder()
-                .path(testFile)
-                .build()) {
+        // Test the library: open a Storage rooted at the file (FileStorageProvider re-roots
+        // at the parent directory transparently) and read the leaf URI.
+        try (Storage storage = StorageFactory.open(testFile.toUri());
+                RangeReader reader = storage.openRangeReader(testFile.toUri())) {
 
             ByteBuffer data = reader.readRange(0, 5);
             data.flip();

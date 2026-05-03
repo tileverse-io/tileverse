@@ -63,6 +63,14 @@ public class DigestAuthentication implements HttpAuthentication {
     }
 
     @Override
+    public HttpAuthFingerprint fingerprint() {
+        // The challenge cache and nonce counter are live state that varies request-to-request and across instances
+        // pointed at the same server; the fingerprint must capture only the credential identity.
+        String canonical = "digest:" + username + ":" + password;
+        return new HttpAuthFingerprint("digest", HttpAuthFingerprint.sha256Hex(canonical));
+    }
+
+    @Override
     public HttpRequest.Builder authenticate(HttpClient httpClient, HttpRequest.Builder requestBuilder) {
         HttpRequest request = requestBuilder.build();
         URI uri = request.uri();

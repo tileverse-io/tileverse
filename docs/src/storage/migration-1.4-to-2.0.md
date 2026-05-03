@@ -40,7 +40,7 @@ Update every Java import:
 | `io.tileverse.rangereader.s3.*` | `io.tileverse.storage.s3.*` |
 | `io.tileverse.rangereader.azure.*` | `io.tileverse.storage.azure.*` |
 | `io.tileverse.rangereader.gcs.*` | `io.tileverse.storage.gcs.*` |
-| `io.tileverse.rangereader.spi.*` | `io.tileverse.storage.spi.*` |
+| `io.tileverse.rangereader.spi.*` | `io.tileverse.storage.spi.*` (provider extension points only; see note below) |
 | `io.tileverse.io.*` | unchanged |
 | `io.tileverse.cache.*` | unchanged |
 
@@ -54,6 +54,16 @@ find . -name '*.java' -print0 | xargs -0 sed -i \
     -e 's/io\.tileverse\.rangereader\.spi/io.tileverse.storage.spi/g' \
     -e 's/io\.tileverse\.rangereader/io.tileverse.storage/g'
 ```
+
+Note that `StorageConfig` and `StorageParameter` live in the consumer-facing
+`io.tileverse.storage` package -- the SPI package retains only the
+extension points (`StorageProvider`, `AbstractStorageProvider`):
+
+| Old (intermediate 2.0-SNAPSHOT) | New (2.0) |
+|---|---|
+| `io.tileverse.storage.spi.StorageConfig` | `io.tileverse.storage.StorageConfig` |
+| `io.tileverse.storage.spi.StorageParameter` | `io.tileverse.storage.StorageParameter` |
+| `StorageConfig.matches(config, providerId, schemes...)` (static) | `StorageProvider.matches(config, schemes...)` (default method on the interface; the provider's id is read from `getId()` automatically) |
 
 ## SPI class renames
 
@@ -109,67 +119,66 @@ release. Each provider's `getParameters()` now reports the canonical
 
 ## Factory API: `RangeReaderFactory` is gone
 
-The single-URI factory entry point was removed. Code that did:
+Both `RangeReaderFactory.create(uri)` (the 1.4.x convenience) and the
+short-lived 2.0 `StorageFactory.openRangeReader(uri[, props])` overloads
+have been removed. The 2.0 model is uniform across every backend: open a
+`Storage` for the container, ask it for a `RangeReader` for each leaf you
+want to read.
 
 ```java
 // 1.4.x
 try (RangeReader reader = RangeReaderFactory.create(uri)) {
     ByteBuffer header = reader.readRange(0, 1024);
 }
-```
 
-becomes one of two forms depending on how many objects you read:
-
-**One-shot single-object reads** (one URL in, one closeable out — same shape
-as the old API):
-
-```java
-// 2.0.x - leaf URL convenience
-try (RangeReader reader = StorageFactory.openRangeReader(uri)) {
+// 2.0.x — the only construction model
+URI parent = URI.create("s3://my-bucket/datasets/v3/");
+URI leaf = URI.create("s3://my-bucket/datasets/v3/file.pmtiles");
+try (Storage storage = StorageFactory.open(parent);
+        RangeReader reader = storage.openRangeReader(leaf)) {
     ByteBuffer header = reader.readRange(0, 1024);
 }
 ```
 
-`StorageFactory.openRangeReader(URI[, Properties])` opens the appropriate
-backend, reads the single object, and returns a reader that owns its
-underlying SDK client. Closing the reader releases the client. This is the
-direct equivalent of `RangeReaderFactory.create(uri)`.
+`Storage.openRangeReader(URI)` validates that the URI is within the
+Storage's namespace (matching scheme + authority, descendant path)
+and derives the relative key for you. The String-key overload
+`storage.openRangeReader("file.pmtiles")` is equivalent and avoids the URI
+parse for callers that already know the key.
 
-**Multi-object reads against the same backend** (the case `RangeReaderFactory`
-couldn't express): hold a `Storage` once and call `openRangeReader(key)` per
-file. The `Storage` is **thread-safe**, owns the underlying SDK client, and
-is reference-counted across sibling `Storage` instances against the same
-account.
+For long-lived consumers reading many files from the same root (GeoTools
+datastores, application services), hold the `Storage` for the lifetime of
+the component and open a per-request `RangeReader`. The `Storage` is
+**thread-safe**, owns the underlying SDK client, and is reference-counted
+across sibling `Storage` instances against the same account; closing the
+last `Storage` against a given account releases the client. This applies
+uniformly to `S3`, `Azure`, `GCS`, and `HTTP` — the JDK `HttpClient` is
+also refcounted via `HttpClientCache`, keyed by `(connect timeout,
+trust-all-certificates)`. Because of that, opening and closing a `Storage`
+for a single read is cheap on every backend, including HTTP.
+
+PMTiles consumers have a one-line shortcut:
+`PMTilesReader.open(URI)` does the parent/leaf split, opens the parent
+`Storage`, gets the `RangeReader`, and bundles them so closing the
+returned reader releases everything.
 
 ```java
-// 2.0.x - container handle, many keys
-URI parent = URI.create("s3://my-bucket/datasets/v3/");
-try (Storage storage = StorageFactory.open(parent)) {
-    try (RangeReader a = storage.openRangeReader("a.pmtiles");
-         RangeReader b = storage.openRangeReader("b.pmtiles")) {
-        // ...
-    }
+try (PMTilesReader reader = PMTilesReader.open(URI.create("s3://my-bucket/world.pmtiles"))) {
+    // ...
 }
 ```
 
-Long-lived consumers (GeoTools datastores, application services) that read
-many files from the same backend root should hold a single `Storage` and
-call `openRangeReader(key)` per request. Close the `Storage` when the
-consumer is disposed; the SDK client is released when the last reference
-drops.
-
 `Properties`-based configuration is preserved through the
-`StorageFactory.open(Properties)`, `StorageFactory.open(URI, Properties)`,
-and `StorageFactory.openRangeReader(URI, Properties)` overloads — this is
-the bridge for tools (GeoTools datastore params, Spring configuration
-binding, etc.) that pass configuration as a flat map.
+`StorageFactory.open(Properties)` and `StorageFactory.open(URI, Properties)`
+overloads — the bridge for tools (GeoTools datastore params, Spring
+configuration binding, etc.) that pass configuration as a flat map.
 
 ## SPI factory methods removed
 
 `StorageProvider` no longer exposes `create(URI)` / `create(StorageConfig)`,
 and `AbstractStorageProvider.createInternal(StorageConfig)` is gone. Custom
 backends now implement only `createStorage(StorageConfig)` (returning a raw
-`Storage` rooted at `config.uri()`) and `declaredCapabilities()`, in addition
+`Storage` rooted at `config.baseUri()`) and `declaredCapabilities()`, in addition
 to the existing `getId`, `getDescription`, `isAvailable`, `canProcess`, and
 `buildParameters` hooks.
 
@@ -198,8 +207,10 @@ S3RangeReader reader = S3RangeReader.builder()
 // 2.0.x — Properties-driven via StorageFactory
 Properties props = new Properties();
 props.setProperty("storage.s3.region", "us-west-2");
-try (RangeReader reader = StorageFactory.openRangeReader(
-        URI.create("s3://my-bucket/data.bin"), props)) {
+URI bucket = URI.create("s3://my-bucket/");
+URI leaf = URI.create("s3://my-bucket/data.bin");
+try (Storage storage = StorageFactory.open(bucket, props);
+        RangeReader reader = storage.openRangeReader(leaf)) {
     // ...
 }
 ```
@@ -256,6 +267,66 @@ optional methods, or rely on `requireXxx` helpers that fail fast with
 documents what each flag controls and which backends typically report
 `true` vs `false`.
 
+## `Storage` URI is a container, never a single object
+
+`Storage.baseUri()` is documented as a directory / container / bucket-prefix.
+It is **never** a single object. The cloud backends accept any prefix as-is
+(they have no ground truth to detect a leaf URI). The file backend is strict:
+a URI that points at an existing regular file is rejected with "must be a
+directory"; a URI that points at a non-existent path is rejected with
+"must point to an existing directory" (the provider does **not** auto-create it).
+
+If you previously relied on the early-2.0-SNAPSHOT behaviour where
+`StorageFactory.open(file:///path/to/file.pmtiles)` silently re-rooted
+at the parent directory, you now need to do the parent split yourself —
+or use `PMTilesReader.open(URI)`, which does it for you. (1.4.x had no
+`StorageFactory`; the equivalent `RangeReaderFactory.create(URI)` is
+covered in the [Factory API](#factory-api-rangereaderfactory-is-gone)
+section above.)
+
+```java
+// 2.0.x — parent-split done explicitly
+URI leaf = URI.create("file:///path/to/world.pmtiles");
+URI parent = URI.create("file:///path/to/");
+try (Storage storage = StorageFactory.open(parent);
+        RangeReader reader = storage.openRangeReader(leaf)) {
+    // ...
+}
+
+// 2.0.x — PMTiles consumers get the one-line shortcut
+try (PMTilesReader reader = PMTilesReader.open(URI.create("file:///path/to/world.pmtiles"))) {
+    // ...
+}
+```
+
+## Path-traversal hardening
+
+Every key-accepting `Storage` method (`stat`, `openRangeReader`, `read`,
+`put`, `openOutputStream`, `delete`, `deleteAll`, `copy`, `move`,
+`presignGet`, `presignPut`) and `list(pattern)` now reject keys with:
+
+- a leading `/`
+- a `..` or `.` path segment (split on `/`)
+- a NUL byte
+- empty (or `null`)
+
+`FileStorage` adds a `Path.startsWith(root)` bounds check after resolving
+the key to catch Windows backslash separators and other shapes the
+lexical guard cannot see.
+
+Callers that legitimately used `..` in object names will get
+`IllegalArgumentException` and need to switch to a different naming
+scheme. Cloud-backend consumers are unlikely to be affected — `..` was
+treated as a literal segment in S3/Azure/GCS keys, but the convention in
+practice is to avoid it.
+
+`Storage.openRangeReader(URI)` additionally rejects URIs whose
+percent-encoded path contains a traversal segment (e.g. `%2E%2E`),
+because some HTTP servers decode mid-path and would honor it as
+traversal. The URI overload also drops fragments silently (RFC 3986
+fragments are client-only) and preserves query strings into the derived
+key (load-bearing for HTTP signed URLs and SAS tokens on the leaf).
+
 ## Quick checklist
 
 1. Bump `tileverse-bom` (or pin) to `2.0.0`.
@@ -266,16 +337,14 @@ documents what each flag controls and which backends typically report
    then `io.tileverse.rangereader → io.tileverse.storage`).
 4. If you implement the SPI: rename four classes, the `META-INF/services`
    file, and replace `createInternal` with `createStorage`.
-5. Replace `RangeReaderFactory.create(URI)` callers. For single-object reads
-   use `StorageFactory.openRangeReader(uri[, props])` (one closeable, same
-   shape as 1.4.x). For consumers that read many objects from the same
-   backend, hold a `Storage` via `StorageFactory.open(parent)` for the
-   lifetime of your component and call `openRangeReader(key)` per request;
-   close the `Storage` on dispose.
+5. Replace `RangeReaderFactory.create(URI)` callers with the two-resource
+   pattern: `StorageFactory.open(parentUri[, props])` to hold the `Storage`
+   for the lifetime of the consumer, then `storage.openRangeReader(leafUri)`
+   per request. PMTiles consumers can use `PMTilesReader.open(URI)` for the
+   one-line case. Close the `Storage` on dispose.
 6. Replace `XxxRangeReader.builder()...build()` callers. For Properties-driven
-   configuration use `StorageFactory.open(uri, props)` /
-   `StorageFactory.openRangeReader(uri, props)`. For SDK-client injection use
-   `XxxStorageProvider.open(URI, sdkClient)` (e.g.
+   configuration use `StorageFactory.open(parentUri, props)`. For SDK-client
+   injection use `XxxStorageProvider.open(URI, sdkClient)` (e.g.
    `S3StorageProvider.open(uri, mySpringS3)`).
 7. Migrate config keys from `io.tileverse.rangereader.*` to
    `storage.*` to silence the legacy-key warnings.

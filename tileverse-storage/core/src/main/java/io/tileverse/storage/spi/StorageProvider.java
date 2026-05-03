@@ -17,32 +17,26 @@ package io.tileverse.storage.spi;
 
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.Storage;
-import java.io.IOException;
+import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageParameter;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.ServiceLoader;
 import java.util.ServiceLoader.Provider;
 import java.util.stream.Stream;
 
 /**
- * Service Provider Interface (SPI) for opening {@link Storage} instances and single-object {@link RangeReader
- * RangeReaders}. Implementations are discovered at runtime via {@link ServiceLoader} and selected by
- * {@link io.tileverse.storage.StorageFactory} based on the URI (and, for ambiguous {@code http(s)} URIs, a HEAD-probe
- * disambiguation step).
+ * Service Provider Interface (SPI) for opening {@link Storage} instances. Implementations are discovered at runtime via
+ * {@link ServiceLoader} and selected by {@link io.tileverse.storage.StorageFactory} based on the URI (and, for
+ * ambiguous {@code http(s)} URIs, a HEAD-probe disambiguation step).
  *
- * <p>To produce a {@link RangeReader} for a single object, either
- *
- * <ul>
- *   <li>call {@link #openRangeReader(StorageConfig)} with a config whose {@link StorageConfig#uri() uri} is the leaf
- *       object URL, or
- *   <li>open a {@link Storage} rooted at the object's container with {@link #createStorage(StorageConfig)} and call
- *       {@link Storage#openRangeReader(String)} with the relative key.
- * </ul>
- *
- * The first form returns a reader that owns its underlying storage; closing the reader releases the SDK client.
+ * <p>To produce a {@link RangeReader} for a single object, open a {@link Storage} rooted at the object's container with
+ * {@link #createStorage(StorageConfig)} and call {@link Storage#openRangeReader(String)} with the relative key (or
+ * {@link Storage#openRangeReader(URI)} with the absolute URI; the Storage validates and relativizes).
  */
 public interface StorageProvider {
 
@@ -94,6 +88,29 @@ public interface StorageProvider {
     boolean canProcess(StorageConfig config);
 
     /**
+     * Convenience helper for {@link #canProcess(StorageConfig)} implementations: returns {@code true} when the config
+     * does not name a different provider AND the config's {@link StorageConfig#baseUri() baseUri} has one of the
+     * supplied schemes (a {@code null} element in {@code acceptedUriSchemes} matches a scheme-less URI like a bare
+     * filesystem path).
+     *
+     * @param config the configuration to check; its {@link StorageConfig#baseUri()} must not be {@code null}
+     * @param acceptedUriSchemes URI schemes this provider claims (e.g. {@code "file"}, {@code "http"}, {@code "https"})
+     * @return {@code true} if the config matches this provider's id (when set) and one of the accepted schemes
+     * @throws NullPointerException if {@code config} or {@code config.baseUri()} is {@code null}
+     */
+    default boolean matches(StorageConfig config, String... acceptedUriSchemes) {
+        Objects.requireNonNull(config, "config parameter is null");
+        Objects.requireNonNull(config.baseUri(), "config baseUri is null");
+        if (config.providerId().isPresent()
+                && !config.providerId().orElseThrow().equals(getId())) {
+            return false;
+        }
+        // may be null; null in acceptedUriSchemes matches scheme-less URIs (bare paths).
+        final String scheme = config.baseUri().getScheme();
+        return Arrays.asList(acceptedUriSchemes).contains(scheme);
+    }
+
+    /**
      * Performs a more definitive check by inspecting HTTP headers from a HEAD request. This method is only called for
      * ambiguous http(s) URIs as a final disambiguation step.
      *
@@ -121,46 +138,6 @@ public interface StorageProvider {
      * {@link RangeReader RangeReaders} obtained from it inherit those settings.
      */
     Storage createStorage(StorageConfig config);
-
-    /**
-     * Open a {@link RangeReader} for the single object identified by {@code leafConfig.uri()}. The returned reader owns
-     * whatever resources it needs (SDK client lease, owning {@link Storage}, etc.) and releases them on
-     * {@link RangeReader#close() close}, so callers have a single resource to manage.
-     *
-     * <p>This is the convenient entry point for one-shot reads of a single object URL. Callers that need to read
-     * multiple objects from the same backend should hold a {@link Storage} (via {@link #createStorage}) and call
-     * {@link Storage#openRangeReader(String)} per key, which avoids the per-call wrapping overhead.
-     *
-     * <p>The default implementation derives a parent URI via {@link URI#resolve(String) leaf.resolve(".")} and
-     * delegates to {@link #createStorage} + {@link Storage#openRangeReader(String)}, then wraps the result so closing
-     * the reader closes the storage. Backends whose URI grammar makes that split lossy (S3 keys with {@code ?}, Azure
-     * container roots, HTTP query strings, etc.) should override.
-     */
-    default RangeReader openRangeReader(StorageConfig leafConfig) {
-        URI leaf = leafConfig.uri();
-        if (leaf == null) {
-            throw new IllegalArgumentException("StorageConfig.uri() is required");
-        }
-        URI parent = leaf.resolve(".");
-        String key = parent.relativize(leaf).toString();
-        if (key.isEmpty() || key.equals(leaf.toString())) {
-            throw new IllegalArgumentException(
-                    "Cannot derive object key from URI: " + leaf + " (must point to a leaf object, not a container)");
-        }
-        Properties props = leafConfig.toProperties();
-        props.setProperty(StorageConfig.URI_KEY, parent.toString());
-        Storage storage = createStorage(StorageConfig.fromProperties(props));
-        try {
-            return new OwnedRangeReader(storage.openRangeReader(key), storage);
-        } catch (RuntimeException e) {
-            try {
-                storage.close();
-            } catch (IOException close) {
-                e.addSuppressed(close);
-            }
-            throw e;
-        }
-    }
 
     /**
      * Checks if a feature is enabled via a system property or environment variable. The check is case-sensitive. The

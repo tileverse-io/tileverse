@@ -72,6 +72,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -80,6 +81,7 @@ import org.jspecify.annotations.Nullable;
  * <p>Azure DataLake Gen2 (HNS) does not expose per-object version IDs; {@link StorageEntry.File#versionId()} is always
  * empty.
  */
+@Slf4j
 final class AzureDataLakeStorage implements Storage {
 
     private static final StorageCapabilities capabilities = StorageCapabilities.builder()
@@ -177,8 +179,11 @@ final class AzureDataLakeStorage implements Storage {
     @Override
     public Stream<StorageEntry> list(String pattern, ListOptions options) {
         requireOpen();
+        Storage.requireSafePattern(pattern);
         StoragePattern parsed = StoragePattern.parse(pattern);
-        String fullPrefix = location.resolve(parsed.prefix());
+        // Skip resolve() because parsed.prefix() may be empty (legitimate root-listing); requireSafePattern above has
+        // already validated the pattern, so concatenating the container prefix directly is safe.
+        String fullPrefix = location.prefix() + parsed.prefix();
         Predicate<String> matcher = parsed.matcher().orElse(k -> true);
 
         ListPathsOptions listOpts = new ListPathsOptions()
@@ -191,7 +196,8 @@ final class AzureDataLakeStorage implements Storage {
         try {
             iter = fileSystem.listPaths(listOpts, null);
             rawItems = iter.iterator();
-            rawItems.hasNext(); // force first-page fetch to surface auth/region errors here
+            boolean hasNext = rawItems.hasNext(); // force first-page fetch to surface auth/region errors here
+            log.trace("first-page fetch check, has next: {}", hasNext);
         } catch (DataLakeStorageException e) {
             throw AzureExceptionMapper.map(e, fullPrefix);
         }
@@ -386,6 +392,7 @@ final class AzureDataLakeStorage implements Storage {
     @Override
     public OutputStream openOutputStream(String key, WriteOptions options) {
         requireOpen();
+        Storage.requireSafeKey(key);
         Path tmp;
         OutputStream sink;
         try {
@@ -434,6 +441,7 @@ final class AzureDataLakeStorage implements Storage {
     @Override
     public DeleteResult deleteAll(Collection<String> keys) {
         requireOpen();
+        keys.forEach(Storage::requireSafeKey);
         Set<String> deleted = new HashSet<>();
         Set<String> didNotExist = new HashSet<>();
         Map<String, StorageException> failed = new HashMap<>();
@@ -455,6 +463,8 @@ final class AzureDataLakeStorage implements Storage {
     @Override
     public StorageEntry.File copy(String srcKey, String dstKey, CopyOptions options) {
         requireOpen();
+        Storage.requireSafeKey(srcKey);
+        Storage.requireSafeKey(dstKey);
         // DataLake SDK does not expose a server-side copy primitive; fall through to the
         // parallel blob endpoint which supports CopyFromUrl on the same data plane.
         if (options.ifNotExistsAtDestination() && stat(dstKey).isPresent()) {
@@ -484,6 +494,8 @@ final class AzureDataLakeStorage implements Storage {
     @Override
     public StorageEntry.File move(String srcKey, String dstKey, CopyOptions options) {
         requireOpen();
+        Storage.requireSafeKey(srcKey);
+        Storage.requireSafeKey(dstKey);
         if (options.ifNotExistsAtDestination() && stat(dstKey).isPresent()) {
             throw new PreconditionFailedException("Destination already exists: " + dstKey);
         }
@@ -497,12 +509,14 @@ final class AzureDataLakeStorage implements Storage {
         return stat(dstKey).orElseThrow(() -> new StorageException("Move failed for: " + dstKey));
     }
 
+    /** @throws UnsupportedCapabilityException */
     @Override
     public URI presignGet(String key, Duration ttl) {
         // Use AzureBlobStorage on the parallel blob endpoint for SAS-based presign.
         throw new UnsupportedCapabilityException("presignGet on DataLake (use AzureBlobStorage on the same account)");
     }
 
+    /** @throws UnsupportedCapabilityException */
     @Override
     public URI presignPut(String key, Duration ttl, PresignWriteOptions options) {
         throw new UnsupportedCapabilityException("presignPut on DataLake (use AzureBlobStorage on the same account)");

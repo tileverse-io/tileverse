@@ -35,8 +35,8 @@ import java.util.stream.Stream;
  * delegate uncached. Caches operate on byte ranges; sequential streams skip the cache by design.
  *
  * <p>Used by {@link StorageFactory} to apply caching auto-decoration based on the {@code storage.caching.*} parameters
- * in the {@link io.tileverse.storage.spi.StorageConfig}, preserving the legacy auto-caching behavior without leaking
- * the decorator concern into individual backend Storage implementations.
+ * in the {@link io.tileverse.storage.StorageConfig}, preserving the legacy auto-caching behavior without leaking the
+ * decorator concern into individual backend Storage implementations.
  */
 final class CachingStorage implements Storage {
 
@@ -71,6 +71,15 @@ final class CachingStorage implements Storage {
     @Override
     public RangeReader openRangeReader(String key) {
         return readerDecorator.apply(delegate.openRangeReader(key));
+    }
+
+    /**
+     * Delegate URI-to-key derivation to the wrapped Storage so backend-specific overrides (e.g. GCS stripping
+     * {@code ?alt=media} from the URI) are honored when callers go through the URI overload.
+     */
+    @Override
+    public String relativizeToKey(URI uri) {
+        return delegate.relativizeToKey(uri);
     }
 
     @Override

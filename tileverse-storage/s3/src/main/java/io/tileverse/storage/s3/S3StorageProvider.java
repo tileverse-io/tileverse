@@ -15,13 +15,13 @@
  */
 package io.tileverse.storage.s3;
 
-import static io.tileverse.storage.spi.StorageParameter.SUBGROUP_AUTHENTICATION;
+import static io.tileverse.storage.StorageParameter.SUBGROUP_AUTHENTICATION;
 import static java.util.function.Predicate.not;
 
 import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.spi.AbstractStorageProvider;
-import io.tileverse.storage.spi.StorageConfig;
-import io.tileverse.storage.spi.StorageParameter;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.util.List;
@@ -35,7 +35,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 /**
  * {@link StorageProvider} implementation for AWS S3.
  *
- * <p>The {@link StorageConfig#uri() URI} is used to extract the bucket and object name from an S3 URI.
+ * <p>The {@link StorageConfig#baseUri() URI} is used to extract the bucket and object name from an S3 URI.
  *
  * <p>An S3 URL, or Amazon Simple Storage Service Uniform Resource Locator, refers to the address used to access
  * resources stored within AWS S3. There are several forms of S3 URLs, depending on the context and desired access
@@ -74,66 +74,6 @@ public class S3StorageProvider extends AbstractStorageProvider {
     public static final String ENABLED_KEY = "IO_TILEVERSE_STORAGE_S3";
     /** This range reader implementation's {@link #getId() unique identifier} */
     public static final String ID = "s3";
-
-    /**
-     * Creates a new S3RangeReaderProvider with support for caching parameters
-     *
-     * @see AbstractStorageProvider#MEMORY_CACHE_ENABLED
-     * @see AbstractStorageProvider#MEMORY_CACHE_BLOCK_ALIGNED
-     * @see AbstractStorageProvider#MEMORY_CACHE_BLOCK_SIZE
-     */
-    public S3StorageProvider() {
-        super(true);
-    }
-
-    /**
-     * Opens a {@link io.tileverse.storage.Storage} backed by the supplied sync
-     * {@link software.amazon.awssdk.services.s3.S3Client}, bypassing the SPI configuration path. Useful for
-     * Spring-managed clients, LocalStack/MinIO test fixtures, or custom credential-provider chains expressible only as
-     * a built {@code S3Client}.
-     *
-     * <p><b>Capability degradation</b>: with only a sync client, {@code read} (parallel multi-part GET via the CRT
-     * async client), multipart upload (via {@code S3TransferManager}), and presigned URL operations are unavailable and
-     * throw {@link io.tileverse.storage.UnsupportedCapabilityException}. For full feature parity, build the matching
-     * async/transfer/presigner objects and call {@link #open(java.net.URI, S3ClientBundle)} instead.
-     *
-     * <p>The returned {@code Storage} <b>borrows</b> the supplied client; closing the {@code Storage} does NOT close
-     * the client. The caller retains ownership.
-     *
-     * @param uri canonical {@code s3://bucket[/prefix/]} URI; bucket parsing follows the standard S3-compatible
-     *     conventions also accepted by the SPI path
-     * @param client a pre-configured sync S3 client; not closed by the returned {@code Storage}
-     * @return a borrowed-client {@code S3Storage} with sync-only capabilities
-     */
-    public static Storage open(URI uri, S3Client client) {
-        if (client == null) {
-            throw new IllegalArgumentException("client");
-        }
-        return open(uri, S3ClientBundle.syncOnly(client));
-    }
-
-    /**
-     * Opens a {@link io.tileverse.storage.Storage} backed by the supplied {@link S3ClientBundle}, bypassing the SPI
-     * configuration path. Use this overload when the caller wants the full feature surface (range reads, {@code read},
-     * multipart upload, presigned URLs) with externally-managed SDK objects.
-     *
-     * <p>The returned {@code Storage} <b>borrows</b> all SDK objects in the bundle; closing the {@code Storage} does
-     * NOT close them. The caller retains ownership and lifetime control.
-     *
-     * @param uri canonical {@code s3://bucket[/prefix/]} URI
-     * @param bundle the SDK objects to use; required to have a sync client, optional async/transfer/presigner
-     * @return a borrowed-client {@code S3Storage} with the capabilities reflected by the bundle's optional objects
-     */
-    public static Storage open(URI uri, S3ClientBundle bundle) {
-        if (uri == null) {
-            throw new IllegalArgumentException("uri");
-        }
-        if (bundle == null) {
-            throw new IllegalArgumentException("bundle");
-        }
-        S3StorageBucketKey ref = S3StorageBucketKey.parse(uri);
-        return new S3Storage(uri, ref, new BorrowedS3Handle(bundle));
-    }
 
     /**
      * A {@link StorageParameter} to enable or disable S3 path style access. When enabled, requests will use path-style
@@ -303,6 +243,66 @@ public class S3StorageProvider extends AbstractStorageProvider {
             S3_USE_DEFAULT_CREDENTIALS_PROVIDER,
             S3_DEFAULT_CREDENTIALS_PROFILE);
 
+    /**
+     * Creates a new S3RangeReaderProvider with support for caching parameters
+     *
+     * @see AbstractStorageProvider#MEMORY_CACHE_ENABLED
+     * @see AbstractStorageProvider#MEMORY_CACHE_BLOCK_ALIGNED
+     * @see AbstractStorageProvider#MEMORY_CACHE_BLOCK_SIZE
+     */
+    public S3StorageProvider() {
+        super(true);
+    }
+
+    /**
+     * Opens a {@link io.tileverse.storage.Storage} backed by the supplied sync
+     * {@link software.amazon.awssdk.services.s3.S3Client}, bypassing the SPI configuration path. Useful for
+     * Spring-managed clients, LocalStack/MinIO test fixtures, or custom credential-provider chains expressible only as
+     * a built {@code S3Client}.
+     *
+     * <p><b>Capability degradation</b>: with only a sync client, {@code read} (parallel multi-part GET via the CRT
+     * async client), multipart upload (via {@code S3TransferManager}), and presigned URL operations are unavailable and
+     * throw {@link io.tileverse.storage.UnsupportedCapabilityException}. For full feature parity, build the matching
+     * async/transfer/presigner objects and call {@link #open(java.net.URI, S3ClientBundle)} instead.
+     *
+     * <p>The returned {@code Storage} <b>borrows</b> the supplied client; closing the {@code Storage} does NOT close
+     * the client. The caller retains ownership.
+     *
+     * @param uri canonical {@code s3://bucket[/prefix/]} URI; bucket parsing follows the standard S3-compatible
+     *     conventions also accepted by the SPI path
+     * @param client a pre-configured sync S3 client; not closed by the returned {@code Storage}
+     * @return a borrowed-client {@code S3Storage} with sync-only capabilities
+     */
+    public static Storage open(URI uri, S3Client client) {
+        if (client == null) {
+            throw new IllegalArgumentException("client");
+        }
+        return open(uri, S3ClientBundle.syncOnly(client));
+    }
+
+    /**
+     * Opens a {@link io.tileverse.storage.Storage} backed by the supplied {@link S3ClientBundle}, bypassing the SPI
+     * configuration path. Use this overload when the caller wants the full feature surface (range reads, {@code read},
+     * multipart upload, presigned URLs) with externally-managed SDK objects.
+     *
+     * <p>The returned {@code Storage} <b>borrows</b> all SDK objects in the bundle; closing the {@code Storage} does
+     * NOT close them. The caller retains ownership and lifetime control.
+     *
+     * @param uri canonical {@code s3://bucket[/prefix/]} URI
+     * @param bundle the SDK objects to use; required to have a sync client, optional async/transfer/presigner
+     * @return a borrowed-client {@code S3Storage} with the capabilities reflected by the bundle's optional objects
+     */
+    public static Storage open(URI uri, S3ClientBundle bundle) {
+        if (uri == null) {
+            throw new IllegalArgumentException("uri");
+        }
+        if (bundle == null) {
+            throw new IllegalArgumentException("bundle");
+        }
+        S3StorageBucketKey ref = S3StorageBucketKey.parse(uri);
+        return new S3Storage(uri, ref, new BorrowedS3Handle(bundle));
+    }
+
     @Override
     public String getId() {
         return ID;
@@ -330,9 +330,9 @@ public class S3StorageProvider extends AbstractStorageProvider {
 
     @Override
     public boolean canProcess(StorageConfig config) {
-        if (StorageConfig.matches(config, getId(), "s3", "http", "https")) {
+        if (matches(config, "s3", "http", "https")) {
             try {
-                URI uri = config.uri();
+                URI uri = config.baseUri();
                 S3Reference l = S3CompatibleUrlParser.parseS3Url(uri);
 
                 boolean hasValidBucket =
@@ -355,7 +355,7 @@ public class S3StorageProvider extends AbstractStorageProvider {
                 }
                 return true;
             } catch (IllegalArgumentException e) {
-                log.debug("Can't process URL {}: {}", config.uri(), e.getMessage());
+                log.debug("Can't process URL {}: {}", config.baseUri(), e.getMessage());
             }
         }
         return false;
@@ -369,9 +369,9 @@ public class S3StorageProvider extends AbstractStorageProvider {
 
     @Override
     public Storage createStorage(StorageConfig config) {
-        URI uri = config.uri();
+        URI uri = config.baseUri();
         if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.uri() is required for S3Storage");
+            throw new IllegalArgumentException("StorageConfig.baseUri() is required for S3Storage");
         }
         S3StorageBucketKey ref = S3StorageBucketKey.parse(uri);
         S3ClientCache.Lease lease = clientCache.acquire(keyFor(config));
@@ -392,9 +392,9 @@ public class S3StorageProvider extends AbstractStorageProvider {
      * </ol>
      */
     static S3ClientCache.Key keyFor(StorageConfig config) {
-        URI uri = config.uri();
+        URI uri = config.baseUri();
         if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.uri() is required for S3Storage");
+            throw new IllegalArgumentException("StorageConfig.baseUri() is required for S3Storage");
         }
         S3Reference s3Ref = S3CompatibleUrlParser.parseS3Url(uri);
         String region = config.getParameter(S3_REGION)

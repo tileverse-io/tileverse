@@ -16,12 +16,9 @@
 package io.tileverse.storage;
 
 import io.tileverse.storage.spi.CachingProviderHelper;
-import io.tileverse.storage.spi.StorageConfig;
-import io.tileverse.storage.spi.StorageParameter;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.util.Properties;
-import java.util.function.UnaryOperator;
 import lombok.NonNull;
 
 /**
@@ -47,7 +44,7 @@ public final class StorageFactory {
      * @throws StorageException if the backend cannot be opened
      */
     public static Storage open(@NonNull URI uri) {
-        return open(new StorageConfig().uri(uri));
+        return open(new StorageConfig().baseUri(uri));
     }
 
     /**
@@ -65,7 +62,7 @@ public final class StorageFactory {
     }
 
     /**
-     * Open a {@link Storage} from a fully-populated {@link StorageConfig}. The config's {@link StorageConfig#uri()}
+     * Open a {@link Storage} from a fully-populated {@link StorageConfig}. The config's {@link StorageConfig#baseUri()}
      * drives provider selection.
      *
      * @throws StorageException if the backend cannot be opened
@@ -85,7 +82,7 @@ public final class StorageFactory {
     private static StorageConfig withProviderDefaults(
             @NonNull StorageProvider provider, @NonNull StorageConfig config) {
         StorageConfig merged = provider.getDefaultConfig();
-        merged.uri(config.uri());
+        merged.baseUri(config.baseUri());
         config.providerId().ifPresent(merged::providerId);
         for (StorageParameter<?> param : provider.getParameters()) {
             config.getParameter(param.key()).ifPresent(v -> merged.setParameter(param.key(), v));
@@ -122,54 +119,5 @@ public final class StorageFactory {
      */
     public static StorageProvider findProvider(@NonNull StorageConfig config) {
         return StorageProviderResolver.findBestProvider(config);
-    }
-
-    /**
-     * One-shot convenience: open a {@link RangeReader} for the single object at {@code uri} using default
-     * configuration. The returned reader owns its underlying SDK client; closing the reader releases it.
-     *
-     * <p>Equivalent to {@code openRangeReader(uri, null)}. Callers that need to read multiple objects from the same
-     * backend should hold a {@link Storage} (via {@link #open(URI)}) and call {@link Storage#openRangeReader(String)}
-     * per key instead.
-     *
-     * @throws StorageException if the reader cannot be opened
-     */
-    public static RangeReader openRangeReader(@NonNull URI uri) {
-        return openRangeReader(uri, new Properties());
-    }
-
-    /**
-     * One-shot convenience: open a {@link RangeReader} for the single object at {@code uri}, configuring the backend
-     * from {@code props}. Properties keys live under the {@code storage.*} namespace (legacy
-     * {@code io.tileverse.rangereader.*} keys are accepted with a one-time WARN per distinct key). The URI argument
-     * wins over any {@code storage.uri} entry in the props.
-     *
-     * <p>The returned reader owns its underlying SDK client; closing the reader releases it. Caching auto-decoration
-     * applies based on {@code storage.caching.*} parameters in the resolved config.
-     *
-     * @throws StorageException if the reader cannot be opened
-     */
-    public static RangeReader openRangeReader(@NonNull URI uri, @NonNull Properties props) {
-        Properties merged = new Properties();
-        merged.putAll(props);
-        merged.setProperty("storage.uri", uri.toString());
-        return openRangeReader(StorageConfig.fromProperties(merged));
-    }
-
-    /**
-     * One-shot convenience: open a {@link RangeReader} for the single object at {@code config.uri()}. Selects the
-     * appropriate provider, applies the provider's parameter defaults over {@code config}, calls
-     * {@link StorageProvider#openRangeReader(StorageConfig)}, and applies caching auto-decoration if enabled.
-     *
-     * @throws StorageException if the reader cannot be opened
-     */
-    public static RangeReader openRangeReader(@NonNull StorageConfig config) {
-        StorageProvider provider = StorageProviderResolver.findBestProvider(config);
-        StorageConfig resolved = withProviderDefaults(provider, config);
-        RangeReader reader = provider.openRangeReader(resolved);
-        return CachingProviderHelper.cachingDecoratorFor(resolved)
-                .<UnaryOperator<RangeReader>>map(d -> d::apply)
-                .orElse(UnaryOperator.identity())
-                .apply(reader);
     }
 }

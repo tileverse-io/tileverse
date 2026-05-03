@@ -28,10 +28,10 @@ import software.amazon.awssdk.transfer.s3.S3TransferManager;
  * surface:
  *
  * <ul>
- *   <li>{@link S3Client} (sync) — required; drives stat, list, range read, single-shot write, copy, delete.
- *   <li>{@link S3AsyncClient} (CRT-based) — optional; required for {@code read} (parallel multi-part GET).
- *   <li>{@link S3TransferManager} — optional; required for multipart upload of larger payloads.
- *   <li>{@link S3Presigner} — optional; required for {@code presignGet}/{@code presignPut}.
+ *   <li>{@link S3Client} (sync) -- required; drives stat, list, range read, single-shot write, copy, delete.
+ *   <li>{@link S3AsyncClient} (CRT-based) -- optional; required for {@code read} (parallel multi-part GET).
+ *   <li>{@link S3TransferManager} -- optional; required for multipart upload of larger payloads.
+ *   <li>{@link S3Presigner} -- optional; required for {@code presignGet}/{@code presignPut}.
  * </ul>
  *
  * <p>Use {@link #syncOnly(S3Client)} when only sync-path operations are needed (range reads, small writes); the missing

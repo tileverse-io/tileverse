@@ -147,6 +147,5 @@ try (PMTilesReader reader = PMTilesReader.open(URI.create("s3://my-bucket/world.
 ## Next Steps
 
 - **[Reading PMTiles](reading.md)**: Learn more about reading operations
-- **[Writing PMTiles](writing.md)**: Create your own PMTiles archives
 - **[Cloud Storage](cloud-storage.md)**: Deep dive into cloud storage integration
 - **[Storage Guide](../../storage/index.md)** and **[Range Reader Guide](../../storage/rangereader/user-guide/index.md)**: Understand the underlying data access layer

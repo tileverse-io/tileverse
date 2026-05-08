@@ -199,8 +199,8 @@ public class VectorTileBuilder {
         }
 
         private Geometry createTileEnvelope() {
-            int buffer = params.clipBuffer;
-            int size = params.extent;
+            double buffer = params.clipBuffer;
+            double size = params.extent;
             Coordinate[] coords = new Coordinate[5];
             coords[0] = new Coordinate(0 - buffer, size + buffer);
             coords[1] = new Coordinate(size + buffer, size + buffer);

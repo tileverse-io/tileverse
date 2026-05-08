@@ -45,7 +45,6 @@ class DualBlockSizeRangeReaderTest {
     private static final int FILE_SIZE = 100_000;
     private static final int MEMORY_BLOCK_SIZE = 16 * 1024; // 16KB
     private static final int DISK_BLOCK_SIZE = 64 * 1024; // 64KB
-    private static final String SOURCE_ID = "test-file";
 
     @BeforeEach
     void setUp() throws IOException {

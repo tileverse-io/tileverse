@@ -16,7 +16,7 @@
 package io.tileverse.storage.gcs;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
@@ -56,8 +56,8 @@ class GoogleCloudStorageProviderTest {
     void testCanProcessRecognizedUrisOnly() {
         StorageConfig config = provider.getDefaultConfig();
 
-        assertThrows(NullPointerException.class, () -> provider.canProcess(null));
-        assertThrows(NullPointerException.class, () -> provider.canProcess(config));
+        assertThatThrownBy(() -> provider.canProcess(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> provider.canProcess(config)).isInstanceOf(NullPointerException.class);
 
         assertThat(provider.canProcess(config.baseUri("gs://bucket/file.pmtiles")))
                 .isTrue();

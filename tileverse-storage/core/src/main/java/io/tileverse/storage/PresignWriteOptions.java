@@ -17,6 +17,7 @@ package io.tileverse.storage;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import org.jspecify.annotations.NullMarked;
 
@@ -31,7 +32,7 @@ import org.jspecify.annotations.NullMarked;
 public record PresignWriteOptions(Optional<String> contentType, Map<String, String> userMetadata, boolean ifNotExists) {
 
     public PresignWriteOptions {
-        contentType = (contentType == null) ? Optional.empty() : contentType;
+        contentType = Objects.requireNonNullElse(contentType, Optional.empty());
         userMetadata = (userMetadata == null) ? Map.of() : Map.copyOf(userMetadata);
     }
 

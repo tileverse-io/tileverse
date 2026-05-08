@@ -120,7 +120,7 @@ class StorageFactoryIT {
         setupGCS();
     }
 
-    static void setupAzurite() throws IOException {
+    static void setupAzurite() {
         BlobServiceClient blobServiceClient = new BlobServiceClientBuilder()
                 .connectionString(azurite.getConnectionString())
                 .buildClient();
@@ -187,12 +187,13 @@ class StorageFactoryIT {
         String url = "http://" + httpd.getHost() + ":" + httpd.getFirstMappedPort() + "/" + FILE_NAME;
         testFindBestProvider(URI.create(url), HttpStorageProvider.class);
 
-        StorageConfig config = new StorageConfig().baseUri(URI.create(url));
+        StorageConfig config = new StorageConfig(url);
         RangeReader reader = testCreate(config);
         assertThat(reader.size()).hasValue(FILE_SIZE);
     }
 
     @Test
+    @SuppressWarnings("java:S125") // The block comment below documents the GCS metadata response; it's not dead code.
     void testGCS() throws IOException {
         String emulatorHost = gcsEmulator.getHost();
         Integer emulatorPort = gcsEmulator.getFirstMappedPort();
@@ -229,7 +230,7 @@ class StorageFactoryIT {
 
         testFindBestProvider(URI.create(gcsURL), GoogleCloudStorageProvider.class);
 
-        StorageConfig config = new StorageConfig().baseUri(gcsURL);
+        StorageConfig config = new StorageConfig(gcsURL);
         RangeReader reader = testCreate(config);
         assertThat(reader.size()).hasValue(FILE_SIZE);
     }
@@ -282,7 +283,7 @@ class StorageFactoryIT {
     static RangeReader testAzureBlob(String url, String accountKey) throws IOException {
         testFindBestProvider(URI.create(url), AzureBlobStorageProvider.class);
 
-        StorageConfig config = new StorageConfig().baseUri(URI.create(url));
+        StorageConfig config = new StorageConfig(url);
 
         if (accountKey != null) {
             config.setParameter(AzureBlobStorageProvider.AZURE_ACCOUNT_KEY, accountKey);
@@ -306,7 +307,7 @@ class StorageFactoryIT {
     static RangeReader testS3(final URI s3URI, String accessKey, String secretKey, boolean anonymous)
             throws IOException {
         testFindBestProvider(s3URI, S3StorageProvider.class);
-        StorageConfig config = new StorageConfig().baseUri(s3URI);
+        StorageConfig config = new StorageConfig(s3URI);
         if (accessKey != null && secretKey != null) {
             // The negative "no credentials -> IOException" path is environment-sensitive
             // (the AWS DefaultCredentialsProvider may pick up ambient creds), so we only
@@ -321,7 +322,7 @@ class StorageFactoryIT {
     }
 
     static void testFindBestProvider(URI uri, Class<? extends StorageProvider> expected) {
-        StorageConfig config = new StorageConfig().baseUri(uri);
+        StorageConfig config = new StorageConfig(uri);
         testFindBestProvider(config, expected);
     }
 

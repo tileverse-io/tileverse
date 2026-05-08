@@ -210,7 +210,9 @@ class TileRangeAllCornerOfOriginsTest {
 
         while (true) {
             Optional<TileIndex> next = range.next(current);
-            if (next.isEmpty()) break;
+            if (next.isEmpty()) {
+                break;
+            }
             current = next.get();
             result.add(current);
         }
@@ -226,7 +228,9 @@ class TileRangeAllCornerOfOriginsTest {
 
         while (true) {
             Optional<TileIndex> prev = range.prev(current);
-            if (prev.isEmpty()) break;
+            if (prev.isEmpty()) {
+                break;
+            }
             current = prev.get();
             result.add(current);
         }

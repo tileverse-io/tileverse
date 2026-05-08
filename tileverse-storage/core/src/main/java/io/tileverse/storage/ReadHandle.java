@@ -25,14 +25,18 @@ import org.jspecify.annotations.NullMarked;
  * Closing the handle closes the underlying stream and releases the connection.
  *
  * <p>Cloud SDKs return both the body and the response headers (ETag, content type, last-modified, version) from a
- * single GET. {@link ReadHandle} surfaces both so callers do not need a separate stat round trip.
+ * single GET. {@link ReadHandle} exposes both so callers do not need a separate stat round trip.
  */
 @NullMarked
 public record ReadHandle(InputStream content, StorageEntry.File metadata) implements Closeable {
 
     public ReadHandle {
-        if (content == null) throw new IllegalArgumentException("content is required");
-        if (metadata == null) throw new IllegalArgumentException("metadata is required");
+        if (content == null) {
+            throw new IllegalArgumentException("content is required");
+        }
+        if (metadata == null) {
+            throw new IllegalArgumentException("metadata is required");
+        }
     }
 
     @Override

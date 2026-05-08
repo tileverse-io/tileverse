@@ -133,15 +133,14 @@ public final class RangeReaderSeekableByteChannel extends RangeReaderReadableByt
         }
 
         try {
-            return String.format(
-                    "RangeReaderSeekableByteChannel[source=%s, position=%d, size=%d]",
-                    rangeReader.getSourceIdentifier(),
-                    position.get(),
-                    rangeReader.size().orElse(-1));
+            return "RangeReaderSeekableByteChannel[source=%s, position=%d, size=%d]"
+                    .formatted(
+                            rangeReader.getSourceIdentifier(),
+                            position.get(),
+                            rangeReader.size().orElse(-1));
         } catch (RuntimeException e) {
-            return String.format(
-                    "RangeReaderSeekableByteChannel[source=%s, position=%d, size=unknown]",
-                    rangeReader.getSourceIdentifier(), position.get());
+            return "RangeReaderSeekableByteChannel[source=%s, position=%d, size=unknown]"
+                    .formatted(rangeReader.getSourceIdentifier(), position.get());
         }
     }
 }

@@ -22,17 +22,10 @@ import java.util.Objects;
  * {@link GcsClientHandle} that wraps a caller-supplied {@link Storage} client. {@link #close()} is a no-op so the
  * caller retains ownership of the SDK client.
  */
-final class BorrowedGcsHandle implements GcsClientHandle {
+record BorrowedGcsHandle(Storage client) implements GcsClientHandle {
 
-    private final Storage client;
-
-    BorrowedGcsHandle(Storage client) {
-        this.client = Objects.requireNonNull(client, "client");
-    }
-
-    @Override
-    public Storage client() {
-        return client;
+    BorrowedGcsHandle {
+        Objects.requireNonNull(client, "client");
     }
 
     @Override

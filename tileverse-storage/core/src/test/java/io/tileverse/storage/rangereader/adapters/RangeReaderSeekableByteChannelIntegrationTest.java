@@ -61,7 +61,7 @@ class RangeReaderSeekableByteChannelIntegrationTest {
 
             // Verify initial state
             assertThat(channel.isOpen()).isTrue();
-            assertThat(channel.position()).isEqualTo(0L);
+            assertThat(channel.position()).isZero();
             assertThat(channel.size()).isEqualTo(1024L);
 
             // Read first 100 bytes

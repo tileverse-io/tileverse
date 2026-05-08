@@ -31,6 +31,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 
@@ -84,7 +85,7 @@ public class StorageConfig {
             .group("advanced")
             .build();
 
-    private @Nullable URI baseUri;
+    private URI baseUri;
 
     /**
      * Optional provider {@link StorageProvider#getId() id}, useful to force using a given provider when the URI or
@@ -94,9 +95,17 @@ public class StorageConfig {
 
     private Map<String, Object> parameterValues = new HashMap<>();
 
-    /** Creates a new, empty {@code StorageConfig}. */
-    public StorageConfig() {
-        // Default constructor
+    public StorageConfig(@NonNull URI baseUri) {
+        this.baseUri = baseUri;
+    }
+
+    public StorageConfig(@NonNull String baseUri) {
+        this(URI.create(baseUri));
+    }
+
+    @SuppressWarnings("java:S2637")
+    private StorageConfig() {
+        // private constructor for withDefaults()
     }
 
     /**
@@ -106,8 +115,7 @@ public class StorageConfig {
      * @return a new {@code StorageConfig} with the same baseUri, providerId and parameter values.
      */
     public StorageConfig copy() {
-        StorageConfig clone = new StorageConfig();
-        clone.baseUri = this.baseUri;
+        StorageConfig clone = new StorageConfig(this.baseUri);
         clone.providerId = this.providerId;
         clone.parameterValues = new HashMap<>(this.parameterValues);
         return clone;
@@ -135,7 +143,7 @@ public class StorageConfig {
      * @throws NullPointerException if the provided URI is {@code null}.
      * @throws IllegalArgumentException If the given string violates RFC&nbsp;2396
      */
-    public StorageConfig baseUri(String baseUri) {
+    public StorageConfig baseUri(@NonNull String baseUri) {
         return baseUri(URI.create(baseUri));
     }
 
@@ -263,7 +271,9 @@ public class StorageConfig {
      * @throws IllegalArgumentException if the conversion to the specified type is not supported.
      */
     static <T> T convert(Object value, Class<T> type) {
-        if (type.isInstance(value)) return type.cast(value);
+        if (type.isInstance(value)) {
+            return type.cast(value);
+        }
 
         Object converted = null;
         if (type.equals(String.class)) {
@@ -332,7 +342,7 @@ public class StorageConfig {
             providerId = properties.getProperty(LEGACY_PROVIDER_ID_KEY);
         }
 
-        StorageConfig config = new StorageConfig().baseUri(baseUri);
+        StorageConfig config = new StorageConfig(baseUri);
         config.providerId(providerId);
 
         Properties copy = new Properties();

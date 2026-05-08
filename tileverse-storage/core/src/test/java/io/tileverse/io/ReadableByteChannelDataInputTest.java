@@ -38,7 +38,7 @@ class ReadableByteChannelDataInputTest {
     private Path testFile;
 
     @BeforeEach
-    void setUp() throws IOException {
+    void setUp() {
         testFile = tempDir.resolve("test-data.bin");
     }
 
@@ -241,7 +241,7 @@ class ReadableByteChannelDataInputTest {
             assertThat(remainingSkipped).isEqualTo(10); // 16 total - 5 skipped - 1 read = 10 remaining
 
             // Try to read - should throw EOFException
-            assertThatThrownBy(() -> dataInput.readByte()).isInstanceOf(EOFException.class);
+            assertThatThrownBy(dataInput::readByte).isInstanceOf(EOFException.class);
         }
     }
 
@@ -252,8 +252,8 @@ class ReadableByteChannelDataInputTest {
         try (ReadableByteChannel channel = Files.newByteChannel(testFile, StandardOpenOption.READ)) {
             DataInput dataInput = ReadableByteChannelDataInput.of(channel);
 
-            assertThat(dataInput.skipBytes(0)).isEqualTo(0);
-            assertThat(dataInput.skipBytes(-5)).isEqualTo(0);
+            assertThat(dataInput.skipBytes(0)).isZero();
+            assertThat(dataInput.skipBytes(-5)).isZero();
 
             // Should still be able to read normally
             assertThat(dataInput.readByte()).isEqualTo((byte) 't');
@@ -272,7 +272,7 @@ class ReadableByteChannelDataInputTest {
             DataInput dataInput = ReadableByteChannelDataInput.of(channel);
 
             assertThat(dataInput.readUTF()).isEqualTo("Hello, World!");
-            assertThat(dataInput.readUTF()).isEqualTo("");
+            assertThat(dataInput.readUTF()).isEmpty();
             assertThat(dataInput.readUTF()).isEqualTo("UTF-8: äöü€🚀");
         }
     }
@@ -305,11 +305,11 @@ class ReadableByteChannelDataInputTest {
             assertThat(dataInput.readByte()).isEqualTo((byte) 2);
 
             // Now trying to read more should throw EOFException
-            assertThatThrownBy(() -> dataInput.readByte()).isInstanceOf(EOFException.class);
+            assertThatThrownBy(dataInput::readByte).isInstanceOf(EOFException.class);
 
-            assertThatThrownBy(() -> dataInput.readInt()).isInstanceOf(EOFException.class);
+            assertThatThrownBy(dataInput::readInt).isInstanceOf(EOFException.class);
 
-            assertThatThrownBy(() -> dataInput.readBoolean()).isInstanceOf(EOFException.class);
+            assertThatThrownBy(dataInput::readBoolean).isInstanceOf(EOFException.class);
         }
     }
 

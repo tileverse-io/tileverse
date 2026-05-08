@@ -15,7 +15,6 @@
  */
 package io.tileverse.pmtiles.store;
 
-import static io.tileverse.tiling.pyramid.TileIndex.xyz;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
@@ -26,7 +25,6 @@ import io.tileverse.pmtiles.PMTilesHeader;
 import io.tileverse.pmtiles.PMTilesReader;
 import io.tileverse.pmtiles.PMTilesTestData;
 import io.tileverse.tiling.common.BoundingBox2D;
-import io.tileverse.tiling.common.Coordinate;
 import io.tileverse.tiling.common.CornerOfOrigin;
 import io.tileverse.tiling.matrix.DefaultTileMatrixSets;
 import io.tileverse.tiling.matrix.Tile;
@@ -44,11 +42,13 @@ import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+@Slf4j
 class PMTilesVectorTileStoreTest {
 
     @TempDir
@@ -189,8 +189,7 @@ class PMTilesVectorTileStoreTest {
 
         assertThat(andorraMatrixSet.tilePyramid().cornerOfOrigin()).isEqualTo(CornerOfOrigin.TOP_LEFT);
 
-        System.out.println(
-                "Total available indices: " + andorraReader.getTileIndices().count());
+        log.debug("Total available indices: {}", andorraReader.getTileIndices().count());
 
         for (int z = andorraMatrixSet.minZoomLevel(); z <= 14 /*andorraMatrixSet.maxZoomLevel()*/; z++) {
             andorraReader.getTileIndicesByZoomLevel(z).forEach(index -> {
@@ -214,7 +213,9 @@ class PMTilesVectorTileStoreTest {
     }
 
     private Optional<VectorTile> decode(Optional<ByteBuffer> tile) {
-        if (tile.isEmpty()) return Optional.empty();
+        if (tile.isEmpty()) {
+            return Optional.empty();
+        }
         ByteBuffer buff = tile.orElseThrow();
         try {
             return Optional.of(new VectorTileCodec().decode(buff));
@@ -226,116 +227,60 @@ class PMTilesVectorTileStoreTest {
 
     private void assertExists(TileIndex tileIndex) {
         Optional<TileData<VectorTile>> tileOpt = andorraStore.findTile(tileIndex);
-        System.out.printf(" -> tile found: %s%n", tileOpt.isPresent());
+        log.debug(" -> tile found: {}", tileOpt.isPresent());
     }
 
+    /**
+     * Every tile in the archive at zoom {@code z} must fall inside the {@link TileRange} that
+     * {@link TileMatrix#extentToRange(BoundingBox2D)} returns for the header's WebMercator bbox.
+     *
+     * <p>Index-side check: the archive's coverage matches the bbox it declares.
+     */
     @Test
-    void debugCoordinateConversion() {
+    void tilesFallWithinHeaderBboxRange() {
+        TileMatrixSet matrixSet = andorraStore.matrixSet();
         PMTilesHeader header = andorraReader.getHeader();
+        BoundingBox2D headerBbox = WebMercatorTransform.latLonToWebMercator(header.geographicBoundingBox());
 
-        System.out.println("=== PMTiles Header Info ===");
-        System.out.println("Geographic bounds: " + header.geographicBoundingBox());
-        System.out.println("Min zoom: " + header.minZoom() + ", Max zoom: " + header.maxZoom());
+        for (int z = matrixSet.minZoomLevel(); z <= matrixSet.maxZoomLevel(); z++) {
+            TileMatrix matrix = matrixSet.getTileMatrix(z);
+            Optional<TileRange> rangeOpt = matrix.extentToRange(headerBbox);
+            assertThat(rangeOpt)
+                    .as("header bbox should produce a tile range at zoom %d", z)
+                    .isPresent();
+            TileRange expectedRange = rangeOpt.orElseThrow();
 
-        // Convert to WebMercator
-        BoundingBox2D webMercatorExtent = WebMercatorTransform.latLonToWebMercator(header.geographicBoundingBox());
-        System.out.println("WebMercator extent: " + webMercatorExtent);
-
-        TileMatrixSet baseTms = DefaultTileMatrixSets.WEB_MERCATOR_QUAD.toBuilder()
-                .zoomRange(header.minZoom(), header.maxZoom())
-                .build();
-
-        // Check what tiles the geographic extent should produce at different zoom levels
-        for (int z = 0; z <= 5; z++) {
-            System.out.println("\n--- Zoom Level " + z + " ---");
-
-            // What tiles does the geographic extent suggest?
-            TileMatrix matrix = baseTms.getTileMatrix(z);
-            Optional<io.tileverse.tiling.pyramid.TileRange> expectedRange = matrix.extentToRange(webMercatorExtent);
-
-            System.out.println("Geographic extent suggests tile range: "
-                    + (expectedRange.isPresent() ? expectedRange.get() : "NONE"));
-
-            if (expectedRange.isPresent()) {
-                io.tileverse.tiling.pyramid.TileRange range = expectedRange.get();
-                System.out.println("  Range bounds: (" + range.minx() + "," + range.miny() + ") to (" + range.maxx()
-                        + "," + range.maxy() + ")");
-                System.out.println("  First tile would be: (" + range.minx() + "," + range.miny() + "," + z + ")");
-            }
-
-            // What tiles actually exist in PMTiles?
-            List<io.tileverse.tiling.pyramid.TileIndex> actualTiles =
+            List<TileIndex> archiveTiles =
                     andorraReader.getTileIndicesByZoomLevel(z).toList();
-
-            System.out.println("Actual PMTiles tiles: " + actualTiles.size() + " tiles");
-            actualTiles.forEach(tile -> System.out.println("  " + tile));
-
-            // Check if actual tiles are within the expected range
-            if (expectedRange.isPresent() && !actualTiles.isEmpty()) {
-                io.tileverse.tiling.pyramid.TileRange range = expectedRange.get();
-                for (io.tileverse.tiling.pyramid.TileIndex tile : actualTiles) {
-                    boolean inRange = tile.x() >= range.minx()
-                            && tile.x() <= range.maxx()
-                            && tile.y() >= range.miny()
-                            && tile.y() <= range.maxy();
-                    System.out.println("  " + tile + " in expected range: " + inRange);
-                }
-            }
+            assertThat(archiveTiles)
+                    .as("archive tiles at zoom %d should fall inside %s", z, expectedRange)
+                    .isNotEmpty()
+                    .allMatch(expectedRange::contains);
         }
     }
 
+    /**
+     * Every tile present in the archive must have a geographic extent that intersects the header's WebMercator bbox.
+     *
+     * <p>Extent-side check, complementary to {@link #tilesFallWithinHeaderBboxRange()}.
+     */
     @Test
-    void debugZoomLevel11TileRange() {
-        TileMatrixSet andorraMatrixSet = andorraStore.matrixSet();
-        int targetZoom = 11;
+    void tileExtentsIntersectHeaderBbox() {
+        TileMatrixSet matrixSet = andorraStore.matrixSet();
+        PMTilesHeader header = andorraReader.getHeader();
+        BoundingBox2D headerBbox = WebMercatorTransform.latLonToWebMercator(header.geographicBoundingBox());
 
-        System.out.println("=== Debugging Zoom Level " + targetZoom + " ===");
+        for (int z = matrixSet.minZoomLevel(); z <= matrixSet.maxZoomLevel(); z++) {
+            TileMatrix matrix = matrixSet.getTileMatrix(z);
+            List<TileIndex> archiveTiles =
+                    andorraReader.getTileIndicesByZoomLevel(z).toList();
 
-        TileMatrix zMatrix = andorraMatrixSet.getTileMatrix(targetZoom);
-        TileRange zRange = zMatrix.tileRange();
-
-        System.out.println("TileMatrix: " + zMatrix);
-        System.out.println("TileRange: " + zRange);
-        System.out.println("Axis Origin: " + zRange.cornerOfOrigin());
-        System.out.println("Range bounds: (" + zRange.minx() + "," + zRange.miny() + ") to (" + zRange.maxx() + ","
-                + zRange.maxy() + ")");
-        System.out.println("Expected count: " + zRange.count() + " tiles");
-        System.out.println("First tile: " + zRange.first());
-        System.out.println("Last tile: " + zRange.last());
-
-        // Manual traversal with debugging
-        System.out.println("\n--- Manual Traversal ---");
-        java.util.List<TileIndex> traversed = new java.util.ArrayList<>();
-        TileIndex index = zRange.min();
-        int count = 0;
-
-        do {
-            traversed.add(index);
-            count++;
-            System.out.println("Tile " + count + ": " + index);
-
-            Optional<TileIndex> nextOpt = zRange.next(index);
-            if (nextOpt.isPresent()) {
-                index = nextOpt.get();
-            } else {
-                System.out.println("No next tile - traversal complete");
-                break;
-            }
-        } while (count < 20); // Safety limit to prevent infinite loop
-
-        System.out.println("\nTraversed " + count + " tiles, expected " + zRange.count() + " tiles");
-
-        if (count != zRange.count()) {
-            System.out.println("ERROR: Traversal count mismatch!");
-
-            // Show what tiles should exist in the range
-            System.out.println("\nExpected tiles in range:");
-            for (long x = zRange.minx(); x <= zRange.maxx(); x++) {
-                for (long y = zRange.miny(); y <= zRange.maxy(); y++) {
-                    TileIndex expected = xyz(x, y, targetZoom);
-                    boolean wasTraversed = traversed.contains(expected);
-                    System.out.println("  " + expected + " - traversed: " + wasTraversed);
-                }
+            for (TileIndex tileIndex : archiveTiles) {
+                Tile tile = matrix.tile(tileIndex).orElseThrow();
+                BoundingBox2D tileExtent = tile.extent();
+                assertThat(tileExtent.intersects(headerBbox))
+                        .as("tile %s extent %s should intersect header bbox %s", tileIndex, tileExtent, headerBbox)
+                        .isTrue();
             }
         }
     }
@@ -344,89 +289,5 @@ class PMTilesVectorTileStoreTest {
     @Disabled("implement!")
     void findBestZoomLevelResolutionStrategy() {
         fail();
-    }
-
-    @Test
-    void testLatLonToWebMercatorAccuracy() {
-        PMTilesHeader header = andorraReader.getHeader();
-        BoundingBox2D geoExtent = header.geographicBoundingBox();
-
-        System.out.println("=== Testing LatLon to WebMercator Accuracy ===");
-        System.out.println("Geographic extent: " + geoExtent);
-
-        // Convert to WebMercator
-        BoundingBox2D wmExtent = WebMercatorTransform.latLonToWebMercator(geoExtent);
-        System.out.println("WebMercator extent: " + wmExtent);
-
-        // Test at different zoom levels what tile coordinates this extent maps to
-        TileMatrixSet baseTms = DefaultTileMatrixSets.WEB_MERCATOR_QUAD;
-
-        for (int zoom = 0; zoom <= 8; zoom++) {
-            System.out.println("\n--- Zoom " + zoom + " ---");
-
-            TileMatrix matrix = baseTms.getTileMatrix(zoom);
-
-            // Convert each corner of the WebMercator extent to tile coordinates
-            Coordinate minCorner = wmExtent.lowerLeft();
-            Coordinate maxCorner = wmExtent.upperRight();
-
-            Optional<Tile> minTileOpt = matrix.coordinateToTile(minCorner);
-            Optional<Tile> maxTileOpt = matrix.coordinateToTile(maxCorner);
-
-            if (minTileOpt.isPresent() && maxTileOpt.isPresent()) {
-                Tile minTile = minTileOpt.get();
-                Tile maxTile = maxTileOpt.get();
-
-                System.out.printf(
-                        "Coordinate (%f, %f) -> Tile (%d, %d)%n",
-                        minCorner.x(), minCorner.y(), minTile.x(), minTile.y());
-                System.out.printf(
-                        "Coordinate (%f, %f) -> Tile (%d, %d)%n",
-                        maxCorner.x(), maxCorner.y(), maxTile.x(), maxTile.y());
-
-                // What are the actual tile extents?
-                System.out.printf("Min tile extent: %s%n", minTile.extent());
-                System.out.printf("Max tile extent: %s%n", maxTile.extent());
-
-                // How much do they differ from the WebMercator extent?
-                BoundingBox2D combinedTileExtent = minTile.extent().union(maxTile.extent());
-                System.out.printf("Combined tile extent: %s%n", combinedTileExtent);
-
-                double deltaMinX = Math.abs(wmExtent.minX() - combinedTileExtent.minX());
-                double deltaMaxX = Math.abs(wmExtent.maxX() - combinedTileExtent.maxX());
-                double deltaMinY = Math.abs(wmExtent.minY() - combinedTileExtent.minY());
-                double deltaMaxY = Math.abs(wmExtent.maxY() - combinedTileExtent.maxY());
-
-                System.out.printf(
-                        "Extent deltas: minX=%.6f, maxX=%.6f, minY=%.6f, maxY=%.6f%n",
-                        deltaMinX, deltaMaxX, deltaMinY, deltaMaxY);
-
-                // Check if the actual PMTiles tiles are within this range
-                List<io.tileverse.tiling.pyramid.TileIndex> actualTiles =
-                        andorraReader.getTileIndicesByZoomLevel(zoom).toList();
-
-                if (!actualTiles.isEmpty()) {
-                    System.out.println("Actual PMTiles tiles: " + actualTiles);
-                    for (io.tileverse.tiling.pyramid.TileIndex actualTile : actualTiles) {
-                        boolean inRange = actualTile.x() >= minTile.x()
-                                && actualTile.x() <= maxTile.x()
-                                && actualTile.y() >= minTile.y()
-                                && actualTile.y() <= maxTile.y();
-                        System.out.printf("  %s in predicted range: %s%n", actualTile, inRange);
-
-                        // What extent does the actual tile cover?
-                        Optional<Tile> actualTileObj = matrix.tile(actualTile);
-                        if (actualTileObj.isPresent()) {
-                            BoundingBox2D actualExtent = actualTileObj.get().extent();
-                            System.out.printf("    Actual tile extent: %s%n", actualExtent);
-
-                            // Does it intersect with the geographic WebMercator extent?
-                            boolean intersects = actualExtent.intersects(wmExtent);
-                            System.out.printf("    Intersects WM extent: %s%n", intersects);
-                        }
-                    }
-                }
-            }
-        }
     }
 }

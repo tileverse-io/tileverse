@@ -15,9 +15,9 @@
  */
 package io.tileverse.storage.rangereader;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
@@ -510,7 +510,7 @@ class RangeReaderBufferTest {
                 target.flip();
 
                 // Verify read count
-                assertEquals(chunkSize, bytesRead, String.format("Should have read %d bytes", chunkSize));
+                assertEquals(chunkSize, bytesRead, "Should have read %d bytes".formatted(chunkSize));
 
                 // Verify buffer state
                 assertEquals(0, target.position(), "Buffer position should be 0");
@@ -525,7 +525,7 @@ class RangeReaderBufferTest {
                 assertArrayEquals(
                         expectedChunk,
                         actualChunk,
-                        String.format("Buffer for chunk size %d should match expected data", chunkSize));
+                        "Buffer for chunk size %d should match expected data".formatted(chunkSize));
             }
         }
     }
@@ -533,48 +533,28 @@ class RangeReaderBufferTest {
     @Test
     void testExceptionHandlingForInvalidParameters() throws IOException {
         try (RangeReader reader = RangeReaderTestSupport.fileReader(testFile)) {
-            // Test with negative offset
             ByteBuffer target = ByteBuffer.allocate(10);
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> {
-                        reader.readRange(-1, 10, target);
-                    },
-                    "Should throw exception for negative offset");
+            assertThatThrownBy(() -> reader.readRange(-1, 10, target))
+                    .as("negative offset")
+                    .isInstanceOf(IllegalArgumentException.class);
 
-            // Test with negative length
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> {
-                        reader.readRange(0, -5, target);
-                    },
-                    "Should throw exception for negative length");
+            assertThatThrownBy(() -> reader.readRange(0, -5, target))
+                    .as("negative length")
+                    .isInstanceOf(IllegalArgumentException.class);
 
-            // Test with null buffer
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> {
-                        reader.readRange(0, 10, null);
-                    },
-                    "Should throw exception for null buffer");
+            assertThatThrownBy(() -> reader.readRange(0, 10, null))
+                    .as("null buffer")
+                    .isInstanceOf(IllegalArgumentException.class);
 
-            // Test with read-only buffer
             ByteBuffer readOnlyBuffer = ByteBuffer.allocate(10).asReadOnlyBuffer();
-            assertThrows(
-                    java.nio.ReadOnlyBufferException.class,
-                    () -> {
-                        reader.readRange(0, 10, readOnlyBuffer);
-                    },
-                    "Should throw exception for read-only buffer");
+            assertThatThrownBy(() -> reader.readRange(0, 10, readOnlyBuffer))
+                    .as("read-only buffer")
+                    .isInstanceOf(java.nio.ReadOnlyBufferException.class);
 
-            // Test with insufficient buffer capacity
             ByteBuffer smallBuffer = ByteBuffer.allocate(5);
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> {
-                        reader.readRange(0, 10, smallBuffer);
-                    },
-                    "Should throw exception for insufficient buffer capacity");
+            assertThatThrownBy(() -> reader.readRange(0, 10, smallBuffer))
+                    .as("buffer capacity smaller than requested length")
+                    .isInstanceOf(IllegalArgumentException.class);
         }
     }
 }

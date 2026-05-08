@@ -61,9 +61,6 @@ public record VectorLayer(
          */
         @JsonProperty("maxzoom") Integer maxZoom) {
 
-    /** Creates a new VectorLayer with all fields. */
-    public VectorLayer {}
-
     /**
      * Creates a minimal VectorLayer with required fields only.
      *

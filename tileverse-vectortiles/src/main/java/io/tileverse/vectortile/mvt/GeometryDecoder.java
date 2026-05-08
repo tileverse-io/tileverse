@@ -24,6 +24,7 @@ import io.tileverse.vectortile.mvt.VectorTileProto.Tile.GeomType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.UnaryOperator;
+import org.jspecify.annotations.Nullable;
 import org.locationtech.jts.algorithm.Area;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.CoordinateSequence;
@@ -70,7 +71,15 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
      * @param length number of coordinates in this part
      * @param orientation ring orientation (only meaningful for polygon rings)
      */
-    private static record Part(int start, int length, Orientation orientation) {}
+    private static record Part(int start, int length, Orientation orientation) {
+        static Part of(int start, int length) {
+            return of(start, length, Orientation.DEGENERATE);
+        }
+
+        static Part of(int start, int length, Orientation orientation) {
+            return new Part(start, length, orientation);
+        }
+    }
 
     /**
      * Returns an instance with the same geometry factory and an in-place coordinate transformation that converts
@@ -219,40 +228,48 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
                 }
             }
 
-            int partLength = coordIndex - partStart;
-
-            if (geomType == GeomType.POLYGON) {
-                Orientation orientation = areaOfRingSigned(allCoords, partStart, partLength);
-                // Skip degenerate rings entirely
-                if (orientation == Orientation.DEGENERATE) {
-                    continue;
+            final int partLength = coordIndex - partStart;
+            Part part = buildPart(geomType, allCoords, partStart, partLength);
+            if (part != null) {
+                parts.add(part);
+                if (geomType == GeomType.POLYGON && firstRingOrientation == null) {
+                    firstRingOrientation = part.orientation();
                 }
-                // Set first ring orientation for reference
-                if (firstRingOrientation == null) {
-                    firstRingOrientation = orientation;
-                }
-                parts.add(new Part(partStart, partLength, orientation));
-            } else if (geomType == GeomType.LINESTRING) {
-                if (partLength < 2) {
-                    continue; // Skip invalid linestrings
-                }
-                parts.add(new Part(partStart, partLength, Orientation.DEGENERATE));
             }
-            // For POINT geometries, don't create parts here - handled after loop
         }
 
         // For POINT geometries, create a single part containing all coordinates
         if (geomType == GeomType.POINT && coordIndex > 0) {
-            parts.add(new Part(0, coordIndex, Orientation.DEGENERATE));
+            parts.add(Part.of(0, coordIndex));
         }
 
-        // Return original sequence if we used exactly the allocated space, otherwise create subsequence
         if (coordIndex != exactCoordCount) {
             throw new IllegalStateException(
                     "number of coordinates (%d) doesn't match calculated number of coordinates (%d)"
                             .formatted(coordIndex, exactCoordCount));
         }
         return allCoords;
+    }
+
+    @Nullable
+    private Part buildPart(
+            final GeomType geomType, CoordinateSequence allCoords, final int partStart, final int partLength) {
+        return switch (geomType) {
+            case POLYGON -> polygon(allCoords, partStart, partLength);
+            case LINESTRING -> line(partStart, partLength);
+            default -> null; // for POINT geometries don't create parts here - handled after loop
+        };
+    }
+
+    private Part line(int partStart, int partLength) {
+        // skip invalid linestrings
+        return partLength < 2 ? null : Part.of(partStart, partLength);
+    }
+
+    private Part polygon(CoordinateSequence allCoords, int partStart, int partLength) {
+        Orientation orientation = areaOfRingSigned(allCoords, partStart, partLength);
+        // skip degenerate linarrings
+        return orientation == Orientation.DEGENERATE ? null : Part.of(partStart, partLength, orientation);
     }
 
     /**
@@ -387,13 +404,15 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
      * @param commands the MVT command list
      * @return exact number of coordinates needed
      */
+    @SuppressWarnings("java:S127") // The MVT command stream is variable-length; the loop counter must skip past N
+    // coordinate parameters following each MoveTo/LineTo command word.
     private static int calculateCoordinateCount(IntList commands) {
         final int size = commands.size();
         int closePathCount = 0;
         int commandCount = 0;
 
-        for (int i = 0; i < size; ) {
-            int cmd = commands.getInt(i++);
+        for (int cmdIndex = 0; cmdIndex < size; cmdIndex++) {
+            int cmd = commands.getInt(cmdIndex);
             int command = GeometryCommand.extractCommand(cmd);
             int count = GeometryCommand.extractCount(cmd);
             commandCount++;
@@ -401,7 +420,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
             if (command == GeometryCommand.ClosePath) {
                 closePathCount++;
             } else if (command == GeometryCommand.MoveTo || command == GeometryCommand.LineTo) {
-                i += count * 2; // Skip coordinate parameters
+                cmdIndex += count * 2; // Skip coordinate parameters
             }
         }
 
@@ -442,7 +461,9 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
      */
     private static Orientation areaOfRingSigned(CoordinateSequence ring, final int start, final int length) {
         final int n = length;
-        if (n < 3) return Orientation.DEGENERATE;
+        if (n < 3) {
+            return Orientation.DEGENERATE;
+        }
         /*
          * Based on the Shoelace formula. http://en.wikipedia.org/wiki/Shoelace_formula
          */

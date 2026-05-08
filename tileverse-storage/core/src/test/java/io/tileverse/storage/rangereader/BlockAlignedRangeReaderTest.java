@@ -15,8 +15,8 @@
  */
 package io.tileverse.storage.rangereader;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
@@ -70,21 +70,24 @@ class BlockAlignedRangeReaderTest {
 
     @Test
     void testConstructorWithNegativeBlockSize() {
-        assertThrows(IllegalArgumentException.class, () -> new BlockAlignedRangeReader(fileReader, -1));
+        assertThatThrownBy(() -> new BlockAlignedRangeReader(fileReader, -1))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void testConstructorWithZeroBlockSize() {
-        assertThrows(IllegalArgumentException.class, () -> new BlockAlignedRangeReader(fileReader, 0));
+        assertThatThrownBy(() -> new BlockAlignedRangeReader(fileReader, 0))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void testConstructorWithNonPowerOfTwoBlockSize() {
-        assertThrows(IllegalArgumentException.class, () -> new BlockAlignedRangeReader(fileReader, 15));
+        assertThatThrownBy(() -> new BlockAlignedRangeReader(fileReader, 15))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void testReadAlignedRange() throws IOException {
+    void testReadAlignedRange() {
         // Read a range that's already aligned to block boundaries
         reader.readRange(16, 16, buffer);
         buffer.flip();
@@ -98,7 +101,7 @@ class BlockAlignedRangeReaderTest {
     }
 
     @Test
-    void testReadUnalignedOffset() throws IOException {
+    void testReadUnalignedOffset() {
         // Read from an offset that's not aligned
         reader.readRange(10, 10, buffer);
         buffer.flip();
@@ -113,7 +116,7 @@ class BlockAlignedRangeReaderTest {
     }
 
     @Test
-    void testReadAcrossMultipleBlocks() throws IOException {
+    void testReadAcrossMultipleBlocks() {
         // Read a range that spans multiple blocks
         reader.readRange(10, 30, buffer);
         buffer.flip();
@@ -127,7 +130,7 @@ class BlockAlignedRangeReaderTest {
     }
 
     @Test
-    void testReadPartialBlock() throws IOException {
+    void testReadPartialBlock() {
         // Read a small part from the middle of a block
         reader.readRange(20, 5, buffer);
         buffer.flip();
@@ -141,7 +144,7 @@ class BlockAlignedRangeReaderTest {
     }
 
     @Test
-    void testReadBeyondEnd() throws IOException {
+    void testReadBeyondEnd() {
         // Try to read beyond the end of the file
         reader.readRange(textContent.length() - 5, 10, buffer);
         buffer.flip();
@@ -155,7 +158,7 @@ class BlockAlignedRangeReaderTest {
     }
 
     @Test
-    void testReadStartingBeyondEnd() throws IOException {
+    void testReadStartingBeyondEnd() {
         // Try to read from an offset beyond the end of the file
         reader.readRange(textContent.length() + 10, 5, buffer);
         buffer.flip();
@@ -163,7 +166,7 @@ class BlockAlignedRangeReaderTest {
     }
 
     @Test
-    void testReadWithZeroLength() throws IOException {
+    void testReadWithZeroLength() {
         // Try to read with a length of 0
         reader.readRange(10, 0, buffer);
         buffer.flip();
@@ -172,14 +175,12 @@ class BlockAlignedRangeReaderTest {
 
     @Test
     void testReadWithNegativeOffset() {
-        // Try to read with a negative offset
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(-1, 10, buffer));
+        assertThatThrownBy(() -> reader.readRange(-1, 10, buffer)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void testReadWithNegativeLength() {
-        // Try to read with a negative length
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(0, -1, buffer));
+        assertThatThrownBy(() -> reader.readRange(0, -1, buffer)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -197,29 +198,29 @@ class BlockAlignedRangeReaderTest {
     }
 
     @Test
-    void testDelegateSize() throws IOException {
+    void testDelegateSize() {
         // Check that size() delegates to the underlying reader
         assertEquals(textContent.length(), reader.size().getAsLong());
     }
 
     @Test
-    void testReadWithOffsetInBuffer() throws IOException {
+    void testReadWithOffsetInBuffer() {
         // Test reading with offset in the buffer
-        ByteBuffer buffer = ByteBuffer.allocate(20);
-        buffer.position(5); // Start at position 5
+        ByteBuffer target = ByteBuffer.allocate(20);
+        target.position(5); // Start at position 5
 
-        int bytesRead = reader.readRange(16, 10, buffer);
+        int bytesRead = reader.readRange(16, 10, target);
 
         // Verify returned byte count
         assertEquals(10, bytesRead);
 
         // Verify buffer is ready for reading
-        assertEquals(15, buffer.position());
-        assertEquals(20, buffer.limit());
+        assertEquals(15, target.position());
+        assertEquals(20, target.limit());
 
-        buffer.flip().position(5);
-        byte[] bytes = new byte[buffer.remaining()];
-        buffer.get(bytes);
+        target.flip().position(5);
+        byte[] bytes = new byte[target.remaining()];
+        target.get(bytes);
         String result = new String(bytes, StandardCharsets.UTF_8);
 
         assertEquals(textContent.substring(16, 26), result);
@@ -227,21 +228,18 @@ class BlockAlignedRangeReaderTest {
 
     @Test
     void testReadWithNegativeExplicitBuffer() {
-        // Try to read with a negative length with explicit buffer
-        ByteBuffer buffer = ByteBuffer.allocate(10);
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(0, -1, buffer));
+        ByteBuffer target = ByteBuffer.allocate(10);
+        assertThatThrownBy(() -> reader.readRange(0, -1, target)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void testReadWithNullBuffer() {
-        // Try to read with a null buffer
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(0, 10, null));
+        assertThatThrownBy(() -> reader.readRange(0, 10, null)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void testReadWithInsufficientBufferCapacity() {
-        // Try to read with a buffer that has insufficient capacity
-        ByteBuffer buffer = ByteBuffer.allocate(5);
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(0, 10, buffer));
+        ByteBuffer target = ByteBuffer.allocate(5);
+        assertThatThrownBy(() -> reader.readRange(0, 10, target)).isInstanceOf(IllegalArgumentException.class);
     }
 }

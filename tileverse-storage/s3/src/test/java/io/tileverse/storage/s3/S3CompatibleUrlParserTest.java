@@ -16,7 +16,7 @@
 package io.tileverse.storage.s3;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.URI;
 import java.util.stream.Stream;
@@ -55,10 +55,9 @@ class S3CompatibleUrlParserTest {
                     .as("Key should match for '%s'".formatted(description))
                     .isEqualTo(expectedKey);
         } else {
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> S3CompatibleUrlParser.parseS3Url(url),
-                    "Should throw IllegalArgumentException for invalid URL: " + url);
+            assertThatThrownBy(() -> S3CompatibleUrlParser.parseS3Url(url))
+                    .as("invalid URL: %s", url)
+                    .isInstanceOf(IllegalArgumentException.class);
         }
     }
 

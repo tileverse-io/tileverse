@@ -63,7 +63,7 @@ class HNSLiveIT {
     }
 
     @Test
-    void putThenStatThenDelete() throws Exception {
+    void putThenStatThenDelete() {
         String key = "tileverse-it/" + System.currentTimeMillis() + ".bin";
         storage.put(key, "hello".getBytes(StandardCharsets.UTF_8));
         try {

@@ -57,7 +57,9 @@ class AzureBlobStorageAzuriteIT extends StorageTCK {
 
     @AfterAll
     static void stopContainer() {
-        if (azurite != null) azurite.stop();
+        if (azurite != null) {
+            azurite.stop();
+        }
     }
 
     private String blobEndpoint() {
@@ -94,7 +96,9 @@ class AzureBlobStorageAzuriteIT extends StorageTCK {
             List<String> all = stream.filter(e -> e instanceof StorageEntry.File)
                     .map(StorageEntry::key)
                     .toList();
-            if (!all.isEmpty()) s.deleteAll(all);
+            if (!all.isEmpty()) {
+                s.deleteAll(all);
+            }
         } catch (Exception ignored) {
             // best-effort
         }

@@ -68,7 +68,9 @@ final class HttpStorage implements Storage {
      * releases a cache lease or is a no-op for borrowed clients).
      */
     HttpStorage(URI baseUri, HttpClientHandle clientHandle, HttpAuthentication authentication) {
-        if (baseUri == null) throw new IllegalArgumentException("baseUri required");
+        if (baseUri == null) {
+            throw new IllegalArgumentException("baseUri required");
+        }
         this.baseUri = baseUri;
         this.clientHandle = clientHandle;
         this.authentication = authentication == null ? HttpAuthentication.NONE : authentication;

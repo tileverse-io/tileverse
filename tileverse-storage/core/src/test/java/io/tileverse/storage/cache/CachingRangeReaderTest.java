@@ -16,10 +16,10 @@
 package io.tileverse.storage.cache;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.benmanes.caffeine.cache.Scheduler;
@@ -77,14 +77,13 @@ class CachingRangeReaderTest {
     }
 
     @Test
-    void testBuilderRequiresDelegateParameter() throws IOException {
+    void testBuilderRequiresDelegateParameter() {
         // Test that builder requires delegate parameter
         RangeReader delegate = RangeReaderTestSupport.fileReader(testFile);
         CachingRangeReader.Builder builder = CachingRangeReader.builder(delegate);
         assertNotNull(builder, "Builder should be created successfully");
 
-        // Test that null delegate throws exception
-        assertThrows(NullPointerException.class, () -> CachingRangeReader.builder(null));
+        assertThatThrownBy(() -> CachingRangeReader.builder(null)).isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -282,11 +281,10 @@ class CachingRangeReaderTest {
     }
 
     @Test
-    void testBuilderValidation() throws IOException {
+    void testBuilderValidation() {
         RangeReader delegate = RangeReaderTestSupport.fileReader(testFile);
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> CachingRangeReader.builder(delegate).blockSize(-1));
+        CachingRangeReader.Builder builder = CachingRangeReader.builder(delegate);
+        assertThatThrownBy(() -> builder.blockSize(-1)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

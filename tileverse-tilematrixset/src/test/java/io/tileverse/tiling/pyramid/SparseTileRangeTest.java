@@ -17,7 +17,7 @@ package io.tileverse.tiling.pyramid;
 
 import static io.tileverse.tiling.pyramid.TileIndex.xyz;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tileverse.tiling.common.CornerOfOrigin;
 import java.util.HashSet;
@@ -83,7 +83,7 @@ class SparseTileRangeTest {
     private TileRange union;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         topLeft = range(0, 0, 9, 9);
         topLeftOverlapping = range(4, 4, 14, 14);
 
@@ -113,11 +113,13 @@ class SparseTileRangeTest {
 
     @Test
     void testConstructorPreconditions() {
-        assertThrows(NullPointerException.class, () -> new SparseTileRange(null));
-        assertThrows(IllegalArgumentException.class, () -> new SparseTileRange(List.of()));
-        IllegalArgumentException iae =
-                assertThrows(IllegalArgumentException.class, () -> new SparseTileRange(List.of(topLeft)));
-        assertThat(iae.getMessage()).contains("should have at least 2 parts");
+        assertThatThrownBy(() -> new SparseTileRange(null)).isInstanceOf(NullPointerException.class);
+        List<TileRange> empty = List.of();
+        assertThatThrownBy(() -> new SparseTileRange(empty)).isInstanceOf(IllegalArgumentException.class);
+        List<TileRange> single = List.of(topLeft);
+        assertThatThrownBy(() -> new SparseTileRange(single))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("should have at least 2 parts");
     }
 
     @Test
@@ -383,8 +385,8 @@ class SparseTileRangeTest {
 
     @Test
     void testCompareTo() {
-        assertThat(topUnion.compareTo(bottomUnion)).isNegative();
-        assertThat(bottomUnion.compareTo(topUnion)).isPositive();
+        assertThat(topUnion).isLessThan(bottomUnion);
+        assertThat(bottomUnion).isGreaterThan(topUnion);
     }
 
     @Test

@@ -117,9 +117,6 @@ public record TileJSON(
          */
         @JsonProperty("version") String version) {
 
-    /** Creates a new TileJSON with all fields. */
-    public TileJSON {}
-
     /**
      * Creates a minimal TileJSON with required fields only.
      *

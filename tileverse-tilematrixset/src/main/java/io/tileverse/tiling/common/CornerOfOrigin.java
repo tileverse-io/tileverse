@@ -149,7 +149,9 @@ public enum CornerOfOrigin {
      * @return true if Y-coordinate transformation is needed
      */
     public boolean needsYFlip(CornerOfOrigin target) {
-        if (this == target) return false;
+        if (this == target) {
+            return false;
+        }
 
         boolean thisIsUpper = this == TOP_LEFT;
         boolean targetIsUpper = target == TOP_LEFT;

@@ -20,6 +20,7 @@ import static java.util.Objects.requireNonNull;
 import io.tileverse.storage.spi.StorageProvider;
 import java.util.List;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Represents a configurable parameter for a {@link StorageProvider}. This record provides metadata about a parameter,
@@ -87,14 +88,27 @@ public record StorageParameter<T>(
 
     /** A builder class for {@link StorageParameter}. */
     public static class Builder {
+        // These fields stay null until the corresponding setter runs; build() validates that the required ones
+        // (key, type) were populated. Marked @Nullable so the @NullMarked package default doesn't claim otherwise.
+        @Nullable
         String key;
+
+        @Nullable
         String title;
+
+        @Nullable
         String description;
+
+        @Nullable
         String group;
+
+        @Nullable
         String subgroup;
+
         boolean password;
 
         @SuppressWarnings("rawtypes")
+        @Nullable
         Class type;
 
         Optional<Object> defaultValue = Optional.empty(); // Initialize with empty optional
@@ -187,6 +201,7 @@ public record StorageParameter<T>(
          * @param values An array of sample values.
          * @return This builder instance.
          */
+        @SuppressWarnings("java:S2589") // a bad caller can always pass null as argument
         public Builder options(Object... values) {
             this.sampleValues = values == null || values.length == 0 ? List.of() : List.of(values);
             return this;

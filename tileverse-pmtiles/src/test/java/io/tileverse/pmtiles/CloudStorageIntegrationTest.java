@@ -34,6 +34,7 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.Optional;
 import java.util.Properties;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,7 @@ import software.amazon.awssdk.services.s3.S3Client;
  * PMTiles files uploaded to the appropriate locations 3. Configure the test properties via environment variables 4. Run
  * Maven with the integration profile: mvn test -Pintegration
  */
+@Slf4j
 @Tag("integration")
 class CloudStorageIntegrationTest {
 
@@ -112,15 +114,20 @@ class CloudStorageIntegrationTest {
             // Verify we can read the header
             PMTilesHeader header = pmTilesReader.getHeader();
             assertNotNull(header);
-            System.out.println("PMTiles header: version=" + header.version() + ", minZoom=" + header.minZoom()
-                    + ", maxZoom=" + header.maxZoom());
+            log.debug(
+                    "PMTiles header: version={}, minZoom={}, maxZoom={}",
+                    header.version(),
+                    header.minZoom(),
+                    header.maxZoom());
 
             // Try to read a tile
             int z = header.minZoom();
             Optional<ByteBuffer> tileData = pmTilesReader.getTile(TileIndex.zxy(z, 0, 0));
             assertTrue(tileData.isPresent(), "Should be able to read a tile at minimum zoom level");
-            System.out.println("Successfully read tile at z=" + z + " with size "
-                    + tileData.get().remaining() + " bytes");
+            log.debug(
+                    "Successfully read tile at z={} with size {} bytes",
+                    z,
+                    tileData.get().remaining());
         }
     }
 
@@ -154,8 +161,11 @@ class CloudStorageIntegrationTest {
             // Verify we can read the header
             PMTilesHeader header = pmTilesReader.getHeader();
             assertNotNull(header);
-            System.out.println("PMTiles header: version=" + header.version() + ", minZoom=" + header.minZoom()
-                    + ", maxZoom=" + header.maxZoom());
+            log.debug(
+                    "PMTiles header: version={}, minZoom={}, maxZoom={}",
+                    header.version(),
+                    header.minZoom(),
+                    header.maxZoom());
 
             // Try to read the metadata
             PMTilesMetadata metadata = pmTilesReader.getMetadata();
@@ -189,16 +199,21 @@ class CloudStorageIntegrationTest {
             // Verify we can read the header
             PMTilesHeader header = pmTilesReader.getHeader();
             assertNotNull(header);
-            System.out.println("PMTiles header: version=" + header.version() + ", minZoom=" + header.minZoom()
-                    + ", maxZoom=" + header.maxZoom());
+            log.debug(
+                    "PMTiles header: version={}, minZoom={}, maxZoom={}",
+                    header.version(),
+                    header.minZoom(),
+                    header.maxZoom());
 
             // Try to read a tile from a specific zoom level
             int z = header.minZoom() + 1;
             if (z <= header.maxZoom()) {
                 Optional<ByteBuffer> tileData = pmTilesReader.getTile(TileIndex.zxy(z, 0, 0));
                 assertTrue(tileData.isPresent(), "Should be able to read a tile at zoom level " + z);
-                System.out.println("Successfully read tile at z=" + z + " with size "
-                        + tileData.get().remaining() + " bytes");
+                log.debug(
+                        "Successfully read tile at z={} with size {} bytes",
+                        z,
+                        tileData.get().remaining());
             }
         }
     }

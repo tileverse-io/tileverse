@@ -51,12 +51,11 @@ import java.util.stream.Stream;
  */
 record SparseTileRange(List<TileRange> parts) implements TileRange {
 
-    SparseTileRange(List<TileRange> parts) {
+    SparseTileRange {
         checkPreconditions(parts);
-        this.parts = parts;
     }
 
-    private void checkPreconditions(List<TileRange> parts) {
+    private static void checkPreconditions(List<TileRange> parts) {
         if (requireNonNull(parts, "parts is null").size() < 2) {
             throw new IllegalArgumentException("SparseTileRange should have at least 2 parts");
         }

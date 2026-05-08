@@ -18,11 +18,11 @@ package io.tileverse.tiling.matrix;
 import static io.tileverse.tiling.common.BoundingBox2D.extent;
 import static io.tileverse.tiling.pyramid.TileIndex.xyz;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.tileverse.tiling.common.BoundingBox2D;
@@ -302,11 +302,9 @@ class DefaultTileMatrixSetsTest {
         TileMatrix matrix10 = tms.getTileMatrix(10);
         assertEquals(10, matrix10.zoomLevel());
 
-        // Test with invalid zoom level
+        // Out-of-range zoom: tileMatrix() returns empty, getTileMatrix() throws.
         assertTrue(tms.tileMatrix(50).isEmpty());
-        assertThrows(IllegalArgumentException.class, () -> {
-            tms.getTileMatrix(50);
-        });
+        assertThatThrownBy(() -> tms.getTileMatrix(50)).isInstanceOf(IllegalArgumentException.class);
 
         // Test spatial operations on TileMatrix
         TileMatrix matrix0 = tms.getTileMatrix(0);
@@ -492,7 +490,9 @@ class DefaultTileMatrixSetsTest {
                         break;
                     }
                 }
-                if (foundTilesCoveringArea) break;
+                if (foundTilesCoveringArea) {
+                    break;
+                }
             }
             assertTrue(foundTilesCoveringArea, "Should find tiles covering the target area at zoom " + zoom);
         }

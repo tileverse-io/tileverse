@@ -45,7 +45,7 @@ class StorageFactoryOnlineIT {
         String url = "https://httpbin.io/range/1024";
         testFindBestProvider(URI.create(url), HttpStorageProvider.class);
 
-        StorageConfig config = new StorageConfig().baseUri(URI.create(url));
+        StorageConfig config = new StorageConfig(url);
         RangeReader reader = testCreate(config);
         assertThat(reader.size()).hasValue(1024);
     }
@@ -58,7 +58,7 @@ class StorageFactoryOnlineIT {
 
         testFindBestProvider(URI.create(gcsURL), GoogleCloudStorageProvider.class);
 
-        StorageConfig config = new StorageConfig().baseUri(URI.create(gcsURL));
+        StorageConfig config = new StorageConfig(gcsURL);
         testCreate(config);
     }
 
@@ -70,7 +70,7 @@ class StorageFactoryOnlineIT {
 
         testFindBestProvider(URI.create(gcsURL), GoogleCloudStorageProvider.class);
 
-        StorageConfig config = new StorageConfig().baseUri(URI.create(gcsURL));
+        StorageConfig config = new StorageConfig(gcsURL);
         testCreate(config);
     }
 
@@ -135,11 +135,11 @@ class StorageFactoryOnlineIT {
     void s3OnlineCustomVirtualHostedStyleFallsBackToHttp() throws IOException {
         URI uri = URI.create("https://demo-bucket.protomaps.com/v4.pmtiles");
         testFindBestProvider(uri, HttpStorageProvider.class);
-        testCreate(new StorageConfig().baseUri(uri));
+        testCreate(new StorageConfig(uri));
     }
 
     private void testForceHttp(String url) throws IOException {
-        StorageConfig config = new StorageConfig().baseUri(url).providerId(HttpStorageProvider.ID);
+        StorageConfig config = new StorageConfig(url).providerId(HttpStorageProvider.ID);
         testFindBestProvider(config, HttpStorageProvider.class);
         testCreate(config);
     }

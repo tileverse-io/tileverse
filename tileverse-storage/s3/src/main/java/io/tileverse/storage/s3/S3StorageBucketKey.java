@@ -51,7 +51,9 @@ record S3StorageBucketKey(String bucket, String prefix) {
 
     /** Strip the prefix from a full key to recover the relative key. */
     String relativize(String fullKey) {
-        if (prefix.isEmpty()) return fullKey;
+        if (prefix.isEmpty()) {
+            return fullKey;
+        }
         if (!fullKey.startsWith(prefix)) {
             throw new IllegalArgumentException("Key '" + fullKey + "' does not start with prefix '" + prefix + "'");
         }

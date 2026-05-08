@@ -154,8 +154,14 @@ final class SubCoordinateSequence implements CoordinateSequence {
         return copy;
     }
 
+    /**
+     * @deprecated CoordinateSequence inherits {@link Object#clone()}, but this implementation rejects it. Use
+     *     {@link #copy()} instead.
+     */
     @Override
-    @Deprecated
+    @Deprecated(since = "1.0", forRemoval = false)
+    @SuppressWarnings({"java:S2975", "java:S1182"}) // CoordinateSequence inherits Object#clone(), but we don't support
+    // it -- callers must use copy(). Skipping super.clone() is intentional.
     public Object clone() {
         throw new UnsupportedOperationException();
     }

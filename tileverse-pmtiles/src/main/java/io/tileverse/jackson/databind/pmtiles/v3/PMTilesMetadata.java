@@ -111,13 +111,6 @@ public record PMTilesMetadata(
     }
 
     /**
-     * Returns a new PMTilesMetadata with the specified format.
-     *
-     * @param format the new format
-     * @return a new PMTilesMetadata instance
-     */
-
-    /**
      * Returns a new PMTilesMetadata with the specified description.
      *
      * @param description the new description
@@ -146,33 +139,6 @@ public record PMTilesMetadata(
     public PMTilesMetadata withAttribution(String attribution) {
         return new PMTilesMetadata(name, description, attribution, type, version, vectorLayers, extras);
     }
-
-    /**
-     * Returns a new PMTilesMetadata with the specified center coordinates.
-     *
-     * @param longitude the longitude of the center
-     * @param latitude the latitude of the center
-     * @param zoom the zoom level for the center (optional)
-     * @return a new PMTilesMetadata instance
-     */
-
-    /**
-     * Returns a new PMTilesMetadata with the specified bounds.
-     *
-     * @param west the western longitude
-     * @param south the southern latitude
-     * @param east the eastern longitude
-     * @param north the northern latitude
-     * @return a new PMTilesMetadata instance
-     */
-
-    /**
-     * Returns a new PMTilesMetadata with the specified zoom range.
-     *
-     * @param minZoom the minimum zoom level
-     * @param maxZoom the maximum zoom level
-     * @return a new PMTilesMetadata instance
-     */
 
     /**
      * Returns a new PMTilesMetadata with the specified vector layers.

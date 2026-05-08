@@ -136,8 +136,8 @@ public record Tile(TileIndex tileIndex, BoundingBox2D extent, int width, int hei
         double pixelY = (extent.maxY() - mapCoordinate.y()) / resolution;
 
         // Clamp to tile bounds
-        pixelX = Math.max(0, Math.min(width - 1, pixelX));
-        pixelY = Math.max(0, Math.min(height - 1, pixelY));
+        pixelX = Math.max(0, Math.min(width - 1d, pixelX));
+        pixelY = Math.max(0, Math.min(height - 1d, pixelY));
 
         return Coordinate.of(pixelX, pixelY);
     }
@@ -191,8 +191,8 @@ public record Tile(TileIndex tileIndex, BoundingBox2D extent, int width, int hei
      */
     @Override
     public String toString() {
-        return String.format(
-                "Tile[%s, extent=%s, %dx%d, res=%.3f, %s]", tileIndex, extent, width, height, resolution, crsId);
+        return "Tile[%s, extent=%s, %dx%d, res=%.3f, %s]"
+                .formatted(tileIndex, extent, width, height, resolution, crsId);
     }
 
     /**

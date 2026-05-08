@@ -16,7 +16,6 @@
 package io.tileverse.vectortile.model;
 
 import io.tileverse.vectortile.mvt.VectorTileCodec;
-import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import org.locationtech.jts.geom.CoordinateSequenceFilter;
 import org.locationtech.jts.geom.Geometry;
@@ -153,11 +152,10 @@ public interface GeometryReader {
      * @throws IllegalArgumentException if transform is null
      */
     public static UnaryOperator<Geometry> toFunction(CoordinateSequenceFilter transform) {
-        UnaryOperator<Geometry> transformingFunction = g -> {
+        return g -> {
             g.apply(transform);
             return g;
         };
-        return transformingFunction;
     }
 
     /**
@@ -188,10 +186,12 @@ public interface GeometryReader {
      */
     @SafeVarargs
     public static UnaryOperator<Geometry> concat(UnaryOperator<Geometry>... operations) {
-        Function<Geometry, Geometry> concat = UnaryOperator.identity();
-        for (UnaryOperator<Geometry> operation : operations) {
-            concat = concat.andThen(operation);
-        }
-        return concat::apply;
+        return geometry -> {
+            Geometry result = geometry;
+            for (UnaryOperator<Geometry> operation : operations) {
+                result = operation.apply(result);
+            }
+            return result;
+        };
     }
 }

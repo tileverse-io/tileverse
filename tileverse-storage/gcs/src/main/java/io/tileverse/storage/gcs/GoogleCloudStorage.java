@@ -70,6 +70,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import lombok.NonNull;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Google Cloud Storage implementation of {@link Storage} (flat keyspace + virtual directories, like S3 and Azure Blob).
@@ -102,7 +104,9 @@ final class GoogleCloudStorage implements Storage {
     private static boolean detectHns(com.google.cloud.storage.Storage client, String bucket) {
         try {
             Bucket b = client.get(bucket);
-            if (b == null) return false;
+            if (b == null) {
+                return false;
+            }
             return b.getHierarchicalNamespace() != null
                     && Boolean.TRUE.equals(b.getHierarchicalNamespace().getEnabled());
         } catch (StorageException e) {
@@ -163,7 +167,12 @@ final class GoogleCloudStorage implements Storage {
     }
 
     private BlobId blobId(String key) {
-        return BlobId.of(location.bucket(), location.resolve(key));
+        return blobId(key, null);
+    }
+
+    private BlobId blobId(String key, @Nullable Long generation) {
+        String absoluteKey = location.resolve(key);
+        return BlobId.of(location.bucket(), absoluteKey, generation);
     }
 
     @Override
@@ -171,7 +180,9 @@ final class GoogleCloudStorage implements Storage {
         requireOpen();
         try {
             Blob blob = handle.client().get(blobId(key));
-            if (blob == null) return Optional.empty();
+            if (blob == null) {
+                return Optional.empty();
+            }
             String contentType = blob.getContentType();
             String etag = blob.getEtag();
             long size = blob.getSize() == null ? 0L : blob.getSize();
@@ -187,7 +198,9 @@ final class GoogleCloudStorage implements Storage {
                     Optional.ofNullable(contentType),
                     blob.getMetadata() == null ? Map.of() : Map.copyOf(blob.getMetadata())));
         } catch (StorageException e) {
-            if (e.getCode() == 404) return Optional.empty();
+            if (e.getCode() == 404) {
+                return Optional.empty();
+            }
             throw SdkExceptionMapper.map(e, key);
         }
     }
@@ -215,7 +228,9 @@ final class GoogleCloudStorage implements Storage {
         try {
             page = handle.client().list(location.bucket(), opts.toArray(BlobListOption[]::new));
             rawItems = page.iterateAll().iterator();
-            rawItems.hasNext(); // force first-page fetch to surface auth/region errors here
+            // Force the first-page fetch so auth/region/missing-bucket errors propagate here as typed
+            // StorageException rather than escaping raw during stream consumption.
+            rawItems.hasNext(); // NOSONAR java:S899 -- side-effecting call, return value intentionally ignored
         } catch (StorageException e) {
             throw SdkExceptionMapper.map(e, fullPrefix);
         }
@@ -282,8 +297,8 @@ final class GoogleCloudStorage implements Storage {
      * end in {@code ?alt=media} when fetching object content, but the query string is not part of the object name.
      */
     @Override
-    public String relativizeToKey(URI uri) {
-        if (uri != null && uri.getRawQuery() != null) {
+    public String relativizeToKey(@NonNull URI uri) {
+        if (uri.getRawQuery() != null) {
             try {
                 URI scrubbed = new URI(
                         uri.getScheme(), uri.getAuthority(), uri.getPath(), null /* query */, uri.getRawFragment());
@@ -298,17 +313,16 @@ final class GoogleCloudStorage implements Storage {
     @Override
     public ReadHandle read(String key, ReadOptions options) {
         requireOpen();
-        BlobId id = blobId(key);
+        Long generation = null;
         // Use options.versionId() to select a specific generation.
-        Blob blob = options.versionId().isPresent()
-                ? handle.client()
-                        .get(BlobId.of(
-                                id.getBucket(),
-                                id.getName(),
-                                Long.parseLong(options.versionId().get())))
-                : handle.client().get(id);
+        if (options.versionId().isPresent()) {
+            generation = Long.parseLong(options.versionId().orElseThrow());
+        }
+        BlobId id = blobId(key, generation);
+        Blob blob = handle.client().get(id);
         if (blob == null) {
-            throw new NotFoundException("Blob not found: gs://" + location.bucket() + "/" + location.resolve(key));
+            String absoluteKey = location.resolve(key);
+            throw new NotFoundException("Blob not found: gs://%s/%s".formatted(location.bucket(), absoluteKey));
         }
         try {
             ReadChannel channel = blob.reader();
@@ -405,7 +419,9 @@ final class GoogleCloudStorage implements Storage {
             bib.setMetadata(options.userMetadata());
         }
         List<BlobTargetOption> opts = new ArrayList<>();
-        if (options.ifNotExists()) opts.add(BlobTargetOption.doesNotExist());
+        if (options.ifNotExists()) {
+            opts.add(BlobTargetOption.doesNotExist());
+        }
         try {
             handle.client().create(bib.build(), data, opts.toArray(BlobTargetOption[]::new));
         } catch (StorageException e) {
@@ -427,11 +443,15 @@ final class GoogleCloudStorage implements Storage {
             bib.setMetadata(options.userMetadata());
         }
         List<BlobWriteOption> opts = new ArrayList<>();
-        if (options.ifNotExists()) opts.add(BlobWriteOption.doesNotExist());
+        if (options.ifNotExists()) {
+            opts.add(BlobWriteOption.doesNotExist());
+        }
         try {
             handle.client().createFrom(bib.build(), source, opts.toArray(BlobWriteOption[]::new));
         } catch (StorageException e) {
-            if (e.getCode() == 412) throw new PreconditionFailedException("Key already exists: " + key, e);
+            if (e.getCode() == 412) {
+                throw new PreconditionFailedException("Key already exists: " + key, e);
+            }
             throw SdkExceptionMapper.map(e, key);
         } catch (IOException e) {
             throw new io.tileverse.storage.StorageException("Failed to read source file: " + source, e);
@@ -449,7 +469,9 @@ final class GoogleCloudStorage implements Storage {
             bib.setMetadata(options.userMetadata());
         }
         List<BlobWriteOption> opts = new ArrayList<>();
-        if (options.ifNotExists()) opts.add(BlobWriteOption.doesNotExist());
+        if (options.ifNotExists()) {
+            opts.add(BlobWriteOption.doesNotExist());
+        }
         WriteChannel writer = handle.client().writer(bib.build(), opts.toArray(BlobWriteOption[]::new));
         OutputStream sink = Channels.newOutputStream(writer);
         return new FilterOutputStream(sink) {
@@ -462,12 +484,16 @@ final class GoogleCloudStorage implements Storage {
 
             @Override
             public void close() throws IOException {
-                if (alreadyClosed) return;
+                if (alreadyClosed) {
+                    return;
+                }
                 alreadyClosed = true;
                 try {
                     super.close();
                 } catch (StorageException e) {
-                    if (e.getCode() == 412) throw new PreconditionFailedException("Key already exists: " + key, e);
+                    if (e.getCode() == 412) {
+                        throw new PreconditionFailedException("Key already exists: " + key, e);
+                    }
                     throw SdkExceptionMapper.map(e, key);
                 }
             }

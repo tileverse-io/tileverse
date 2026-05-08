@@ -15,9 +15,9 @@
  */
 package io.tileverse.storage.s3;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.lenient;
@@ -28,7 +28,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.Arrays;
@@ -78,7 +77,7 @@ class S3RangeReaderTest {
     }
 
     @BeforeEach
-    void setUp() throws IOException {
+    void setUp() {
         // Make mocks lenient for this test class to avoid unnecessary stubbing errors
         lenient().when(s3Client.headObject(any(HeadObjectRequest.class))).thenReturn(headObjectResponse);
         lenient().when(headObjectResponse.contentLength()).thenReturn((long) CONTENT_LENGTH);
@@ -127,13 +126,13 @@ class S3RangeReaderTest {
     }
 
     @Test
-    void testGetSize() throws IOException {
+    void testGetSize() {
         assertEquals(CONTENT_LENGTH, reader.size().getAsLong());
         verify(s3Client, times(1)).headObject(any(HeadObjectRequest.class));
     }
 
     @Test
-    void testReadEntireFile() throws IOException {
+    void testReadEntireFile() {
         when(getObjectResponse.contentLength()).thenReturn((long) CONTENT_LENGTH);
 
         ByteBuffer buffer = reader.readRange(0, CONTENT_LENGTH);
@@ -151,7 +150,7 @@ class S3RangeReaderTest {
     }
 
     @Test
-    void testReadRange() throws IOException {
+    void testReadRange() {
         int offset = 100;
         int length = 500;
         when(getObjectResponse.contentLength()).thenReturn((long) length);
@@ -172,7 +171,7 @@ class S3RangeReaderTest {
     }
 
     @Test
-    void testReadRangeBeyondEnd() throws IOException {
+    void testReadRangeBeyondEnd() {
         int offset = CONTENT_LENGTH - 200;
         int length = 500; // Beyond the end
         when(getObjectResponse.contentLength()).thenReturn(200L);
@@ -194,7 +193,7 @@ class S3RangeReaderTest {
     }
 
     @Test
-    void testReadZeroLength() throws IOException {
+    void testReadZeroLength() {
         ByteBuffer buffer = reader.readRange(100, 0);
         buffer.flip();
 
@@ -206,12 +205,12 @@ class S3RangeReaderTest {
 
     @Test
     void testReadWithNegativeOffset() {
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(-1, 10));
+        assertThatThrownBy(() -> reader.readRange(-1, 10)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void testReadWithNegativeLength() {
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(0, -1));
+        assertThatThrownBy(() -> reader.readRange(0, -1)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -220,7 +219,7 @@ class S3RangeReaderTest {
         when(s3Client.getObjectAsBytes((GetObjectRequest) any(GetObjectRequest.class)))
                 .thenThrow(SdkException.builder().message("S3 download error").build());
 
-        assertThrows(io.tileverse.storage.StorageException.class, () -> reader.readRange(0, 100));
+        assertThatThrownBy(() -> reader.readRange(0, 100)).isInstanceOf(io.tileverse.storage.StorageException.class);
     }
 
     @Test
@@ -228,7 +227,7 @@ class S3RangeReaderTest {
         // Override the default behavior for this specific test
         when(getObjectResponse.contentLength()).thenReturn(50L); // Wrong content length
 
-        assertThrows(io.tileverse.storage.StorageException.class, () -> reader.readRange(0, 100));
+        assertThatThrownBy(() -> reader.readRange(0, 100)).isInstanceOf(io.tileverse.storage.StorageException.class);
     }
 
     @Test

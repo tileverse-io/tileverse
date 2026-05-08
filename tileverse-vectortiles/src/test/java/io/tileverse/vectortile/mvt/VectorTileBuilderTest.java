@@ -105,6 +105,10 @@ class VectorTileBuilderTest {
     }
 
     @Test
+    @SuppressWarnings(
+            "java:S5853") // Two assertThat(tile) chains navigate into distinct layers ("roads" then "buildings");
+    // joining them would require backtracking the fluent assertion off one layer to start a sibling chain on the
+    // other, which the AssertJ API here does not support.
     void testComprehensiveAssertions() {
         // Create a tile with multiple layers and features
         VectorTileBuilder vtm = new VectorTileBuilder().setExtent(4096);

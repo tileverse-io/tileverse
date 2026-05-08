@@ -77,9 +77,7 @@ class HttpAuthFingerprintTest {
         HttpAuthFingerprint differentPrefix = new ApiKeyAuthentication("X-API-Key", "abc123", "Token ").fingerprint();
         HttpAuthFingerprint differentHeader =
                 new ApiKeyAuthentication("X-Other-Header", "abc123", "Bearer ").fingerprint();
-        assertThat(a).isEqualTo(b);
-        assertThat(a).isNotEqualTo(differentPrefix);
-        assertThat(a).isNotEqualTo(differentHeader);
+        assertThat(a).isEqualTo(b).isNotEqualTo(differentPrefix).isNotEqualTo(differentHeader);
     }
 
     @Test

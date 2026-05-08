@@ -17,7 +17,6 @@ package io.tileverse.storage.gcs;
 
 import static java.util.Objects.requireNonNull;
 
-import com.google.auth.Credentials;
 import com.google.cloud.ReadChannel;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
@@ -27,12 +26,8 @@ import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.RangeReader;
 import java.io.IOException;
-import java.net.URI;
 import java.nio.ByteBuffer;
 import java.time.Duration;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
 import java.util.OptionalLong;
 import lombok.extern.slf4j.Slf4j;
 
@@ -44,33 +39,6 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements RangeReader {
-
-    private static final Credentials ANONYMOUS_CREDENTIALS = new Credentials() {
-        @Override
-        public String getAuthenticationType() {
-            return "Anonymous";
-        }
-
-        @Override
-        public Map<String, List<String>> getRequestMetadata(URI uri) {
-            return Collections.emptyMap();
-        }
-
-        @Override
-        public boolean hasRequestMetadata() {
-            return false;
-        }
-
-        @Override
-        public boolean hasRequestMetadataOnly() {
-            return false;
-        }
-
-        @Override
-        public void refresh() {
-            // no-op
-        }
-    };
 
     @SuppressWarnings("unused")
     private final Storage storage;

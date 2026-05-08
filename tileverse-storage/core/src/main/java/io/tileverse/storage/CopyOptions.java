@@ -16,6 +16,7 @@
 package io.tileverse.storage;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -33,9 +34,9 @@ public record CopyOptions(
         boolean preserveLastModified) {
 
     public CopyOptions {
-        ifMatchSourceEtag = (ifMatchSourceEtag == null) ? Optional.empty() : ifMatchSourceEtag;
-        overrideUserMetadata =
-                (overrideUserMetadata == null) ? Optional.empty() : overrideUserMetadata.map(Map::copyOf);
+        ifMatchSourceEtag = Objects.requireNonNullElse(ifMatchSourceEtag, Optional.empty());
+        overrideUserMetadata = Objects.requireNonNullElse(overrideUserMetadata, Optional.<Map<String, String>>empty())
+                .map(Map::copyOf);
     }
 
     public static CopyOptions defaults() {

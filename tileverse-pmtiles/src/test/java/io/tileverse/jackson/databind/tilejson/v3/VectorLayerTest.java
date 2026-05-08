@@ -15,11 +15,11 @@
  */
 package io.tileverse.jackson.databind.tilejson.v3;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Map;
@@ -84,17 +84,21 @@ class VectorLayerTest {
     void testRequiredFieldValidation() {
         Map<String, String> fields = Map.of("name", "String");
 
-        // Test null id
-        assertThrows(IllegalArgumentException.class, () -> VectorLayer.of(null, fields));
+        assertThatThrownBy(() -> VectorLayer.of(null, fields))
+                .as("null id")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        // Test blank id
-        assertThrows(IllegalArgumentException.class, () -> VectorLayer.of("", fields));
-        assertThrows(IllegalArgumentException.class, () -> VectorLayer.of("   ", fields));
+        assertThatThrownBy(() -> VectorLayer.of("", fields))
+                .as("empty id")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> VectorLayer.of("   ", fields))
+                .as("whitespace-only id")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        // Test null fields
-        assertThrows(IllegalArgumentException.class, () -> VectorLayer.of("test", null));
+        assertThatThrownBy(() -> VectorLayer.of("test", null))
+                .as("null fields")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        // Test valid creation
         assertDoesNotThrow(() -> VectorLayer.of("test", fields));
     }
 
@@ -102,16 +106,23 @@ class VectorLayerTest {
     void testZoomValidation() {
         Map<String, String> fields = Map.of("name", "String");
 
-        // Test invalid minZoom
-        assertThrows(IllegalArgumentException.class, () -> VectorLayer.of("test", fields, null, -1, 10));
-        assertThrows(IllegalArgumentException.class, () -> VectorLayer.of("test", fields, null, 31, 10));
+        assertThatThrownBy(() -> VectorLayer.of("test", fields, null, -1, 10))
+                .as("minZoom below 0")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> VectorLayer.of("test", fields, null, 31, 10))
+                .as("minZoom above 30")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        // Test invalid maxZoom
-        assertThrows(IllegalArgumentException.class, () -> VectorLayer.of("test", fields, null, 5, -1));
-        assertThrows(IllegalArgumentException.class, () -> VectorLayer.of("test", fields, null, 5, 31));
+        assertThatThrownBy(() -> VectorLayer.of("test", fields, null, 5, -1))
+                .as("maxZoom below 0")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> VectorLayer.of("test", fields, null, 5, 31))
+                .as("maxZoom above 30")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        // Test minZoom > maxZoom
-        assertThrows(IllegalArgumentException.class, () -> VectorLayer.of("test", fields, null, 10, 5));
+        assertThatThrownBy(() -> VectorLayer.of("test", fields, null, 10, 5))
+                .as("minZoom greater than maxZoom")
+                .isInstanceOf(IllegalArgumentException.class);
 
         // Test valid zoom ranges
         assertDoesNotThrow(() -> VectorLayer.of("test", fields, null, 0, 30));
@@ -150,13 +161,19 @@ class VectorLayerTest {
         Map<String, String> fields = Map.of("name", "String");
         VectorLayer layer = VectorLayer.of("test", fields);
 
-        // Test zoom range validation in builder methods
-        assertThrows(IllegalArgumentException.class, () -> layer.withZoomRange(-1, 10));
-        assertThrows(IllegalArgumentException.class, () -> layer.withZoomRange(10, 31));
-        assertThrows(IllegalArgumentException.class, () -> layer.withZoomRange(15, 5));
+        assertThatThrownBy(() -> layer.withZoomRange(-1, 10))
+                .as("withZoomRange minZoom below 0")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> layer.withZoomRange(10, 31))
+                .as("withZoomRange maxZoom above 30")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> layer.withZoomRange(15, 5))
+                .as("withZoomRange minZoom greater than maxZoom")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        // Test fields validation in builder method
-        assertThrows(IllegalArgumentException.class, () -> layer.withFields(null));
+        assertThatThrownBy(() -> layer.withFields(null))
+                .as("withFields(null)")
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

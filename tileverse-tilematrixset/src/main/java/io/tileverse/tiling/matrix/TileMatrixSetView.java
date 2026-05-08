@@ -23,6 +23,7 @@ import io.tileverse.tiling.pyramid.TilePyramid;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A view-based implementation of TileMatrixSet that delegates to another TileMatrixSet while applying zoom level and/or
@@ -47,9 +48,11 @@ class TileMatrixSetView implements TileMatrixSet {
     private final int maxZoomLevel;
     private final BoundingBox2D filterExtent;
 
-    // Lazy cached values
-    private volatile List<TileMatrix> cachedMatrices;
-    private volatile TilePyramid cachedPyramid;
+    // Lazy cached values; AtomicReference#updateAndGet gives lock-free idempotent computation. The compute
+    // functions return the current value unchanged when it has already been populated, so the supplier never
+    // runs more than once on the steady-state path.
+    private final AtomicReference<List<TileMatrix>> cachedMatrices = new AtomicReference<>();
+    private final AtomicReference<TilePyramid> cachedPyramid = new AtomicReference<>();
 
     /** Creates a view with zoom level filtering. */
     private TileMatrixSetView(TileMatrixSet delegate, int minZoomLevel, int maxZoomLevel, BoundingBox2D filterExtent) {
@@ -86,7 +89,8 @@ class TileMatrixSetView implements TileMatrixSet {
     /** Creates a spatially-filtered view of the given tile matrix set. */
     static Optional<TileMatrixSet> intersection(TileMatrixSet delegate, BoundingBox2D mapExtent) {
         TileMatrixSet ret = null;
-        int minZoom, maxZoom;
+        int minZoom;
+        int maxZoom;
 
         // If delegate is already a view, we can combine filters but preserve zoom levels
         if (delegate instanceof TileMatrixSetView view) {
@@ -108,54 +112,53 @@ class TileMatrixSetView implements TileMatrixSet {
 
     @Override
     public TilePyramid tilePyramid() {
-        if (cachedPyramid == null) {
-            synchronized (this) {
-                if (cachedPyramid == null) {
-                    TilePyramid basePyramid = delegate.tilePyramid();
+        return cachedPyramid.updateAndGet(this::buildPyramid);
+    }
 
-                    // Apply zoom filtering if different from delegate's range
-                    int delegateMin = delegate.minZoomLevel();
-                    int delegateMax = delegate.maxZoomLevel();
+    private TilePyramid buildPyramid(TilePyramid current) {
+        if (current != null) {
+            return current; // already populated; skip the rebuild on a CAS retry
+        }
+        TilePyramid basePyramid = delegate.tilePyramid();
 
-                    if (minZoomLevel != delegateMin || maxZoomLevel != delegateMax) {
-                        int actualMin = Math.max(minZoomLevel, basePyramid.minZoomLevel());
-                        int actualMax = Math.min(maxZoomLevel, basePyramid.maxZoomLevel());
+        // Apply zoom filtering if different from delegate's range
+        int delegateMin = delegate.minZoomLevel();
+        int delegateMax = delegate.maxZoomLevel();
 
-                        if (actualMin <= actualMax) {
-                            basePyramid = basePyramid.subset(actualMin, actualMax);
-                        } else {
-                            // Empty pyramid
-                            basePyramid = TilePyramid.builder()
-                                    .cornerOfOrigin(basePyramid.cornerOfOrigin())
-                                    .build();
-                        }
-                    }
+        if (minZoomLevel != delegateMin || maxZoomLevel != delegateMax) {
+            int actualMin = Math.max(minZoomLevel, basePyramid.minZoomLevel());
+            int actualMax = Math.min(maxZoomLevel, basePyramid.maxZoomLevel());
 
-                    // Apply spatial filtering if different from delegate's extent
-                    if (!filterExtent.equals(delegate.boundingBox())) {
-                        TilePyramid.Builder pyramidBuilder =
-                                TilePyramid.builder().cornerOfOrigin(basePyramid.cornerOfOrigin());
-
-                        for (var range : basePyramid.levels()) {
-                            // Get the tile matrix for this zoom level and apply spatial filter
-                            Optional<TileMatrix> matrix = delegate.tileMatrix(range.zoomLevel());
-                            if (matrix.isPresent()) {
-                                TileMatrix filtered =
-                                        matrix.get().intersection(filterExtent).orElse(null);
-                                if (filtered != null) {
-                                    pyramidBuilder.level(filtered.tileRange());
-                                }
-                            }
-                        }
-
-                        basePyramid = pyramidBuilder.build();
-                    }
-
-                    cachedPyramid = basePyramid;
-                }
+            if (actualMin <= actualMax) {
+                basePyramid = basePyramid.subset(actualMin, actualMax);
+            } else {
+                // Empty pyramid
+                basePyramid = TilePyramid.builder()
+                        .cornerOfOrigin(basePyramid.cornerOfOrigin())
+                        .build();
             }
         }
-        return cachedPyramid;
+
+        // Apply spatial filtering if different from delegate's extent
+        if (!filterExtent.equals(delegate.boundingBox())) {
+            TilePyramid.Builder pyramidBuilder = TilePyramid.builder().cornerOfOrigin(basePyramid.cornerOfOrigin());
+
+            for (var range : basePyramid.levels()) {
+                // Get the tile matrix for this zoom level and apply spatial filter
+                Optional<TileMatrix> matrix = delegate.tileMatrix(range.zoomLevel());
+                if (matrix.isPresent()) {
+                    TileMatrix filtered =
+                            matrix.get().intersection(filterExtent).orElse(null);
+                    if (filtered != null) {
+                        pyramidBuilder.level(filtered.tileRange());
+                    }
+                }
+            }
+
+            basePyramid = pyramidBuilder.build();
+        }
+
+        return basePyramid;
     }
 
     @Override
@@ -191,30 +194,29 @@ class TileMatrixSetView implements TileMatrixSet {
 
     @Override
     public List<TileMatrix> tileMatrices() {
-        if (cachedMatrices == null) {
-            synchronized (this) {
-                if (cachedMatrices == null) {
-                    cachedMatrices = tilePyramid().levels().stream()
-                            .map(range -> {
-                                Optional<TileMatrix> matrix = delegate.tileMatrix(range.zoomLevel());
-                                if (matrix.isPresent()) {
-                                    TileMatrix result = matrix.get();
-                                    // Apply spatial filter if different from delegate's extent
-                                    if (!filterExtent.equals(delegate.boundingBox())) {
-                                        result = result.intersection(filterExtent)
-                                                .orElse(null);
-                                    }
-                                    // The zoom filtering is already handled by tilePyramid()
-                                    return result;
-                                }
-                                return null;
-                            })
-                            .filter(Objects::nonNull)
-                            .toList();
-                }
-            }
+        return cachedMatrices.updateAndGet(this::buildMatrices);
+    }
+
+    private List<TileMatrix> buildMatrices(List<TileMatrix> current) {
+        if (current != null) {
+            return current; // already populated; skip the rebuild on a CAS retry
         }
-        return cachedMatrices;
+        return tilePyramid().levels().stream()
+                .map(range -> {
+                    Optional<TileMatrix> matrix = delegate.tileMatrix(range.zoomLevel());
+                    if (matrix.isPresent()) {
+                        TileMatrix result = matrix.get();
+                        // Apply spatial filter if different from delegate's extent
+                        if (!filterExtent.equals(delegate.boundingBox())) {
+                            result = result.intersection(filterExtent).orElse(null);
+                        }
+                        // The zoom filtering is already handled by tilePyramid()
+                        return result;
+                    }
+                    return null;
+                })
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     @Override

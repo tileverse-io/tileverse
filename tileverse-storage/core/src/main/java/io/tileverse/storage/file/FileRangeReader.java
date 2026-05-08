@@ -142,6 +142,67 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     /**
+     * Returns the size of the file in bytes.
+     *
+     * <p>The file size is cached at construction time using {@link Files#size(Path)} and does not depend on the file
+     * channel being open. This means size queries work even when the channel has been idle-closed.
+     *
+     * @return the size of the file in bytes, never {@link OptionalLong#empty() empty}
+     * @throws IllegalStateException if this reader has been permanently closed via {@link #close()}
+     */
+    @Override
+    public OptionalLong size() {
+        if (permanentlyClosed.get()) {
+            throw new IllegalStateException("FileRangeReader is closed");
+        }
+        return OptionalLong.of(this.size);
+    }
+
+    /**
+     * Returns a string identifier for this file source.
+     *
+     * <p>The identifier is the absolute path of the file, which uniquely identifies the data source for logging,
+     * caching, and debugging purposes.
+     *
+     * @return the absolute path of the file as a string
+     */
+    @Override
+    public String getSourceIdentifier() {
+        return path.toAbsolutePath().toString();
+    }
+
+    /**
+     * Closes this reader and releases any associated system resources.
+     *
+     * <p>This method is thread-safe and idempotent - it can be called multiple times without harm. After closing, any
+     * further attempts to read from this FileRangeReader will result in a {@link ClosedChannelException}.
+     *
+     * <p>Any errors encountered while closing the underlying file channel are silently ignored, as this reader may be
+     * closing a stale or already-closed channel.
+     *
+     * <p>It is recommended to use this FileRangeReader in a try-with-resources statement to ensure proper resource
+     * cleanup.
+     */
+    @Override
+    public void close() {
+        if (permanentlyClosed.compareAndSet(false, true)) {
+            channelLock.lock();
+            try {
+                cancelIdleCheck();
+                closeChannel();
+            } finally {
+                channelLock.unlock();
+            }
+        }
+    }
+
+    void closeChannel() {
+        FileChannel ch = this.channel;
+        this.channel = null;
+        closeQuietly(ch);
+    }
+
+    /**
      * Performs the actual range read operation using thread-safe positioned reads, with automatic retry on recoverable
      * errors (stale NFS file handles, closed channels).
      *
@@ -200,6 +261,10 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
             pos += read;
         }
         return totalRead;
+    }
+
+    FileChannel channel() {
+        return this.channel;
     }
 
     private FileChannel ensureOpen() throws IOException {
@@ -289,9 +354,7 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
     private void closeStaleChannel() {
         channelLock.lock();
         try {
-            FileChannel ch = this.channel;
-            this.channel = null;
-            closeQuietly(ch);
+            closeChannel();
         } finally {
             channelLock.unlock();
         }
@@ -311,63 +374,6 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
                 ch.close();
             } catch (IOException ignored) {
                 // intentionally swallowed
-            }
-        }
-    }
-
-    /**
-     * Returns the size of the file in bytes.
-     *
-     * <p>The file size is cached at construction time using {@link Files#size(Path)} and does not depend on the file
-     * channel being open. This means size queries work even when the channel has been idle-closed.
-     *
-     * @return the size of the file in bytes, never {@link OptionalLong#empty() empty}
-     * @throws IllegalStateException if this reader has been permanently closed via {@link #close()}
-     */
-    @Override
-    public OptionalLong size() {
-        if (permanentlyClosed.get()) {
-            throw new IllegalStateException("FileRangeReader is closed");
-        }
-        return OptionalLong.of(this.size);
-    }
-
-    /**
-     * Returns a string identifier for this file source.
-     *
-     * <p>The identifier is the absolute path of the file, which uniquely identifies the data source for logging,
-     * caching, and debugging purposes.
-     *
-     * @return the absolute path of the file as a string
-     */
-    @Override
-    public String getSourceIdentifier() {
-        return path.toAbsolutePath().toString();
-    }
-
-    /**
-     * Closes this reader and releases any associated system resources.
-     *
-     * <p>This method is thread-safe and idempotent - it can be called multiple times without harm. After closing, any
-     * further attempts to read from this FileRangeReader will result in a {@link ClosedChannelException}.
-     *
-     * <p>Any errors encountered while closing the underlying file channel are silently ignored, as this reader may be
-     * closing a stale or already-closed channel.
-     *
-     * <p>It is recommended to use this FileRangeReader in a try-with-resources statement to ensure proper resource
-     * cleanup.
-     */
-    @Override
-    public void close() {
-        if (permanentlyClosed.compareAndSet(false, true)) {
-            channelLock.lock();
-            try {
-                cancelIdleCheck();
-                FileChannel ch = this.channel;
-                this.channel = null;
-                closeQuietly(ch);
-            } finally {
-                channelLock.unlock();
             }
         }
     }

@@ -90,6 +90,7 @@ public abstract class AbstractRangeReader implements RangeReader {
      * @throws java.nio.ReadOnlyBufferException If the target buffer is read-only
      */
     @Override
+    @SuppressWarnings("java:S2583") // if target==null we throw IAE
     public final int readRange(long offset, int length, ByteBuffer target) {
         if (offset < 0) {
             throw new IllegalArgumentException("Offset cannot be negative");

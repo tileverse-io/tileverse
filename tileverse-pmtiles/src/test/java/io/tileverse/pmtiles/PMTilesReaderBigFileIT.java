@@ -24,9 +24,7 @@ import io.tileverse.cache.CacheStats;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.StorageFactory;
 import io.tileverse.storage.cache.CachingRangeReader;
-import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Paths;
@@ -36,6 +34,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.IntStream;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -46,6 +45,7 @@ import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.threeten.bp.Instant;
 
+@Slf4j
 @Disabled
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class PMTilesReaderBigFileIT {
@@ -64,7 +64,7 @@ class PMTilesReaderBigFileIT {
     @AfterEach
     void tearDown() {
         Map<String, CacheStats> stats = this.cacheManager.stats();
-        stats.forEach((name, cacheStats) -> System.err.printf("\t%s: %s%n", name, cacheStats));
+        stats.forEach((name, cacheStats) -> log.debug("\t{}: {}", name, cacheStats));
         this.cacheManager.invalidateAll();
         forkJoinPool.shutdownNow();
         System.gc();
@@ -216,14 +216,14 @@ class PMTilesReaderBigFileIT {
     }
 
     private void traverseAllSequentially(PMTilesReader reader, int count) {
-        System.err.printf("----- %s(%d) -----%n", testName, count);
-        System.err.println("\t" + reader.getHeader());
+        log.debug("----- {}({}) -----", testName, count);
+        log.debug("\t{}", reader.getHeader());
         IntStream.range(0, count).forEach(i -> traverseAllIndices(reader));
     }
 
     private void traverseAllConcurrently(PMTilesReader reader, int concurrency) {
-        System.err.printf("----- %s(%d) -----%n", testName, concurrency);
-        System.err.println("\t" + reader.getHeader());
+        log.debug("----- {}({}) -----", testName, concurrency);
+        log.debug("\t{}", reader.getHeader());
         @SuppressWarnings("rawtypes")
         CompletableFuture[] all = IntStream.range(0, concurrency)
                 .mapToObj(i -> CompletableFuture.runAsync(() -> traverseAllIndices(reader)))
@@ -244,36 +244,21 @@ class PMTilesReaderBigFileIT {
 
         final Duration ellapsed = Duration.ofMillis(end.toEpochMilli() - start.toEpochMilli());
         long memFinal = runtime.totalMemory() - runtime.freeMemory();
-        System.err.printf(
-                """
+        log.debug("""
                 \tDirectories: %,d, Tile entries: %,d, Tile indices: %,d, runLengths: %,d, traversal: %s
-                \tMemory initial: %,dMB, final: %,dMB%n
-                """,
-                tileCount.dirEntries(),
-                tileCount.tileEntries(),
-                tileCount.tileIndices(),
-                tileCount.runLengths(),
-                ellapsed,
-                memInitial / (1024 * 1024),
-                memFinal / (1024 * 1024));
+                \tMemory initial: %,dMB, final: %,dMB""".formatted(
+                        tileCount.dirEntries(),
+                        tileCount.tileEntries(),
+                        tileCount.tileIndices(),
+                        tileCount.runLengths(),
+                        ellapsed,
+                        memInitial / (1024 * 1024),
+                        memFinal / (1024 * 1024)));
 
         Map<String, CacheStats> stats = CacheManager.getDefault().stats();
-        stats.forEach((name, s) -> System.err.printf("%s: %s%n", name, s));
+        stats.forEach((name, s) -> log.debug("{}: {}", name, s));
 
         assertThat(tileCount.runLengths()).isEqualTo(tileCount.tileIndices());
-        //        System.err.printf(
-        //                """
-        //				\tDirectories: %,d, Tile entries: %,d, Tile indices: %,d, runLengths: %,d, Data tiles: %,d, Data size:
-        // %.2fGB, traversal: %s
-        //				\tMemory initial: %,dMB, final: %,dMB%n
-        //				""",
-        //                tileCount.dirEntries(),
-        //                tileCount.tileEntries(),
-        //                tileCount.tileIndices(),
-        //                tileCount.runLengths(),
-        //                ellapsed,
-        //                memInitial / (1024 * 1024),
-        //                memFinal / (1024 * 1024));
     }
 
     private TileIndexCount traverseDirectory(PMTilesReader reader, PMTilesDirectory directory) {
@@ -311,54 +296,5 @@ class PMTilesReaderBigFileIT {
 
         return new TileIndexCount(
                 directoryEntryCount, tileEntryCount, runLengthSum.longValue(), tileIndexCount.longValue());
-    }
-
-    //    private TileIndexCount traverseTiles(PMTilesReader reader, PMTilesDirectory directory) {
-    //        final long directoryEntryCount = directory.numDirectoryEntries();
-    //        final long tileEntryCount = directory.numTileEntries();
-    //
-    //        final LongAdder runLengthSum = new LongAdder();
-    //        final LongAdder tileIndexCount = new LongAdder();
-    //        final LongAdder tileDataCount = new LongAdder();
-    //        final LongAdder tileDataSize = new LongAdder();
-    //
-    //        directory.tileEntries().parallel().forEach(tileEntry -> {
-    //            runLengthSum.add(tileEntry.runLength());
-    //            reader.getTileIndices(tileEntry, tileIndex -> {
-    //                tileIndexCount.add(1);
-    //                int tileSize = tileDataSize(reader, tileIndex);
-    //                if (tileSize > 0) {
-    //                    tileDataCount.add(1);
-    //                    tileDataSize.add(tileSize);
-    //                }
-    //            });
-    //        });
-    //
-    //        return new TileIndexCount(
-    //                directoryEntryCount,
-    //                tileEntryCount,
-    //                runLengthSum.longValue(),
-    //                tileIndexCount.longValue(),
-    //                tileDataCount.longValue(),
-    //                tileDataSize.longValue());
-    //    }
-
-    private int tileDataSize(PMTilesReader reader, TileIndex tileIndex) {
-        try {
-            return reader.getTile(tileIndex).map(ByteBuffer::remaining).orElse(0);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    private void printDirectory(PMTilesDirectory directory, long tileCount, long dirCount, String indent) {
-        System.out.printf("%s%s (%,d directories, %,d tiles)%n", indent, directory, dirCount, tileCount);
-    }
-
-    private void printTile(PMTilesReader reader, PMTilesEntry tileEntry, String indent) {
-        if (tileEntry.runLength() > 1) {
-            TileIndex tileIndex = reader.getTileIndex(tileEntry.tileId());
-            System.out.printf("%s%s%s %s%n", indent, indent, tileEntry, tileIndex);
-        }
     }
 }

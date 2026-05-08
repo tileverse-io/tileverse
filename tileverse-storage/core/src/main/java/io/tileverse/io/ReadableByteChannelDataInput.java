@@ -214,6 +214,7 @@ public class ReadableByteChannelDataInput implements DataInput {
     }
 
     @Override
+    @SuppressWarnings({"java:S135", "java:S1141"}) // no gain in splitting this method further
     public String readLine() throws IOException {
         StringBuilder line = new StringBuilder();
         int c;
@@ -243,7 +244,7 @@ public class ReadableByteChannelDataInput implements DataInput {
             c = -1;
         }
 
-        return line.length() > 0 || c != -1 ? line.toString() : null;
+        return !line.isEmpty() || c != -1 ? line.toString() : null;
     }
 
     @Override
@@ -267,13 +268,17 @@ public class ReadableByteChannelDataInput implements DataInput {
     protected String readModifiedUTF8(byte[] bytearr) throws IOException {
         int utflen = bytearr.length;
         char[] chararr = new char[utflen];
-        int c, char2, char3;
+        int c;
+        int char2;
+        int char3;
         int count = 0;
         int chararrCount = 0;
 
         while (count < utflen) {
             c = bytearr[count] & 0xff;
-            if (c > 127) break;
+            if (c > 127) {
+                break;
+            }
             count++;
             chararr[chararrCount++] = (char) c;
         }
@@ -286,19 +291,24 @@ public class ReadableByteChannelDataInput implements DataInput {
                     count++;
                     chararr[chararrCount++] = (char) c;
                     break;
-                case 12:
-                case 13:
+                case 12, 13:
                     /* 110x xxxx   10xx xxxx*/
                     count += 2;
-                    if (count > utflen) throw new IOException("malformed input: partial character at end");
+                    if (count > utflen) {
+                        throw new IOException("malformed input: partial character at end");
+                    }
                     char2 = bytearr[count - 1];
-                    if ((char2 & 0xC0) != 0x80) throw new IOException("malformed input around byte " + count);
+                    if ((char2 & 0xC0) != 0x80) {
+                        throw new IOException("malformed input around byte " + count);
+                    }
                     chararr[chararrCount++] = (char) (((c & 0x1F) << 6) | (char2 & 0x3F));
                     break;
                 case 14:
                     /* 1110 xxxx  10xx xxxx  10xx xxxx */
                     count += 3;
-                    if (count > utflen) throw new IOException("malformed input: partial character at end");
+                    if (count > utflen) {
+                        throw new IOException("malformed input: partial character at end");
+                    }
                     char2 = bytearr[count - 2];
                     char3 = bytearr[count - 1];
                     if (((char2 & 0xC0) != 0x80) || ((char3 & 0xC0) != 0x80))
@@ -403,8 +413,7 @@ public class ReadableByteChannelDataInput implements DataInput {
 
     @Override
     public String toString() {
-        return String.format(
-                "ReadableByteChannelDataInput[channel=%s, bufferSize=%d, bufferRemaining=%d]",
-                channel, buffer.capacity(), buffer.remaining());
+        return "ReadableByteChannelDataInput[channel=%s, bufferSize=%d, bufferRemaining=%d]"
+                .formatted(channel, buffer.capacity(), buffer.remaining());
     }
 }

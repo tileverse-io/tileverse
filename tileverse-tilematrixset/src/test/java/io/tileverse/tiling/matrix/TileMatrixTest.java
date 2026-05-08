@@ -18,11 +18,11 @@ package io.tileverse.tiling.matrix;
 import static io.tileverse.tiling.common.BoundingBox2D.extent;
 import static io.tileverse.tiling.common.CornerOfOrigin.TOP_LEFT;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.tileverse.tiling.common.BoundingBox2D;
@@ -189,31 +189,25 @@ class TileMatrixTest {
 
     @Test
     void testValidation() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            TileMatrix.builder()
-                    .tileRange(null) // Null range
-                    .resolution(156.543)
-                    .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
-                    .crs("EPSG:3857")
-                    .build();
-        });
+        TileMatrixBuilder nullRange = TileMatrix.builder()
+                .tileRange(null)
+                .resolution(156.543)
+                .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
+                .crs("EPSG:3857");
+        assertThatThrownBy(nullRange::build).isInstanceOf(IllegalArgumentException.class);
 
-        assertThrows(IllegalArgumentException.class, () -> {
-            TileMatrix.builder()
-                    .tileRange(TileRange.of(0, 0, 1, 1, 0))
-                    .resolution(0) // Invalid resolution
-                    .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
-                    .crs("EPSG:3857")
-                    .build();
-        });
+        TileMatrixBuilder zeroResolution = TileMatrix.builder()
+                .tileRange(TileRange.of(0, 0, 1, 1, 0))
+                .resolution(0)
+                .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
+                .crs("EPSG:3857");
+        assertThatThrownBy(zeroResolution::build).isInstanceOf(IllegalArgumentException.class);
 
-        assertThrows(IllegalArgumentException.class, () -> {
-            TileMatrix.builder()
-                    .tileRange(TileRange.of(0, 0, 1, 1, 0))
-                    .resolution(156.543)
-                    .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
-                    .crs("") // Empty CRS
-                    .build();
-        });
+        TileMatrixBuilder emptyCrs = TileMatrix.builder()
+                .tileRange(TileRange.of(0, 0, 1, 1, 0))
+                .resolution(156.543)
+                .pointOfOrigin(DefaultTileMatrixSets.WebMercatorBounds.upperLeft())
+                .crs("");
+        assertThatThrownBy(emptyCrs::build).isInstanceOf(IllegalArgumentException.class);
     }
 }

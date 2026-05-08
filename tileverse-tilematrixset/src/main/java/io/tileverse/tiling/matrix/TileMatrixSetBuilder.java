@@ -115,13 +115,10 @@ public class TileMatrixSetBuilder {
             }
         }
 
-        // Create new arrays that maintain direct indexing but sized to the max zoom needed
+        // Create new arrays that maintain direct indexing but sized to the max zoom needed: indices below
+        // minZoom stay at the default 0.0, the minZoom..maxZoom slice is copied verbatim.
         double[] subsetResolutions = new double[maxZoom + 1];
-
-        // Copy relevant values maintaining direct indexing
-        for (int z = minZoom; z <= maxZoom; z++) {
-            subsetResolutions[z] = resolutions[z];
-        }
+        System.arraycopy(resolutions, minZoom, subsetResolutions, minZoom, maxZoom - minZoom + 1);
 
         this.resolutions = subsetResolutions;
 

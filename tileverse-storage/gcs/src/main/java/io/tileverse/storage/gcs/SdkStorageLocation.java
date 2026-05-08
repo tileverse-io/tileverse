@@ -84,7 +84,9 @@ record SdkStorageLocation(String bucket, String prefix) {
     }
 
     String relativize(String fullKey) {
-        if (prefix.isEmpty()) return fullKey;
+        if (prefix.isEmpty()) {
+            return fullKey;
+        }
         if (!fullKey.startsWith(prefix)) {
             throw new IllegalArgumentException("Key '" + fullKey + "' does not start with prefix '" + prefix + "'");
         }

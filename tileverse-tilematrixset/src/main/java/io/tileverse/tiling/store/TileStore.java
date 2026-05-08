@@ -96,7 +96,7 @@ public interface TileStore<T> {
         }
 
         List<TileMatrix> intersecting = extents.stream()
-                .map(extent -> fullMatrix.intersection(extent))
+                .map(fullMatrix::intersection)
                 .filter(Optional::isPresent)
                 .map(Optional::orElseThrow)
                 .toList();

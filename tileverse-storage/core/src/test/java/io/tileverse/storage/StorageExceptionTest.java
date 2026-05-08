@@ -25,14 +25,15 @@ class StorageExceptionTest {
 
     @Test
     void allSubclassesExtendStorageException() {
-        assertThat(StorageException.class).isAssignableFrom(NotFoundException.class);
-        assertThat(StorageException.class).isAssignableFrom(AccessDeniedException.class);
-        assertThat(StorageException.class).isAssignableFrom(ConflictException.class);
-        assertThat(StorageException.class).isAssignableFrom(PreconditionFailedException.class);
-        assertThat(StorageException.class).isAssignableFrom(RangeNotSatisfiableException.class);
-        assertThat(StorageException.class).isAssignableFrom(UnsupportedCapabilityException.class);
-        assertThat(StorageException.class).isAssignableFrom(InvalidKeyException.class);
-        assertThat(StorageException.class).isAssignableFrom(TransientStorageException.class);
+        assertThat(StorageException.class)
+                .isAssignableFrom(NotFoundException.class)
+                .isAssignableFrom(AccessDeniedException.class)
+                .isAssignableFrom(ConflictException.class)
+                .isAssignableFrom(PreconditionFailedException.class)
+                .isAssignableFrom(RangeNotSatisfiableException.class)
+                .isAssignableFrom(UnsupportedCapabilityException.class)
+                .isAssignableFrom(InvalidKeyException.class)
+                .isAssignableFrom(TransientStorageException.class);
         assertThat(RuntimeException.class).isAssignableFrom(StorageException.class);
     }
 

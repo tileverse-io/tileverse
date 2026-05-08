@@ -374,77 +374,92 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
         }
 
         // Override WKT overloads for return type covariance
+        @Override
         public FeatureGeometryAssertions equalsExact(String expectedWkt, double tolerance) {
             super.equalsExact(expectedWkt, tolerance);
             return this;
         }
 
+        @Override
         public FeatureGeometryAssertions equalsExact(String expectedWkt) {
             super.equalsExact(expectedWkt);
             return this;
         }
 
+        @Override
         public FeatureGeometryAssertions equalsNorm(String expectedWkt) {
             super.equalsNorm(expectedWkt);
             return this;
         }
 
+        @Override
         public FeatureGeometryAssertions equalsTopo(String expectedWkt) {
             super.equalsTopo(expectedWkt);
             return this;
         }
 
         // Override WKT spatial relationship methods
+        @Override
         public FeatureGeometryAssertions disjoint(String otherWkt) {
             super.disjoint(otherWkt);
             return this;
         }
 
+        @Override
         public FeatureGeometryAssertions touches(String otherWkt) {
             super.touches(otherWkt);
             return this;
         }
 
+        @Override
         public FeatureGeometryAssertions intersects(String otherWkt) {
             super.intersects(otherWkt);
             return this;
         }
 
+        @Override
         public FeatureGeometryAssertions doesNotIntersect(String otherWkt) {
             super.doesNotIntersect(otherWkt);
             return this;
         }
 
+        @Override
         public FeatureGeometryAssertions crosses(String otherWkt) {
             super.crosses(otherWkt);
             return this;
         }
 
+        @Override
         public FeatureGeometryAssertions within(String otherWkt) {
             super.within(otherWkt);
             return this;
         }
 
+        @Override
         public FeatureGeometryAssertions contains(String otherWkt) {
             super.contains(otherWkt);
             return this;
         }
 
+        @Override
         public FeatureGeometryAssertions doesNotContain(String otherWkt) {
             super.doesNotContain(otherWkt);
             return this;
         }
 
+        @Override
         public FeatureGeometryAssertions overlaps(String otherWkt) {
             super.overlaps(otherWkt);
             return this;
         }
 
+        @Override
         public FeatureGeometryAssertions covers(String otherWkt) {
             super.covers(otherWkt);
             return this;
         }
 
+        @Override
         public FeatureGeometryAssertions coveredBy(String otherWkt) {
             super.coveredBy(otherWkt);
             return this;
@@ -562,16 +577,16 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
                 String status;
                 if (exp == null) {
                     status = "EXTRA";
-                    error.append(String.format("  [%d] %s: %s\n", i, status, act));
+                    error.append("  [%d] %s: %s%n".formatted(i, status, act));
                 } else if (act == null) {
                     status = "MISSING";
-                    error.append(String.format("  [%d] %s: %s\n", i, status, exp));
+                    error.append("  [%d] %s: %s%n".formatted(i, status, exp));
                 } else if (!exp.equals(act)) {
                     status = "DIFF";
-                    error.append(String.format("  [%d] %s: expected <%s> but was <%s>\n", i, status, exp, act));
+                    error.append("  [%d] %s: expected <%s> but was <%s>%n".formatted(i, status, exp, act));
                 } else {
                     status = "OK";
-                    error.append(String.format("  [%d] %s: %s\n", i, status, exp));
+                    error.append("  [%d] %s: %s%n".formatted(i, status, exp));
                 }
             }
 
@@ -644,7 +659,6 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
         /** Builder for MoveTo commands supporting both single and multi-point assertions. */
         public static class MoveToCommand {
             private final FeatureGeometryAssertions parent;
-            private int expectedCount = 1;
 
             public MoveToCommand(FeatureGeometryAssertions parent) {
                 this.parent = parent;
@@ -652,7 +666,6 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
 
             /** Set the expected count for this MoveTo command (for MULTIPOINT geometries). */
             public CoordinateSequence count(int count) {
-                this.expectedCount = count;
                 return new CoordinateSequence(parent, GeometryCommand.MoveTo, count);
             }
 
@@ -699,8 +712,8 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
             /** Add a coordinate pair to the sequence. */
             public CoordinateSequence coord(int x, int y) {
                 if (coordinateCount >= expectedCount) {
-                    throw new IllegalStateException(String.format(
-                            "Too many coordinates: expected %d but got %d+", expectedCount, coordinateCount));
+                    throw new IllegalStateException(
+                            "Too many coordinates: expected %d but got %d+".formatted(expectedCount, coordinateCount));
                 }
                 parent.expectedCommands.add(new DecodedCommand(command, x, y));
                 coordinateCount++;
@@ -713,9 +726,8 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
              */
             public FeatureGeometryAssertions done() {
                 if (coordinateCount != expectedCount) {
-                    throw new IllegalStateException(String.format(
-                            "Incomplete coordinate sequence: expected %d coordinates but got %d",
-                            expectedCount, coordinateCount));
+                    throw new IllegalStateException("Incomplete coordinate sequence: expected %d coordinates but got %d"
+                            .formatted(expectedCount, coordinateCount));
                 }
                 return parent;
             }
@@ -736,8 +748,12 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
 
         @Override
         public boolean equals(Object obj) {
-            if (this == obj) return true;
-            if (!(obj instanceof DecodedCommand other)) return false;
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof DecodedCommand other)) {
+                return false;
+            }
             return command == other.command && (command == GeometryCommand.ClosePath || (x == other.x && y == other.y));
         }
 
@@ -749,10 +765,10 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
         @Override
         public String toString() {
             return switch (command) {
-                case GeometryCommand.MoveTo -> String.format("MoveTo(%d, %d)", x, y);
-                case GeometryCommand.LineTo -> String.format("LineTo(%d, %d)", x, y);
+                case GeometryCommand.MoveTo -> "MoveTo(%d, %d)".formatted(x, y);
+                case GeometryCommand.LineTo -> "LineTo(%d, %d)".formatted(x, y);
                 case GeometryCommand.ClosePath -> "ClosePath()";
-                default -> String.format("Unknown(%d, %d, %d)", command, x, y);
+                default -> "Unknown(%d, %d, %d)".formatted(command, x, y);
             };
         }
     }

@@ -22,17 +22,10 @@ import java.util.Objects;
  * {@link HttpClientHandle} that wraps a caller-supplied {@link HttpClient}. {@link #close()} is a no-op so the caller
  * retains ownership of the client (used by {@link HttpStorageProvider#open(java.net.URI, HttpClient)}).
  */
-final class BorrowedHttpHandle implements HttpClientHandle {
+record BorrowedHttpHandle(HttpClient client) implements HttpClientHandle {
 
-    private final HttpClient client;
-
-    BorrowedHttpHandle(HttpClient client) {
-        this.client = Objects.requireNonNull(client, "client");
-    }
-
-    @Override
-    public HttpClient client() {
-        return client;
+    BorrowedHttpHandle {
+        Objects.requireNonNull(client, "client");
     }
 
     @Override

@@ -30,8 +30,8 @@ import java.util.List;
 /**
  * {@link StorageProvider} implementation for the local filesystem. Selects on {@code file:} URIs (or filesystem paths
  * convertible to one) and produces a {@link FileStorage} rooted at an existing directory. The opened Storage supports
- * the full read/write surface (stat, list, openRangeReader, read, put, delete, copy/move) backed by NIO; presigned URLs
- * are not applicable.
+ * the full read/write API (stat, list, openRangeReader, read, put, delete, copy/move) backed by NIO; presigned URLs are
+ * not applicable.
  *
  * <p>The URI must point to an existing directory. URIs that resolve to a regular file are rejected (use the parent
  * directory and address the file via {@code openRangeReader(key)} or {@code openRangeReader(URI)}). URIs that resolve
@@ -107,9 +107,6 @@ public class FileStorageProvider extends AbstractStorageProvider {
     @Override
     public Storage createStorage(StorageConfig config) {
         URI uri = config.baseUri();
-        if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.baseUri() is required for FileStorage");
-        }
         Path root = Paths.get(uri);
         if (!Files.exists(root)) {
             throw new IllegalArgumentException(

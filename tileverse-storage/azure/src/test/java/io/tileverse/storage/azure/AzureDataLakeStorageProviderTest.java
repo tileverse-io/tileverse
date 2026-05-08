@@ -18,7 +18,6 @@ package io.tileverse.storage.azure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tileverse.storage.StorageConfig;
-import java.net.URI;
 import org.junit.jupiter.api.Test;
 
 class AzureDataLakeStorageProviderTest {
@@ -26,23 +25,23 @@ class AzureDataLakeStorageProviderTest {
     @Test
     void canProcessAcceptsAbfsUris() {
         AzureDataLakeStorageProvider p = new AzureDataLakeStorageProvider();
-        assertThat(p.canProcess(new StorageConfig().baseUri(URI.create("abfss://fs@acct.dfs.core.windows.net/path/"))))
+        assertThat(p.canProcess(new StorageConfig("abfss://fs@acct.dfs.core.windows.net/path/")))
                 .isTrue();
-        assertThat(p.canProcess(new StorageConfig().baseUri(URI.create("abfs://fs@acct.dfs.core.windows.net/"))))
+        assertThat(p.canProcess(new StorageConfig("abfs://fs@acct.dfs.core.windows.net/")))
                 .isTrue();
     }
 
     @Test
     void canProcessAcceptsHttpsToDfsHost() {
         AzureDataLakeStorageProvider p = new AzureDataLakeStorageProvider();
-        assertThat(p.canProcess(new StorageConfig().baseUri(URI.create("https://acct.dfs.core.windows.net/fs/path"))))
+        assertThat(p.canProcess(new StorageConfig("https://acct.dfs.core.windows.net/fs/path")))
                 .isTrue();
     }
 
     @Test
     void canProcessRejectsBlobHost() {
         AzureDataLakeStorageProvider p = new AzureDataLakeStorageProvider();
-        assertThat(p.canProcess(new StorageConfig().baseUri(URI.create("https://acct.blob.core.windows.net/fs/path"))))
+        assertThat(p.canProcess(new StorageConfig("https://acct.blob.core.windows.net/fs/path")))
                 .isFalse();
     }
 }

@@ -25,9 +25,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import io.tileverse.storage.RangeReader;
@@ -42,11 +42,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
 /** Comprehensive tests for HttpRangeReader using WireMock. */
+@Slf4j
 class HttpRangeReaderTest {
 
     private static final String TEST_PATH = "/test-pmtiles";
@@ -58,7 +60,7 @@ class HttpRangeReaderTest {
             .build();
 
     private URI testUri;
-    private RangeReader reader;
+    private RangeReader rangeReader;
 
     /** Creates test data with a predictable pattern. */
     private static byte[] createTestData(int size) {
@@ -88,19 +90,19 @@ class HttpRangeReaderTest {
         // Individual range request stubs - we'll create these for each test as needed
 
         // Create reader
-        reader = RangeReaderTestSupport.httpReader(testUri);
+        rangeReader = RangeReaderTestSupport.httpReader(testUri);
     }
 
     @Test
-    void testGetSize() throws IOException {
-        assertThat(reader.size()).hasValue(TEST_DATA.length);
+    void testGetSize() {
+        assertThat(rangeReader.size()).hasValue(TEST_DATA.length);
 
         // Verify that HEAD request was made
         wm.verify(headRequestedFor(urlEqualTo(TEST_PATH)));
     }
 
     @Test
-    void testReadEntireFile() throws IOException {
+    void testReadEntireFile() {
         // Stub the range request
         int start = 0;
         int end = TEST_DATA.length - 1;
@@ -115,7 +117,7 @@ class HttpRangeReaderTest {
                         .withBody(responseBytes)));
 
         ByteBuffer buffer = ByteBuffer.allocate(TEST_DATA.length);
-        reader.readRange(0, TEST_DATA.length, buffer);
+        rangeReader.readRange(0, TEST_DATA.length, buffer);
         buffer.flip();
 
         assertEquals(TEST_DATA.length, buffer.remaining());
@@ -138,7 +140,7 @@ class HttpRangeReaderTest {
     }
 
     @Test
-    void testReadRange() throws IOException {
+    void testReadRange() {
         int offset = 1000;
         int length = 500;
         int end = offset + length - 1;
@@ -156,7 +158,7 @@ class HttpRangeReaderTest {
                         .withBody(responseBytes)));
 
         ByteBuffer buffer = ByteBuffer.allocate(length);
-        reader.readRange(offset, length, buffer);
+        rangeReader.readRange(offset, length, buffer);
         buffer.flip();
 
         assertEquals(length, buffer.remaining());
@@ -174,7 +176,7 @@ class HttpRangeReaderTest {
     }
 
     @Test
-    void testReadRangeFromEnd() throws IOException {
+    void testReadRangeFromEnd() {
         int offset = TEST_DATA.length - 500;
         int length = 500;
         int end = offset + length - 1;
@@ -192,7 +194,7 @@ class HttpRangeReaderTest {
                         .withBody(responseBytes)));
 
         ByteBuffer buffer = ByteBuffer.allocate(length);
-        reader.readRange(offset, length, buffer);
+        rangeReader.readRange(offset, length, buffer);
         buffer.flip();
 
         assertEquals(length, buffer.remaining());
@@ -210,7 +212,7 @@ class HttpRangeReaderTest {
     }
 
     @Test
-    void testReadRangeBeyondEnd() throws IOException {
+    void testReadRangeBeyondEnd() {
         // Set up a specific stub for this test
         int offset = TEST_DATA.length - 200;
         int length = 500; // This goes beyond the end of the data
@@ -229,7 +231,7 @@ class HttpRangeReaderTest {
                         .withBody(responseBytes)));
 
         ByteBuffer buffer = ByteBuffer.allocate(length);
-        reader.readRange(offset, length, buffer);
+        rangeReader.readRange(offset, length, buffer);
         buffer.flip();
 
         // Should only get back 200 bytes (to the end of file)
@@ -248,13 +250,13 @@ class HttpRangeReaderTest {
     }
 
     @Test
-    void testReadZeroLength() throws IOException {
+    void testReadZeroLength() {
         int offset = 100;
         int length = 0;
 
         // The implementation now returns an empty buffer for zero-length requests without making HTTP requests
         ByteBuffer buffer = ByteBuffer.allocate(length);
-        reader.readRange(offset, length, buffer);
+        rangeReader.readRange(offset, length, buffer);
         buffer.flip();
 
         assertEquals(0, buffer.remaining());
@@ -265,12 +267,14 @@ class HttpRangeReaderTest {
 
     @Test
     void testReadWithNegativeOffset() {
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(-1, 10, ByteBuffer.allocate(1)));
+        ByteBuffer buff = ByteBuffer.allocate(1);
+        assertThatThrownBy(() -> rangeReader.readRange(-1, 10, buff)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void testReadWithNegativeLength() {
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(0, -1, ByteBuffer.allocate(1)));
+        ByteBuffer buff = ByteBuffer.allocate(1);
+        assertThatThrownBy(() -> rangeReader.readRange(0, -1, buff)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -286,8 +290,8 @@ class HttpRangeReaderTest {
 
         // Should throw when readRange() is called (triggering range support initialization)
         RangeReader reader = RangeReaderTestSupport.httpReader(noRangeUri);
-        assertThrows(
-                io.tileverse.storage.StorageException.class, () -> reader.readRange(0, 100, ByteBuffer.allocate(100)));
+        assertThatThrownBy(() -> reader.readRange(0, 100, ByteBuffer.allocate(100)))
+                .isInstanceOf(io.tileverse.storage.StorageException.class);
     }
 
     @Test
@@ -315,9 +319,8 @@ class HttpRangeReaderTest {
 
         // Should throw StorageException when server doesn't support range requests (returns 200 instead of 206)
         try (RangeReader ignoreRangeReader = RangeReaderTestSupport.httpReader(ignoreRangeUri)) {
-            assertThrows(
-                    io.tileverse.storage.StorageException.class,
-                    () -> ignoreRangeReader.readRange(offset, length, ByteBuffer.allocate(length)));
+            assertThatThrownBy(() -> ignoreRangeReader.readRange(offset, length, ByteBuffer.allocate(length)))
+                    .isInstanceOf(io.tileverse.storage.StorageException.class);
         }
     }
 
@@ -346,9 +349,8 @@ class HttpRangeReaderTest {
         // Should be able to create the reader
         try (RangeReader errorReader = RangeReaderTestSupport.httpReader(errorUri)) {
             // But reading a range should throw
-            assertThrows(
-                    io.tileverse.storage.StorageException.class,
-                    () -> errorReader.readRange(offset, length, ByteBuffer.allocate(length)));
+            assertThatThrownBy(() -> errorReader.readRange(offset, length, ByteBuffer.allocate(length)))
+                    .isInstanceOf(io.tileverse.storage.StorageException.class);
 
             // Verify that range request was made
             wm.verify(
@@ -399,7 +401,7 @@ class HttpRangeReaderTest {
 
                         // Read a region
                         ByteBuffer buffer = ByteBuffer.allocate(regionSize);
-                        reader.readRange(regionStart, regionSize, buffer);
+                        rangeReader.readRange(regionStart, regionSize, buffer);
                         buffer.flip();
                         byte[] data = new byte[buffer.remaining()];
                         buffer.get(data);
@@ -407,9 +409,12 @@ class HttpRangeReaderTest {
                         // Verify data is correct
                         for (int j = 0; j < data.length; j++) {
                             if (data[j] != (byte) ((regionStart + j) % 256)) {
-                                System.err.printf(
-                                        "Thread %d: Data mismatch at index %d, expected %d but got %d%n",
-                                        threadIndex, j, (regionStart + j) % 256, data[j] & 0xFF);
+                                log.debug(
+                                        "Thread {}: Data mismatch at index {}, expected {} but got {}",
+                                        threadIndex,
+                                        j,
+                                        (regionStart + j) % 256,
+                                        data[j] & 0xFF);
                                 failure.set(true);
                                 return;
                             }
@@ -460,7 +465,7 @@ class HttpRangeReaderTest {
     }
 
     @Test
-    void testInvalidContentLengthHeader() throws IOException {
+    void testInvalidContentLengthHeader() {
         // Test behavior when Content-Length header is invalid
         // Let's use a simpler approach by creating a mock HttpRangeReader that throws on size()
 
@@ -485,7 +490,7 @@ class HttpRangeReaderTest {
 
         // Should throw when size() is called (triggering initialization)
         RangeReader reader = RangeReaderTestSupport.httpReader(nonExistentUri);
-        assertThrows(io.tileverse.storage.TransientStorageException.class, reader::size);
+        assertThatThrownBy(reader::size).isInstanceOf(io.tileverse.storage.TransientStorageException.class);
     }
 
     @Test
@@ -498,9 +503,9 @@ class HttpRangeReaderTest {
 
         // Should throw when size() is called (triggering initialization)
         RangeReader reader = RangeReaderTestSupport.httpReader(serverErrorUri);
-        io.tileverse.storage.StorageException ex =
-                assertThrows(io.tileverse.storage.StorageException.class, reader::size);
-        assertThat(ex.getMessage()).contains("Failed to connect");
+        assertThatThrownBy(reader::size)
+                .isInstanceOf(io.tileverse.storage.StorageException.class)
+                .hasMessageContaining("Failed to connect");
     }
 
     @Test

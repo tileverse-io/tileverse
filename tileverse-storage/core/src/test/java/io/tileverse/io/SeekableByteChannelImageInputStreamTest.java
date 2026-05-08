@@ -38,7 +38,7 @@ class SeekableByteChannelImageInputStreamTest {
     private Path testFile;
 
     @BeforeEach
-    void setUp() throws IOException {
+    void setUp() {
         testFile = tempDir.resolve("test-image-data.bin");
     }
 
@@ -58,7 +58,7 @@ class SeekableByteChannelImageInputStreamTest {
 
             assertThat(imageStream.read()).isEqualTo(42);
             assertThat(imageStream.read()).isEqualTo(128); // -128 as unsigned
-            assertThat(imageStream.read()).isEqualTo(0);
+            assertThat(imageStream.read()).isZero();
             assertThat(imageStream.read()).isEqualTo(127);
             assertThat(imageStream.read()).isEqualTo(-1); // EOF
         }
@@ -138,7 +138,7 @@ class SeekableByteChannelImageInputStreamTest {
                 ImageInputStream imageStream = SeekableByteChannelImageInputStream.of(channel)) {
 
             // Initial position should be 0
-            assertThat(imageStream.getStreamPosition()).isEqualTo(0);
+            assertThat(imageStream.getStreamPosition()).isZero();
 
             // Seek to middle
             imageStream.seek(500);
@@ -148,8 +148,8 @@ class SeekableByteChannelImageInputStreamTest {
 
             // Seek back to beginning
             imageStream.seek(0);
-            assertThat(imageStream.getStreamPosition()).isEqualTo(0);
-            assertThat(imageStream.read()).isEqualTo(0);
+            assertThat(imageStream.getStreamPosition()).isZero();
+            assertThat(imageStream.read()).isZero();
 
             // Seek to end
             imageStream.seek(1000);

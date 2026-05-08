@@ -268,12 +268,8 @@ public abstract class StorageTCK {
 
     @Test
     void readMissingKeyThrowsNotFound() {
-        assertThatThrownBy(() -> {
-                    try (ReadHandle r = storage.read("missing.bin")) {
-                        r.content().read();
-                    }
-                })
-                .isInstanceOf(NotFoundException.class);
+        // read() of a missing key throws NotFoundException; we only need to invoke read() in the lambda.
+        assertThatThrownBy(() -> storage.read("missing.bin")).isInstanceOf(NotFoundException.class);
     }
 
     // --------------------------------------------------------------- write paths
@@ -299,10 +295,8 @@ public abstract class StorageTCK {
         requireWrites();
         requireConditionalWrite();
         storage.put("cond.bin", new byte[5]);
-        assertThatThrownBy(() -> storage.put(
-                        "cond.bin",
-                        new byte[10],
-                        WriteOptions.builder().ifNotExists(true).build()))
+        WriteOptions ifNotExists = WriteOptions.builder().ifNotExists(true).build();
+        assertThatThrownBy(() -> storage.put("cond.bin", new byte[10], ifNotExists))
                 .isInstanceOf(PreconditionFailedException.class);
     }
 
@@ -448,25 +442,28 @@ public abstract class StorageTCK {
     @Test
     void presignGetUnsupportedThrows() {
         assumeTrue(!caps.presignedUrls(), "this test runs only on backends without presign support");
-        assertThatThrownBy(() -> storage.presignGet("k", Duration.ofMinutes(1)))
-                .isInstanceOf(UnsupportedCapabilityException.class);
+        Duration ttl = Duration.ofMinutes(1);
+        assertThatThrownBy(() -> storage.presignGet("k", ttl)).isInstanceOf(UnsupportedCapabilityException.class);
     }
 
     @Test
     void moveWithIfNotExistsAtDestinationFailsIfDestinationExists() {
-        if (!storage.capabilities().writes()) return;
+        if (!storage.capabilities().writes()) {
+            return;
+        }
         storage.put("src.bin", new byte[] {1, 2, 3});
         storage.put("dst.bin", new byte[] {9});
-        assertThatThrownBy(() -> storage.move(
-                        "src.bin",
-                        "dst.bin",
-                        CopyOptions.builder().ifNotExistsAtDestination(true).build()))
+        CopyOptions ifNotExistsAtDestination =
+                CopyOptions.builder().ifNotExistsAtDestination(true).build();
+        assertThatThrownBy(() -> storage.move("src.bin", "dst.bin", ifNotExistsAtDestination))
                 .isInstanceOf(PreconditionFailedException.class);
     }
 
     @Test
     void readReturnsSameMetadataAsStat() throws Exception {
-        if (!storage.capabilities().writes()) return;
+        if (!storage.capabilities().writes()) {
+            return;
+        }
         byte[] payload = "hello".getBytes(StandardCharsets.UTF_8);
         storage.put("read-meta.txt", payload);
         StorageEntry.File statResult = storage.stat("read-meta.txt").orElseThrow();
@@ -481,8 +478,12 @@ public abstract class StorageTCK {
 
     @Test
     void deleteAllPartitionsExistingFromMissingWhenCapable() {
-        if (!storage.capabilities().writes()) return;
-        if (!storage.capabilities().deleteReportsExistence()) return;
+        if (!storage.capabilities().writes()) {
+            return;
+        }
+        if (!storage.capabilities().deleteReportsExistence()) {
+            return;
+        }
         storage.put("a.txt", "a".getBytes(StandardCharsets.UTF_8));
         storage.put("b.txt", "b".getBytes(StandardCharsets.UTF_8));
         DeleteResult r = storage.deleteAll(List.of("a.txt", "b.txt", "c.txt"));
@@ -493,8 +494,12 @@ public abstract class StorageTCK {
 
     @Test
     void deleteAllLumpsAllIntoDeletedWhenIncapable() {
-        if (!storage.capabilities().writes()) return;
-        if (storage.capabilities().deleteReportsExistence()) return;
+        if (!storage.capabilities().writes()) {
+            return;
+        }
+        if (storage.capabilities().deleteReportsExistence()) {
+            return;
+        }
         storage.put("a.txt", "a".getBytes(StandardCharsets.UTF_8));
         DeleteResult r = storage.deleteAll(List.of("a.txt", "missing.txt"));
         assertThat(r.deleted()).containsExactlyInAnyOrder("a.txt", "missing.txt");
@@ -503,7 +508,9 @@ public abstract class StorageTCK {
 
     @Test
     void nonRecursiveListEmitsDirectoryWhenCapable() {
-        if (!storage.capabilities().writes() || !storage.capabilities().list()) return;
+        if (!storage.capabilities().writes() || !storage.capabilities().list()) {
+            return;
+        }
         storage.put("a/b/file.txt", "x".getBytes(StandardCharsets.UTF_8));
         try (java.util.stream.Stream<StorageEntry> s = storage.list("a/")) {
             java.util.List<StorageEntry> entries = s.toList();
@@ -517,7 +524,9 @@ public abstract class StorageTCK {
 
     @Test
     void recursiveListEmitsOnlyFiles() {
-        if (!storage.capabilities().writes() || !storage.capabilities().list()) return;
+        if (!storage.capabilities().writes() || !storage.capabilities().list()) {
+            return;
+        }
         storage.put("r/x/y.txt", "x".getBytes(StandardCharsets.UTF_8));
         try (java.util.stream.Stream<StorageEntry> s = storage.list("r/**")) {
             java.util.List<StorageEntry> entries = s.toList();

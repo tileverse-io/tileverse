@@ -85,9 +85,13 @@ class PMTilesDirectoryImpl implements PMTilesDirectory {
             // Read directly from buffer without creating an object
             long midVal = PMTilesDirectoryImpl.getTileId(mid, unpacked);
 
-            if (midVal < tileId) low = mid + 1;
-            else if (midVal > tileId) high = mid - 1;
-            else return mid; // Key found
+            if (midVal < tileId) {
+                low = mid + 1;
+            } else if (midVal > tileId) {
+                high = mid - 1;
+            } else {
+                return mid; // Key found
+            }
         }
         return -1; // key not found
     }

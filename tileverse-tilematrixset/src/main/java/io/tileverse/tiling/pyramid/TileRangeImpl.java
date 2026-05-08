@@ -34,7 +34,7 @@ record TileRangeImpl(long minx, long miny, long maxx, long maxy, int zoomLevel, 
     TileRangeImpl {
         if (minx > maxx || miny > maxy) {
             throw new IllegalArgumentException(
-                    String.format("Invalid range: min(%d,%d) must be <= max(%d,%d)", minx, miny, maxx, maxy));
+                    "Invalid range: min(%d,%d) must be <= max(%d,%d)".formatted(minx, miny, maxx, maxy));
         }
         if (cornerOfOrigin == null) {
             throw new IllegalArgumentException("cornerOfOrigin cannot be null");

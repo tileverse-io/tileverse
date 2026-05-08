@@ -267,8 +267,8 @@ class ByteBufferPoolTest {
         // Try to add 1500 (alloc 2048). Pool is [3072, ...]. Smallest is 3072.
         // 2048 < 3072. Should be rejected.
 
-        ByteBuffer b2048_2 = ByteBuffer.allocateDirect(2048);
-        pool.returnBuffer(b2048_2);
+        ByteBuffer b2048Second = ByteBuffer.allocateDirect(2048);
+        pool.returnBuffer(b2048Second);
 
         // Verify 2048 was NOT added. We should still have [3072, ...].
         // Borrowing 2500 (needs 3072) should still find 3072.

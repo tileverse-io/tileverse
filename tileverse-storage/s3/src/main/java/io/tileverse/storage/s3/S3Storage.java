@@ -89,7 +89,6 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 import software.amazon.awssdk.transfer.s3.S3TransferManager;
 import software.amazon.awssdk.transfer.s3.model.FileUpload;
-import software.amazon.awssdk.transfer.s3.model.UploadFileRequest;
 
 /**
  * AWS S3 implementation of {@link Storage}, supporting both general-purpose buckets and S3 Express One Zone (Directory
@@ -225,7 +224,9 @@ final class S3Storage implements Storage {
         } catch (NoSuchKeyException e) {
             return Optional.empty();
         } catch (S3Exception e) {
-            if (e.statusCode() == 404) return Optional.empty();
+            if (e.statusCode() == 404) {
+                return Optional.empty();
+            }
             throw S3ExceptionMapper.map(e, key);
         }
     }
@@ -250,14 +251,16 @@ final class S3Storage implements Storage {
         }
 
         // Force the first page read up-front so wrong-region / missing-bucket / permission
-        // errors surface synchronously as a typed StorageException from the list(...) call
+        // errors propagate synchronously as a typed StorageException from the list(...) call
         // itself rather than escaping raw during stream consumption.
         ListObjectsV2Iterable paginator;
         Iterator<ListObjectsV2Response> rawPages;
         try {
             paginator = handle.client().listObjectsV2Paginator(requestBuilder.build());
             rawPages = paginator.iterator();
-            rawPages.hasNext(); // force first-page fetch to surface auth/region errors here
+            // Force the first-page fetch so auth/region/missing-bucket errors propagate here as typed
+            // StorageException rather than escaping raw during stream consumption.
+            rawPages.hasNext(); // NOSONAR java:S899 -- side-effecting call, return value intentionally ignored
         } catch (S3Exception e) {
             throw S3ExceptionMapper.map(e, fullPrefix);
         }
@@ -273,7 +276,7 @@ final class S3Storage implements Storage {
     private Stream<StorageEntry> entriesFromPage(ListObjectsV2Response page, boolean recursive) {
         Stream<StorageEntry> files = page.contents().stream().map(this::toFileEntry);
         // Recursive listings (** glob) emit only File entries. Non-recursive listings additionally
-        // surface S3's synthetic CommonPrefixes (i.e. "directories") as Prefix entries.
+        // expose S3's synthetic CommonPrefixes (i.e. "directories") as Prefix entries.
         if (recursive) {
             return files;
         }
@@ -468,11 +471,8 @@ final class S3Storage implements Storage {
             }
         } else {
             PutObjectRequest putObjectRequest = putBuilder.build();
-            UploadFileRequest uploadRequest = UploadFileRequest.builder()
-                    .source(source)
-                    .putObjectRequest(putObjectRequest)
-                    .build();
-            FileUpload fileUpload = transferManager().uploadFile(uploadRequest);
+            FileUpload fileUpload =
+                    transferManager().uploadFile(b -> b.source(source).putObjectRequest(putObjectRequest));
             try {
                 fileUpload.completionFuture().join();
             } catch (CompletionException e) {
@@ -509,7 +509,9 @@ final class S3Storage implements Storage {
 
             @Override
             public void close() throws IOException {
-                if (alreadyClosed) return;
+                if (alreadyClosed) {
+                    return;
+                }
                 alreadyClosed = true;
                 try {
                     super.close();

@@ -40,8 +40,8 @@ public class CaffeineCacheManager implements CacheManager {
     @SuppressWarnings("unchecked")
     public com.github.benmanes.caffeine.cache.Cache<Object, Object> getNativeCache(String name) {
         Cache<?, ?> cache = caffeineCaches.get(name);
-        if (cache instanceof CaffeineCache cc) {
-            return cc.cache;
+        if (cache instanceof CaffeineCache<?, ?> cc) {
+            return (com.github.benmanes.caffeine.cache.Cache<Object, Object>) cc.cache;
         }
         return (com.github.benmanes.caffeine.cache.Cache<Object, Object>) cache;
     }

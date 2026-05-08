@@ -16,12 +16,13 @@
 package io.tileverse.pmtiles;
 
 import static io.tileverse.tiling.pyramid.TileIndex.xyz;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.tileverse.tiling.pyramid.TileIndex;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -30,6 +31,7 @@ import org.junit.jupiter.params.provider.CsvSource;
  * Unit tests for the HilbertCurve class, validating tile ID conversion, round-trip conversion, and PMTiles
  * compatibility.
  */
+@Slf4j
 class HilbertCurveTest {
 
     private HilbertCurve hilbertCurve = new HilbertCurve();
@@ -85,16 +87,16 @@ class HilbertCurveTest {
             xyz(517, 378, 10) // From viewer: (10,517,378)
         };
 
-        System.out.println("=== Testing Actual Andorra Tiles with HilbertCurve ===");
+        log.debug("=== Testing Actual Andorra Tiles with HilbertCurve ===");
         for (TileIndex expected : actualTiles) {
-            System.out.printf("Testing tile %s%n", expected);
+            log.debug("Testing tile {}", expected);
 
             // Convert to tile ID and back using HilbertCurve
             long tileId = hilbertCurve.tileIndexToTileId(expected);
             TileIndex roundTrip = hilbertCurve.tileIdToTileIndex(tileId);
 
-            System.out.printf("  Tile ID: %d%n", tileId);
-            System.out.printf("  Round trip: %s%n", roundTrip);
+            log.debug("  Tile ID: {}", tileId);
+            log.debug("  Round trip: {}", roundTrip);
 
             // Verify round-trip conversion works
             assertEquals(expected.z(), roundTrip.z(), "Zoom level should match");
@@ -129,11 +131,12 @@ class HilbertCurveTest {
     /** Test tileIdToTileIndex with invalid inputs. */
     @Test
     void testTileIdToTileIndexInvalidInputs() {
-        // Test negative tile ID
-        assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIdToTileIndex(-1));
-
-        // Test extremely large tile ID (beyond 26 zoom levels)
-        assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIdToTileIndex(Long.MAX_VALUE));
+        assertThatThrownBy(() -> hilbertCurve.tileIdToTileIndex(-1))
+                .as("negative tile id")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> hilbertCurve.tileIdToTileIndex(Long.MAX_VALUE))
+                .as("tile id beyond 26 zoom levels")
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     /** Test tileIndexToTileId with zoom level that's too large. */
@@ -141,7 +144,8 @@ class HilbertCurveTest {
     void testTileIdZoomTooLarge() {
         // Test that zoom level > 26 throws exception
         TileIndex invalidZoom = xyz(0, 0, 27);
-        assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIndexToTileId(invalidZoom));
+        assertThatThrownBy(() -> hilbertCurve.tileIndexToTileId(invalidZoom))
+                .isInstanceOf(IllegalArgumentException.class);
 
         // Test that zoom level 26 works (it's at the limit)
         TileIndex validMaxZoom = xyz(0, 0, 26);
@@ -213,13 +217,16 @@ class HilbertCurveTest {
     void testCoordinateValidation() {
         // Test coordinates beyond valid range for zoom level
         TileIndex tileIndex1 = xyz(1, 0, 0); // Max at z=0 is 0
-        assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIndexToTileId(tileIndex1));
+        assertThatThrownBy(() -> hilbertCurve.tileIndexToTileId(tileIndex1))
+                .isInstanceOf(IllegalArgumentException.class);
 
         TileIndex tileIndex2 = xyz(32, 0, 5); // Max at z=5 is 31
-        assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIndexToTileId(tileIndex2));
+        assertThatThrownBy(() -> hilbertCurve.tileIndexToTileId(tileIndex2))
+                .isInstanceOf(IllegalArgumentException.class);
 
         TileIndex tileIndex3 = xyz(0, 32, 5); // Max at z=5 is 31
-        assertThrows(IllegalArgumentException.class, () -> hilbertCurve.tileIndexToTileId(tileIndex3));
+        assertThatThrownBy(() -> hilbertCurve.tileIndexToTileId(tileIndex3))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     /** Test specific PMTiles tile ID calculations that were problematic. */

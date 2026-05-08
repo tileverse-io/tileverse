@@ -38,7 +38,7 @@ class SeekableByteChannelDataInputTest {
     private Path testFile;
 
     @BeforeEach
-    void setUp() throws IOException {
+    void setUp() {
         testFile = tempDir.resolve("test-data.bin");
     }
 
@@ -76,7 +76,7 @@ class SeekableByteChannelDataInputTest {
             SeekableByteChannelDataInput dataInput = SeekableByteChannelDataInput.of(channel);
 
             // Initial position should be 0
-            assertThat(dataInput.position()).isEqualTo(0);
+            assertThat(dataInput.position()).isZero();
 
             // Skip a large amount efficiently
             int skipped = dataInput.skipBytes(5000);
@@ -94,7 +94,7 @@ class SeekableByteChannelDataInputTest {
             assertThat(dataInput.position()).isEqualTo(10000);
 
             // Try to read at end - should throw EOFException
-            assertThatThrownBy(() -> dataInput.readByte()).isInstanceOf(EOFException.class);
+            assertThatThrownBy(dataInput::readByte).isInstanceOf(EOFException.class);
         }
     }
 
@@ -105,9 +105,9 @@ class SeekableByteChannelDataInputTest {
         try (SeekableByteChannel channel = Files.newByteChannel(testFile, StandardOpenOption.READ)) {
             SeekableByteChannelDataInput dataInput = SeekableByteChannelDataInput.of(channel);
 
-            assertThat(dataInput.skipBytes(0)).isEqualTo(0);
-            assertThat(dataInput.skipBytes(-5)).isEqualTo(0);
-            assertThat(dataInput.position()).isEqualTo(0);
+            assertThat(dataInput.skipBytes(0)).isZero();
+            assertThat(dataInput.skipBytes(-5)).isZero();
+            assertThat(dataInput.position()).isZero();
 
             // Should still be able to read normally
             assertThat(dataInput.readByte()).isEqualTo((byte) 't');
@@ -207,7 +207,7 @@ class SeekableByteChannelDataInputTest {
             assertThat(dataInput.readByte()).isEqualTo((byte) 2);
 
             // Now trying to read more should throw EOFException
-            assertThatThrownBy(() -> dataInput.readByte()).isInstanceOf(EOFException.class);
+            assertThatThrownBy(dataInput::readByte).isInstanceOf(EOFException.class);
         }
     }
 
@@ -228,7 +228,7 @@ class SeekableByteChannelDataInputTest {
         try (SeekableByteChannel channel = Files.newByteChannel(testFile, StandardOpenOption.READ)) {
             SeekableByteChannelDataInput dataInput = SeekableByteChannelDataInput.of(channel);
 
-            assertThat(dataInput.position()).isEqualTo(0);
+            assertThat(dataInput.position()).isZero();
             assertThat(dataInput.size()).isEqualTo(11);
 
             // Read some bytes

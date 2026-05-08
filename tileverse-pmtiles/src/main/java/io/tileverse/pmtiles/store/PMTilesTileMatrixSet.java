@@ -27,7 +27,11 @@ import io.tileverse.tiling.matrix.TileMatrixSet;
  *
  * @since 1.0
  */
-public class PMTilesTileMatrixSet {
+public final class PMTilesTileMatrixSet {
+
+    private PMTilesTileMatrixSet() {
+        // utility class
+    }
 
     /**
      * Creates a WebMercator TileMatrixSet from a PMTilesReader. Convenience method that extracts the header and creates

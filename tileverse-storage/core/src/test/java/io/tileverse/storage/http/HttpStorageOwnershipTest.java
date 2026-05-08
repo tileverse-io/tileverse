@@ -67,15 +67,17 @@ class HttpStorageOwnershipTest {
 
     @AfterAll
     static void stopServer() {
-        if (server != null) server.stop(0);
+        if (server != null) {
+            server.stop(0);
+        }
     }
 
     private final HttpStorageProvider provider = new HttpStorageProvider();
 
     @Test
     void sameConfigSharesUnderlyingHttpClient() {
-        StorageConfig a = new StorageConfig().baseUri(baseUri);
-        StorageConfig b = new StorageConfig().baseUri(baseUri);
+        StorageConfig a = new StorageConfig(baseUri);
+        StorageConfig b = new StorageConfig(baseUri);
         try (HttpStorage sa = (HttpStorage) provider.createStorage(a);
                 HttpStorage sb = (HttpStorage) provider.createStorage(b)) {
             assertThat(sa.client()).isSameAs(sb.client());
@@ -84,8 +86,8 @@ class HttpStorageOwnershipTest {
 
     @Test
     void differentConfigGetsDifferentHttpClient() {
-        StorageConfig fast = new StorageConfig().baseUri(baseUri).setParameter(HTTP_CONNECTION_TIMEOUT_MILLIS, 1_000);
-        StorageConfig slow = new StorageConfig().baseUri(baseUri).setParameter(HTTP_CONNECTION_TIMEOUT_MILLIS, 30_000);
+        StorageConfig fast = new StorageConfig(baseUri).setParameter(HTTP_CONNECTION_TIMEOUT_MILLIS, 1_000);
+        StorageConfig slow = new StorageConfig(baseUri).setParameter(HTTP_CONNECTION_TIMEOUT_MILLIS, 30_000);
         try (HttpStorage sa = (HttpStorage) provider.createStorage(fast);
                 HttpStorage sb = (HttpStorage) provider.createStorage(slow)) {
             assertThat(sa.client()).isNotSameAs(sb.client());
@@ -94,7 +96,7 @@ class HttpStorageOwnershipTest {
 
     @Test
     void closingOneRangeReaderDoesNotBreakSiblingReader() throws IOException {
-        try (Storage storage = provider.createStorage(new StorageConfig().baseUri(baseUri));
+        try (Storage storage = provider.createStorage(new StorageConfig(baseUri));
                 RangeReader first = storage.openRangeReader("placeholder.txt");
                 RangeReader second = storage.openRangeReader("placeholder.txt")) {
 
@@ -111,9 +113,9 @@ class HttpStorageOwnershipTest {
     void closingStorageDoesNotShutDownClientWhileOtherStorageHoldsLease() throws IOException {
         // Two Storages, same config, share a client via cache. Closing one keeps the lease (the other still holds it),
         // so the surviving Storage's reader still works.
-        try (Storage second = provider.createStorage(new StorageConfig().baseUri(baseUri))) {
+        try (Storage second = provider.createStorage(new StorageConfig(baseUri))) {
             HttpClient sharedClient;
-            try (Storage first = provider.createStorage(new StorageConfig().baseUri(baseUri))) {
+            try (Storage first = provider.createStorage(new StorageConfig(baseUri))) {
                 sharedClient = ((HttpStorage) first).client();
                 assertThat(((HttpStorage) second).client()).isSameAs(sharedClient);
             }

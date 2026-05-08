@@ -356,9 +356,6 @@ public class HttpStorageProvider extends AbstractStorageProvider {
     @Override
     public Storage createStorage(StorageConfig config) {
         URI uri = config.baseUri();
-        if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.baseUri() is required for HttpStorage");
-        }
         HttpClientCache.Lease lease = HttpClientCache.INSTANCE.acquire(cacheKeyFor(config));
         return new HttpStorage(uri, new LeasedHttpHandle(lease), buildAuthentication(config));
     }

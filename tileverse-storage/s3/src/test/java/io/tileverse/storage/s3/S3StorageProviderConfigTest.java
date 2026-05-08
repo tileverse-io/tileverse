@@ -32,8 +32,7 @@ class S3StorageProviderConfigTest {
 
     @Test
     void regionResolution_explicitParameterWins() {
-        StorageConfig config = new StorageConfig()
-                .baseUri(URI.create("https://my-bucket.s3.us-west-2.amazonaws.com/file.txt"))
+        StorageConfig config = new StorageConfig("https://my-bucket.s3.us-west-2.amazonaws.com/file.txt")
                 .setParameter(S3StorageProvider.S3_REGION, "us-east-1");
 
         assertThat(S3StorageProvider.keyFor(config).region()).isEqualTo("us-east-1");
@@ -41,23 +40,21 @@ class S3StorageProviderConfigTest {
 
     @Test
     void regionResolution_fallsBackToUriParsedRegion() {
-        StorageConfig config =
-                new StorageConfig().baseUri(URI.create("https://my-bucket.s3.us-west-2.amazonaws.com/file.txt"));
+        StorageConfig config = new StorageConfig("https://my-bucket.s3.us-west-2.amazonaws.com/file.txt");
 
         assertThat(S3StorageProvider.keyFor(config).region()).isEqualTo("us-west-2");
     }
 
     @Test
     void regionResolution_fallsBackToUsEast1WhenAbsent() {
-        StorageConfig config = new StorageConfig().baseUri(URI.create("s3://my-bucket/file.txt"));
+        StorageConfig config = new StorageConfig("s3://my-bucket/file.txt");
 
         assertThat(S3StorageProvider.keyFor(config).region()).isEqualTo("us-east-1");
     }
 
     @Test
     void regionResolution_blankExplicitRegionFallsBack() {
-        StorageConfig config = new StorageConfig()
-                .baseUri(URI.create("https://my-bucket.s3.us-west-2.amazonaws.com/file.txt"))
+        StorageConfig config = new StorageConfig("https://my-bucket.s3.us-west-2.amazonaws.com/file.txt")
                 .setParameter(S3StorageProvider.S3_REGION, "   ");
 
         assertThat(S3StorageProvider.keyFor(config).region()).isEqualTo("us-west-2");
@@ -65,22 +62,21 @@ class S3StorageProviderConfigTest {
 
     @Test
     void endpointOverride_extractedFromCustomHost() {
-        StorageConfig config = new StorageConfig().baseUri(URI.create("http://localhost:9000/my-bucket/file.txt"));
+        StorageConfig config = new StorageConfig("http://localhost:9000/my-bucket/file.txt");
 
         assertThat(S3StorageProvider.keyFor(config).endpointOverride()).hasValue(URI.create("http://localhost:9000"));
     }
 
     @Test
     void endpointOverride_emptyForCanonicalAwsUri() {
-        StorageConfig config = new StorageConfig().baseUri(URI.create("s3://my-bucket/file.txt"));
+        StorageConfig config = new StorageConfig("s3://my-bucket/file.txt");
 
         assertThat(S3StorageProvider.keyFor(config).endpointOverride()).isEmpty();
     }
 
     @Test
     void credentials_staticAccessAndSecretKeyAreCarriedOnTheKey() {
-        StorageConfig config = new StorageConfig()
-                .baseUri(URI.create("s3://my-bucket/file.txt"))
+        StorageConfig config = new StorageConfig("s3://my-bucket/file.txt")
                 .setParameter(S3StorageProvider.S3_AWS_ACCESS_KEY_ID, "AKIA-static")
                 .setParameter(S3StorageProvider.S3_AWS_SECRET_ACCESS_KEY, "secret");
 
@@ -91,8 +87,7 @@ class S3StorageProviderConfigTest {
 
     @Test
     void credentials_profileNameCarried() {
-        StorageConfig config = new StorageConfig()
-                .baseUri(URI.create("s3://my-bucket/file.txt"))
+        StorageConfig config = new StorageConfig("s3://my-bucket/file.txt")
                 .setParameter(S3StorageProvider.S3_DEFAULT_CREDENTIALS_PROFILE, "production");
 
         assertThat(S3StorageProvider.keyFor(config).profile()).hasValue("production");
@@ -100,7 +95,7 @@ class S3StorageProviderConfigTest {
 
     @Test
     void credentials_emptyWhenNoCredentialsConfigured() {
-        StorageConfig config = new StorageConfig().baseUri(URI.create("s3://my-bucket/file.txt"));
+        StorageConfig config = new StorageConfig("s3://my-bucket/file.txt");
 
         S3ClientCache.Key key = S3StorageProvider.keyFor(config);
         assertThat(key.accessKeyId()).isEmpty();
@@ -110,15 +105,14 @@ class S3StorageProviderConfigTest {
 
     @Test
     void forcePathStyle_defaultsToFalse() {
-        StorageConfig config = new StorageConfig().baseUri(URI.create("s3://my-bucket/file.txt"));
+        StorageConfig config = new StorageConfig("s3://my-bucket/file.txt");
 
         assertThat(S3StorageProvider.keyFor(config).forcePathStyle()).isFalse();
     }
 
     @Test
     void forcePathStyle_explicitTrue() {
-        StorageConfig config = new StorageConfig()
-                .baseUri(URI.create("https://minio.example.com/my-bucket/file.txt"))
+        StorageConfig config = new StorageConfig("https://minio.example.com/my-bucket/file.txt")
                 .setParameter(S3StorageProvider.S3_FORCE_PATH_STYLE, true);
 
         assertThat(S3StorageProvider.keyFor(config).forcePathStyle()).isTrue();
@@ -126,13 +120,11 @@ class S3StorageProviderConfigTest {
 
     @Test
     void sameKeyIsReturnedForEquivalentConfigs() {
-        StorageConfig a = new StorageConfig()
-                .baseUri(URI.create("s3://my-bucket/file.txt"))
+        StorageConfig a = new StorageConfig("s3://my-bucket/file.txt")
                 .setParameter(S3StorageProvider.S3_REGION, "us-west-2")
                 .setParameter(S3StorageProvider.S3_AWS_ACCESS_KEY_ID, "AKIA-X")
                 .setParameter(S3StorageProvider.S3_AWS_SECRET_ACCESS_KEY, "secret");
-        StorageConfig b = new StorageConfig()
-                .baseUri(URI.create("s3://my-bucket/different-key.txt"))
+        StorageConfig b = new StorageConfig("s3://my-bucket/different-key.txt")
                 .setParameter(S3StorageProvider.S3_REGION, "us-west-2")
                 .setParameter(S3StorageProvider.S3_AWS_ACCESS_KEY_ID, "AKIA-X")
                 .setParameter(S3StorageProvider.S3_AWS_SECRET_ACCESS_KEY, "secret");
@@ -144,12 +136,10 @@ class S3StorageProviderConfigTest {
 
     @Test
     void differentRegionsProduceDifferentCacheKeys() {
-        StorageConfig a = new StorageConfig()
-                .baseUri(URI.create("s3://my-bucket/file.txt"))
-                .setParameter(S3StorageProvider.S3_REGION, "us-west-2");
-        StorageConfig b = new StorageConfig()
-                .baseUri(URI.create("s3://my-bucket/file.txt"))
-                .setParameter(S3StorageProvider.S3_REGION, "eu-central-1");
+        StorageConfig a =
+                new StorageConfig("s3://my-bucket/file.txt").setParameter(S3StorageProvider.S3_REGION, "us-west-2");
+        StorageConfig b =
+                new StorageConfig("s3://my-bucket/file.txt").setParameter(S3StorageProvider.S3_REGION, "eu-central-1");
 
         assertThat(S3StorageProvider.keyFor(a)).isNotEqualTo(S3StorageProvider.keyFor(b));
     }
@@ -157,12 +147,10 @@ class S3StorageProviderConfigTest {
     @Test
     void differentAccessKeysProduceDifferentCacheKeys() {
         URI uri = URI.create("s3://my-bucket/file.txt");
-        StorageConfig a = new StorageConfig()
-                .baseUri(uri)
+        StorageConfig a = new StorageConfig(uri)
                 .setParameter(S3StorageProvider.S3_AWS_ACCESS_KEY_ID, "AKIA-A")
                 .setParameter(S3StorageProvider.S3_AWS_SECRET_ACCESS_KEY, "s");
-        StorageConfig b = new StorageConfig()
-                .baseUri(uri)
+        StorageConfig b = new StorageConfig(uri)
                 .setParameter(S3StorageProvider.S3_AWS_ACCESS_KEY_ID, "AKIA-B")
                 .setParameter(S3StorageProvider.S3_AWS_SECRET_ACCESS_KEY, "s");
 

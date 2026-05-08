@@ -154,7 +154,7 @@ public interface Storage extends Closeable {
      * <p>A query string on {@code uri} is preserved into the derived key (load-bearing for HTTP-backed Storages whose
      * URLs carry signatures, SAS tokens, or routing parameters). A fragment is dropped silently because RFC 3986
      * fragments are client-only and never reach the server. Backends whose key grammar cannot represent a query string
-     * (File, S3, Azure, GCS path-style) will surface a {@link NotFoundException} from {@link #openRangeReader(String)}
+     * (File, S3, Azure, GCS path-style) will throw a {@link NotFoundException} from {@link #openRangeReader(String)}
      * when the resulting key has no matching object.
      *
      * <p><b>Path traversal:</b> {@code ..} and {@code .} segments are normalized before the namespace check; URIs whose

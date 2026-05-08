@@ -9,7 +9,7 @@ These libraries are designed to be **composable**: pick the ones you need for yo
 | Library | Artifact | Role |
 | :--- | :--- | :--- |
 | **[Storage](storage/index.md)** | `tileverse-storage-all` | **Object Storage Abstraction**: Full container API (list, range/streaming reads, atomic writes, deletes, server-side copy, presigned URLs) across local files, HTTP, S3 (GP + Express), Azure (Blob + Data Lake Gen2), and GCS (flat + HNS). Includes the byte-range [`RangeReader`](storage/rangereader/index.md) API used by PMTiles, COG, and single-file Parquet. |
-| **[PMTiles](pmtiles/index.md)** | `tileverse-pmtiles` | **Archive Format**: Read/write support for PMTiles v3, leveraging Storage / RangeReader for cloud access. |
+| **[PMTiles](pmtiles/index.md)** | `tileverse-pmtiles` | **Archive Format**: Read support for PMTiles v3, leveraging Storage / RangeReader for cloud access. |
 | **[Vector Tiles](vectortiles/index.md)** | `tileverse-vectortiles` | **Codec**: High-performance encoding and decoding of Mapbox Vector Tiles (MVT) to/from JTS Geometries. |
 | **[Tile Matrix Set](tilematrixset/index.md)** | `tileverse-tilematrixset` | **Math & Logic**: Implementation of the OGC Tile Matrix Set standard for calculating tile pyramids and grids. |
 

@@ -2,9 +2,11 @@
 
 This module provides a pure Java implementation of the [PMTiles v3 specification](https://github.com/protomaps/PMTiles), a single-file archive format for cloud-optimized tiled data.
 
+This library is focused on efficient, cloud-optimized reading of PMTiles archives. For creating archives, use one of the existing tools such as [`pmtiles`](https://github.com/protomaps/go-pmtiles) or [Tippecanoe](https://github.com/felt/tippecanoe).
+
 ## Features
 
-- **Read & Write**: Full support for creating and consuming PMTiles archives.
+- **Cloud-Optimized Reads**: Range-based access tuned for archives served from object storage.
 - **Storage Agnostic**: Works seamlessly with any [`RangeReader`](../storage/rangereader/index.md) backend from `tileverse-storage` (S3, HTTP, Local File, Azure Blob, GCS).
 - **Spatial Indexing**: Implements Hilbert curve indexing for O(log N) tile lookups.
 - **Type Support**: Handles both vector (MVT) and raster (PNG, JPG, WebP) tiles.
@@ -19,8 +21,6 @@ This module provides a pure Java implementation of the [PMTiles v3 specification
 ```
 
 ## Usage
-
-### Reading
 
 The `PMTilesReader` accepts either a `RangeReader` or a `Supplier<SeekableByteChannel>`. The `RangeReader` can provide this via its `asByteChannel()` method.
 
@@ -40,18 +40,4 @@ try (PMTilesReader reader = PMTilesReader.open(Path.of("data/map.pmtiles").toUri
         // Process tile bytes...
     });
 }
-```
-
-### Writing
-
-Writing involves the `PMTilesWriter` which organizes input data into the proper directory structure with Hilbert ordering.
-
-```java
-PMTilesWriter writer = new PMTilesWriter(outputStream);
-
-// Add tiles (order doesn't matter, writer handles sorting)
-writer.addTile(0, 0, 0, tileBytes);
-
-// Finalize and write directory
-writer.finish();
 ```

@@ -140,5 +140,4 @@ try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
 
 ## Next Steps
 
-- **[Writing PMTiles](writing.md)**: Create your own PMTiles archives
 - **[Cloud Storage](cloud-storage.md)**: Optimize for cloud storage

@@ -8,7 +8,6 @@ This guide covers:
 
 - **[Quick Start](quick-start.md)**: Get up and running quickly
 - **[Reading PMTiles](reading.md)**: Read tiles from PMTiles archives
-- **[Writing PMTiles](writing.md)**: Create new PMTiles archives
 - **[Cloud Storage](cloud-storage.md)**: Work with PMTiles in S3, Azure, and GCS
 
 ## Installation

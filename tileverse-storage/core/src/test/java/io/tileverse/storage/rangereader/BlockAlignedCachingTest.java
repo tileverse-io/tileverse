@@ -75,7 +75,7 @@ class BlockAlignedCachingTest {
     }
 
     @Test
-    void testCachingOfBlockAlignedReads() throws IOException {
+    void testCachingOfBlockAlignedReads() {
         // Read a range that's not aligned to a block boundary
         cachingReader.readRange(10, 10, buffer);
         assertEquals(10, buffer.flip().remaining());
@@ -104,7 +104,7 @@ class BlockAlignedCachingTest {
     }
 
     @Test
-    void testCachingEfficiencyWithIdenticalReads() throws IOException {
+    void testCachingEfficiencyWithIdenticalReads() {
         // Initial state
         assertEquals(0, countingReader.getReadCount());
 

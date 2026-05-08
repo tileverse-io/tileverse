@@ -82,15 +82,6 @@ public record TileMatrix(
         return tileRange.cornerOfOrigin();
     }
 
-    /**
-     * Position in CRS coordinates of the {@link #cornerOfOrigin() corner of origin} for a tile matrix.
-     *
-     * @return the origin coordinate of the {@link #first()} tile in map space
-     */
-    public Coordinate pointOfOrigin() {
-        return pointOfOrigin;
-    }
-
     public BoundingBox2D boundingBox() {
         return calculateExtent(tileRange, pointOfOrigin(), resolution(), tileWidth(), tileHeight());
     }
@@ -179,7 +170,10 @@ public record TileMatrix(
         final double tileMapWidth = tileWidth * resolution;
         final double tileMapHeight = tileHeight * resolution;
 
-        double minX, minY, maxX, maxY;
+        double minX;
+        double minY;
+        double maxX;
+        double maxY;
         // Transform tile coordinates to map coordinates based on corner of origin
         switch (this.cornerOfOrigin()) {
             case BOTTOM_LEFT -> {
@@ -213,7 +207,8 @@ public record TileMatrix(
         final double tileMapHeight = tileHeight * resolution;
         final Coordinate origin = pointOfOrigin();
 
-        long tileX, tileY;
+        long tileX;
+        long tileY;
 
         // Transform map coordinates to tile coordinates based on corner of origin
         // Uses epsilon adjustment per OGC TileMatrixSet spec to handle floating-point precision
@@ -248,7 +243,10 @@ public record TileMatrix(
         final double tileMapHeight = tileHeight * resolution;
         final Coordinate origin = pointOfOrigin();
 
-        long minTileX, minTileY, maxTileX, maxTileY;
+        long minTileX;
+        long minTileY;
+        long maxTileX;
+        long maxTileY;
 
         // Transform map coordinates to tile coordinates based on corner of origin
         // Uses epsilon adjustments per OGC spec: add epsilon for min, subtract for max
@@ -446,7 +444,10 @@ public record TileMatrix(
         final double tileMapWidth = tileWidth * resolution;
         final double tileMapHeight = tileHeight * resolution;
 
-        double minX, minY, maxX, maxY;
+        double minX;
+        double minY;
+        double maxX;
+        double maxY;
 
         // Transform tile coordinates to map coordinates based on corner of origin
         switch (tileRange.cornerOfOrigin()) {

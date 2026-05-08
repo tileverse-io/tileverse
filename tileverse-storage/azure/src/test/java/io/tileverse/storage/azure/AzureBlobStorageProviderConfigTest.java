@@ -38,9 +38,8 @@ class AzureBlobStorageProviderConfigTest {
 
     @Test
     void accountKey_carriedOnTheKey() {
-        StorageConfig config = new StorageConfig()
-                .baseUri(BLOB_URI)
-                .setParameter(AzureBlobStorageProvider.AZURE_ACCOUNT_KEY, "base64-secret");
+        StorageConfig config =
+                new StorageConfig(BLOB_URI).setParameter(AzureBlobStorageProvider.AZURE_ACCOUNT_KEY, "base64-secret");
 
         assertThat(AzureBlobStorageProvider.keyFor(config, locationOf(BLOB_URI)).accountKey())
                 .hasValue("base64-secret");
@@ -48,8 +47,7 @@ class AzureBlobStorageProviderConfigTest {
 
     @Test
     void sasToken_carriedOnTheKey() {
-        StorageConfig config = new StorageConfig()
-                .baseUri(BLOB_URI)
+        StorageConfig config = new StorageConfig(BLOB_URI)
                 .setParameter(AzureBlobStorageProvider.AZURE_SAS_TOKEN, "sv=2020-08-04&sig=abc");
 
         assertThat(AzureBlobStorageProvider.keyFor(config, locationOf(BLOB_URI)).sasToken())
@@ -58,8 +56,7 @@ class AzureBlobStorageProviderConfigTest {
 
     @Test
     void connectionString_carriedOnTheKey() {
-        StorageConfig config = new StorageConfig()
-                .baseUri(BLOB_URI)
+        StorageConfig config = new StorageConfig(BLOB_URI)
                 .setParameter(
                         AzureBlobStorageProvider.AZURE_CONNECTION_STRING,
                         "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=base64;EndpointSuffix=localhost");
@@ -70,7 +67,7 @@ class AzureBlobStorageProviderConfigTest {
 
     @Test
     void noCredentials_resultInEmptyOptionals() {
-        StorageConfig config = new StorageConfig().baseUri(BLOB_URI);
+        StorageConfig config = new StorageConfig(BLOB_URI);
         AzureClientCache.Key key = AzureBlobStorageProvider.keyFor(config, locationOf(BLOB_URI));
 
         assertThat(key.accountKey()).isEmpty();
@@ -81,8 +78,7 @@ class AzureBlobStorageProviderConfigTest {
 
     @Test
     void anonymousFlag_carriedOnTheKey() {
-        StorageConfig config =
-                new StorageConfig().baseUri(BLOB_URI).setParameter(AzureBlobStorageProvider.AZURE_ANONYMOUS, true);
+        StorageConfig config = new StorageConfig(BLOB_URI).setParameter(AzureBlobStorageProvider.AZURE_ANONYMOUS, true);
 
         assertThat(AzureBlobStorageProvider.keyFor(config, locationOf(BLOB_URI)).anonymous())
                 .isTrue();
@@ -90,9 +86,8 @@ class AzureBlobStorageProviderConfigTest {
 
     @Test
     void differentAnonymousFlagsProduceDifferentCacheKeys() {
-        StorageConfig a = new StorageConfig().baseUri(BLOB_URI);
-        StorageConfig b =
-                new StorageConfig().baseUri(BLOB_URI).setParameter(AzureBlobStorageProvider.AZURE_ANONYMOUS, true);
+        StorageConfig a = new StorageConfig(BLOB_URI);
+        StorageConfig b = new StorageConfig(BLOB_URI).setParameter(AzureBlobStorageProvider.AZURE_ANONYMOUS, true);
 
         assertThat(AzureBlobStorageProvider.keyFor(a, locationOf(BLOB_URI)))
                 .isNotEqualTo(AzureBlobStorageProvider.keyFor(b, locationOf(BLOB_URI)));
@@ -100,7 +95,7 @@ class AzureBlobStorageProviderConfigTest {
 
     @Test
     void retryDefaults_appliedWhenAbsent() {
-        StorageConfig config = new StorageConfig().baseUri(BLOB_URI);
+        StorageConfig config = new StorageConfig(BLOB_URI);
         AzureRetryConfig retry =
                 AzureBlobStorageProvider.keyFor(config, locationOf(BLOB_URI)).retry();
 
@@ -112,8 +107,7 @@ class AzureBlobStorageProviderConfigTest {
 
     @Test
     void retryParameters_overrideDefaults() {
-        StorageConfig config = new StorageConfig()
-                .baseUri(BLOB_URI)
+        StorageConfig config = new StorageConfig(BLOB_URI)
                 .setParameter(AzureBlobStorageProvider.AZURE_MAX_RETRIES, 5)
                 .setParameter(AzureBlobStorageProvider.AZURE_RETRY_DELAY, Duration.ofSeconds(10))
                 .setParameter(AzureBlobStorageProvider.AZURE_MAX_RETRY_DELAY, Duration.ofMinutes(5))
@@ -129,9 +123,8 @@ class AzureBlobStorageProviderConfigTest {
 
     @Test
     void differentRetryConfigsProduceDifferentCacheKeys() {
-        StorageConfig a = new StorageConfig().baseUri(BLOB_URI);
-        StorageConfig b =
-                new StorageConfig().baseUri(BLOB_URI).setParameter(AzureBlobStorageProvider.AZURE_MAX_RETRIES, 5);
+        StorageConfig a = new StorageConfig(BLOB_URI);
+        StorageConfig b = new StorageConfig(BLOB_URI).setParameter(AzureBlobStorageProvider.AZURE_MAX_RETRIES, 5);
 
         assertThat(AzureBlobStorageProvider.keyFor(a, locationOf(BLOB_URI)))
                 .isNotEqualTo(AzureBlobStorageProvider.keyFor(b, locationOf(BLOB_URI)));
@@ -139,10 +132,8 @@ class AzureBlobStorageProviderConfigTest {
 
     @Test
     void differentAccountKeysProduceDifferentCacheKeys() {
-        StorageConfig a =
-                new StorageConfig().baseUri(BLOB_URI).setParameter(AzureBlobStorageProvider.AZURE_ACCOUNT_KEY, "key-a");
-        StorageConfig b =
-                new StorageConfig().baseUri(BLOB_URI).setParameter(AzureBlobStorageProvider.AZURE_ACCOUNT_KEY, "key-b");
+        StorageConfig a = new StorageConfig(BLOB_URI).setParameter(AzureBlobStorageProvider.AZURE_ACCOUNT_KEY, "key-a");
+        StorageConfig b = new StorageConfig(BLOB_URI).setParameter(AzureBlobStorageProvider.AZURE_ACCOUNT_KEY, "key-b");
 
         assertThat(AzureBlobStorageProvider.keyFor(a, locationOf(BLOB_URI)))
                 .isNotEqualTo(AzureBlobStorageProvider.keyFor(b, locationOf(BLOB_URI)));

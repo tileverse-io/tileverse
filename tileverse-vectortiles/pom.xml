@@ -13,6 +13,15 @@
   <name>Tileverse :: Vector Tiles</name>
   <description>Vector tile encoding/decoding for Tileverse</description>
 
+  <properties>
+    <!--
+      VectorTileProto.java is protoc-generated (carries @com.google.protobuf.Generated)
+      with manual edits to fix builder casting; exclude it from analysis.
+    -->
+    <sonar.exclusions>**/VectorTileProto.java</sonar.exclusions>
+    <sonar.cpd.exclusions>**/VectorTileProto.java</sonar.cpd.exclusions>
+  </properties>
+
   <dependencyManagement>
     <dependencies>
       <dependency>

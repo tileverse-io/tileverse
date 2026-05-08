@@ -335,13 +335,8 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
         long maxX = Math.min(maxx(), compatible.maxx());
         long maxY = Math.min(maxy(), compatible.maxy());
 
-        // Ensure the intersection is valid
-        if (minX > maxX || minY > maxY) {
-            // No intersection - return empty range using MAX_VALUE coordinates as a marker
-            return false;
-        }
-
-        return true;
+        // Empty intersection on either axis means no overlap.
+        return minX <= maxX && minY <= maxY;
     }
 
     /**
@@ -372,7 +367,10 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
         long tilesPerSide = 1L << zoomLevel();
         long maxCoord = tilesPerSide - 1;
 
-        long newMinX, newMinY, newMaxX, newMaxY;
+        long newMinX;
+        long newMinY;
+        long newMaxX;
+        long newMaxY;
 
         newMinX = minx();
         newMaxX = maxx();
@@ -486,20 +484,20 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
      * @return true if the tile ranges are equal
      */
     static boolean equals(TileRange range1, TileRange range2) {
-        if (range1 == range2) return true;
-        if (range1 == null || range2 == null) return false;
-
-        // Basic coordinate, zoom level, and axis origin equality
-        if (range1.zoomLevel() != range2.zoomLevel()
-                || range1.minx() != range2.minx()
-                || range1.miny() != range2.miny()
-                || range1.maxx() != range2.maxx()
-                || range1.maxy() != range2.maxy()
-                || range1.cornerOfOrigin() != range2.cornerOfOrigin()) {
+        if (range1 == range2) {
+            return true;
+        }
+        if (range1 == null || range2 == null) {
             return false;
         }
 
-        return true;
+        // Basic coordinate, zoom level, and axis origin equality.
+        return range1.zoomLevel() == range2.zoomLevel()
+                && range1.minx() == range2.minx()
+                && range1.miny() == range2.miny()
+                && range1.maxx() == range2.maxx()
+                && range1.maxy() == range2.maxy()
+                && range1.cornerOfOrigin() == range2.cornerOfOrigin();
     }
 
     /**
@@ -510,7 +508,9 @@ public sealed interface TileRange extends Comparable<TileRange> permits TileRang
      * @return the hash code
      */
     static int hashCode(TileRange range) {
-        if (range == null) return 0;
+        if (range == null) {
+            return 0;
+        }
 
         int result = range.getClass().hashCode();
 

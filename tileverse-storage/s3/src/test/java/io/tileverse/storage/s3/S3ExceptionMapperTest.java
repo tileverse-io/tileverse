@@ -92,8 +92,7 @@ class S3ExceptionMapperTest {
         AwsServiceException ex = (AwsServiceException)
                 AwsServiceException.builder().statusCode(418).message("teapot").build();
         StorageException mapped = S3ExceptionMapper.map(ex, "k");
-        assertThat(mapped).isInstanceOf(StorageException.class);
-        assertThat(mapped).isNotInstanceOf(NotFoundException.class);
+        assertThat(mapped).isInstanceOf(StorageException.class).isNotInstanceOf(NotFoundException.class);
         assertThat(mapped.getCause()).isSameAs(ex);
     }
 }

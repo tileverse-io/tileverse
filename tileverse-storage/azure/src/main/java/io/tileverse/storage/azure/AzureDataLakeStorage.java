@@ -171,7 +171,9 @@ final class AzureDataLakeStorage implements Storage {
                     Optional.ofNullable(props.getContentType()),
                     props.getMetadata() == null ? Map.of() : Map.copyOf(props.getMetadata())));
         } catch (DataLakeStorageException e) {
-            if (e.getStatusCode() == 404) return Optional.empty();
+            if (e.getStatusCode() == 404) {
+                return Optional.empty();
+            }
             throw AzureExceptionMapper.map(e, key);
         }
     }
@@ -196,7 +198,7 @@ final class AzureDataLakeStorage implements Storage {
         try {
             iter = fileSystem.listPaths(listOpts, null);
             rawItems = iter.iterator();
-            boolean hasNext = rawItems.hasNext(); // force first-page fetch to surface auth/region errors here
+            boolean hasNext = rawItems.hasNext(); // force first-page fetch so auth/region errors propagate here
             log.trace("first-page fetch check, has next: {}", hasNext);
         } catch (DataLakeStorageException e) {
             throw AzureExceptionMapper.map(e, fullPrefix);
@@ -412,7 +414,9 @@ final class AzureDataLakeStorage implements Storage {
 
             @Override
             public void close() throws IOException {
-                if (alreadyClosed) return;
+                if (alreadyClosed) {
+                    return;
+                }
                 alreadyClosed = true;
                 try {
                     super.close();
@@ -503,7 +507,9 @@ final class AzureDataLakeStorage implements Storage {
         try {
             fc.rename(null, location.resolve(dstKey));
         } catch (DataLakeStorageException e) {
-            if (e.getStatusCode() == 404) throw new NotFoundException("Source not found: " + srcKey, e);
+            if (e.getStatusCode() == 404) {
+                throw new NotFoundException("Source not found: " + srcKey, e);
+            }
             throw AzureExceptionMapper.map(e, srcKey);
         }
         return stat(dstKey).orElseThrow(() -> new StorageException("Move failed for: " + dstKey));

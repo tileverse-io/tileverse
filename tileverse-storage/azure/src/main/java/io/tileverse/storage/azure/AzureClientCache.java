@@ -25,6 +25,8 @@ import com.azure.storage.file.datalake.DataLakeServiceClientBuilder;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -76,7 +78,7 @@ final class AzureClientCache {
     final class Lease implements AutoCloseable {
         private final Key key;
         private final Entry entry;
-        private boolean closed;
+        private final AtomicBoolean closed = new AtomicBoolean();
 
         Lease(Key key, Entry entry) {
             this.key = key;
@@ -99,19 +101,21 @@ final class AzureClientCache {
         }
 
         @Override
-        public synchronized void close() {
-            if (closed) return;
-            closed = true;
-            release(key);
+        public void close() {
+            if (closed.compareAndSet(false, true)) {
+                release(key);
+            }
         }
 
-        private synchronized void release(Key key) {
+        private void release(Key key) {
             entries.compute(key, (k, e) -> {
-                if (e == null) return null;
-                e.refCount--;
+                if (e == null) {
+                    return null;
+                }
+                int refCount = e.refCount.decrementAndGet();
                 // Azure SDK clients may be Reactor-backed; they don't have an explicit close().
                 // Forgetting the references lets GC collect the underlying http pipeline.
-                return e.refCount <= 0 ? null : e;
+                return refCount <= 0 ? null : e;
             });
         }
     }
@@ -122,7 +126,7 @@ final class AzureClientCache {
         @Nullable
         final DataLakeServiceClient dataLakeServiceClient;
 
-        int refCount;
+        final AtomicInteger refCount = new AtomicInteger();
 
         Entry(BlobServiceClient blobClient, @Nullable DataLakeServiceClient dlClient) {
             this.blobServiceClient = blobClient;
@@ -139,7 +143,7 @@ final class AzureClientCache {
     Lease acquire(Key key) {
         Entry entry = entries.compute(key, (k, existing) -> {
             Entry e = existing == null ? build(k) : existing;
-            e.refCount++;
+            e.refCount.incrementAndGet();
             return e;
         });
         return new Lease(key, entry);
@@ -160,8 +164,8 @@ final class AzureClientCache {
             // Public-container access: leave the builder without a credential. The Azure SDK
             // emits unsigned requests, which only succeed against containers configured with
             // anonymous (Container- or Blob-level) read access. DataLakeServiceClientBuilder
-            // rejects anonymous access at buildClient() time, so the DataLake client is omitted;
-            // attempts to use it via the lease throw UnsupportedOperationException.
+            // rejects anonymous access at buildClient() time, so the DataLake client is omitted,
+            // and attempts to use it via the lease throw UnsupportedOperationException.
             return new Entry(blobBuilder.buildClient(), null);
         }
 

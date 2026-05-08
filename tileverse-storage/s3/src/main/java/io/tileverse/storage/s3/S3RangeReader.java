@@ -91,7 +91,7 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
     S3RangeReader(S3Client s3Client, S3Reference s3Location) {
         this.s3Client = Objects.requireNonNull(s3Client, "S3Client cannot be null");
         this.s3Location = Objects.requireNonNull(s3Location, "S3Location cannot be null");
-        // Eager HEAD: surface NotFoundException at construction time so callers don't get
+        // Eager HEAD: throw NotFoundException at construction time so callers don't get
         // mid-stream failures, and cache the content length for subsequent size() calls.
         try {
             HeadObjectRequest headRequest = HeadObjectRequest.builder()

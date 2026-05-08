@@ -78,7 +78,9 @@ class AzureDataLakeLiveIT extends StorageTCK {
             List<String> all = stream.filter(e -> e instanceof StorageEntry.File)
                     .map(StorageEntry::key)
                     .toList();
-            if (!all.isEmpty()) s.deleteAll(all);
+            if (!all.isEmpty()) {
+                s.deleteAll(all);
+            }
         } catch (Exception ignored) {
             // best-effort
         }

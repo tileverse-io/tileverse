@@ -23,7 +23,7 @@ import static io.tileverse.storage.s3.S3StorageProvider.S3_FORCE_PATH_STYLE;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_REGION;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_USE_DEFAULT_CREDENTIALS_PROVIDER;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
@@ -56,9 +56,9 @@ class S3StorageProviderTest {
             assertThat(StorageProvider.getAvailableProviders().stream().anyMatch(S3StorageProvider.class::isInstance))
                     .isFalse();
             assertThat(StorageProvider.findProvider(S3StorageProvider.ID)).isPresent();
-            IllegalStateException ex = assertThrows(
-                    IllegalStateException.class, () -> StorageProvider.getProvider(S3StorageProvider.ID, true));
-            assertThat(ex.getMessage()).contains("The specified StorageProvider is not available: s3");
+            assertThatThrownBy(() -> StorageProvider.getProvider(S3StorageProvider.ID, true))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("The specified StorageProvider is not available: s3");
         } finally {
             System.clearProperty(S3StorageProvider.ENABLED_KEY);
         }
@@ -100,15 +100,20 @@ class S3StorageProviderTest {
     }
 
     @Test
+    @SuppressWarnings("java:S5778")
     void canProcess() {
-        assertThrows(NullPointerException.class, () -> provider.canProcess(null));
+        assertThatThrownBy(() -> provider.canProcess(null)).isInstanceOf(NullPointerException.class);
         StorageConfig config = provider.getDefaultConfig();
-        NullPointerException npe = assertThrows(NullPointerException.class, () -> provider.canProcess(config));
-        assertThat(npe.getMessage()).contains("config baseUri is null");
+        assertThatThrownBy(() -> provider.canProcess(config))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("config baseUri is null");
 
-        // Invalid S3 URIs
-        assertThrows(IllegalArgumentException.class, () -> provider.canProcess(config.baseUri("s3:")));
-        assertThrows(IllegalArgumentException.class, () -> provider.canProcess(config.baseUri("s3://")));
+        // Invalid S3 URIs: StorageConfig.baseUri rejects malformed URIs eagerly, so the IAE is thrown from
+        // baseUri() itself rather than canProcess(). Keeping both calls in the lambda is intentional.
+        assertThatThrownBy(() -> provider.canProcess(config.baseUri("s3:")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> provider.canProcess(config.baseUri("s3://")))
+                .isInstanceOf(IllegalArgumentException.class);
 
         // Unsupported schemes
         assertThat(provider.canProcess(config.baseUri("ftp://my-bucket/my-blob")))
@@ -145,7 +150,7 @@ class S3StorageProviderTest {
         assertThat(provider.canProcess(config.baseUri("https://storage.googleapis.com/my-bucket/my-blob")))
                 .isTrue();
 
-        // Bucket root URLs: s3:// scheme is now accepted (Storage use case);
+        // Bucket root URLs: s3:// scheme is now accepted (Storage use case).
         // http(s):// without a key remains rejected to fall back to HTTP for ambiguous custom domains.
         assertThat(provider.canProcess(config.baseUri("s3://my-bucket/"))).isTrue();
         assertThat(provider.canProcess(config.baseUri("http://localhost:9000/my-bucket/")))

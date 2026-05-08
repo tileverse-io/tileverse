@@ -15,9 +15,9 @@
  */
 package io.tileverse.pmtiles.store;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.tileverse.pmtiles.PMTilesHeader;
@@ -129,8 +129,7 @@ class PMTilesTileMatrixSetTest {
                 .maxZoom((byte) 35)
                 .build();
 
-        assertThrows(IllegalArgumentException.class, () -> {
-            PMTilesTileMatrixSet.fromWebMercator(header);
-        });
+        assertThatThrownBy(() -> PMTilesTileMatrixSet.fromWebMercator(header))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

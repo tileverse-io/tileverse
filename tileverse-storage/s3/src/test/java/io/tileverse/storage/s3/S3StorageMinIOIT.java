@@ -60,7 +60,9 @@ class S3StorageMinIOIT extends StorageTCK {
 
     @AfterAll
     static void stopContainer() {
-        if (minio != null) minio.stop();
+        if (minio != null) {
+            minio.stop();
+        }
         System.clearProperty("aws.accessKeyId");
         System.clearProperty("aws.secretAccessKey");
     }
@@ -91,7 +93,9 @@ class S3StorageMinIOIT extends StorageTCK {
             List<String> all = stream.filter(e -> e instanceof StorageEntry.File)
                     .map(StorageEntry::key)
                     .toList();
-            if (!all.isEmpty()) s.deleteAll(all);
+            if (!all.isEmpty()) {
+                s.deleteAll(all);
+            }
         } catch (Exception ignored) {
             // best-effort
         }

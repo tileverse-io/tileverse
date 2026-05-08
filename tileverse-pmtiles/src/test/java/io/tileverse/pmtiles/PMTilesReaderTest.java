@@ -20,7 +20,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.tileverse.cache.CacheManager;
@@ -208,29 +207,22 @@ class PMTilesReaderTest {
     @Test
     @SuppressWarnings("java:S5778")
     void testEdgeCases() {
-        // Test negative coordinates - should throw IllegalArgumentException
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> reader.getTile(TileIndex.zxy(5, -1, 10)),
-                "Tile with negative X should throw IllegalArgumentException");
+        // Negative coordinates and coordinates beyond the grid bounds for the zoom level all reject with IAE.
+        assertThatThrownBy(() -> reader.getTile(TileIndex.zxy(5, -1, 10)))
+                .as("negative X")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> reader.getTile(TileIndex.zxy(5, 10, -1)))
+                .as("negative Y")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> reader.getTile(TileIndex.zxy(5, 10, -1)),
-                "Tile with negative Y should throw IllegalArgumentException");
-
-        // Test coordinates beyond tile grid bounds at zoom level
         int zoom = 5;
-        int maxCoord = (1 << zoom); // 2^zoom
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> reader.getTile(TileIndex.zxy(zoom, maxCoord, 0)),
-                "Tile with X beyond grid bounds should throw IllegalArgumentException");
-
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> reader.getTile(TileIndex.zxy(zoom, 0, maxCoord)),
-                "Tile with Y beyond grid bounds should throw IllegalArgumentException");
+        int maxCoord = (1 << zoom);
+        assertThatThrownBy(() -> reader.getTile(TileIndex.zxy(zoom, maxCoord, 0)))
+                .as("X beyond grid bounds")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> reader.getTile(TileIndex.zxy(zoom, 0, maxCoord)))
+                .as("Y beyond grid bounds")
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     /** Test tiles at different zoom levels to verify zoom-specific behavior. */
@@ -335,11 +327,12 @@ class PMTilesReaderTest {
                 }
                 """;
 
-        IOException e = assertThrows(IOException.class, () -> PMTilesReader.parseMetadata(rawMetadata));
-        assertThat(e.getMessage())
-                .contains("Failed to parse PMTiles metadata JSON:")
-                .contains("Unexpected character ('h' (code 104)): was expecting comma to separate Object entries")
-                .contains(rawMetadata);
+        assertThatThrownBy(() -> PMTilesReader.parseMetadata(rawMetadata))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("Failed to parse PMTiles metadata JSON:")
+                .hasMessageContaining(
+                        "Unexpected character ('h' (code 104)): was expecting comma to separate Object entries")
+                .hasMessageContaining(rawMetadata);
     }
 
     @Test

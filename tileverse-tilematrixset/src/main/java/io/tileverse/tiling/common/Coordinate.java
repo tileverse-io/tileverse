@@ -70,6 +70,6 @@ public record Coordinate(double x, double y) {
 
     @Override
     public String toString() {
-        return String.format("Coordinate(%.6f, %.6f)", x, y);
+        return "Coordinate(%.6f, %.6f)".formatted(x, y);
     }
 }

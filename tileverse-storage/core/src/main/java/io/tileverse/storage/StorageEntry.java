@@ -17,6 +17,7 @@ package io.tileverse.storage;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import org.jspecify.annotations.NullMarked;
 
@@ -62,26 +63,36 @@ public sealed interface StorageEntry {
             implements StorageEntry {
 
         public File {
-            if (key == null) throw new IllegalArgumentException("key is required");
-            if (lastModified == null) throw new IllegalArgumentException("lastModified is required");
-            if (size < 0L) throw new IllegalArgumentException("size must be >= 0");
-            etag = (etag != null) ? etag : Optional.empty();
-            versionId = (versionId == null) ? Optional.empty() : versionId;
-            contentType = (contentType == null) ? Optional.empty() : contentType;
+            if (key == null) {
+                throw new IllegalArgumentException("key is required");
+            }
+            if (lastModified == null) {
+                throw new IllegalArgumentException("lastModified is required");
+            }
+            if (size < 0L) {
+                throw new IllegalArgumentException("size must be >= 0");
+            }
+            etag = Objects.requireNonNullElse(etag, Optional.empty());
+            versionId = Objects.requireNonNullElse(versionId, Optional.empty());
+            contentType = Objects.requireNonNullElse(contentType, Optional.empty());
             userMetadata = (userMetadata == null) ? Map.of() : Map.copyOf(userMetadata);
         }
     }
 
     record Prefix(String key) implements StorageEntry {
         public Prefix {
-            if (key == null) throw new IllegalArgumentException("key is required");
+            if (key == null) {
+                throw new IllegalArgumentException("key is required");
+            }
         }
     }
 
     record Directory(String key, Optional<Instant> lastModified) implements StorageEntry {
         public Directory {
-            if (key == null) throw new IllegalArgumentException("key is required");
-            lastModified = (lastModified == null) ? Optional.empty() : lastModified;
+            if (key == null) {
+                throw new IllegalArgumentException("key is required");
+            }
+            lastModified = Objects.requireNonNullElse(lastModified, Optional.empty());
         }
     }
 }

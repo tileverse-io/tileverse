@@ -214,7 +214,7 @@ final class AzureBlobStorage implements Storage {
                     ? containerClient.listBlobs(opts, null)
                     : containerClient.listBlobsByHierarchy("/", opts, null);
             rawItems = iter.iterator();
-            boolean hasNext = rawItems.hasNext(); // force first-page fetch to surface auth/region errors here
+            boolean hasNext = rawItems.hasNext(); // force first-page fetch so auth/region errors propagate here
             log.trace("first-page fetch check, has next: {}", hasNext);
         } catch (HttpResponseException e) {
             throw AzureExceptionMapper.map(e, fullPrefix);
@@ -420,7 +420,9 @@ final class AzureBlobStorage implements Storage {
 
             @Override
             public void close() throws IOException {
-                if (alreadyClosed) return;
+                if (alreadyClosed) {
+                    return;
+                }
                 alreadyClosed = true;
                 try {
                     super.close();
@@ -519,7 +521,7 @@ final class AzureBlobStorage implements Storage {
             Set<String> didNotExist,
             Map<String, StorageException> failed) {
         try {
-            // Force eager iteration so the batch is actually submitted and any error surfaces here.
+            // Force eager iteration so the batch is actually submitted and any error propagates here.
             PagedIterable<Response<Void>> deleteBlobs = batch.deleteBlobs(blobUrls, DeleteSnapshotsOptionType.INCLUDE);
             deleteBlobs.iterator().forEachRemaining(r -> {});
         } catch (BlobBatchStorageException ex) {

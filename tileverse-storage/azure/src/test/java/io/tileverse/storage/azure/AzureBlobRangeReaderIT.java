@@ -108,11 +108,11 @@ class AzureBlobRangeReaderIT extends AbstractRangeReaderIT {
     }
 
     @Test
-    void testAzureBlobWithAccountCredentials() throws IOException {
+    void testAzureBlobWithAccountCredentials() {
 
         String azuriteHost = azurite.getHost();
         Integer azuritePort = azurite.getMappedPort(10000);
-        String blobEndpoint = String.format("http://%s:%d/%s", azuriteHost, azuritePort, ACCOUNT_NAME);
+        String blobEndpoint = "http://%s:%d/%s".formatted(azuriteHost, azuritePort, ACCOUNT_NAME);
 
         StorageSharedKeyCredential credential = new StorageSharedKeyCredential(ACCOUNT_NAME, ACCOUNT_KEY);
 

@@ -21,14 +21,9 @@ import static org.assertj.core.api.Assertions.within;
 import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.common.Coordinate;
 import io.tileverse.tiling.pyramid.TileIndex;
-import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 class WebMercatorTransformTest {
-
-    @TempDir
-    private Path tmpFolder;
 
     @Test
     void testLatLonToWebMercatorRoundTrip() {

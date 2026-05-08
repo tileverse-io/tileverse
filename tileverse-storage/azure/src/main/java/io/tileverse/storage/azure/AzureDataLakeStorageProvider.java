@@ -43,7 +43,7 @@ public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
      * {@link com.azure.storage.file.datalake.DataLakeServiceClient} and
      * {@link com.azure.storage.blob.BlobServiceClient}, bypassing the SPI configuration path. Both clients are
      * required: the DFS client drives directory and rename operations on HNS-enabled accounts, and the blob client
-     * drives byte-range and streaming reads via the dual-API surface.
+     * drives byte-range and streaming reads via the dual-API contract.
      *
      * <p>The returned {@code Storage} <b>borrows</b> the supplied clients; closing the {@code Storage} does NOT close
      * them. The caller retains ownership.
@@ -59,9 +59,15 @@ public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
             URI uri,
             com.azure.storage.file.datalake.DataLakeServiceClient dataLakeServiceClient,
             com.azure.storage.blob.BlobServiceClient blobServiceClient) {
-        if (uri == null) throw new IllegalArgumentException("uri");
-        if (dataLakeServiceClient == null) throw new IllegalArgumentException("dataLakeServiceClient");
-        if (blobServiceClient == null) throw new IllegalArgumentException("blobServiceClient");
+        if (uri == null) {
+            throw new IllegalArgumentException("uri");
+        }
+        if (dataLakeServiceClient == null) {
+            throw new IllegalArgumentException("dataLakeServiceClient");
+        }
+        if (blobServiceClient == null) {
+            throw new IllegalArgumentException("blobServiceClient");
+        }
         AzureBlobLocation location = AzureBlobLocation.parse(uri);
         return new AzureDataLakeStorage(
                 uri, location, new BorrowedAzureHandle(blobServiceClient, dataLakeServiceClient));
@@ -88,7 +94,6 @@ public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
             return false;
         }
         URI uri = config.baseUri();
-        if (uri == null) return false;
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
         if (scheme.equals("abfs") || scheme.equals("abfss")) {
             return uri.getHost() != null && uri.getHost().contains(".dfs.core.");
@@ -114,9 +119,6 @@ public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
     @Override
     public Storage createStorage(StorageConfig config) {
         URI uri = config.baseUri();
-        if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.baseUri() is required for AzureDataLakeStorage");
-        }
         AzureBlobLocation location = AzureBlobLocation.parse(uri);
         AzureClientCache.Lease lease = clientCache.acquire(AzureBlobStorageProvider.keyFor(config, location));
         return new AzureDataLakeStorage(uri, location, lease);

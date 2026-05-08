@@ -36,7 +36,7 @@ import org.locationtech.jts.precision.GeometryPrecisionReducer;
 public class FeatureBuilder {
 
     private final LayerBuilder layerBuilder;
-    private final VectorTileProto.Tile.Feature.Builder featureBuilder;
+    private final VectorTileProto.Tile.Feature.Builder protoBuilder;
 
     private GeometryPrecisionReducer precisionReducer;
     private Geometry geometry;
@@ -45,7 +45,7 @@ public class FeatureBuilder {
 
     FeatureBuilder(LayerBuilder layerBuilder) {
         this.layerBuilder = layerBuilder;
-        this.featureBuilder = VectorTileProto.Tile.Feature.newBuilder();
+        this.protoBuilder = VectorTileProto.Tile.Feature.newBuilder();
         PrecisionModel integerPrecision = new PrecisionModel(1.0); // Scale 1.0 = snap to integers
         precisionReducer = new GeometryPrecisionReducer(integerPrecision);
         precisionReducer.setRemoveCollapsedComponents(true); // Remove degenerate components
@@ -61,9 +61,9 @@ public class FeatureBuilder {
      * Reset this feature builder for reuse with a new feature ID. This avoids object creation overhead in tight loops.
      */
     FeatureBuilder reset(long id) {
-        featureBuilder.clear();
+        protoBuilder.clear();
         if (id > -1L) {
-            featureBuilder.setId(id);
+            protoBuilder.setId(id);
         }
         return this;
     }
@@ -75,7 +75,7 @@ public class FeatureBuilder {
      * @return this FeatureBuilder for method chaining
      */
     public FeatureBuilder id(long id) {
-        featureBuilder.setId(id);
+        protoBuilder.setId(id);
         return this;
     }
 
@@ -100,8 +100,8 @@ public class FeatureBuilder {
      */
     public FeatureBuilder attribute(String name, Object value) {
         if (value != null) {
-            featureBuilder.addTags(layerBuilder.getKeyIndex(name));
-            featureBuilder.addTags(layerBuilder.getValueIndex(value));
+            protoBuilder.addTags(layerBuilder.getKeyIndex(name));
+            protoBuilder.addTags(layerBuilder.getValueIndex(value));
         }
         return this;
     }
@@ -133,12 +133,12 @@ public class FeatureBuilder {
         if (finalGeometries.size() == 1) {
             // single-feature to build
             Geometry resultingGeometry = finalGeometries.isEmpty() ? null : finalGeometries.get(0);
-            buildFinalFeature(featureBuilder, resultingGeometry);
+            buildFinalFeature(protoBuilder, resultingGeometry);
         } else {
             // We need to create multiple Fetures as processGeometries resulted in disparate geometry types
-            // use featureBuilder as prototype
+            // use protoBuilder as prototype
             for (Geometry preparedGeom : finalGeometries) {
-                VectorTileProto.Tile.Feature.Builder subFeatureBuilder = copyPrototype(featureBuilder);
+                VectorTileProto.Tile.Feature.Builder subFeatureBuilder = copyPrototype(protoBuilder);
                 buildFinalFeature(subFeatureBuilder, preparedGeom);
             }
         }

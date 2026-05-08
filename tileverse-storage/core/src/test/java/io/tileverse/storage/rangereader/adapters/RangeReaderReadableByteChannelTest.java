@@ -69,7 +69,7 @@ class RangeReaderReadableByteChannelTest {
         try (RangeReader reader = RangeReaderTestSupport.fileReader(testFile);
                 RangeReaderReadableByteChannel channel = RangeReaderReadableByteChannel.of(reader)) {
 
-            assertThat(channel.position()).isEqualTo(0L);
+            assertThat(channel.position()).isZero();
         }
     }
 
@@ -122,8 +122,8 @@ class RangeReaderReadableByteChannelTest {
 
             ByteBuffer emptyBuffer = ByteBuffer.allocate(0);
             int bytesRead = channel.read(emptyBuffer);
-            assertThat(bytesRead).isEqualTo(0);
-            assertThat(channel.position()).isEqualTo(0L);
+            assertThat(bytesRead).isZero();
+            assertThat(channel.position()).isZero();
         }
     }
 
@@ -232,10 +232,10 @@ class RangeReaderReadableByteChannelTest {
         channel.close();
 
         assertThatThrownBy(() -> channel.read(ByteBuffer.allocate(10))).isInstanceOf(ClosedChannelException.class);
-        assertThatThrownBy(() -> channel.position()).isInstanceOf(ClosedChannelException.class);
-        assertThatThrownBy(() -> channel.size()).isInstanceOf(ClosedChannelException.class);
-        assertThatThrownBy(() -> channel.getRangeReader()).isInstanceOf(ClosedChannelException.class);
-        assertThatThrownBy(() -> channel.getSourceIdentifier()).isInstanceOf(ClosedChannelException.class);
+        assertThatThrownBy(channel::position).isInstanceOf(ClosedChannelException.class);
+        assertThatThrownBy(channel::size).isInstanceOf(ClosedChannelException.class);
+        assertThatThrownBy(channel::getRangeReader).isInstanceOf(ClosedChannelException.class);
+        assertThatThrownBy(channel::getSourceIdentifier).isInstanceOf(ClosedChannelException.class);
     }
 
     @Test

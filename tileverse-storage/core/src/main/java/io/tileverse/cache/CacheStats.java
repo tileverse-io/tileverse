@@ -71,16 +71,4 @@ public record CacheStats(
     public long requestCount() {
         return hitCount + missCount;
     }
-
-    //    /**
-    //     * Returns a formatted string representation of the cache statistics.
-    //     *
-    //     * @return A human-readable string with key cache metrics
-    //     */
-    //    @Override
-    //    public String toString() {
-    //        return String.format(
-    //                "CacheStats{entries=%d, hitRate=%.2f%%, hits=%d, misses=%d, evictions=%d}",
-    //                entryCount, hitRate * 100.0, hitCount, missCount, evictionCount);
-    //    }
 }

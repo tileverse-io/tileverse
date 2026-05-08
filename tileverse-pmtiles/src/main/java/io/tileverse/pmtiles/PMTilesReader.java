@@ -134,7 +134,7 @@ public class PMTilesReader implements AutoCloseable {
      * @throws IOException if the URI cannot be opened
      */
     public static PMTilesReader open(URI uri) throws IOException {
-        return open(new StorageConfig().baseUri(uri));
+        return open(new StorageConfig(uri));
     }
 
     /**
@@ -235,9 +235,15 @@ public class PMTilesReader implements AutoCloseable {
      */
     public long getTileId(TileIndex tileIndex) {
         requireNonNull(tileIndex, "tileIndex is null");
-        if (tileIndex.z() < 0) throw new IllegalArgumentException("z can't be < 0");
-        if (tileIndex.x() < 0) throw new IllegalArgumentException("x can't be < 0");
-        if (tileIndex.y() < 0) throw new IllegalArgumentException("y can't be < 0");
+        if (tileIndex.z() < 0) {
+            throw new IllegalArgumentException("z can't be < 0");
+        }
+        if (tileIndex.x() < 0) {
+            throw new IllegalArgumentException("x can't be < 0");
+        }
+        if (tileIndex.y() < 0) {
+            throw new IllegalArgumentException("y can't be < 0");
+        }
         return hilbertCurve.tileIndexToTileId(tileIndex);
     }
 

@@ -285,9 +285,6 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
             return false;
         }
         URI uri = config.baseUri();
-        if (uri == null) {
-            return false;
-        }
         // az:// is parsed by AzureBlobLocation directly. http(s) URIs go through BlobUrlParts so we keep
         // the existing host-shape validation (account name embedded in host, container in path).
         if ("az".equalsIgnoreCase(uri.getScheme())) {
@@ -304,14 +301,11 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
         } catch (RuntimeException e) {
             return false;
         }
-        if (parts.getHost() == null
-                || parts.getBlobContainerName() == null
-                || parts.getBlobContainerName().isEmpty()) {
-            return false;
-        }
-        // Both blob-rooted URIs and container-rooted URIs are valid Storage roots;
-        // openRangeReader(key) supplies the leaf at read time.
-        return true;
+        // Both blob-rooted URIs and container-rooted URIs are valid Storage roots: openRangeReader(key)
+        // supplies the leaf at read time.
+        return parts.getHost() != null
+                && parts.getBlobContainerName() != null
+                && !parts.getBlobContainerName().isEmpty();
     }
 
     static BlobUrlParts parseBlobUrlParts(URI endpointUrl) {
@@ -331,9 +325,6 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
     @Override
     public Storage createStorage(StorageConfig config) {
         URI uri = config.baseUri();
-        if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.baseUri() is required for AzureBlobStorage");
-        }
         AzureBlobLocation location = AzureBlobLocation.parse(uri);
         AzureClientCache.Lease lease = clientCache.acquire(keyFor(config, location));
         return new AzureBlobStorage(uri, location, lease);

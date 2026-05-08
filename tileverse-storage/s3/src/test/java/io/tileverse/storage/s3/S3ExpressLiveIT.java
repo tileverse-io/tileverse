@@ -16,6 +16,7 @@
 package io.tileverse.storage.s3;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import io.tileverse.storage.Storage;
@@ -54,7 +55,9 @@ class S3ExpressLiveIT {
 
     @AfterAll
     static void tearDown() throws Exception {
-        if (storage != null) storage.close();
+        if (storage != null) {
+            storage.close();
+        }
     }
 
     @Test
@@ -65,7 +68,7 @@ class S3ExpressLiveIT {
     }
 
     @Test
-    void putThenStatThenDelete() throws Exception {
+    void putThenStatThenDelete() {
         String key = "tileverse-it/" + System.currentTimeMillis() + ".bin";
         storage.put(key, "hello".getBytes(StandardCharsets.UTF_8));
         try {
@@ -78,7 +81,7 @@ class S3ExpressLiveIT {
 
     @Test
     void presignTtlRejectedAbove5Minutes() {
-        org.junit.jupiter.api.Assertions.assertThrows(
-                IllegalArgumentException.class, () -> storage.presignGet("anything", Duration.ofMinutes(10)));
+        Duration tooLong = Duration.ofMinutes(10);
+        assertThatThrownBy(() -> storage.presignGet("anything", tooLong)).isInstanceOf(IllegalArgumentException.class);
     }
 }

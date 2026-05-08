@@ -52,7 +52,7 @@ class FileStorageTest {
     @Test
     void openInputStreamMissingThrowsNotFound(@TempDir Path tmp) {
         try (FileStorage s = new FileStorage(tmp)) {
-            assertThatThrownBy(() -> s.read("missing.bin").close()).isInstanceOf(NotFoundException.class);
+            assertThatThrownBy(() -> s.read("missing.bin")).isInstanceOf(NotFoundException.class);
         }
     }
 
@@ -60,10 +60,8 @@ class FileStorageTest {
     void putIfNotExistsRejectsExisting(@TempDir Path tmp) {
         try (FileStorage s = new FileStorage(tmp)) {
             s.put("k", new byte[1]);
-            assertThatThrownBy(() -> s.put(
-                            "k",
-                            new byte[2],
-                            WriteOptions.builder().ifNotExists(true).build()))
+            WriteOptions ifNotExists = WriteOptions.builder().ifNotExists(true).build();
+            assertThatThrownBy(() -> s.put("k", new byte[2], ifNotExists))
                     .isInstanceOf(PreconditionFailedException.class);
         }
     }
@@ -77,10 +75,9 @@ class FileStorageTest {
             byte[] original = "original".getBytes(StandardCharsets.UTF_8);
             s.put("dir/existing.bin", original);
 
-            assertThatThrownBy(() -> s.put(
-                            "dir/existing.bin",
-                            "replaced".getBytes(StandardCharsets.UTF_8),
-                            WriteOptions.builder().ifNotExists(true).build()))
+            byte[] replaced = "replaced".getBytes(StandardCharsets.UTF_8);
+            WriteOptions ifNotExists = WriteOptions.builder().ifNotExists(true).build();
+            assertThatThrownBy(() -> s.put("dir/existing.bin", replaced, ifNotExists))
                     .isInstanceOf(PreconditionFailedException.class);
 
             assertThat(Files.readAllBytes(tmp.resolve("dir/existing.bin"))).isEqualTo(original);

@@ -17,14 +17,13 @@ package io.tileverse.storage.file;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
@@ -43,6 +42,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -50,6 +50,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /** Comprehensive tests for FileRangeReader. */
+@Slf4j
 class FileRangeReaderTest {
 
     @TempDir
@@ -61,7 +62,6 @@ class FileRangeReaderTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        // Create a text file with known content
         testFile = tempDir.resolve("test-file.txt");
         textContent = """
                 The quick brown fox jumps over the lazy dog. \
@@ -69,13 +69,11 @@ class FileRangeReaderTest {
                 abcdefghijklmnopqrstuvwxyz""";
         Files.writeString(testFile, textContent, StandardOpenOption.CREATE);
 
-        // Initialize the reader
         reader = new FileRangeReader(testFile);
     }
 
     @AfterEach
     void tearDown() {
-        // Close the reader after each test
         if (reader != null) {
             reader.close();
         }
@@ -83,20 +81,19 @@ class FileRangeReaderTest {
 
     @Test
     void testFactory() throws IOException {
-        // Direct construction via the package-private of(Path) factory.
         assertThat(new FileRangeReader(testFile)).isNotNull().hasFieldOrPropertyWithValue("path", testFile);
         assertThat(new FileRangeReader(testFile)).isNotNull().hasFieldOrPropertyWithValue("path", testFile);
     }
 
     @Test
     void testConstructorWithNullPath() {
-        assertThrows(NullPointerException.class, () -> new FileRangeReader(null));
+        assertThatThrownBy(() -> new FileRangeReader(null)).isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void testNonExistentFile() {
         Path nonExistentFile = tempDir.resolve("non-existent-file.txt");
-        assertThrows(NoSuchFileException.class, () -> new FileRangeReader(nonExistentFile));
+        assertThatThrownBy(() -> new FileRangeReader(nonExistentFile)).isInstanceOf(NoSuchFileException.class);
     }
 
     @Test
@@ -228,7 +225,6 @@ class FileRangeReaderTest {
 
     @Test
     void testReadWithZeroLength() {
-        // Test reading with length = 0
         ByteBuffer buffer = reader.readRange(10, 0);
 
         assertEquals(0, buffer.remaining());
@@ -236,14 +232,12 @@ class FileRangeReaderTest {
 
     @Test
     void testReadWithNegativeOffset() {
-        // Test reading with negative offset - should throw IllegalArgumentException
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(-1, 10));
+        assertThatThrownBy(() -> reader.readRange(-1, 10)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void testReadWithNegativeLength() {
-        // Test reading with negative length - should throw exception
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(0, -1));
+        assertThatThrownBy(() -> reader.readRange(0, -1)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -334,8 +328,8 @@ class FileRangeReaderTest {
         reader.close();
 
         // Operations after close should throw IllegalStateException (now RuntimeException, not IOException)
-        assertThrows(IllegalStateException.class, () -> reader.size());
-        assertThrows(IllegalStateException.class, () -> reader.readRange(0, 10));
+        assertThatThrownBy(() -> reader.size()).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> reader.readRange(0, 10)).isInstanceOf(IllegalStateException.class);
     }
 
     @Test
@@ -384,9 +378,12 @@ class FileRangeReaderTest {
                         for (int j = 0; j < readData.length; j++) {
                             byte expected = (byte) ((regionStart + j) % 256);
                             if (readData[j] != expected) {
-                                System.err.printf(
-                                        "Thread %d: Data mismatch at index %d, expected %d but got %d%n",
-                                        threadIndex, j, expected & 0xFF, readData[j] & 0xFF);
+                                log.debug(
+                                        "Thread {}: Data mismatch at index {}, expected {} but got {}",
+                                        threadIndex,
+                                        j,
+                                        expected & 0xFF,
+                                        readData[j] & 0xFF);
                                 return false;
                             }
                         }
@@ -519,7 +516,7 @@ class FileRangeReaderTest {
 
     @Test
     void of_withNullPath_throwsNullPointerException() {
-        assertThrows(NullPointerException.class, () -> new FileRangeReader(null));
+        assertThatThrownBy(() -> new FileRangeReader(null)).isInstanceOf(NullPointerException.class);
     }
 
     @Nested
@@ -535,14 +532,14 @@ class FileRangeReaderTest {
                 assertThat(buf.remaining()).isEqualTo(10);
 
                 // Channel should be open after the read
-                assertThat(getChannel(r)).isNotNull();
-                assertThat(getChannel(r).isOpen()).isTrue();
+                assertThat(r.channel()).isNotNull();
+                assertThat(r.channel().isOpen()).isTrue();
 
                 // Wait for idle timeout to close the channel
                 await().atMost(Duration.ofSeconds(2))
                         .pollInterval(Duration.ofMillis(50))
                         .untilAsserted(() -> {
-                            FileChannel ch = getChannel(r);
+                            FileChannel ch = r.channel();
                             assertThat(ch).isNull();
                         });
             }
@@ -560,15 +557,15 @@ class FileRangeReaderTest {
                 // Wait for idle close
                 await().atMost(Duration.ofSeconds(2))
                         .pollInterval(Duration.ofMillis(50))
-                        .untilAsserted(() -> assertThat(getChannel(r)).isNull());
+                        .untilAsserted(() -> assertThat(r.channel()).isNull());
 
                 // Read again - should transparently reopen
                 String secondRead = readAsString(r, 0, textContent.length());
                 assertThat(secondRead).isEqualTo(textContent);
 
                 // Channel should be open again
-                assertThat(getChannel(r)).isNotNull();
-                assertThat(getChannel(r).isOpen()).isTrue();
+                assertThat(r.channel()).isNotNull();
+                assertThat(r.channel().isOpen()).isTrue();
             }
         }
 
@@ -582,7 +579,7 @@ class FileRangeReaderTest {
                 assertThat(firstRead).isEqualTo(textContent.substring(0, 10));
 
                 // Simulate stale channel by closing it directly
-                FileChannel ch = getChannel(r);
+                FileChannel ch = r.channel();
                 assertThat(ch).isNotNull();
                 ch.close();
 
@@ -600,10 +597,8 @@ class FileRangeReaderTest {
                 // First read opens the channel
                 readAsString(r, 0, 10);
 
-                // Close and null the channel via reflection (simulating idleClose)
-                FileChannel ch = getChannel(r);
-                setChannel(r, null);
-                ch.close();
+                // Close and null the channel (simulating idleClose)
+                r.closeChannel();
 
                 // Next read should reopen
                 String result = readAsString(r, 0, textContent.length());
@@ -686,7 +681,7 @@ class FileRangeReaderTest {
                 }
             };
             try (r) {
-                assertThrows(io.tileverse.storage.StorageException.class, () -> r.readRange(0, 10));
+                assertThatThrownBy(() -> r.readRange(0, 10)).isInstanceOf(io.tileverse.storage.StorageException.class);
                 // Should NOT have retried -- only one openChannel call
                 assertThat(callCount.get()).isEqualTo(1);
             }
@@ -694,7 +689,7 @@ class FileRangeReaderTest {
 
         @Test
         void permanentCloseSkipsRetryOnRecoverableError() throws Exception {
-            // after close(), readRange surfaces the closed-state error eagerly via size() which throws
+            // after close(), readRange raises the closed-state error eagerly via size() which throws
             // IllegalStateException before reaching readRangeNoFlip.
             try (FileRangeReader r = new FileRangeReader(testFile, Duration.ZERO)) {
 
@@ -702,8 +697,9 @@ class FileRangeReaderTest {
                 // permanently close
                 r.close();
 
-                IllegalStateException ex = assertThrows(IllegalStateException.class, () -> r.readRange(0, 10));
-                assertThat(ex.getMessage()).contains("closed");
+                assertThatThrownBy(() -> r.readRange(0, 10))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("closed");
             }
         }
 
@@ -718,7 +714,7 @@ class FileRangeReaderTest {
                 // wait for idle close
                 await().atMost(Duration.ofSeconds(2))
                         .pollInterval(Duration.ofMillis(50))
-                        .untilAsserted(() -> assertThat(getChannel(r)).isNull());
+                        .untilAsserted(() -> assertThat(r.channel()).isNull());
 
                 // size() should still work even with channel closed
                 assertThat(r.size()).hasValue(textContent.length());
@@ -728,7 +724,7 @@ class FileRangeReaderTest {
         @Test
         void sizeThrowsAfterPermanentClose() {
             reader.close();
-            assertThrows(IllegalStateException.class, () -> reader.size());
+            assertThatThrownBy(() -> reader.size()).isInstanceOf(IllegalStateException.class);
         }
 
         @Test
@@ -745,8 +741,9 @@ class FileRangeReaderTest {
             reader.readRange(0, 10);
             reader.close();
             // After close, size() throws IllegalStateException eagerly from the readRange entry path.
-            IllegalStateException ex = assertThrows(IllegalStateException.class, () -> reader.readRange(0, 10));
-            assertThat(ex.getMessage()).contains("closed");
+            assertThatThrownBy(() -> reader.readRange(0, 10))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("closed");
         }
 
         @Test
@@ -770,8 +767,9 @@ class FileRangeReaderTest {
             assertThatNoException().isThrownBy(() -> new FileRangeReader(testFile, Duration.ofSeconds(30)));
             assertThatNoException().isThrownBy(() -> new FileRangeReader(testFile, Duration.ZERO));
             Duration negativeDuration = Duration.ofSeconds(-1);
-            assertThrows(IllegalArgumentException.class, () -> new FileRangeReader(testFile, negativeDuration));
-            assertThrows(NullPointerException.class, () -> new FileRangeReader(testFile, null));
+            assertThatThrownBy(() -> new FileRangeReader(testFile, negativeDuration))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> new FileRangeReader(testFile, null)).isInstanceOf(NullPointerException.class);
         }
 
         @Test
@@ -780,12 +778,12 @@ class FileRangeReaderTest {
 
                 // read to open channel
                 r.readRange(0, 10);
-                FileChannel ch = getChannel(r);
+                FileChannel ch = r.channel();
                 assertThat(ch).isNotNull();
 
                 // wait a bit, channel should remain open
                 Thread.sleep(300);
-                assertThat(getChannel(r)).isSameAs(ch);
+                assertThat(r.channel()).isSameAs(ch);
                 assertThat(ch.isOpen()).isTrue();
             }
         }
@@ -844,18 +842,6 @@ class FileRangeReaderTest {
             byte[] bytes = new byte[buf.remaining()];
             buf.get(bytes);
             return new String(bytes, StandardCharsets.UTF_8);
-        }
-
-        private FileChannel getChannel(FileRangeReader r) throws Exception {
-            Field f = FileRangeReader.class.getDeclaredField("channel");
-            f.setAccessible(true);
-            return (FileChannel) f.get(r);
-        }
-
-        private void setChannel(FileRangeReader r, FileChannel ch) throws Exception {
-            Field f = FileRangeReader.class.getDeclaredField("channel");
-            f.setAccessible(true);
-            f.set(r, ch);
         }
 
         /**

@@ -23,6 +23,8 @@ import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
@@ -71,6 +73,9 @@ import org.slf4j.LoggerFactory;
  * unrelated to cache-key decisions; they just shape how aggressively a heavily-shared client recycles idle connections.
  */
 @NullMarked
+@SuppressWarnings("java:S6548") // Process-wide JDK HttpClient pool keyed by stable connection knobs is intended:
+// HttpClient.Builder is immutable, the underlying connection pool is JVM-global, and per-Storage caches would just
+// duplicate the same TLS/proxy state across instances.
 final class HttpClientCache {
 
     private static final Logger log = LoggerFactory.getLogger(HttpClientCache.class);
@@ -87,7 +92,7 @@ final class HttpClientCache {
     final class Lease implements AutoCloseable {
         private final Key key;
         private final Entry entry;
-        private boolean closed;
+        private final AtomicBoolean closed = new AtomicBoolean();
 
         Lease(Key key, Entry entry) {
             this.key = key;
@@ -99,20 +104,33 @@ final class HttpClientCache {
         }
 
         @Override
-        public synchronized void close() {
-            if (closed) return;
-            closed = true;
-            release(key);
+        public void close() {
+            if (closed.compareAndSet(false, true)) {
+                release(key);
+            }
+        }
+
+        private void release(Key key) {
+            entries.compute(key, (k, e) -> {
+                if (e == null) {
+                    return null;
+                }
+                int refCount = e.refCount.decrementAndGet();
+                if (refCount <= 0) {
+                    e.shutdown();
+                    return null;
+                }
+                return e;
+            });
         }
     }
 
     private static final class Entry {
         final HttpClient client;
-        int refCount;
+        final AtomicInteger refCount = new AtomicInteger();
 
         Entry(HttpClient client) {
             this.client = client;
-            this.refCount = 0;
         }
 
         void shutdown() {
@@ -144,27 +162,15 @@ final class HttpClientCache {
     Lease acquire(Key key) {
         Entry entry = entries.compute(key, (k, existing) -> {
             Entry e = existing == null ? new Entry(build(k)) : existing;
-            e.refCount++;
+            e.refCount.incrementAndGet();
             return e;
         });
         return new Lease(key, entry);
     }
 
-    private synchronized void release(Key key) {
-        entries.compute(key, (k, e) -> {
-            if (e == null) return null;
-            e.refCount--;
-            if (e.refCount <= 0) {
-                e.shutdown();
-                return null;
-            }
-            return e;
-        });
-    }
-
     private static HttpClient build(Key key) {
-        HttpClient.Builder builder =
-                HttpClient.newBuilder().connectTimeout(Duration.ofMillis(key.connectTimeoutMillis()));
+        Duration timeout = Duration.ofMillis(key.connectTimeoutMillis());
+        HttpClient.Builder builder = HttpClient.newBuilder().connectTimeout(timeout);
         if (key.trustAllCertificates()) {
             builder.sslContext(trustAllSslContext());
         }
@@ -180,6 +186,8 @@ final class HttpClientCache {
      * applies endpoint identification ({@code SSLParameters.endpointIdentificationAlgorithm = "HTTPS"}) regardless, so
      * a self-signed cert whose subject doesn't match the request host still fails.
      */
+    @SuppressWarnings(
+            "java:S4830") // trust-all is the documented behaviour gated by storage.http.trust-all-certificates.
     private static SSLContext trustAllSslContext() {
         TrustManager trustAll = new X509TrustManager() {
             @Override

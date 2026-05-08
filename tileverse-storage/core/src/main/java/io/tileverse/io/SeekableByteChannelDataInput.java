@@ -166,13 +166,11 @@ public final class SeekableByteChannelDataInput extends ReadableByteChannelDataI
     @Override
     public String toString() {
         try {
-            return String.format(
-                    "SeekableByteChannelDataInput[channel=%s, position=%d, size=%d, bufferSize=%d, bufferRemaining=%d]",
-                    channel, channel().position(), channel().size(), buffer.capacity(), buffer.remaining());
+            return "SeekableByteChannelDataInput[channel=%s, position=%d, size=%d, bufferSize=%d, bufferRemaining=%d]"
+                    .formatted(channel, channel().position(), channel().size(), buffer.capacity(), buffer.remaining());
         } catch (IOException e) {
-            return String.format(
-                    "SeekableByteChannelDataInput[channel=%s, position=unknown, size=unknown, bufferSize=%d, bufferRemaining=%d]",
-                    channel, buffer.capacity(), buffer.remaining());
+            return "SeekableByteChannelDataInput[channel=%s, position=unknown, size=unknown, bufferSize=%d, bufferRemaining=%d]"
+                    .formatted(channel, buffer.capacity(), buffer.remaining());
         }
     }
 }

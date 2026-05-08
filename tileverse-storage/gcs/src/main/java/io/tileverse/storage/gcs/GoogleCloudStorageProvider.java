@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import lombok.NonNull;
 
 /**
  * {@link StorageProvider} implementation for Google Cloud Storage.
@@ -88,13 +89,7 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
      * @param client a pre-configured GCS Storage client; not closed by the returned {@code Storage}
      * @return a borrowed-client {@code GoogleCloudStorage}
      */
-    public static Storage open(URI uri, com.google.cloud.storage.Storage client) {
-        if (uri == null) {
-            throw new IllegalArgumentException("uri");
-        }
-        if (client == null) {
-            throw new IllegalArgumentException("client");
-        }
+    public static Storage open(@NonNull URI uri, @NonNull com.google.cloud.storage.Storage client) {
         SdkStorageLocation location = SdkStorageLocation.parse(uri);
         return new GoogleCloudStorage(uri, location, new BorrowedGcsHandle(client));
     }
@@ -244,9 +239,6 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
     @Override
     public Storage createStorage(StorageConfig config) {
         URI uri = config.baseUri();
-        if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.baseUri() is required for GoogleCloudStorageStorage");
-        }
         SdkStorageLocation location = SdkStorageLocation.parse(uri);
         SdkStorageCache.Lease lease = clientCache.acquire(keyFor(config));
         return new GoogleCloudStorage(uri, location, lease);
@@ -269,9 +261,6 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
      */
     static SdkStorageCache.Key keyFor(StorageConfig config) {
         URI uri = config.baseUri();
-        if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.baseUri() is required for GoogleCloudStorageStorage");
-        }
         Optional<String> projectId = config.getParameter(GCS_PROJECT_ID);
         Optional<String> hostOverride = config.getParameter(GCS_HOST).filter(s -> !s.isBlank());
         if (hostOverride.isEmpty()) {

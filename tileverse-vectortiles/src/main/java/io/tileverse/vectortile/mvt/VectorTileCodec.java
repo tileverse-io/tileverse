@@ -123,7 +123,7 @@ public class VectorTileCodec {
      *     {@link InsufficientBufferException#getSerializedSize() required size} for proper buffer allocation
      * @throws IOException if encoding fails for other reasons
      */
-    public void encode(VectorTile tile, ByteBuffer buffer) throws InsufficientBufferException, IOException {
+    public void encode(VectorTile tile, ByteBuffer buffer) throws IOException {
         VectorTileProto.Tile proto = getProto(tile);
         int serializedSize = proto.getSerializedSize();
 

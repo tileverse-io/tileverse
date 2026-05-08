@@ -70,7 +70,9 @@ class HttpStorageIT extends StorageTCK {
 
     @AfterAll
     static void stopHttpd() throws IOException {
-        if (httpd != null) httpd.stop();
+        if (httpd != null) {
+            httpd.stop();
+        }
         if (docroot != null) {
             try (Stream<Path> s = Files.walk(docroot)) {
                 s.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
@@ -112,7 +114,7 @@ class HttpStorageIT extends StorageTCK {
 
     @Test
     void presignThrowsUnsupported() {
-        assertThatThrownBy(() -> storage.presignGet("k", Duration.ofMinutes(1)))
-                .isInstanceOf(UnsupportedCapabilityException.class);
+        Duration duration = Duration.ofMinutes(1);
+        assertThatThrownBy(() -> storage.presignGet("k", duration)).isInstanceOf(UnsupportedCapabilityException.class);
     }
 }

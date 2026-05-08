@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
@@ -43,48 +44,13 @@ import org.locationtech.jts.io.ParseException;
 import org.locationtech.jts.io.WKTReader;
 import org.locationtech.jts.util.Stopwatch;
 
+@Slf4j
 class VectorTileCodecTest {
 
     private GeometryFactory gf = new GeometryFactory();
     private VectorTileCodec codec = new VectorTileCodec();
 
     private int extent = 4096;
-    //
-    //    @Test
-    //    void testAutoScaleOnOff() throws IOException {
-    //        // Use a point clearly within 0-255 range to test mixed modes
-    //        Geometry geometry = geom("POINT(128 96)");
-    //
-    //        // applies to both the encoder and decoder in testFeatureRoundTrip
-    //        autoScale = false;
-    //        extent = 512;
-    //        testFeatureRoundTrip(geometry, geometry, Map.of());
-    //
-    //        // encoder preserves coordinates (128,96 stored directly)
-    //        autoScale = false;
-    //        byte[] encoded = encode(geometry, Map.of(), "layer");
-    //        // decoder scales down to 0..255: (128,96) * (256/512) = (64, 48)
-    //        Tile tile = decode(encoded, true); // autoScale=true for decoder
-    //        Feature decoded =
-    //                tile.getLayer("layer").orElseThrow().getFeatures().findFirst().orElseThrow();
-    //        Geometry expected = geom("POINT(64 48)");
-    //        Geometry actual = decoded.getGeometry();
-    //        assertEquals(expected.toString(), actual.toString());
-    //
-    //        // encoder scales: input (128,96) * (512/256) = (256,192) stored
-    //        autoScale = true;
-    //        encoded = encode(geometry, Map.of(), "layer");
-    //        // decoder preserves coordinates: (256,192) * 1.0 = (256,192)
-    //        tile = decode(encoded, false); // autoScale=false for decoder
-    //        decoded = tile.getLayer("layer")
-    //                .orElseThrow()
-    //                .getFeatures()
-    //                .findFirst()
-    //                .orElseThrow(); // no coordinate transform = extent space
-    //        expected = geom("POINT(256 192)");
-    //        actual = decoded.getGeometry();
-    //        assertEquals(expected.toString(), actual.toString());
-    //    }
 
     @Test
     void testCustomGeometryFactory() throws IOException {
@@ -103,8 +69,8 @@ class VectorTileCodecTest {
         byte[] encoded = codec.encode(tile);
 
         // Test 1: Default codec uses PackedCoordinateSequenceFactory
-        VectorTileCodec codec = new VectorTileCodec();
-        VectorTile decoded = codec.decode(encoded);
+        VectorTileCodec defaultCodec = new VectorTileCodec();
+        VectorTile decoded = defaultCodec.decode(encoded);
 
         Feature defaultPointFeature =
                 decoded.getFeatures("test_layer").findFirst().orElseThrow();
@@ -245,10 +211,7 @@ class VectorTileCodecTest {
 
         Geometry parkGeometry = park.getGeometry();
 
-        assertCoordEquals(
-                new Coordinate(3898.0, 1731.0),
-                park.getLayer().getExtent(),
-                parkGeometry.getCoordinates()[0]);
+        assertCoordEquals(new Coordinate(3898.0, 1731.0), parkGeometry.getCoordinates()[0]);
 
         Feature building = decoded.getFeatures("building").findFirst().orElseThrow();
         Geometry buildingGeometry = building.getGeometry();
@@ -261,8 +224,7 @@ class VectorTileCodecTest {
     // baseline old decoder:            memory diff: 449 MB, time: 23215 ms
     // VectorTilereader					memory diff: 617 MB, time:  9077 ms
     @Test
-    void testBigTile() throws IOException, InterruptedException {
-        // System.out.println("serialized size: " + decodeResource("/bigtile.vector.pbf").getSerializedSize());
+    void testBigTile() throws IOException {
         testBigTile(10);
     }
 
@@ -272,17 +234,13 @@ class VectorTileCodecTest {
         VectorTile tile = decodeClasspathResource("/bigtile.vector.pbf");
         Stopwatch sw = new Stopwatch();
         for (int i = 0; i < iterations; i++) {
-            assertThat(tile.getFeatures().peek(f -> {
-                        // f.getAttributes();
-                        f.getGeometry();
-                    }))
-                    .hasSize(100_000);
+            assertThat(tile.getFeatures().peek(Feature::getGeometry)).hasSize(100_000);
         }
         sw.stop();
         long memoryEnd = Runtime.getRuntime().totalMemory();
         long memoryDiff = memoryEnd - memoryStart;
-        System.out.println("Start memory: %d, end memory: %d".formatted(memoryStart, memoryEnd));
-        System.out.println("memory diff: " + memoryDiff / (1024 * 1024) + " MB, time: " + sw.getTime() + " ms");
+        log.debug("Start memory: {}, end memory: {}", memoryStart, memoryEnd);
+        log.debug("memory diff: {} MB, time: {} ms", memoryDiff / (1024 * 1024), sw.getTime());
     }
 
     @Test
@@ -348,7 +306,7 @@ class VectorTileCodecTest {
         }
     }
 
-    private void assertCoordEquals(Coordinate expected, int extent, Coordinate actual) {
+    private void assertCoordEquals(Coordinate expected, Coordinate actual) {
         assertEquals(expected.x, actual.x, 1e-7);
         assertEquals(expected.y, actual.y, 1e-7);
     }
@@ -401,7 +359,7 @@ class VectorTileCodecTest {
         VectorTile decoded = decode(encoded);
 
         if (expectedGeometry == null) {
-            assertThat(decoded.getLayers().isEmpty());
+            assertThat(decoded.getLayers()).isEmpty();
             return null;
         }
         assertEquals(Set.of(layerName), decoded.getLayerNames());
@@ -433,16 +391,12 @@ class VectorTileCodecTest {
                 .build()
                 .build()
                 .build();
-        // Feature f =
-        //        tile.getLayer(layerName).orElseThrow().getFeatures().findFirst().orElseThrow();
-        // System.err.printf("input:%n\t%s%nencoded:%n%s%n", geometry, f);
         return codec.encode(tile);
     }
 
     public static void main(String... args) throws IOException {
         int iterations = 1000;
-        System.out.println(
-                "Running %s.testBigTile(%d)".formatted(VectorTileCodecTest.class.getSimpleName(), iterations));
+        log.debug("Running {}.testBigTile({})", VectorTileCodecTest.class.getSimpleName(), iterations);
         new VectorTileCodecTest().testBigTile(iterations);
     }
 }

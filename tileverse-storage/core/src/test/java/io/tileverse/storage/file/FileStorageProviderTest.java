@@ -32,7 +32,7 @@ class FileStorageProviderTest {
 
     @Test
     void acceptsExistingDirectory(@TempDir Path tmp) throws IOException {
-        StorageConfig config = new StorageConfig().baseUri(tmp.toUri());
+        StorageConfig config = new StorageConfig(tmp.toUri());
         try (Storage storage = provider.createStorage(config)) {
             assertThat(storage.baseUri()).isEqualTo(tmp.toUri());
         }
@@ -41,7 +41,7 @@ class FileStorageProviderTest {
     @Test
     void rejectsRegularFileUri(@TempDir Path tmp) throws IOException {
         Path file = Files.createFile(tmp.resolve("data.pmtiles"));
-        StorageConfig config = new StorageConfig().baseUri(file.toUri());
+        StorageConfig config = new StorageConfig(file.toUri());
 
         assertThatThrownBy(() -> provider.createStorage(config))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -52,7 +52,7 @@ class FileStorageProviderTest {
     @Test
     void rejectsMissingPath(@TempDir Path tmp) {
         Path missing = tmp.resolve("does-not-exist");
-        StorageConfig config = new StorageConfig().baseUri(missing.toUri());
+        StorageConfig config = new StorageConfig(missing.toUri());
 
         assertThatThrownBy(() -> provider.createStorage(config))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -69,7 +69,7 @@ class FileStorageProviderTest {
         // Specific regression: a non-existent file:///.../missing.pmtiles previously created a
         // directory at that path. Confirm the strict contract leaves the filesystem untouched.
         Path missingLeaf = tmp.resolve("world.pmtiles");
-        StorageConfig config = new StorageConfig().baseUri(missingLeaf.toUri());
+        StorageConfig config = new StorageConfig(missingLeaf.toUri());
 
         assertThatThrownBy(() -> provider.createStorage(config)).isInstanceOf(IllegalArgumentException.class);
 

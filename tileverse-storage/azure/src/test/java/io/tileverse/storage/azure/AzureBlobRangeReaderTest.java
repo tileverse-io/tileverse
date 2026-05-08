@@ -15,9 +15,9 @@
  */
 package io.tileverse.storage.azure;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -186,12 +186,12 @@ class AzureBlobRangeReaderTest {
 
     @Test
     void testReadWithNegativeOffset() {
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(-1, 10));
+        assertThatThrownBy(() -> reader.readRange(-1, 10)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void testReadWithNegativeLength() {
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(0, -1));
+        assertThatThrownBy(() -> reader.readRange(0, -1)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -208,7 +208,8 @@ class AzureBlobRangeReaderTest {
         reset(blobClient);
         when(blobClient.exists()).thenReturn(false);
 
-        assertThrows(io.tileverse.storage.NotFoundException.class, () -> new AzureBlobRangeReader(blobClient));
+        assertThatThrownBy(() -> new AzureBlobRangeReader(blobClient))
+                .isInstanceOf(io.tileverse.storage.NotFoundException.class);
     }
 
     @Test
@@ -217,6 +218,7 @@ class AzureBlobRangeReaderTest {
         reset(blobClient);
         when(blobClient.exists()).thenThrow(new RuntimeException("Failed to check blob existence"));
 
-        assertThrows(io.tileverse.storage.StorageException.class, () -> new AzureBlobRangeReader(blobClient));
+        assertThatThrownBy(() -> new AzureBlobRangeReader(blobClient))
+                .isInstanceOf(io.tileverse.storage.StorageException.class);
     }
 }

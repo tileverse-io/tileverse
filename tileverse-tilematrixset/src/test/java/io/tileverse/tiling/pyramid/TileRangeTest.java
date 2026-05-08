@@ -16,10 +16,11 @@
 package io.tileverse.tiling.pyramid;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.tileverse.tiling.common.CornerOfOrigin;
@@ -58,9 +59,9 @@ class TileRangeTest {
 
     @Test
     void testInvalidRange() {
-        // Test invalid ranges where lowerLeft > upperRight
-        assertThrows(IllegalArgumentException.class, () -> TileRange.of(30, 20, 10, 40, 5));
-        assertThrows(IllegalArgumentException.class, () -> TileRange.of(10, 40, 30, 20, 5));
+        // Reject ranges where lowerLeft > upperRight on either axis.
+        assertThatThrownBy(() -> TileRange.of(30, 20, 10, 40, 5)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> TileRange.of(10, 40, 30, 20, 5)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -149,7 +150,7 @@ class TileRangeTest {
         assertEquals(range1, range2);
         assertNotEquals(range1, range3);
         assertNotEquals(range1, range4);
-        assertNotEquals(range1, null);
+        assertNotEquals(null, range1);
 
         // Test hash code consistency
         assertEquals(range1.hashCode(), range2.hashCode());
@@ -211,7 +212,7 @@ class TileRangeTest {
         TileRange range = TileRange.of(0, 0, 3, 3, 2, CornerOfOrigin.BOTTOM_LEFT);
         TileRange sameOrigin = range.withCornerOfOrigin(CornerOfOrigin.BOTTOM_LEFT);
 
-        assertTrue(range == sameOrigin); // Same instance
+        assertSame(range, sameOrigin);
     }
 
     @Test
@@ -423,9 +424,8 @@ class TileRangeTest {
     void testNextPrevEdgeCases() {
         TileRange range = TileRange.of(10, 20, 11, 21, 5, CornerOfOrigin.BOTTOM_LEFT);
 
-        // Test with null
-        assertThrows(NullPointerException.class, () -> range.next(null));
-        assertThrows(NullPointerException.class, () -> range.prev(null));
+        assertThatThrownBy(() -> range.next(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> range.prev(null)).isInstanceOf(NullPointerException.class);
 
         // Test with wrong zoom level
         TileIndex wrongZoom = TileIndex.xyz(10, 20, 6);
@@ -472,8 +472,7 @@ class TileRangeTest {
         assertEquals(range5.maxx(), identicalIntersection.maxx());
         assertEquals(range5.maxy(), identicalIntersection.maxy());
 
-        // Test null intersection
-        assertThrows(NullPointerException.class, () -> range5.intersection(null));
+        assertThatThrownBy(() -> range5.intersection(null)).isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -481,9 +480,7 @@ class TileRangeTest {
         TileRange range1 = TileRange.of(0, 0, 10, 10, 5, CornerOfOrigin.TOP_LEFT);
         TileRange range2 = TileRange.of(5, 5, 15, 15, 6, CornerOfOrigin.TOP_LEFT); // Different zoom level
 
-        assertThrows(IllegalArgumentException.class, () -> {
-            range1.intersection(range2);
-        });
+        assertThatThrownBy(() -> range1.intersection(range2)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

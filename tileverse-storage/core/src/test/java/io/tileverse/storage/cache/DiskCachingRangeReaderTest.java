@@ -18,11 +18,11 @@ package io.tileverse.storage.cache;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.tileverse.storage.RangeReader;
@@ -548,41 +548,25 @@ class DiskCachingRangeReaderTest {
         try (DiskCachingRangeReader cachingReader = DiskCachingRangeReader.builder(baseReader)
                 .cacheDirectory(cacheDir)
                 .build()) {
-            // Test with null buffer
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> {
-                        cachingReader.readRange(0, 100, null);
-                    },
-                    "Should throw exception for null buffer");
+            assertThatThrownBy(() -> cachingReader.readRange(0, 100, null))
+                    .as("null buffer")
+                    .isInstanceOf(IllegalArgumentException.class);
 
-            // Test with read-only buffer
             ByteBuffer readOnlyBuffer = ByteBuffer.allocate(100).asReadOnlyBuffer();
-            assertThrows(
-                    java.nio.ReadOnlyBufferException.class,
-                    () -> {
-                        cachingReader.readRange(0, 100, readOnlyBuffer);
-                    },
-                    "Should throw exception for read-only buffer");
+            assertThatThrownBy(() -> cachingReader.readRange(0, 100, readOnlyBuffer))
+                    .as("read-only buffer")
+                    .isInstanceOf(java.nio.ReadOnlyBufferException.class);
 
-            // Test with insufficient buffer capacity
             ByteBuffer smallBuffer = ByteBuffer.allocate(50);
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> {
-                        cachingReader.readRange(0, 100, smallBuffer);
-                    },
-                    "Should throw exception for insufficient buffer capacity");
+            assertThatThrownBy(() -> cachingReader.readRange(0, 100, smallBuffer))
+                    .as("buffer capacity smaller than requested length")
+                    .isInstanceOf(IllegalArgumentException.class);
 
-            // Test with partially filled buffer
             ByteBuffer partialBuffer = ByteBuffer.allocate(150);
-            partialBuffer.put(new byte[100]); // Fill first 100 bytes
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> {
-                        cachingReader.readRange(0, 100, partialBuffer);
-                    },
-                    "Should throw exception for insufficient remaining capacity");
+            partialBuffer.put(new byte[100]);
+            assertThatThrownBy(() -> cachingReader.readRange(0, 100, partialBuffer))
+                    .as("buffer remaining capacity smaller than requested length")
+                    .isInstanceOf(IllegalArgumentException.class);
         }
     }
 
@@ -750,7 +734,7 @@ class DiskCachingRangeReaderTest {
             // Both ranges should have been read from delegate (total should be at least 2)
             assertTrue(
                     delegateReadCount.get() >= 2,
-                    String.format("Should have read from delegate at least twice, got %d", delegateReadCount.get()));
+                    "Should have read from delegate at least twice, got %d".formatted(delegateReadCount.get()));
 
             // Verify that the cache files were recreated
             assertTrue(countCacheFiles(cacheDir) > 0, "Cache files should be recreated");
@@ -849,9 +833,8 @@ class DiskCachingRangeReaderTest {
             // The other two should have come from cache
             assertTrue(
                     delegateReadCount.get() >= 4,
-                    String.format(
-                            "Should have read from delegate at least one more time, got %d total",
-                            delegateReadCount.get()));
+                    "Should have read from delegate at least one more time, got %d total"
+                            .formatted(delegateReadCount.get()));
 
             // Verify all ranges were read correctly
             assertEquals(length1, data1Again.remaining());
@@ -930,7 +913,7 @@ class DiskCachingRangeReaderTest {
                 long fileCount = countCacheFiles(cacheDir);
                 // We expect at least 3 files (at least 1 that wasn't deleted + the new range + at least 1
                 // reloaded)
-                assertTrue(fileCount >= 3, String.format("Should have at least 3 cache files, found %d", fileCount));
+                assertTrue(fileCount >= 3, "Should have at least 3 cache files, found %d".formatted(fileCount));
             });
 
             // Calculate the actual size on disk
@@ -955,9 +938,8 @@ class DiskCachingRangeReaderTest {
                 // We use a tolerance value since we've had timing issues
                 assertTrue(
                         Math.abs(actualCacheSize - reportedSize) <= 500,
-                        String.format(
-                                "Reported cache size (%d) should be close to actual files on disk (%d)",
-                                reportedSize, actualCacheSize));
+                        "Reported cache size (%d) should be close to actual files on disk (%d)"
+                                .formatted(reportedSize, actualCacheSize));
             });
 
             // Now read one more range, which should trigger eviction
@@ -1026,32 +1008,22 @@ class DiskCachingRangeReaderTest {
 
     @Test
     void testBuilderValidation() {
-        // Test null delegate
-        assertThrows(
-                NullPointerException.class,
-                () -> {
-                    DiskCachingRangeReader.builder(null);
-                },
-                "Should throw exception for null delegate");
+        assertThatThrownBy(() -> DiskCachingRangeReader.builder(null))
+                .as("null delegate")
+                .isInstanceOf(NullPointerException.class);
 
-        // Test zero max cache size
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> {
-                    DiskCachingRangeReader.builder(RangeReaderTestSupport.fileReader(testFile))
-                            .maxCacheSizeBytes(0)
-                            .build();
-                },
-                "Should throw exception for zero max cache size");
+        // The setter rejects non-positive values directly.
+        DiskCachingRangeReader.Builder zeroBuilder =
+                DiskCachingRangeReader.builder(RangeReaderTestSupport.fileReader(testFile));
+        assertThatThrownBy(() -> zeroBuilder.maxCacheSizeBytes(0))
+                .as("zero max cache size")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        // Test negative max cache size
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> {
-                    DiskCachingRangeReader.builder(RangeReaderTestSupport.fileReader(testFile))
-                            .maxCacheSizeBytes(-1);
-                },
-                "Should throw exception for negative max cache size");
+        DiskCachingRangeReader.Builder negativeBuilder =
+                DiskCachingRangeReader.builder(RangeReaderTestSupport.fileReader(testFile));
+        assertThatThrownBy(() -> negativeBuilder.maxCacheSizeBytes(-1))
+                .as("negative max cache size")
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -1071,25 +1043,17 @@ class DiskCachingRangeReaderTest {
     @Test
     void testConstructorMaxCacheSizeBytesValidation() throws IOException {
         try (RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile)) {
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> {
-                        DiskCachingRangeReader.builder(baseReader)
-                                .cacheDirectory(cacheDir)
-                                .maxCacheSizeBytes(0)
-                                .build();
-                    },
-                    "Constructor should throw exception for zero max cache size");
+            DiskCachingRangeReader.Builder zeroBuilder =
+                    DiskCachingRangeReader.builder(baseReader).cacheDirectory(cacheDir);
+            assertThatThrownBy(() -> zeroBuilder.maxCacheSizeBytes(0))
+                    .as("zero max cache size via builder chain")
+                    .isInstanceOf(IllegalArgumentException.class);
 
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> {
-                        DiskCachingRangeReader.builder(baseReader)
-                                .cacheDirectory(cacheDir)
-                                .maxCacheSizeBytes(-1)
-                                .build();
-                    },
-                    "Constructor should throw exception for negative max cache size");
+            DiskCachingRangeReader.Builder negativeBuilder =
+                    DiskCachingRangeReader.builder(baseReader).cacheDirectory(cacheDir);
+            assertThatThrownBy(() -> negativeBuilder.maxCacheSizeBytes(-1))
+                    .as("negative max cache size via builder chain")
+                    .isInstanceOf(IllegalArgumentException.class);
         }
     }
 

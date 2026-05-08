@@ -33,7 +33,7 @@ public record BoundingBox2D(double minX, double minY, double maxX, double maxY) 
     public BoundingBox2D {
         if (minX > maxX || minY > maxY) {
             throw new IllegalArgumentException(
-                    String.format("Invalid extent: min(%f,%f) must be <= max(%f,%f)", minX, minY, maxX, maxY));
+                    "Invalid extent: min(%f,%f) must be <= max(%f,%f)".formatted(minX, minY, maxX, maxY));
         }
     }
 
@@ -223,12 +223,11 @@ public record BoundingBox2D(double minX, double minY, double maxX, double maxY) 
 
     @Override
     public String toString() {
-        return String.format("BoundingBox2D(%f, %f, %f, %f)", minX, minY, maxX, maxY);
+        return "BoundingBox2D(%f, %f, %f, %f)".formatted(minX, minY, maxX, maxY);
     }
 
     public String toWKT() {
-        return String.format(
-                "POLYGON((%f %f, %f %f, %f %f, %f %f, %f %f))",
-                minX, minY, minX, maxY, maxX, maxY, maxX, minY, minX, minY);
+        return "POLYGON((%f %f, %f %f, %f %f, %f %f, %f %f))"
+                .formatted(minX, minY, minX, maxY, maxX, maxY, maxX, minY, minX, minY);
     }
 }

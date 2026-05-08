@@ -28,8 +28,8 @@
  *       capabilities}.
  *   <li>{@link io.tileverse.storage.RangeReader RangeReader} - a thread-safe {@code readRange(offset, length)}
  *       abstraction obtained from {@link io.tileverse.storage.Storage#openRangeReader(String) Storage.openRangeReader}.
- *       Suited to single-object byte-range readers (PMTiles, COG, single-file Parquet) where the {@code Storage}
- *       surface is more than the caller needs.
+ *       Suited to single-object byte-range readers (PMTiles, COG, single-file Parquet) where the {@code Storage} API is
+ *       more than the caller needs.
  * </ul>
  *
  * <h2>Opening a Storage</h2>
@@ -48,7 +48,7 @@
  * }
  * }</pre>
  *
- * <h2>Optional surface</h2>
+ * <h2>Optional capabilities</h2>
  *
  * Backends differ. Inspect {@link io.tileverse.storage.Storage#capabilities() storage.capabilities()} before invoking
  * optional methods, or use the {@code requireXxx} helpers to fail fast with

@@ -235,7 +235,14 @@ import software.amazon.awssdk.regions.Region;
  * @see <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/RESTAPI.html">AWS S3 REST API</a>
  * @see <a href="https://min.io/docs/minio/linux/developers/minio-drivers.html">MinIO S3 Compatibility</a>
  */
-class S3CompatibleUrlParser {
+final class S3CompatibleUrlParser {
+
+    private S3CompatibleUrlParser() {
+        // utility class
+    }
+
+    private static final String AMAZONAWS_DOMAIN = "amazonaws.com";
+    private static final String AMAZONAWS_DOMAIN_SUFFIX = "." + AMAZONAWS_DOMAIN;
 
     public static S3Reference parseS3Url(String uri) {
         try {
@@ -279,7 +286,7 @@ class S3CompatibleUrlParser {
         if (isAwsVirtualHostedStyle(host)) {
             // AWS virtual hosted-style - use null endpoint to let AWS SDK handle it properly
             String bucket = host.substring(0, host.indexOf(".s3"));
-            String key = path != null && path.startsWith("/") ? path.substring(1) : (path != null ? path : "");
+            String key = pathToKey(path);
 
             // Extract region from URL format, hostname, or bucket name
             String region = extractAwsRegion(host);
@@ -361,20 +368,29 @@ class S3CompatibleUrlParser {
         }
         URI endpoint = URI.create(sb.toString());
 
-        String key = path != null && path.startsWith("/") ? path.substring(1) : (path != null ? path : "");
+        String key = pathToKey(path);
 
         return new S3Reference(endpoint, bucket, key, region);
     }
 
+    /** Strips a leading slash from a URL path so it can be used as an S3 key, treating null/blank as the empty key. */
+    private static String pathToKey(String path) {
+        if (path == null) {
+            return "";
+        }
+        return path.startsWith("/") ? path.substring(1) : path;
+    }
+
     private static boolean isAwsVirtualHostedStyle(String host) {
         return host != null
-                && ((host.contains(".s3.") && host.contains("amazonaws.com"))
-                        || (host.contains(".s3-") && host.contains("amazonaws.com")));
+                && ((host.contains(".s3.") && host.contains(AMAZONAWS_DOMAIN))
+                        || (host.contains(".s3-") && host.contains(AMAZONAWS_DOMAIN)));
     }
 
     private static boolean isAwsPathStyle(String host) {
         return host != null
-                && (host.equals("s3.amazonaws.com") || (host.startsWith("s3.") && host.endsWith(".amazonaws.com")));
+                && (host.equals("s3." + AMAZONAWS_DOMAIN)
+                        || (host.startsWith("s3.") && host.endsWith(AMAZONAWS_DOMAIN_SUFFIX)));
     }
 
     private static boolean isGenericVirtualHostedStyle(String host) {
@@ -382,7 +398,7 @@ class S3CompatibleUrlParser {
     }
 
     private static String extractAwsRegion(String host) {
-        if (host.contains(".s3.") && host.contains("amazonaws.com")) {
+        if (host.contains(".s3.") && host.contains(AMAZONAWS_DOMAIN)) {
             // Virtual hosted: bucket.s3.region.amazonaws.com or bucket.s3.amazonaws.com
             String[] parts = host.split("\\.");
             for (int i = 0; i < parts.length - 1; i++) {
@@ -396,9 +412,9 @@ class S3CompatibleUrlParser {
                     return nextPart;
                 }
             }
-        } else if (host.startsWith("s3.") && host.endsWith(".amazonaws.com")) {
+        } else if (host.startsWith("s3.") && host.endsWith(AMAZONAWS_DOMAIN_SUFFIX)) {
             // Path-style: s3.region.amazonaws.com or s3.amazonaws.com
-            int endIndex = host.length() - ".amazonaws.com".length();
+            int endIndex = host.length() - AMAZONAWS_DOMAIN_SUFFIX.length();
             if (endIndex > 3) {
                 String regionPart = host.substring(3, endIndex);
                 return regionPart.isEmpty() ? null : regionPart;

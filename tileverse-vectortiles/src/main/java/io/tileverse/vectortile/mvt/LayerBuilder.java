@@ -113,12 +113,7 @@ public class LayerBuilder {
      * @return the index of the key in the keys array
      */
     Integer getKeyIndex(String key) {
-        Integer index = keys.get(key);
-        if (index == null) {
-            index = keys.size();
-            keys.put(key, index);
-        }
-        return index;
+        return keys.computeIfAbsent(key, k -> keys.size());
     }
 
     /**
@@ -128,12 +123,7 @@ public class LayerBuilder {
      * @return the index of the value in the values array
      */
     Integer getValueIndex(Object value) {
-        Integer index = values.get(value);
-        if (index == null) {
-            index = values.size();
-            values.put(value, index);
-        }
-        return index;
+        return values.computeIfAbsent(value, v -> values.size());
     }
 
     /** Internal method for FeatureBuilder to add completed features. */

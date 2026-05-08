@@ -158,7 +158,7 @@ class S3StorageFactoryIT {
         // open a connection here - the test exists to validate the URL parser
         // handles real-world S3 URL shapes; opening a public-bucket connection
         // would race with sibling ITs over ambient AWS credentials in sys props.
-        StorageConfig config = new StorageConfig().baseUri(s3Uri);
+        StorageConfig config = new StorageConfig(s3Uri);
         StorageProvider provider = StorageFactory.findProvider(config);
         assertNotNull("Should resolve a provider for " + description, provider);
         // Either the S3 provider or (for ambiguous custom-domain HTTPS URLs that don't HEAD-probe

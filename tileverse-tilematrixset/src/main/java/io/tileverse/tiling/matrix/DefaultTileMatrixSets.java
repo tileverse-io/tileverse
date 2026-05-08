@@ -37,7 +37,11 @@ import io.tileverse.tiling.pyramid.TileRange;
  *
  * @since 1.0
  */
-public class DefaultTileMatrixSets {
+public final class DefaultTileMatrixSets {
+
+    private DefaultTileMatrixSets() {
+        // utility class
+    }
 
     private static final Coordinate WEBMERCATOR_BOTTOM_LEFT = new Coordinate(-20037508.3427892, -20037508.3427892);
     private static final Coordinate WEBMERCATOR_TOP_RIGHT = new Coordinate(20037508.3427892, 20037508.3427892);

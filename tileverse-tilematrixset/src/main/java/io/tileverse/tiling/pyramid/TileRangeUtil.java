@@ -181,7 +181,6 @@ final class TileRangeUtil {
                 if (current.intersects(other)) {
                     // Remove the intersecting range - we'll split it
                     remaining.remove(i);
-                    i--; // Adjust index after removal
 
                     // Split both ranges into non-overlapping parts
                     List<TileRange> splitResult = splitTwoRanges(current, other);
@@ -303,10 +302,14 @@ final class TileRangeUtil {
         List<TileRange> parts = new ArrayList<>();
 
         // Create up to 4 non-overlapping rectangles around the subtracted area
-        long fromMinX = from.minx(), fromMinY = from.miny();
-        long fromMaxX = from.maxx(), fromMaxY = from.maxy();
-        long subMinX = subtract.minx(), subMinY = subtract.miny();
-        long subMaxX = subtract.maxx(), subMaxY = subtract.maxy();
+        long fromMinX = from.minx();
+        long fromMinY = from.miny();
+        long fromMaxX = from.maxx();
+        long fromMaxY = from.maxy();
+        long subMinX = subtract.minx();
+        long subMinY = subtract.miny();
+        long subMaxX = subtract.maxx();
+        long subMaxY = subtract.maxy();
 
         // Left part (west of subtract)
         if (fromMinX < subMinX) {
@@ -342,8 +345,10 @@ final class TileRangeUtil {
         }
 
         TileRange first = ranges.get(0);
-        long minX = first.minx(), minY = first.miny();
-        long maxX = first.maxx(), maxY = first.maxy();
+        long minX = first.minx();
+        long minY = first.miny();
+        long maxX = first.maxx();
+        long maxY = first.maxy();
 
         for (int i = 1; i < ranges.size(); i++) {
             TileRange range = ranges.get(i);

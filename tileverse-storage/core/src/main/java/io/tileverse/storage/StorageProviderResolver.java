@@ -101,6 +101,9 @@ final class StorageProviderResolver {
                 return probedCandidates.get(0);
             }
             specificCandidates = probedCandidates;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("HEAD request probe interrupted for {}: {}", uri, e.getMessage());
         } catch (Exception e) {
             log.warn("HEAD request probe failed for {}: {}", uri, e.getMessage(), e);
         }

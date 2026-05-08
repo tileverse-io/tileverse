@@ -15,8 +15,8 @@
  */
 package io.tileverse.storage.http;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
@@ -70,7 +70,7 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
         httpd.start();
 
         // Set up the URI for accessing the test file via HTTP
-        String baseUrl = String.format("http://%s:%d", httpd.getHost(), httpd.getFirstMappedPort());
+        String baseUrl = "http://%s:%d".formatted(httpd.getHost(), httpd.getFirstMappedPort());
         testFileUri = URI.create(baseUrl + "/" + TEST_FILE_NAME);
     }
 
@@ -119,10 +119,7 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
 
         RangeReader reader = RangeReaderTestSupport.httpReader(invalidUri);
 
-        assertThrows(
-                StorageException.class,
-                reader::size,
-                "Calling size() with a nonexistent URL should throw StorageException");
+        assertThatThrownBy(reader::size).as("size() against a nonexistent URL").isInstanceOf(StorageException.class);
     }
 
     @Test

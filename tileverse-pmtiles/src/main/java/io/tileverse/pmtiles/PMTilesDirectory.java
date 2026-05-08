@@ -68,8 +68,10 @@ public interface PMTilesDirectory extends Iterable<PMTilesEntry> {
 
     int getRunLength(int index);
 
+    @Override
     Iterator<PMTilesEntry> iterator();
 
+    @Override
     Spliterator<PMTilesEntry> spliterator();
 
     PMTilesEntry firstEntry();

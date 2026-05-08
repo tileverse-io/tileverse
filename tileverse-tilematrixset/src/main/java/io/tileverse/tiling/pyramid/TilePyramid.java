@@ -366,7 +366,13 @@ public abstract class TilePyramid {
         }
     }
 
-    /** Standard implementation of TilePyramid that stores tile ranges directly. */
+    /**
+     * Standard implementation of TilePyramid that stores tile ranges directly. Equality is inherited from
+     * {@link TilePyramid#equals(Object)}, which compares pyramids by their {@code levels()} content; that already
+     * covers every observable piece of state for this subclass, so no extra equals override is needed (S2160
+     * suppressed).
+     */
+    @SuppressWarnings("java:S2160")
     private static class TilePyramidImpl extends TilePyramid {
         private final List<TileRange> levels;
 
@@ -388,7 +394,20 @@ public abstract class TilePyramid {
     /**
      * A view of the pyramid that filters ranges to a specific zoom level range. Uses efficient subList() to avoid
      * copying or lazy initialization.
+     *
+     * <p>State distinction:
+     *
+     * <ul>
+     *   <li>{@code minZLevel} / {@code maxZLevel} are the zoom-level bounds requested by the caller (logical input).
+     *   <li>{@code startIndex} / {@code endIndex} are the resolved positions in {@code source.levels()} that satisfy
+     *       those bounds at construction time (cached lookup result).
+     * </ul>
+     *
+     * <p>The four index/level fields are derived state that only affects what {@link #levels()} returns; the inherited
+     * {@link TilePyramid#equals(Object)} already compares pyramids by {@code levels()}, so two SubsetViews with the
+     * same effective content are equivalent regardless of how they were constructed (S2160 suppressed).
      */
+    @SuppressWarnings("java:S2160")
     private static class SubsetView extends TilePyramid {
         private final TilePyramid source;
         private final int startIndex;

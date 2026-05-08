@@ -204,7 +204,7 @@ final class FileStorage implements Storage {
         }
         if (attrs.isDirectory()) {
             // Recursive walks (a glob containing **) emit File entries only; non-recursive walks
-            // surface intermediate directories as Directory entries so callers can navigate.
+            // emit intermediate directories as Directory entries so callers can navigate.
             if (recursive) {
                 return null;
             }
@@ -279,17 +279,25 @@ final class FileStorage implements Storage {
 
         @Override
         public int read() throws IOException {
-            if (remaining <= 0) return -1;
+            if (remaining <= 0) {
+                return -1;
+            }
             int b = super.read();
-            if (b >= 0) remaining--;
+            if (b >= 0) {
+                remaining--;
+            }
             return b;
         }
 
         @Override
         public int read(byte[] b, int off, int len) throws IOException {
-            if (remaining <= 0) return -1;
+            if (remaining <= 0) {
+                return -1;
+            }
             int n = super.read(b, off, (int) Math.min(len, remaining));
-            if (n > 0) remaining -= n;
+            if (n > 0) {
+                remaining -= n;
+            }
             return n;
         }
 
@@ -374,7 +382,9 @@ final class FileStorage implements Storage {
 
             @Override
             public void close() throws IOException {
-                if (alreadyClosed) return;
+                if (alreadyClosed) {
+                    return;
+                }
                 alreadyClosed = true;
                 try {
                     super.close();

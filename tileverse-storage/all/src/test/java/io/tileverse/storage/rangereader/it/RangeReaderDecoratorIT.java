@@ -151,7 +151,9 @@ class RangeReaderDecoratorIT {
             for (int offset : offsets) {
                 for (int length : lengths) {
                     int clamped = Math.min(length, FILE_SIZE - offset);
-                    if (clamped <= 0) continue;
+                    if (clamped <= 0) {
+                        continue;
+                    }
                     assertReadMatchesExpected(reader, offset, clamped);
                 }
             }
@@ -174,7 +176,7 @@ class RangeReaderDecoratorIT {
         }
     }
 
-    private void assertReadMatchesExpected(RangeReader reader, int offset, int length) throws IOException {
+    private void assertReadMatchesExpected(RangeReader reader, int offset, int length) {
         ByteBuffer buffer = reader.readRange(offset, length).flip();
         assertEquals(length, buffer.remaining(), "Should read " + length + " bytes from offset " + offset);
         byte[] actual = new byte[length];

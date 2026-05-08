@@ -113,10 +113,14 @@ record AzureBlobLocation(String endpoint, String accountName, String container, 
     }
 
     private static String normalizePrefix(String s) {
-        if (s == null) return "";
+        if (s == null) {
+            return "";
+        }
         String p = s;
         while (p.startsWith("/")) p = p.substring(1);
-        if (!p.isEmpty() && !p.endsWith("/")) p = p + "/";
+        if (!p.isEmpty() && !p.endsWith("/")) {
+            p = p + "/";
+        }
         return p;
     }
 
@@ -126,7 +130,9 @@ record AzureBlobLocation(String endpoint, String accountName, String container, 
     }
 
     String relativize(String fullKey) {
-        if (prefix.isEmpty()) return fullKey;
+        if (prefix.isEmpty()) {
+            return fullKey;
+        }
         if (!fullKey.startsWith(prefix)) {
             throw new IllegalArgumentException("Key '" + fullKey + "' does not start with prefix '" + prefix + "'");
         }

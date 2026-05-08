@@ -44,7 +44,7 @@ public final class StorageFactory {
      * @throws StorageException if the backend cannot be opened
      */
     public static Storage open(@NonNull URI uri) {
-        return open(new StorageConfig().baseUri(uri));
+        return open(new StorageConfig(uri));
     }
 
     /**

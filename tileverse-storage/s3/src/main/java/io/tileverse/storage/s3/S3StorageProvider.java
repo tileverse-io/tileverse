@@ -282,7 +282,7 @@ public class S3StorageProvider extends AbstractStorageProvider {
 
     /**
      * Opens a {@link io.tileverse.storage.Storage} backed by the supplied {@link S3ClientBundle}, bypassing the SPI
-     * configuration path. Use this overload when the caller wants the full feature surface (range reads, {@code read},
+     * configuration path. Use this overload when the caller wants the full feature set (range reads, {@code read},
      * multipart upload, presigned URLs) with externally-managed SDK objects.
      *
      * <p>The returned {@code Storage} <b>borrows</b> all SDK objects in the bundle; closing the {@code Storage} does
@@ -370,9 +370,6 @@ public class S3StorageProvider extends AbstractStorageProvider {
     @Override
     public Storage createStorage(StorageConfig config) {
         URI uri = config.baseUri();
-        if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.baseUri() is required for S3Storage");
-        }
         S3StorageBucketKey ref = S3StorageBucketKey.parse(uri);
         S3ClientCache.Lease lease = clientCache.acquire(keyFor(config));
         return new S3Storage(uri, ref, lease);
@@ -393,9 +390,6 @@ public class S3StorageProvider extends AbstractStorageProvider {
      */
     static S3ClientCache.Key keyFor(StorageConfig config) {
         URI uri = config.baseUri();
-        if (uri == null) {
-            throw new IllegalArgumentException("StorageConfig.baseUri() is required for S3Storage");
-        }
         S3Reference s3Ref = S3CompatibleUrlParser.parseS3Url(uri);
         String region = config.getParameter(S3_REGION)
                 .filter(s -> !s.isBlank())

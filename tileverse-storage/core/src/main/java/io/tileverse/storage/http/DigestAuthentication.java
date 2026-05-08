@@ -126,6 +126,10 @@ public class DigestAuthentication implements HttpAuthentication {
                 return null;
             }
 
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Pre-flight request for digest auth interrupted: {}", e.getMessage());
+            return null;
         } catch (Exception e) {
             log.warn("Error during pre-flight request for digest auth", e);
             return null;
@@ -185,7 +189,7 @@ public class DigestAuthentication implements HttpAuthentication {
 
         if (params.qop) {
             cnonce = generateCnonce();
-            nc = String.format("%08x", nonceCounter.getAndIncrement());
+            nc = "%08x".formatted(nonceCounter.getAndIncrement());
         }
 
         // Calculate digest response
@@ -326,7 +330,7 @@ public class DigestAuthentication implements HttpAuthentication {
             return toHexString(digest);
         } catch (NoSuchAlgorithmException e) {
             log.error("MD5 algorithm not available", e);
-            throw new RuntimeException("MD5 algorithm not available", e);
+            throw new IllegalStateException("MD5 algorithm not available", e);
         }
     }
 

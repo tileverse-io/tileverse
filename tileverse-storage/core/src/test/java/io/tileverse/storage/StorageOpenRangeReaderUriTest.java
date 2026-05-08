@@ -60,7 +60,8 @@ class StorageOpenRangeReaderUriTest {
     @Test
     void schemeMismatchThrows() {
         RecordingStorage storage = new RecordingStorage(URI.create("s3://bucket/folder/"));
-        assertThatThrownBy(() -> storage.openRangeReader(URI.create("https://bucket/folder/file.parquet")))
+        URI mismatchedScheme = URI.create("https://bucket/folder/file.parquet");
+        assertThatThrownBy(() -> storage.openRangeReader(mismatchedScheme))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("scheme");
     }
@@ -68,7 +69,8 @@ class StorageOpenRangeReaderUriTest {
     @Test
     void authorityMismatchThrows() {
         RecordingStorage storage = new RecordingStorage(URI.create("s3://bucket-a/folder/"));
-        assertThatThrownBy(() -> storage.openRangeReader(URI.create("s3://bucket-b/folder/file.parquet")))
+        URI mismatchedAuthority = URI.create("s3://bucket-b/folder/file.parquet");
+        assertThatThrownBy(() -> storage.openRangeReader(mismatchedAuthority))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("authority");
     }
@@ -76,7 +78,8 @@ class StorageOpenRangeReaderUriTest {
     @Test
     void pathOutsideBaseThrows() {
         RecordingStorage storage = new RecordingStorage(URI.create("s3://bucket/release/"));
-        assertThatThrownBy(() -> storage.openRangeReader(URI.create("s3://bucket/other/file.parquet")))
+        URI outsideBase = URI.create("s3://bucket/other/file.parquet");
+        assertThatThrownBy(() -> storage.openRangeReader(outsideBase))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("not within");
     }
@@ -84,7 +87,8 @@ class StorageOpenRangeReaderUriTest {
     @Test
     void uriEqualToBaseRejectsEmptyKey() {
         RecordingStorage storage = new RecordingStorage(URI.create("s3://bucket/folder/"));
-        assertThatThrownBy(() -> storage.openRangeReader(URI.create("s3://bucket/folder/")))
+        URI equalToBase = URI.create("s3://bucket/folder/");
+        assertThatThrownBy(() -> storage.openRangeReader(equalToBase))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("leaf object");
     }
@@ -92,7 +96,7 @@ class StorageOpenRangeReaderUriTest {
     @Test
     void queryStringIsPreservedInDerivedKey() {
         // Query strings can be load-bearing (HTTP signed URLs, SAS tokens, GCS ?alt=media). The default preserves them
-        // into the key; backends whose key grammar can't represent a query string surface a NotFoundException at
+        // into the key; backends whose key grammar can't represent a query string throw a NotFoundException at
         // openRangeReader(String) time, which is the right ownership of the error.
         RecordingStorage storage = new RecordingStorage(URI.create("https://server/path/"));
         storage.openRangeReader(URI.create("https://server/path/file.bin?X-Amz-Signature=abc&X-Amz-Date=20260430"));
@@ -120,7 +124,8 @@ class StorageOpenRangeReaderUriTest {
         // After URI.normalize(), 'https://server/data/../etc/passwd' becomes 'https://server/etc/passwd', which is no
         // longer under '/data/'. The prefix check fires before any reader is constructed.
         RecordingStorage storage = new RecordingStorage(URI.create("https://server/data/"));
-        assertThatThrownBy(() -> storage.openRangeReader(URI.create("https://server/data/../etc/passwd")))
+        URI traversal = URI.create("https://server/data/../etc/passwd");
+        assertThatThrownBy(() -> storage.openRangeReader(traversal))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("not within");
         assertThat(storage.lastKey).isNull();
@@ -129,7 +134,8 @@ class StorageOpenRangeReaderUriTest {
     @Test
     void deeplyNestedDotDotEscapingNamespaceIsRejected() {
         RecordingStorage storage = new RecordingStorage(URI.create("https://server/data/sub/"));
-        assertThatThrownBy(() -> storage.openRangeReader(URI.create("https://server/data/sub/../../etc/passwd")))
+        URI traversal = URI.create("https://server/data/sub/../../etc/passwd");
+        assertThatThrownBy(() -> storage.openRangeReader(traversal))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("not within");
         assertThat(storage.lastKey).isNull();
@@ -157,7 +163,8 @@ class StorageOpenRangeReaderUriTest {
         // URI.normalize() does NOT decode percent-encoding, so '%2E%2E' survives normalization. Some HTTP servers
         // decode mid-path and would traverse, so we reject explicitly.
         RecordingStorage storage = new RecordingStorage(URI.create("https://server/data/"));
-        assertThatThrownBy(() -> storage.openRangeReader(URI.create("https://server/data/%2E%2E/etc/passwd")))
+        URI traversal = URI.create("https://server/data/%2E%2E/etc/passwd");
+        assertThatThrownBy(() -> storage.openRangeReader(traversal))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("traversal");
         assertThat(storage.lastKey).isNull();
@@ -166,7 +173,8 @@ class StorageOpenRangeReaderUriTest {
     @Test
     void percentEncodedDotDotIsRejectedRegardlessOfCase() {
         RecordingStorage storage = new RecordingStorage(URI.create("https://server/data/"));
-        assertThatThrownBy(() -> storage.openRangeReader(URI.create("https://server/data/%2e%2e/etc/passwd")))
+        URI traversal = URI.create("https://server/data/%2e%2e/etc/passwd");
+        assertThatThrownBy(() -> storage.openRangeReader(traversal))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("traversal");
     }
@@ -175,7 +183,8 @@ class StorageOpenRangeReaderUriTest {
     void mixedPercentEncodedDotDotIsRejected() {
         // One '.' encoded, the other literal: still decodes to '..' as a segment.
         RecordingStorage storage = new RecordingStorage(URI.create("https://server/data/"));
-        assertThatThrownBy(() -> storage.openRangeReader(URI.create("https://server/data/%2E./etc/passwd")))
+        URI traversal = URI.create("https://server/data/%2E./etc/passwd");
+        assertThatThrownBy(() -> storage.openRangeReader(traversal))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("traversal");
     }
@@ -183,8 +192,8 @@ class StorageOpenRangeReaderUriTest {
     @Test
     void deeplyNestedPercentEncodedTraversalIsRejected() {
         RecordingStorage storage = new RecordingStorage(URI.create("https://server/data/"));
-        assertThatThrownBy(
-                        () -> storage.openRangeReader(URI.create("https://server/data/foo/%2E%2E/%2E%2E/etc/passwd")))
+        URI traversal = URI.create("https://server/data/foo/%2E%2E/%2E%2E/etc/passwd");
+        assertThatThrownBy(() -> storage.openRangeReader(traversal))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("traversal");
     }

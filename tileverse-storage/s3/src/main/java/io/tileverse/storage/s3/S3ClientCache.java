@@ -19,6 +19,8 @@ import java.net.URI;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
@@ -82,7 +84,7 @@ final class S3ClientCache {
     final class Lease implements AutoCloseable {
         private final Key key;
         private final Entry entry;
-        private boolean closed;
+        private final AtomicBoolean closed = new AtomicBoolean();
 
         Lease(Key key, Entry entry) {
             this.key = key;
@@ -106,10 +108,24 @@ final class S3ClientCache {
         }
 
         @Override
-        public synchronized void close() {
-            if (closed) return;
-            closed = true;
-            release(key);
+        public void close() {
+            if (closed.compareAndSet(false, true)) {
+                release(key);
+            }
+        }
+
+        private void release(Key key) {
+            entries.compute(key, (k, e) -> {
+                if (e == null) {
+                    return null;
+                }
+                int refCount = e.refCount.decrementAndGet();
+                if (refCount <= 0) {
+                    e.closeAll();
+                    return null;
+                }
+                return e;
+            });
         }
     }
 
@@ -118,14 +134,13 @@ final class S3ClientCache {
         final S3AsyncClient asyncClient;
         final S3TransferManager transferManager;
         final S3Presigner presigner;
-        int refCount;
+        final AtomicInteger refCount = new AtomicInteger();
 
         Entry(S3Client sync, S3AsyncClient async, S3TransferManager tm, S3Presigner ps) {
             this.syncClient = sync;
             this.asyncClient = async;
             this.transferManager = tm;
             this.presigner = ps;
-            this.refCount = 0;
         }
 
         void closeAll() {
@@ -145,22 +160,10 @@ final class S3ClientCache {
     Lease acquire(Key key) {
         Entry entry = entries.compute(key, (k, existing) -> {
             Entry e = existing == null ? build(k) : existing;
-            e.refCount++;
+            e.refCount.incrementAndGet();
             return e;
         });
         return new Lease(key, entry);
-    }
-
-    private synchronized void release(Key key) {
-        entries.compute(key, (k, e) -> {
-            if (e == null) return null;
-            e.refCount--;
-            if (e.refCount <= 0) {
-                e.closeAll();
-                return null;
-            }
-            return e;
-        });
     }
 
     private static Entry build(Key key) {

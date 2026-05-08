@@ -22,7 +22,9 @@ import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.pyramid.TilePyramid;
 import io.tileverse.tiling.pyramid.TileRange;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -105,7 +107,8 @@ public record StandardTileMatrixSet(
         final double tileMapHeight = tileHeight * resolution;
         final Coordinate origin = origin();
 
-        long tileX, tileY;
+        long tileX;
+        long tileY;
 
         // Transform map coordinates to tile coordinates based on corner of origin
         // Uses epsilon adjustment per OGC TileMatrixSet spec to handle floating-point precision
@@ -150,7 +153,6 @@ public record StandardTileMatrixSet(
             matrices.add(createTileMatrix(levels.get(i)));
         }
         return matrices;
-        // return tilePyramid.levels().stream().map(this::createTileMatrix).toList();
     }
 
     @Override
@@ -209,5 +211,39 @@ public record StandardTileMatrixSet(
     private static long floorWithEpsilon(double value) {
         // For coordinate-to-tile transformations, add small epsilon to avoid precision issues
         return (long) Math.floor(value + 1e-6);
+    }
+
+    // The default record-generated equals/hashCode/toString compare the resolutions array by reference
+    // and print its identity hash, which gives wrong semantics for value-based comparison and logging.
+    // Override to use Arrays.equals / Arrays.hashCode / Arrays.toString on the array component.
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof StandardTileMatrixSet other)) {
+            return false;
+        }
+        return tileWidth == other.tileWidth
+                && tileHeight == other.tileHeight
+                && Objects.equals(tilePyramid, other.tilePyramid)
+                && Objects.equals(crsId, other.crsId)
+                && Objects.equals(extent, other.extent)
+                && Arrays.equals(resolutions, other.resolutions);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = Objects.hash(tilePyramid, crsId, tileWidth, tileHeight, extent);
+        result = 31 * result + Arrays.hashCode(resolutions);
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return "StandardTileMatrixSet[tilePyramid=" + tilePyramid + ", crsId=" + crsId + ", tileWidth=" + tileWidth
+                + ", tileHeight=" + tileHeight + ", extent=" + extent + ", resolutions="
+                + Arrays.toString(resolutions) + "]";
     }
 }

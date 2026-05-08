@@ -49,8 +49,8 @@ class StorageFactoryTest {
 
     @Test
     void openUnknownSchemeThrows() {
-        assertThatThrownBy(() -> StorageFactory.open(java.net.URI.create("unknown://x/y")))
-                .isInstanceOf(IllegalStateException.class);
+        URI unknownScheme = URI.create("unknown://x/y");
+        assertThatThrownBy(() -> StorageFactory.open(unknownScheme)).isInstanceOf(IllegalStateException.class);
     }
 
     @Test
@@ -73,7 +73,7 @@ class StorageFactoryTest {
 
     @Test
     void findProviderResolvesByUri(@TempDir Path tmp) {
-        io.tileverse.storage.StorageConfig config = new io.tileverse.storage.StorageConfig().baseUri(tmp.toUri());
+        StorageConfig config = new StorageConfig(tmp.toUri());
         assertThat(StorageFactory.findProvider(config).getId()).isEqualTo("file");
     }
 
@@ -96,8 +96,9 @@ class StorageFactoryTest {
     @Test
     void openRangeReaderRejectsContainerUri(@TempDir Path tmp) throws IOException {
         // tmp.toUri() is a directory, not a leaf object - the URI overload rejects it before any I/O.
-        try (Storage s = StorageFactory.open(tmp.toUri())) {
-            assertThatThrownBy(() -> s.openRangeReader(tmp.toUri())).isInstanceOf(IllegalArgumentException.class);
+        URI containerUri = tmp.toUri();
+        try (Storage s = StorageFactory.open(containerUri)) {
+            assertThatThrownBy(() -> s.openRangeReader(containerUri)).isInstanceOf(IllegalArgumentException.class);
         }
     }
 

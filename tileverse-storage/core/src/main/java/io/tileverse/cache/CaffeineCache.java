@@ -32,9 +32,11 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
+import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
+@Slf4j
 @NullMarked
 public class CaffeineCache<K, V> implements Cache<K, V> {
 
@@ -146,9 +148,11 @@ public class CaffeineCache<K, V> implements Cache<K, V> {
             if (maximumWeightBytes != null && averageWeightBytes != null) {
                 int initialCapacity =
                         computeInitialCapacity(maximumWeightBytes.longValue(), averageWeightBytes.intValue());
-                //                System.out.printf(
-                //                        "maximumWeight: %,d, averageWeight: %,d, initialCapacity: %,d%n",
-                //                        maximumWeightBytes, averageWeightBytes, initialCapacity);
+                log.debug(
+                        "maximumWeight: {}, averageWeight: {}, initialCapacity: {}",
+                        maximumWeightBytes,
+                        averageWeightBytes,
+                        initialCapacity);
                 caffeine.initialCapacity(initialCapacity);
             }
             com.github.benmanes.caffeine.cache.Cache<K, V> cache = caffeine.build();

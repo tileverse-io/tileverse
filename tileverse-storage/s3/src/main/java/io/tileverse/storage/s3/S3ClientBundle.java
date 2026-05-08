@@ -24,8 +24,7 @@ import software.amazon.awssdk.transfer.s3.S3TransferManager;
 
 /**
  * Bundle of caller-supplied AWS SDK objects that {@link S3StorageProvider#open(java.net.URI, S3ClientBundle) accepts}
- * for the SDK-injection escape hatch. {@link S3Storage} draws on up to four SDK objects to cover its full feature
- * surface:
+ * for the SDK-injection escape hatch. {@link S3Storage} draws on up to four SDK objects to cover its full feature set:
  *
  * <ul>
  *   <li>{@link S3Client} (sync) -- required; drives stat, list, range read, single-shot write, copy, delete.
@@ -35,7 +34,7 @@ import software.amazon.awssdk.transfer.s3.S3TransferManager;
  * </ul>
  *
  * <p>Use {@link #syncOnly(S3Client)} when only sync-path operations are needed (range reads, small writes); the missing
- * capabilities surface as {@link io.tileverse.storage.UnsupportedCapabilityException} at the call site. Use
+ * capabilities throw {@link io.tileverse.storage.UnsupportedCapabilityException} at the call site. Use
  * {@link #of(S3Client, S3AsyncClient, S3TransferManager, S3Presigner)} for full feature parity with the SPI path.
  *
  * <p>The returned {@code Storage} <b>borrows</b> all four SDK objects; closing the {@code Storage} does NOT close them.

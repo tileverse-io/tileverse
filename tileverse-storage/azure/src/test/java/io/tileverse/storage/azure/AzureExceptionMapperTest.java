@@ -72,8 +72,7 @@ class AzureExceptionMapperTest {
     @Test
     void unmappedStatusFallsBackToStorageException() {
         StorageException mapped = AzureExceptionMapper.map(httpException(418, "Teapot"), "k");
-        assertThat(mapped).isInstanceOf(StorageException.class);
-        assertThat(mapped).isNotInstanceOf(NotFoundException.class);
+        assertThat(mapped).isInstanceOf(StorageException.class).isNotInstanceOf(NotFoundException.class);
     }
 
     private static HttpResponseException httpException(int status, String errorCode) {

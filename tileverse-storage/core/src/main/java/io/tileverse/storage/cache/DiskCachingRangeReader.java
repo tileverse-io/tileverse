@@ -89,7 +89,7 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
     private final boolean alignToBlocks;
 
     // Default cache max size (1GB)
-    static final long DEFAULT_MAX_CACHE_SIZE = 1024 * 1024 * 1024;
+    static final long DEFAULT_MAX_CACHE_SIZE = 1024 * 1024 * 1024L;
 
     // Default block size (1MB) - good for cloud storage optimization
     static final int DEFAULT_BLOCK_SIZE = 1024 * 1024;
@@ -348,6 +348,9 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
 
         } catch (StorageException e) {
             throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new StorageException("Interrupted while reading blocks in parallel", e);
         } catch (Exception e) {
             // Handle any exceptions from the parallel loading
             Throwable cause = e.getCause();
@@ -418,19 +421,6 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
     }
 
     /**
-     * Reads data from a cache file into the target buffer. This method enables file-level sharing between multiple
-     * DiskCachingRangeReader instances.
-     *
-     * @param cachePath the path to the cache file
-     * @param target the target buffer to read into
-     * @return the number of bytes read
-     * @throws IOException if an I/O error occurs
-     */
-    private int readFromCacheFile(Path cachePath, ByteBuffer target) throws IOException {
-        return readFromCacheFileWithOffset(cachePath, target, 0, target.remaining());
-    }
-
-    /**
      * Reads data from a cache file into the target buffer, starting at a specific offset within the cache file and
      * reading only the requested length.
      *
@@ -476,11 +466,9 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
     }
 
     private int fallbackToDelegate(final long offset, final int actualLength, ByteBuffer target) {
-        int readCount = delegate.readRange(offset, actualLength, target);
-        // With NIO conventions: delegate.readRange advances position but doesn't flip
-        // For readRangeNoFlip contract, position should be advanced by bytes written
-        // So no additional position manipulation is needed
-        return readCount;
+        // With NIO conventions delegate.readRange advances position but doesn't flip; that matches the
+        // readRangeNoFlip contract, so we can return its result directly with no extra position manipulation.
+        return delegate.readRange(offset, actualLength, target);
     }
 
     @Override
@@ -685,7 +673,7 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
     private String computeFileName(ByteRange key) {
         long rangeStart = key.offset();
         long rangeEnd = rangeStart + key.length() - 1;
-        return String.format("%d_%d.range", rangeStart, rangeEnd);
+        return "%d_%d.range".formatted(rangeStart, rangeEnd);
     }
 
     /**
@@ -716,12 +704,12 @@ public class DiskCachingRangeReader extends AbstractRangeReader implements Range
             byte[] hash = digest.digest(sourceIdentifier.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) {
-                sb.append(String.format("%02x", b));
+                sb.append("%02x".formatted(b));
             }
             return sb.toString().substring(0, 8); // Use first 8 chars for brevity
         } catch (NoSuchAlgorithmException e) {
             // Fallback to simple hash for unlikely case MD5 is not available
-            return String.format("%08x", sourceIdentifier.hashCode());
+            return "%08x".formatted(sourceIdentifier.hashCode());
         }
     }
 

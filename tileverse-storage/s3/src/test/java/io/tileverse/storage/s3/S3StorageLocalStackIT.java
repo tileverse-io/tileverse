@@ -16,7 +16,6 @@
 package io.tileverse.storage.s3;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import io.tileverse.storage.PresignWriteOptions;
 import io.tileverse.storage.Storage;
@@ -30,6 +29,7 @@ import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
@@ -106,9 +106,9 @@ class S3StorageLocalStackIT extends StorageTCK {
      */
     @Override
     @Test
-    protected void putIfNotExistsRejectsExistingKey() {
-        assumeTrue(false, "LocalStack 3.2 does not enforce If-None-Match: * on PutObject");
-    }
+    @Disabled("LocalStack 3.2 does not enforce If-None-Match: * on PutObject")
+    @SuppressWarnings({"java:S2699", "java:S1186"})
+    protected void putIfNotExistsRejectsExistingKey() {}
 
     /**
      * Override to skip on LocalStack 3.2: PutObject with empty body throws a 500 ("'NoneType' object has no attribute
@@ -116,9 +116,9 @@ class S3StorageLocalStackIT extends StorageTCK {
      */
     @Override
     @Test
-    protected void openOutputStreamEmptyWriteCreatesZeroLengthBlob() {
-        assumeTrue(false, "LocalStack 3.2 rejects zero-byte PutObject with internal error");
-    }
+    @Disabled("LocalStack 3.2 rejects zero-byte PutObject with internal error")
+    @SuppressWarnings({"java:S2699", "java:S1186"})
+    protected void openOutputStreamEmptyWriteCreatesZeroLengthBlob() {}
 
     @Test
     void presignPutCommitsToContentType() {
@@ -140,7 +140,9 @@ class S3StorageLocalStackIT extends StorageTCK {
             List<String> all = stream.filter(e -> e instanceof StorageEntry.File)
                     .map(StorageEntry::key)
                     .toList();
-            if (!all.isEmpty()) s.deleteAll(all);
+            if (!all.isEmpty()) {
+                s.deleteAll(all);
+            }
         } catch (Exception ignored) {
             // best-effort
         }

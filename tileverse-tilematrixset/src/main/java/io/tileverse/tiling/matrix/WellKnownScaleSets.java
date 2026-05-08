@@ -15,7 +15,19 @@
  */
 package io.tileverse.tiling.matrix;
 
-public class WellKnownScaleSets {
+/**
+ * The PascalCase field names below mirror the OGC Well-Known Scale Set identifiers verbatim, and a parallel branch is
+ * actively reworking this API; intentionally suppress S1104 (mutable public field), S3008 (constant naming), and S1444
+ * (non-final public static) here so the refactor lands on a quiet baseline.
+ */
+@SuppressWarnings({"java:S1104", "java:S3008", "java:S1444"})
+public final class WellKnownScaleSets {
+
+    private WellKnownScaleSets() {
+        // utility class
+    }
+
+    private static final String CRS84_URI = "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
 
     /**
      * This WKSS has been defined for global cartographic products. Rounded scales have been chosen for intuitive
@@ -23,7 +35,7 @@ public class WellKnownScaleSets {
      */
     public static ScaleSet GlobalCRS84Scale = ScaleSet.builder()
             .uri("http://www.opengis.net/def/wkss/OGC/1.0/GlobalCRS84Scale")
-            .crsURI("http://www.opengis.net/def/crs/OGC/1.3/CRS84")
+            .crsURI(CRS84_URI)
             .pixelSize(ScaleSet.DEFAULT_PIXEL_SIZE)
             .metersPerUnit(111319.49079327358)
             .scaleDenominators(
@@ -58,7 +70,7 @@ public class WellKnownScaleSets {
      */
     public static ScaleSet GlobalCRS84Pixel = ScaleSet.builder()
             .uri("http://www.opengis.net/def/wkss/OGC/1.0/GlobalCRS84Pixel")
-            .crsURI("http://www.opengis.net/def/crs/OGC/1.3/CRS84")
+            .crsURI(CRS84_URI)
             .pixelSize(ScaleSet.DEFAULT_PIXEL_SIZE)
             .metersPerUnit(111319.49079327358)
             .cellSizes(
@@ -97,7 +109,7 @@ public class WellKnownScaleSets {
      */
     public static ScaleSet GoogleCRS84Quad = ScaleSet.builder()
             .uri("http://www.opengis.net/def/wkss/OGC/1.0/GoogleCRS84Quad")
-            .crsURI("http://www.opengis.net/def/crs/OGC/1.3/CRS84")
+            .crsURI(CRS84_URI)
             .pixelSize(ScaleSet.DEFAULT_PIXEL_SIZE)
             .metersPerUnit(111319.49079327358)
             .scaleDenominators(

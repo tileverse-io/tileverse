@@ -45,11 +45,7 @@ final class AzureExceptionMapper {
                 return new PreconditionFailedException(messageFor(cause, contextKey, "precondition failed"), cause);
             case 416:
                 return new RangeNotSatisfiableException(messageFor(cause, contextKey, "range not satisfiable"), cause);
-            case 429:
-            case 500:
-            case 502:
-            case 503:
-            case 504:
+            case 429, 500, 502, 503, 504:
                 return new TransientStorageException(messageFor(cause, contextKey, "transient"), cause);
             default:
                 return new StorageException(messageFor(cause, contextKey, "Azure error"), cause);

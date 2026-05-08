@@ -155,8 +155,8 @@ class TileIndexTest {
         assertEquals(tile1, tile1); // reflexive
         assertNotEquals(tile1, tile3);
         assertNotEquals(tile1, tile4);
-        assertNotEquals(tile1, null);
-        assertNotEquals(tile1, "not a tile");
+        assertNotEquals(null, tile1);
+        assertNotEquals("not a tile", tile1);
 
         // Test hashCode consistency
         assertEquals(tile1.hashCode(), tile2.hashCode());

@@ -19,6 +19,9 @@
 package io.tileverse.vectortile.mvt;
 
 /** MVT command constants for geometry encoding. */
+@SuppressWarnings(
+        "java:S115") // constant names match the MVT spec ("MoveTo", "LineTo", "ClosePath"); renaming would be an API
+// change.
 final class GeometryCommand {
     /** MoveTo: 1. (2 parameters follow) */
     public static final int MoveTo = 1;

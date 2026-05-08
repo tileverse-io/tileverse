@@ -16,9 +16,9 @@
 package io.tileverse.tiling.pyramid;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -119,7 +119,7 @@ class TilePyramidTest {
     void testSubsetInvalidArguments() {
         TilePyramid pyramid = TilePyramid.of(TileRange.of(0, 0, 1, 1, 0));
 
-        assertThrows(IllegalArgumentException.class, () -> pyramid.subset(-1, 0));
-        assertThrows(IllegalArgumentException.class, () -> pyramid.subset(1, 0));
+        assertThatThrownBy(() -> pyramid.subset(-1, 0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> pyramid.subset(1, 0)).isInstanceOf(IllegalArgumentException.class);
     }
 }

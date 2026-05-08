@@ -15,8 +15,8 @@
  */
 package io.tileverse.storage.http;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.tileverse.storage.AccessDeniedException;
 import io.tileverse.storage.RangeReader;
@@ -26,6 +26,7 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
@@ -42,6 +43,7 @@ import org.testcontainers.utility.MountableFile;
  * {@code mod_auth_basic}/{@code mod_auth_digest}, and Bearer Token, API Key, and Custom Header via {@code mod_rewrite}
  * string comparison.
  */
+@Slf4j
 @Testcontainers(disabledWithoutDocker = true)
 class HttpRangeReaderAuthenticationIT {
 
@@ -105,11 +107,11 @@ class HttpRangeReaderAuthenticationIT {
             .withCopyFileToContainer(
                     MountableFile.forClasspathResource("httpd-auth-test.conf"), "/usr/local/apache2/conf/httpd.conf")
             .waitingFor(Wait.forHttp("/").forPort(80))
-            .withLogConsumer(outputFrame -> System.out.println("HTTPD: " + outputFrame.getUtf8String()));
+            .withLogConsumer(outputFrame -> log.debug("HTTPD: {}", outputFrame.getUtf8String()));
 
     @BeforeAll
     static void setupURIs() {
-        String baseUrl = String.format("http://%s:%d", httpd.getHost(), httpd.getFirstMappedPort());
+        String baseUrl = "http://%s:%d".formatted(httpd.getHost(), httpd.getFirstMappedPort());
         publicFileUri = URI.create(baseUrl + "/" + TEST_FILE_NAME);
         basicAuthUri = URI.create(baseUrl + "/secured/basic/" + TEST_FILE_NAME);
         digestAuthUri = URI.create(baseUrl + "/secured/digest/" + TEST_FILE_NAME);
@@ -132,10 +134,9 @@ class HttpRangeReaderAuthenticationIT {
     @Test
     void basicAuthNoCredentials() throws IOException {
         try (RangeReader reader = RangeReaderTestSupport.httpReader(basicAuthUri)) {
-            assertThrows(
-                    AccessDeniedException.class,
-                    reader::size,
-                    "Accessing basic auth protected resource without credentials should throw AccessDeniedException");
+            assertThatThrownBy(reader::size)
+                    .as("basic auth resource without credentials")
+                    .isInstanceOf(AccessDeniedException.class);
         }
     }
 
@@ -157,10 +158,9 @@ class HttpRangeReaderAuthenticationIT {
         BasicAuthentication auth = new BasicAuthentication(BASIC_AUTH_USER, "wrongpassword");
 
         RangeReader reader = RangeReaderTestSupport.httpReader(basicAuthUri, auth);
-        assertThrows(
-                AccessDeniedException.class,
-                reader::size,
-                "Accessing basic auth protected resource with incorrect credentials should throw AccessDeniedException");
+        assertThatThrownBy(reader::size)
+                .as("basic auth resource with wrong credentials")
+                .isInstanceOf(AccessDeniedException.class);
     }
 
     @Test
@@ -179,10 +179,9 @@ class HttpRangeReaderAuthenticationIT {
     @Test
     void digestNoCredentials() throws IOException {
         try (RangeReader reader = RangeReaderTestSupport.httpReader(digestAuthUri)) {
-            assertThrows(
-                    AccessDeniedException.class,
-                    reader::size,
-                    "Accessing digest auth protected resource without credentials should throw AccessDeniedException");
+            assertThatThrownBy(reader::size)
+                    .as("digest auth resource without credentials")
+                    .isInstanceOf(AccessDeniedException.class);
         }
     }
 
@@ -203,10 +202,9 @@ class HttpRangeReaderAuthenticationIT {
     void digestWithIncorrectCredentials() {
         DigestAuthentication auth = new DigestAuthentication(DIGEST_AUTH_USER, "wrongpassword");
         RangeReader reader = RangeReaderTestSupport.httpReader(digestAuthUri, auth);
-        assertThrows(
-                AccessDeniedException.class,
-                reader::size,
-                "Accessing digest auth protected resource with incorrect credentials should throw AccessDeniedException");
+        assertThatThrownBy(reader::size)
+                .as("digest auth resource with wrong credentials")
+                .isInstanceOf(AccessDeniedException.class);
     }
 
     @Test
@@ -228,10 +226,9 @@ class HttpRangeReaderAuthenticationIT {
     @Test
     void bearerTokenNoCredentials() throws IOException {
         try (RangeReader reader = RangeReaderTestSupport.httpReader(bearerTokenUri)) {
-            assertThrows(
-                    AccessDeniedException.class,
-                    reader::size,
-                    "Accessing bearer token protected resource without token should throw AccessDeniedException");
+            assertThatThrownBy(reader::size)
+                    .as("bearer-token resource without token")
+                    .isInstanceOf(AccessDeniedException.class);
         }
     }
 
@@ -253,10 +250,9 @@ class HttpRangeReaderAuthenticationIT {
         BearerTokenAuthentication auth = new BearerTokenAuthentication("wrong-token");
 
         RangeReader reader = RangeReaderTestSupport.httpReader(bearerTokenUri, auth);
-        assertThrows(
-                AccessDeniedException.class,
-                reader::size,
-                "Accessing bearer token protected resource with incorrect token should throw AccessDeniedException");
+        assertThatThrownBy(reader::size)
+                .as("bearer-token resource with wrong token")
+                .isInstanceOf(AccessDeniedException.class);
     }
 
     @Test
@@ -275,10 +271,9 @@ class HttpRangeReaderAuthenticationIT {
     @Test
     void apiKeyNoCredentials() throws IOException {
         try (RangeReader reader = RangeReaderTestSupport.httpReader(apiKeyUri)) {
-            assertThrows(
-                    AccessDeniedException.class,
-                    reader::size,
-                    "Accessing API key protected resource without API key should throw AccessDeniedException");
+            assertThatThrownBy(reader::size)
+                    .as("API-key resource without key")
+                    .isInstanceOf(AccessDeniedException.class);
         }
     }
 
@@ -298,10 +293,9 @@ class HttpRangeReaderAuthenticationIT {
     void apiKeyWithIncorrectKey() throws IOException {
         try (RangeReader reader = RangeReaderTestSupport.httpReader(
                 apiKeyUri, new ApiKeyAuthentication(API_KEY_HEADER, "wrong-key", null))) {
-            assertThrows(
-                    AccessDeniedException.class,
-                    reader::size,
-                    "Accessing API key protected resource with incorrect API key should throw AccessDeniedException");
+            assertThatThrownBy(reader::size)
+                    .as("API-key resource with wrong key")
+                    .isInstanceOf(AccessDeniedException.class);
         }
     }
 
@@ -321,10 +315,9 @@ class HttpRangeReaderAuthenticationIT {
     @Test
     void customHeaderNoCredentials() throws IOException {
         try (RangeReader reader = RangeReaderTestSupport.httpReader(customHeaderUri)) {
-            assertThrows(
-                    AccessDeniedException.class,
-                    reader::size,
-                    "Accessing custom header protected resource without header should throw AccessDeniedException");
+            assertThatThrownBy(reader::size)
+                    .as("custom-header resource without header")
+                    .isInstanceOf(AccessDeniedException.class);
         }
     }
 
@@ -349,10 +342,9 @@ class HttpRangeReaderAuthenticationIT {
         headers.put(CUSTOM_HEADER_NAME, "wrong-value");
         CustomHeaderAuthentication auth = new CustomHeaderAuthentication(headers);
         RangeReader reader = RangeReaderTestSupport.httpReader(customHeaderUri, auth);
-        assertThrows(
-                AccessDeniedException.class,
-                reader::size,
-                "Accessing custom header protected resource with incorrect header value should throw AccessDeniedException");
+        assertThatThrownBy(reader::size)
+                .as("custom-header resource with wrong header value")
+                .isInstanceOf(AccessDeniedException.class);
     }
 
     @Test

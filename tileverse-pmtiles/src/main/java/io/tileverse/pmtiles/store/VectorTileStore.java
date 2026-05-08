@@ -69,10 +69,9 @@ public abstract class VectorTileStore extends AbstractTileStore<VectorTile> {
             return matrixSet().minZoomLevel();
         }
 
-        int maxMinZoom = getVectorLayersMetadata().stream()
+        return getVectorLayersMetadata().stream()
                 .mapToInt(VectorLayer::minZoom)
                 .max()
                 .orElseGet(matrixSet()::minZoomLevel);
-        return maxMinZoom;
     }
 }

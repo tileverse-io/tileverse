@@ -354,8 +354,8 @@ public class ByteBufferPool {
         String identityString = getClass().getName() + "@" + Integer.toHexString(System.identityHashCode(this));
         PoolStatistics heapPoolStatistics = getHeapPoolStatistics();
         PoolStatistics directPoolStatistics = getDirectPoolStatistics();
-        return String.format(
-                "%s[heap buffers: %s, direct buffers: %s]", identityString, heapPoolStatistics, directPoolStatistics);
+        return "%s[heap buffers: %s, direct buffers: %s]"
+                .formatted(identityString, heapPoolStatistics, directPoolStatistics);
     }
 
     /** Immutable statistics snapshot for a ByteBuffer pool. */
@@ -626,6 +626,13 @@ public class ByteBufferPool {
         }
     }
 
+    /**
+     * Reflective access to {@code sun.misc.Unsafe.invokeCleaner} (and a Java 8 fallback path) is the only way to
+     * release a direct {@link ByteBuffer}'s native memory eagerly without waiting for GC. The
+     * {@link java.lang.reflect.AccessibleObject#setAccessible(boolean)} calls below are required for that and are
+     * intentional; suppressing S3011 at the class level keeps the rest of the codebase honest about reflection usage.
+     */
+    @SuppressWarnings("java:S3011")
     private static final class DirectByteBufferCleaner {
         // internal unsafe instance for direct buffer cleanup
         private static final Object UNSAFE;

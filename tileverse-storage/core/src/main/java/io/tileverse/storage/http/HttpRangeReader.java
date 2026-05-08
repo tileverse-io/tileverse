@@ -28,14 +28,18 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
+import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandler;
+import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.concurrent.atomic.AtomicReference;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -59,9 +63,14 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
     private final HttpClient httpClient;
     private final HttpAuthentication authentication;
 
-    private OptionalLong cachedContentLength;
-    private volatile boolean rangeInitialized = false;
-    private HttpResponse<Void> cachedHeadResponse = null;
+    /** @see #getHeadResponse() */
+    private final AtomicReference<HeadResponse> headResponse = new AtomicReference<>(null);
+
+    private record HeadResponse(
+            boolean supportsByteRange,
+            OptionalLong contentLength,
+            Optional<String> etag,
+            Optional<String> lastModified) {}
 
     /**
      * Creates a new HttpRangeReader with a custom HTTP client and authentication.
@@ -75,6 +84,23 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
         this.httpClient = requireNonNull(httpClient);
         this.authentication = requireNonNull(authentication);
         // Content length and range support will be checked when size() is first called
+    }
+
+    @Override
+    public OptionalLong size() {
+        return getHeadResponse().contentLength();
+    }
+
+    @Override
+    public String getSourceIdentifier() {
+        return uri.toString();
+    }
+
+    @Override
+    public void close() {
+        // HttpClient is owned by HttpStorage (and ultimately by HttpClientCache)
+        // per-reader close must not shut it down.
+        // Mirrors S3RangeReader / AzureBlobRangeReader / GoogleCloudStorageRangeReader.
     }
 
     @Override
@@ -154,7 +180,7 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
 
         HttpResponse<InputStream> response;
         try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            response = httpClient.send(request, BodyHandlers.ofInputStream());
         } catch (HttpConnectTimeoutException timeout) {
             throw rethrow(timeout);
         }
@@ -163,23 +189,28 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
         return response;
     }
 
-    private void checkContentLength(final int length, HttpResponse<InputStream> response) {
+    private void checkContentLength(final int requestedLength, HttpResponse<InputStream> response) {
         OptionalLong contentLength = response.headers().firstValueAsLong("Content-Length");
         contentLength.ifPresent(returns -> {
-            if (returns > length) {
+            if (returns > requestedLength) {
                 throw new IllegalStateException(
                         "Server returned more data than requested. Requested %,d bytes, returned %,d"
-                                .formatted(length, returns));
+                                .formatted(requestedLength, returns));
             }
         });
     }
 
     private void checkStatusCode(HttpResponse<?> response) {
         int statusCode = response.statusCode();
-        if (statusCode == 401 || statusCode == 403) {
-            throw new AccessDeniedException("Authentication failed for URI: " + uri + ", status code: " + statusCode);
-        } else if (statusCode != 206) {
-            throw new StorageException("Failed to get range from URI: " + uri + ", status code: " + statusCode);
+        switch (statusCode) {
+            case 206:
+                // all good
+                break;
+            case 401, 403:
+                throw new AccessDeniedException(
+                        "Authentication failed for URI: " + uri + ", status code: " + statusCode);
+            default:
+                throw new StorageException("Failed to get range from URI: " + uri + ", status code: " + statusCode);
         }
     }
 
@@ -195,27 +226,10 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     private void checkServerSupportsByteRanges() {
-        // Initialize range support on first read
-        if (!rangeInitialized) {
-            synchronized (this) {
-                if (!rangeInitialized) {
-                    initializeRangeSupport();
-                    rangeInitialized = true;
-                }
-            }
+        HeadResponse head = getHeadResponse();
+        if (!head.supportsByteRange()) {
+            throw new StorageException("Server explicitly does not support range requests (Accept-Ranges: none)");
         }
-    }
-
-    @Override
-    public OptionalLong size() {
-        if (cachedContentLength == null) {
-            synchronized (this) {
-                if (cachedContentLength == null) {
-                    initializeSize();
-                }
-            }
-        }
-        return cachedContentLength;
     }
 
     /**
@@ -225,44 +239,79 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
      * @return the cached HEAD response
      * @throws StorageException If a storage error occurs during the HEAD request
      */
-    private HttpResponse<Void> getHeadResponse() {
-        if (cachedHeadResponse == null) {
-            synchronized (this) {
-                if (cachedHeadResponse == null) {
-                    try {
-                        HttpRequest.Builder requestBuilder =
-                                HttpRequest.newBuilder().uri(uri).method("HEAD", HttpRequest.BodyPublishers.noBody());
+    private HeadResponse getHeadResponse() {
 
-                        // Apply authentication if provided
-                        requestBuilder = authentication.authenticate(httpClient, requestBuilder);
-
-                        HttpRequest headRequest = requestBuilder.build();
-                        HttpResponse<Void> headResponse =
-                                httpClient.send(headRequest, HttpResponse.BodyHandlers.discarding());
-
-                        int statusCode = headResponse.statusCode();
-                        if (statusCode == 401 || statusCode == 403) {
-                            throw new AccessDeniedException(
-                                    "Authentication failed for URI: " + uri + ", status code: " + statusCode);
-                        } else if (statusCode != 200) {
-                            throw new StorageException(
-                                    "Failed to connect to URI: " + uri + ", status code: " + statusCode);
-                        }
-
-                        cachedHeadResponse = headResponse;
-
-                    } catch (HttpConnectTimeoutException timeout) {
-                        throw rethrow(timeout);
-                    } catch (IOException e) {
-                        throw new TransientStorageException("HEAD request failed for " + uri, e);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        throw new TransientStorageException("Request was interrupted for " + uri, e);
-                    }
-                }
-            }
+        HeadResponse response = headResponse.get();
+        if (response == null) {
+            response = headResponse.updateAndGet(this::fetchHeadResponse);
         }
-        return cachedHeadResponse;
+        return response;
+    }
+
+    private HeadResponse fetchHeadResponse(HeadResponse currValue) {
+        if (currValue != null) {
+            // another thread already populated the cache while we were racing into updateAndGet, skip the redundant
+            // HEAD and adopt their result.
+            return currValue;
+        }
+        try {
+            HttpRequest.Builder requestBuilder =
+                    HttpRequest.newBuilder().uri(uri).method("HEAD", BodyPublishers.noBody());
+
+            requestBuilder = authentication.authenticate(httpClient, requestBuilder);
+
+            HttpRequest request = requestBuilder.build();
+            HttpResponse<Void> response = httpClient.send(request, BodyHandlers.discarding());
+
+            check200StatusCode(response);
+
+            final boolean supportsByteRanges = supportsByteRanges(response);
+            if (!supportsByteRanges) {
+                log.warn("{} does not support byte ranges", uri);
+            }
+            OptionalLong contentLength = contentLength(response);
+            if (contentLength.isEmpty()) {
+                log.warn("Content-Length unknown for {}", uri);
+            } else if (contentLength.getAsLong() < 0) {
+                contentLength = OptionalLong.empty();
+            }
+            Optional<String> etag = etag(response);
+            Optional<String> lastModified = lastModified(response);
+            return new HeadResponse(supportsByteRanges, contentLength, etag, lastModified);
+        } catch (HttpConnectTimeoutException timeout) {
+            throw rethrow(timeout);
+        } catch (IOException e) {
+            throw new TransientStorageException("HEAD request failed for " + uri, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new TransientStorageException("Request was interrupted for " + uri, e);
+        }
+    }
+
+    private void check200StatusCode(HttpResponse<Void> response) {
+        final int statusCode = response.statusCode();
+        if (statusCode == 401 || statusCode == 403) {
+            throw new AccessDeniedException("Authentication failed for URI: " + uri + ", status code: " + statusCode);
+        } else if (statusCode != 200) {
+            throw new StorageException("Failed to connect to URI: " + uri + ", status code: " + statusCode);
+        }
+    }
+
+    private boolean supportsByteRanges(HttpResponse<Void> response) {
+        List<String> acceptRanges = response.headers().allValues("Accept-Ranges");
+        return acceptRanges.stream().anyMatch("bytes"::equalsIgnoreCase);
+    }
+
+    private OptionalLong contentLength(HttpResponse<Void> response) {
+        return response.headers().firstValueAsLong("Content-Length");
+    }
+
+    private Optional<String> etag(HttpResponse<Void> response) {
+        return response.headers().firstValue("ETag");
+    }
+
+    private Optional<String> lastModified(HttpResponse<Void> response) {
+        return response.headers().firstValue("Last-Modified");
     }
 
     private TransientStorageException rethrow(HttpConnectTimeoutException timeout) {
@@ -275,41 +324,5 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
         TransientStorageException ex = new TransientStorageException(message);
         ex.addSuppressed(timeout);
         return ex;
-    }
-
-    /** Initializes the content length from the cached HEAD response. */
-    private void initializeSize() {
-
-        HttpResponse<Void> headResponse = getHeadResponse();
-
-        // Get content length
-        this.cachedContentLength = headResponse.headers().firstValueAsLong("Content-Length");
-        if (this.cachedContentLength.isEmpty()) {
-            log.warn("Content-Length unkown for {}", uri);
-        } else if (this.cachedContentLength.getAsLong() < 0) {
-            this.cachedContentLength = OptionalLong.empty();
-        }
-    }
-
-    /** Initializes range support by checking the Accept-Ranges header from the cached HEAD response. */
-    private void initializeRangeSupport() {
-        HttpResponse<Void> headResponse = getHeadResponse();
-
-        // Check for explicit range support denial
-        List<String> acceptRanges = headResponse.headers().allValues("Accept-Ranges");
-        if (acceptRanges.stream().map(String::toLowerCase).noneMatch("bytes"::equals)) {
-            throw new StorageException("Server explicitly does not support range requests (Accept-Ranges: none)");
-        }
-    }
-
-    @Override
-    public String getSourceIdentifier() {
-        return uri.toString();
-    }
-
-    @Override
-    public void close() {
-        // The HttpClient is owned by HttpStorage (and ultimately by HttpClientCache); per-reader close must not
-        // shut it down. Mirrors S3RangeReader / AzureBlobRangeReader / GoogleCloudStorageRangeReader.
     }
 }

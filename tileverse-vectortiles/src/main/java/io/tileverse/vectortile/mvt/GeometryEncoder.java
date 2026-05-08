@@ -96,9 +96,6 @@ class GeometryEncoder {
         // faster than clipping before simplification
         geometry = simplify(geometry);
 
-        // Step 1: Transform coordinates to extent space
-        // geometry = scaleToExtentSpace(geometry);
-
         if (geometry == null || geometry.isEmpty()) {
             return List.of();
         }
@@ -142,7 +139,7 @@ class GeometryEncoder {
         if (simplificationDistance <= 0.0 || geometry instanceof Point) {
             return geometry;
         }
-        Geometry simplified = geometry;
+        Geometry simplified;
         if (geometry instanceof Lineal) {
             simplified = DouglasPeuckerSimplifier.simplify(geometry, simplificationDistance);
         } else if (geometry instanceof Polygonal) {
@@ -182,15 +179,6 @@ class GeometryEncoder {
         }
         return null;
     }
-
-    //    private Geometry scaleToExtentSpace(Geometry geometry) {
-    //        double scale = params.isAutoScale() ? (params.getExtent() / 256.0) : 1.0;
-    //        if (scale != 1.0) {
-    //            AffineTransformation scaleTransform = AffineTransformation.scaleInstance(scale, scale);
-    //            geometry = scaleTransform.transform(geometry);
-    //        }
-    //        return geometry;
-    //    }
 
     /**
      * Check if geometry is valid for encoding after precision snapping. Note: We skip the expensive geometry.isValid()
@@ -275,12 +263,8 @@ class GeometryEncoder {
             }
 
             return geometry;
-        } catch (TopologyException e) {
-            // could not intersect. original geometry will be used instead.
-            return geometry;
-        } catch (ParseException e1) {
-            // could not encode/decode WKT. original geometry will be used
-            // instead.
+        } catch (TopologyException | ParseException e) {
+            // Could not intersect or could not round-trip via WKT; fall back to the original geometry.
             return geometry;
         }
     }

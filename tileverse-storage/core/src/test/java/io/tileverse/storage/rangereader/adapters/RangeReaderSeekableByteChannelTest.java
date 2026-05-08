@@ -70,7 +70,7 @@ class RangeReaderSeekableByteChannelTest {
         try (RangeReader reader = RangeReaderTestSupport.fileReader(testFile);
                 RangeReaderSeekableByteChannel channel = RangeReaderSeekableByteChannel.of(reader)) {
 
-            assertThat(channel.position()).isEqualTo(0L);
+            assertThat(channel.position()).isZero();
         }
     }
 
@@ -147,8 +147,8 @@ class RangeReaderSeekableByteChannelTest {
 
             ByteBuffer emptyBuffer = ByteBuffer.allocate(0);
             int bytesRead = channel.read(emptyBuffer);
-            assertThat(bytesRead).isEqualTo(0);
-            assertThat(channel.position()).isEqualTo(0L);
+            assertThat(bytesRead).isZero();
+            assertThat(channel.position()).isZero();
         }
     }
 
@@ -302,11 +302,11 @@ class RangeReaderSeekableByteChannelTest {
         channel.close();
 
         assertThatThrownBy(() -> channel.read(ByteBuffer.allocate(10))).isInstanceOf(ClosedChannelException.class);
-        assertThatThrownBy(() -> channel.position()).isInstanceOf(ClosedChannelException.class);
+        assertThatThrownBy(channel::position).isInstanceOf(ClosedChannelException.class);
         assertThatThrownBy(() -> channel.position(100L)).isInstanceOf(ClosedChannelException.class);
-        assertThatThrownBy(() -> channel.size()).isInstanceOf(ClosedChannelException.class);
-        assertThatThrownBy(() -> channel.getRangeReader()).isInstanceOf(ClosedChannelException.class);
-        assertThatThrownBy(() -> channel.getSourceIdentifier()).isInstanceOf(ClosedChannelException.class);
+        assertThatThrownBy(channel::size).isInstanceOf(ClosedChannelException.class);
+        assertThatThrownBy(channel::getRangeReader).isInstanceOf(ClosedChannelException.class);
+        assertThatThrownBy(channel::getSourceIdentifier).isInstanceOf(ClosedChannelException.class);
 
         reader.close(); // Clean up
     }
@@ -354,13 +354,6 @@ class RangeReaderSeekableByteChannelTest {
         assertThat(result).contains("RangeReaderSeekableByteChannel[closed]");
 
         reader.close(); // Clean up
-    }
-
-    @Test
-    void toString_withIOException_handlesGracefully() throws IOException {
-        // This test is harder to implement with real FileRangeReader since it doesn't easily throw IOExceptions
-        // on size() calls. We'll skip this specific test for now as it requires mock setup.
-        // The toString method does handle IOExceptions gracefully as shown in the implementation.
     }
 
     @Test

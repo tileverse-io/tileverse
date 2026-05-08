@@ -100,7 +100,9 @@ public record StoragePattern(String prefix, boolean walkDescendants, Optional<Pr
     private static Predicate<String> globMatcher(String pattern) {
         PathMatcher pm = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
         return key -> {
-            if (key == null) return false;
+            if (key == null) {
+                return false;
+            }
             Path p = Path.of(key.replace('/', File.separatorChar));
             return pm.matches(p);
         };

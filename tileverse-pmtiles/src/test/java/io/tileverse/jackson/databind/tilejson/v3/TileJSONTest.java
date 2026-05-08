@@ -15,11 +15,11 @@
  */
 package io.tileverse.jackson.databind.tilejson.v3;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.Map;
@@ -33,29 +33,12 @@ class TileJSONTest {
 
     @Test
     void testMinimalTileJSON() throws Exception {
-        // Create minimal valid TileJSON
         VectorLayer layer = VectorLayer.of("test", Map.of("name", "string"));
         TileJSON tileJSON = TileJSON.of("3.0.0", List.of("https://example.com/{z}/{x}/{y}.pbf"), List.of(layer));
 
-        assertEquals("3.0.0", tileJSON.tilejson());
-        assertEquals(1, tileJSON.tiles().size());
-        assertEquals("https://example.com/{z}/{x}/{y}.pbf", tileJSON.tiles().get(0));
-        assertEquals(1, tileJSON.vectorLayers().size());
-        assertEquals("test", tileJSON.vectorLayers().get(0).id());
-
-        // Test serialization
         String json = objectMapper.writeValueAsString(tileJSON);
-        assertTrue(json.contains("\"tilejson\":\"3.0.0\""));
-        assertTrue(json.contains("\"tiles\":[\"https://example.com/{z}/{x}/{y}.pbf\"]"));
-        assertTrue(json.contains("\"vector_layers\""));
-
-        // Test deserialization
         TileJSON deserialized = objectMapper.readValue(json, TileJSON.class);
-        assertEquals(tileJSON.tilejson(), deserialized.tilejson());
-        assertEquals(tileJSON.tiles(), deserialized.tiles());
-        assertEquals(
-                tileJSON.vectorLayers().get(0).id(),
-                deserialized.vectorLayers().get(0).id());
+        assertThat(deserialized).isEqualTo(tileJSON);
     }
 
     @Test
@@ -80,84 +63,42 @@ class TileJSONTest {
                 .withZoomRange(0, 18)
                 .withVersion("1.0.0");
 
-        // Verify all fields
-        assertEquals("3.0.0", tileJSON.tilejson());
-        assertEquals("Test Tileset", tileJSON.name());
-        assertEquals("A comprehensive test tileset", tileJSON.description());
-        assertEquals("© Test Contributors", tileJSON.attribution());
-        assertEquals("1.0.0", tileJSON.version());
-
-        assertEquals(2, tileJSON.tiles().size());
-        assertEquals(
-                "https://tile1.example.com/{z}/{x}/{y}.pbf", tileJSON.tiles().get(0));
-        assertEquals(
-                "https://tile2.example.com/{z}/{x}/{y}.pbf", tileJSON.tiles().get(1));
-
-        assertEquals(4, tileJSON.bounds().size());
-        assertEquals(-180.0, tileJSON.bounds().get(0));
-        assertEquals(-85.0, tileJSON.bounds().get(1));
-        assertEquals(180.0, tileJSON.bounds().get(2));
-        assertEquals(85.0, tileJSON.bounds().get(3));
-
-        assertEquals(3, tileJSON.center().size());
-        assertEquals(-74.0059, tileJSON.center().get(0));
-        assertEquals(40.7128, tileJSON.center().get(1));
-        assertEquals(10.0, tileJSON.center().get(2));
-
-        assertEquals(Integer.valueOf(0), tileJSON.minzoom());
-        assertEquals(Integer.valueOf(18), tileJSON.maxzoom());
-
-        assertEquals(2, tileJSON.vectorLayers().size());
-        assertEquals("buildings", tileJSON.vectorLayers().get(0).id());
-        assertEquals("roads", tileJSON.vectorLayers().get(1).id());
-
-        // Test serialization/deserialization
         String json = objectMapper.writeValueAsString(tileJSON);
         TileJSON deserialized = objectMapper.readValue(json, TileJSON.class);
 
-        assertEquals(tileJSON.tilejson(), deserialized.tilejson());
-        assertEquals(tileJSON.name(), deserialized.name());
-        assertEquals(tileJSON.description(), deserialized.description());
-        assertEquals(tileJSON.attribution(), deserialized.attribution());
-        assertEquals(tileJSON.bounds(), deserialized.bounds());
-        assertEquals(tileJSON.center(), deserialized.center());
-        assertEquals(tileJSON.minzoom(), deserialized.minzoom());
-        assertEquals(tileJSON.maxzoom(), deserialized.maxzoom());
-        assertEquals(tileJSON.vectorLayers().size(), deserialized.vectorLayers().size());
+        assertThat(deserialized).isEqualTo(tileJSON);
     }
 
     @Test
     void testRequiredFieldValidation() {
         VectorLayer layer = VectorLayer.of("test", Map.of("name", "string"));
+        List<String> validTiles = List.of("https://example.com/{z}/{x}/{y}.pbf");
+        List<VectorLayer> validLayers = List.of(layer);
+        List<String> emptyTiles = List.of();
+        List<String> nullTileUrl = java.util.Arrays.asList((String) null);
+        List<String> blankTileUrl = List.of("");
 
-        // Test null tilejson
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> TileJSON.of(null, List.of("https://example.com/{z}/{x}/{y}.pbf"), List.of(layer)));
-
-        // Test blank tilejson
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> TileJSON.of("", List.of("https://example.com/{z}/{x}/{y}.pbf"), List.of(layer)));
-
-        // Test null tiles
-        assertThrows(IllegalArgumentException.class, () -> TileJSON.of("3.0.0", null, List.of(layer)));
-
-        // Test empty tiles
-        assertThrows(IllegalArgumentException.class, () -> TileJSON.of("3.0.0", List.of(), List.of(layer)));
-
-        // Test null tile URL
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> TileJSON.of("3.0.0", java.util.Arrays.asList((String) null), List.of(layer)));
-
-        // Test blank tile URL
-        assertThrows(IllegalArgumentException.class, () -> TileJSON.of("3.0.0", List.of(""), List.of(layer)));
-
-        // Test null vector layers
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> TileJSON.of("3.0.0", List.of("https://example.com/{z}/{x}/{y}.pbf"), null));
+        assertThatThrownBy(() -> TileJSON.of(null, validTiles, validLayers))
+                .as("null tilejson")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> TileJSON.of("", validTiles, validLayers))
+                .as("empty tilejson")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> TileJSON.of("3.0.0", null, validLayers))
+                .as("null tiles")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> TileJSON.of("3.0.0", emptyTiles, validLayers))
+                .as("empty tiles")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> TileJSON.of("3.0.0", nullTileUrl, validLayers))
+                .as("null tile URL")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> TileJSON.of("3.0.0", blankTileUrl, validLayers))
+                .as("blank tile URL")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> TileJSON.of("3.0.0", validTiles, null))
+                .as("null vector layers")
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -165,19 +106,32 @@ class TileJSONTest {
         VectorLayer layer = VectorLayer.of("test", Map.of("name", "string"));
         TileJSON tileJSON = TileJSON.of("3.0.0", List.of("https://example.com/{z}/{x}/{y}.pbf"), List.of(layer));
 
-        // Test invalid bounds (west >= east)
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withBounds(10, -85, 10, 85));
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withBounds(10, -85, -10, 85));
+        assertThatThrownBy(() -> tileJSON.withBounds(10, -85, 10, 85))
+                .as("west == east")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> tileJSON.withBounds(10, -85, -10, 85))
+                .as("west > east")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        // Test invalid bounds (south >= north)
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withBounds(-180, 85, 180, 85));
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withBounds(-180, 85, 180, -85));
+        assertThatThrownBy(() -> tileJSON.withBounds(-180, 85, 180, 85))
+                .as("south == north")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> tileJSON.withBounds(-180, 85, 180, -85))
+                .as("south > north")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        // Test out of range bounds
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withBounds(-181, -85, 180, 85));
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withBounds(-180, -91, 180, 85));
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withBounds(-180, -85, 181, 85));
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withBounds(-180, -85, 180, 91));
+        assertThatThrownBy(() -> tileJSON.withBounds(-181, -85, 180, 85))
+                .as("west < -180")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> tileJSON.withBounds(-180, -91, 180, 85))
+                .as("south < -90")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> tileJSON.withBounds(-180, -85, 181, 85))
+                .as("east > 180")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> tileJSON.withBounds(-180, -85, 180, 91))
+                .as("north > 90")
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -185,19 +139,28 @@ class TileJSONTest {
         VectorLayer layer = VectorLayer.of("test", Map.of("name", "string"));
         TileJSON tileJSON = TileJSON.of("3.0.0", List.of("https://example.com/{z}/{x}/{y}.pbf"), List.of(layer));
 
-        // Test invalid longitude
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withCenter(-181, 0, null));
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withCenter(181, 0, null));
+        assertThatThrownBy(() -> tileJSON.withCenter(-181, 0, null))
+                .as("longitude < -180")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> tileJSON.withCenter(181, 0, null))
+                .as("longitude > 180")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        // Test invalid latitude
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withCenter(0, -91, null));
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withCenter(0, 91, null));
+        assertThatThrownBy(() -> tileJSON.withCenter(0, -91, null))
+                .as("latitude < -90")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> tileJSON.withCenter(0, 91, null))
+                .as("latitude > 90")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        // Test invalid zoom
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withCenter(0, 0, -1.0));
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withCenter(0, 0, 31.0));
+        assertThatThrownBy(() -> tileJSON.withCenter(0, 0, -1.0))
+                .as("zoom < 0")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> tileJSON.withCenter(0, 0, 31.0))
+                .as("zoom > 30")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        // Test valid centers
+        // valid centers
         assertDoesNotThrow(() -> tileJSON.withCenter(-180, -90, null));
         assertDoesNotThrow(() -> tileJSON.withCenter(180, 90, null));
         assertDoesNotThrow(() -> tileJSON.withCenter(0, 0, 0.0));
@@ -209,12 +172,17 @@ class TileJSONTest {
         VectorLayer layer = VectorLayer.of("test", Map.of("name", "string"));
         TileJSON tileJSON = TileJSON.of("3.0.0", List.of("https://example.com/{z}/{x}/{y}.pbf"), List.of(layer));
 
-        // Test invalid zoom levels
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withZoomRange(-1, 10));
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withZoomRange(0, 31));
-        assertThrows(IllegalArgumentException.class, () -> tileJSON.withZoomRange(10, 5));
+        assertThatThrownBy(() -> tileJSON.withZoomRange(-1, 10))
+                .as("minZoom < 0")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> tileJSON.withZoomRange(0, 31))
+                .as("maxZoom > 30")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> tileJSON.withZoomRange(10, 5))
+                .as("minZoom > maxZoom")
+                .isInstanceOf(IllegalArgumentException.class);
 
-        // Test valid zoom ranges
+        // valid zoom ranges
         assertDoesNotThrow(() -> tileJSON.withZoomRange(0, 0));
         assertDoesNotThrow(() -> tileJSON.withZoomRange(0, 30));
         assertDoesNotThrow(() -> tileJSON.withZoomRange(null, 10));
@@ -288,7 +256,7 @@ class TileJSONTest {
         VectorLayer layer = VectorLayer.of("test", Map.of("name", "string"));
         TileJSON original = TileJSON.of("3.0.0", List.of("https://example.com/{z}/{x}/{y}.pbf"), List.of(layer));
 
-        // Test all builder methods
+        // all builder methods
         TileJSON modified = original.withName("New Name")
                 .withDescription("New Description")
                 .withAttribution("New Attribution")

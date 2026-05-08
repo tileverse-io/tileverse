@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.jspecify.annotations.NullMarked;
 
 /**
@@ -56,7 +58,7 @@ final class SdkStorageCache {
     final class Lease implements AutoCloseable {
         private final Key key;
         private final Entry entry;
-        private boolean closed;
+        private final AtomicBoolean closed = new AtomicBoolean();
 
         Lease(Key key, Entry entry) {
             this.key = key;
@@ -68,17 +70,19 @@ final class SdkStorageCache {
         }
 
         @Override
-        public synchronized void close() {
-            if (closed) return;
-            closed = true;
-            release(key);
+        public void close() {
+            if (closed.compareAndSet(false, true)) {
+                release(key);
+            }
         }
 
-        private synchronized void release(Key key) {
+        private void release(Key key) {
             entries.compute(key, (k, e) -> {
-                if (e == null) return null;
-                e.refCount--;
-                if (e.refCount <= 0) {
+                if (e == null) {
+                    return null;
+                }
+                int refCount = e.refCount.decrementAndGet();
+                if (refCount <= 0) {
                     e.closeAll();
                     return null;
                 }
@@ -89,7 +93,7 @@ final class SdkStorageCache {
 
     private static final class Entry {
         final Storage client;
-        int refCount;
+        final AtomicInteger refCount = new AtomicInteger();
 
         Entry(Storage client) {
             this.client = client;
@@ -107,7 +111,7 @@ final class SdkStorageCache {
     Lease acquire(Key key) {
         Entry entry = entries.compute(key, (k, existing) -> {
             Entry e = existing == null ? build(k) : existing;
-            e.refCount++;
+            e.refCount.incrementAndGet();
             return e;
         });
         return new Lease(key, entry);

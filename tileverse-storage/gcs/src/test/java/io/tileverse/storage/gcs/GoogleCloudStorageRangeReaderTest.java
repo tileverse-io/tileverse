@@ -15,14 +15,16 @@
  */
 package io.tileverse.storage.gcs;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.cloud.ReadChannel;
@@ -116,7 +118,7 @@ class GoogleCloudStorageRangeReaderTest {
     }
 
     @Test
-    void testGetSize() throws IOException {
+    void testGetSize() {
         assertEquals(CONTENT_LENGTH, reader.size().getAsLong());
         verify(storage, times(1)).get(BlobId.of(BUCKET, OBJECT_NAME));
     }
@@ -180,7 +182,7 @@ class GoogleCloudStorageRangeReaderTest {
     }
 
     @Test
-    void testReadZeroLength() throws IOException {
+    void testReadZeroLength() {
         ByteBuffer buffer = reader.readRange(100, 0);
         buffer.flip();
 
@@ -192,12 +194,12 @@ class GoogleCloudStorageRangeReaderTest {
 
     @Test
     void testReadWithNegativeOffset() {
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(-1, 10));
+        assertThatThrownBy(() -> reader.readRange(-1, 10)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void testReadWithNegativeLength() {
-        assertThrows(IllegalArgumentException.class, () -> reader.readRange(0, -1));
+        assertThatThrownBy(() -> reader.readRange(0, -1)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @SuppressWarnings("resource")
@@ -206,17 +208,16 @@ class GoogleCloudStorageRangeReaderTest {
         // Override the default behavior for this specific test
         when(blob.exists()).thenReturn(false);
 
-        assertThrows(
-                io.tileverse.storage.NotFoundException.class,
-                () -> new GoogleCloudStorageRangeReader(storage, BUCKET, OBJECT_NAME).size());
+        assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(storage, BUCKET, OBJECT_NAME).size())
+                .isInstanceOf(io.tileverse.storage.NotFoundException.class);
     }
 
     @Test
-    void testStorageExceptionDuringRead() throws IOException {
+    void testStorageExceptionDuringRead() {
         // Override the default behavior for this specific test
         when(blob.reader()).thenThrow(new StorageException(500, "Storage error"));
 
-        assertThrows(io.tileverse.storage.StorageException.class, () -> reader.readRange(0, 100));
+        assertThatThrownBy(() -> reader.readRange(0, 100)).isInstanceOf(io.tileverse.storage.StorageException.class);
     }
 
     @Test
@@ -235,7 +236,7 @@ class GoogleCloudStorageRangeReaderTest {
     }
 
     @Test
-    void testGetSizeFromCachedValue() throws IOException {
+    void testGetSizeFromCachedValue() {
         // First call should query the blob
         assertEquals(CONTENT_LENGTH, reader.size().getAsLong());
         verify(storage, times(1)).get(BlobId.of(BUCKET, OBJECT_NAME));
@@ -247,15 +248,18 @@ class GoogleCloudStorageRangeReaderTest {
 
     @Test
     void testNullInputsInConstructor() {
-        assertThrows(NullPointerException.class, () -> new GoogleCloudStorageRangeReader(null, BUCKET, OBJECT_NAME));
-        assertThrows(NullPointerException.class, () -> new GoogleCloudStorageRangeReader(storage, null, OBJECT_NAME));
-        assertThrows(NullPointerException.class, () -> new GoogleCloudStorageRangeReader(storage, BUCKET, null));
+        assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(null, BUCKET, OBJECT_NAME))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(storage, null, OBJECT_NAME))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(storage, BUCKET, null))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void testClose() {
-        // Should not throw any exception
+        clearInvocations(storage);
         reader.close();
-        // Verify no interactions with the storage client during close
+        verifyNoInteractions(storage);
     }
 }

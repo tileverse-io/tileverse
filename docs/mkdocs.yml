@@ -98,11 +98,11 @@ nav:
   - Storage:
     - Overview: storage/index.md
     - Why tileverse-storage?: storage/why.md
-    - Installation: storage/rangereader/user-guide/installation.md
+    - Installation: storage/user-guide/installation.md
     - Quick Start: storage/user-guide/quick-start.md
-    - Configuration: storage/rangereader/user-guide/configuration.md
-    - Authentication: storage/rangereader/user-guide/authentication.md
-    - Troubleshooting: storage/rangereader/user-guide/troubleshooting.md
+    - Configuration: storage/user-guide/configuration.md
+    - Authentication: storage/user-guide/authentication.md
+    - Troubleshooting: storage/user-guide/troubleshooting.md
     - Migrating from 1.4.x: storage/migration-1.4-to-2.0.md
     - Range Reader:
       - Overview: storage/rangereader/index.md

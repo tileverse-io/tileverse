@@ -49,9 +49,9 @@ This guide is designed for:
 
 If you're in a hurry, start with these essentials:
 
-1. **[Installation](installation.md)** - Add the library to your project
+1. **[Installation](../../user-guide/installation.md)** - Add the library to your project
 2. **[Quick Start](quick-start.md)** - Basic usage examples
-3. **[Configuration](configuration.md)** - Performance optimization
+3. **[Configuration](../../user-guide/configuration.md)** - Performance optimization
 
 ## Library Overview
 
@@ -189,7 +189,7 @@ Ready to get started? Choose your path:
 
     Add the library to your Maven project
 
-    [:octicons-arrow-right-24: Install](installation.md)
+    [:octicons-arrow-right-24: Install](../../user-guide/installation.md)
 
 -   :material-rocket: **Quick Start**
 
@@ -205,7 +205,7 @@ Ready to get started? Choose your path:
 
     Optimize performance for your use case
 
-    [:octicons-arrow-right-24: Configure](configuration.md)
+    [:octicons-arrow-right-24: Configure](../../user-guide/configuration.md)
 
 -   :material-shield-key: **Authentication**
 
@@ -213,13 +213,13 @@ Ready to get started? Choose your path:
 
     Set up secure access to your data
 
-    [:octicons-arrow-right-24: Auth Setup](authentication.md)
+    [:octicons-arrow-right-24: Auth Setup](../../user-guide/authentication.md)
 
 </div>
 
 ## Need Help?
 
-- Check the **[Troubleshooting](troubleshooting.md)** guide for common issues
+- Check the **[Troubleshooting](../../user-guide/troubleshooting.md)** guide for common issues
 - Review the **[Quick Start](quick-start.md)** for code examples
-- Read the **[Configuration](configuration.md)** guide for advanced setup
+- Read the **[Configuration](../../user-guide/configuration.md)** guide for advanced setup
 - Visit our **[GitHub repository](https://github.com/tileverse-io/tileverse)** for the latest updates

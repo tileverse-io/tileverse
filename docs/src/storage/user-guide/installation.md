@@ -1,6 +1,6 @@
 # Installation
 
-This guide explains how to add the `tileverse-storage` library to your Java project. The library exposes both the broader [`Storage`](../../index.md) API and the [`RangeReader`](../index.md) byte-range API in the same artifacts.
+This guide explains how to add the `tileverse-storage` library to your Java project. The library exposes both the broader [`Storage`](../index.md) API and the [`RangeReader`](../rangereader/index.md) byte-range API in the same artifacts.
 
 ## Maven Installation
 

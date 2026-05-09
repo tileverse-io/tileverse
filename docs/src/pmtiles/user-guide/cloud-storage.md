@@ -144,5 +144,5 @@ RangeReader alignedReader = BlockAlignedRangeReader.builder(baseReader)
 
 ## See Also
 
-- [Range Reader Authentication](../../storage/rangereader/user-guide/authentication.md)
+- [Storage Authentication](../../storage/user-guide/authentication.md)
 - [Range Reader Performance](../../storage/rangereader/developer-guide/performance.md)

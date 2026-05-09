@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -31,10 +32,12 @@ import com.google.cloud.ReadChannel;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.Storage.BlobGetOption;
 import com.google.cloud.storage.StorageException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -78,7 +81,7 @@ class GoogleCloudStorageRangeReaderTest {
         currentSeekPosition = 0;
 
         // Make mocks lenient for this test class to avoid unnecessary stubbing errors
-        lenient().when(storage.get(blobId)).thenReturn(blob);
+        lenient().when(storage.get(eq(blobId), any(BlobGetOption[].class))).thenReturn(blob);
         lenient().when(blob.exists()).thenReturn(true);
         lenient().when(blob.getSize()).thenReturn((long) CONTENT_LENGTH);
 
@@ -114,13 +117,13 @@ class GoogleCloudStorageRangeReaderTest {
         });
 
         // Create the reader
-        reader = new GoogleCloudStorageRangeReader(storage, BUCKET, OBJECT_NAME);
+        reader = new GoogleCloudStorageRangeReader(storage, BUCKET, OBJECT_NAME, Optional.empty());
     }
 
     @Test
     void testGetSize() {
         assertEquals(CONTENT_LENGTH, reader.size().getAsLong());
-        verify(storage, times(1)).get(BlobId.of(BUCKET, OBJECT_NAME));
+        verify(storage, times(1)).get(eq(BlobId.of(BUCKET, OBJECT_NAME)), any(BlobGetOption[].class));
     }
 
     @Test
@@ -208,7 +211,8 @@ class GoogleCloudStorageRangeReaderTest {
         // Override the default behavior for this specific test
         when(blob.exists()).thenReturn(false);
 
-        assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(storage, BUCKET, OBJECT_NAME).size())
+        assertThatThrownBy(
+                        () -> new GoogleCloudStorageRangeReader(storage, BUCKET, OBJECT_NAME, Optional.empty()).size())
                 .isInstanceOf(io.tileverse.storage.NotFoundException.class);
     }
 
@@ -239,20 +243,21 @@ class GoogleCloudStorageRangeReaderTest {
     void testGetSizeFromCachedValue() {
         // First call should query the blob
         assertEquals(CONTENT_LENGTH, reader.size().getAsLong());
-        verify(storage, times(1)).get(BlobId.of(BUCKET, OBJECT_NAME));
+        verify(storage, times(1)).get(eq(BlobId.of(BUCKET, OBJECT_NAME)), any(BlobGetOption[].class));
 
         // Second call should use cached value
         assertEquals(CONTENT_LENGTH, reader.size().getAsLong());
-        verify(storage, times(1)).get(BlobId.of(BUCKET, OBJECT_NAME)); // Still only one call
+        verify(storage, times(1))
+                .get(eq(BlobId.of(BUCKET, OBJECT_NAME)), any(BlobGetOption[].class)); // Still only one call
     }
 
     @Test
     void testNullInputsInConstructor() {
-        assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(null, BUCKET, OBJECT_NAME))
+        assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(null, BUCKET, OBJECT_NAME, Optional.empty()))
                 .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(storage, null, OBJECT_NAME))
+        assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(storage, null, OBJECT_NAME, Optional.empty()))
                 .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(storage, BUCKET, null))
+        assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(storage, BUCKET, null, Optional.empty()))
                 .isInstanceOf(NullPointerException.class);
     }
 

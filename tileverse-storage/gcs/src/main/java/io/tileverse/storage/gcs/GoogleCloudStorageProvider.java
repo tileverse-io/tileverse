@@ -91,7 +91,7 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
      */
     public static Storage open(@NonNull URI uri, @NonNull com.google.cloud.storage.Storage client) {
         SdkStorageLocation location = SdkStorageLocation.parse(uri);
-        return new GoogleCloudStorage(uri, location, new BorrowedGcsHandle(client));
+        return new GoogleCloudStorage(uri, location, new BorrowedGcsHandle(client), Optional.empty());
     }
 
     /** Project ID is a unique, user-defined identifier for a Google Cloud project. */
@@ -148,6 +148,35 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
             .build();
 
     /**
+     * Billing project to attach to every operation against a Requester Pays bucket. When set, every GCS request appends
+     * {@code userProject=<value>} so the requester (rather than the bucket owner) is billed for egress and
+     * per-operation costs. Required to access buckets configured with the Requester Pays billing model; without it such
+     * buckets respond with {@code 400 UserProjectMissing}.
+     *
+     * <p><b>Authentication is mandatory.</b> The requester must be an authenticated principal (service account or end
+     * user) that holds {@code serviceusage.services.use} on the project named here; anonymous calls cannot satisfy
+     * either requirement. Enable {@link #GCS_USE_DEFAULT_APPLICTION_CREDENTIALS} or inject a configured
+     * {@link com.google.cloud.storage.Storage} client, and do not pair this parameter with a host override that forces
+     * anonymous mode.
+     */
+    public static final StorageParameter<String> GCS_USER_PROJECT = StorageParameter.builder()
+            .key("storage.gcs.user-project")
+            .title("Billing project for Requester Pays buckets")
+            .description("""
+                    Project ID to bill for operations against a Requester Pays bucket. When set, the value is \
+                    attached to every request as the userProject option (URL parameter); buckets in Requester \
+                    Pays mode reject requests without it with 400 UserProjectMissing.
+
+                    Authentication is mandatory: the requester must be an authenticated principal (service \
+                    account or end user) that holds the serviceusage.services.use permission on the named \
+                    billing project. Anonymous requests cannot satisfy that requirement. Enable \
+                    storage.gcs.default-credentials-chain so application default credentials are used.
+                    """)
+            .type(String.class)
+            .group(ID)
+            .build();
+
+    /**
      * Custom GCS endpoint host override (e.g. {@code http://localhost:4443} for fake-gcs-server emulators). When set,
      * the provider talks to this host instead of the default {@code https://storage.googleapis.com}, and credentials
      * default to anonymous unless explicitly configured otherwise.
@@ -166,8 +195,8 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
             .group(ID)
             .build();
 
-    private static final List<StorageParameter<?>> PARAMS =
-            List.of(GCS_PROJECT_ID, GCS_QUOTA_PROJECT_ID, GCS_USE_DEFAULT_APPLICTION_CREDENTIALS, GCS_HOST);
+    private static final List<StorageParameter<?>> PARAMS = List.of(
+            GCS_PROJECT_ID, GCS_QUOTA_PROJECT_ID, GCS_USE_DEFAULT_APPLICTION_CREDENTIALS, GCS_USER_PROJECT, GCS_HOST);
 
     private final SdkStorageCache clientCache = new SdkStorageCache();
 
@@ -240,8 +269,9 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
     public Storage createStorage(StorageConfig config) {
         URI uri = config.baseUri();
         SdkStorageLocation location = SdkStorageLocation.parse(uri);
-        SdkStorageCache.Lease lease = clientCache.acquire(keyFor(config));
-        return new GoogleCloudStorage(uri, location, lease);
+        SdkStorageCache.Key key = keyFor(config);
+        SdkStorageCache.Lease lease = clientCache.acquire(key);
+        return new GoogleCloudStorage(uri, location, lease, key.userProject());
     }
 
     /**
@@ -274,6 +304,7 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
         boolean useDefaultCreds =
                 config.getParameter(GCS_USE_DEFAULT_APPLICTION_CREDENTIALS).orElse(true);
         boolean anonymous = !useDefaultCreds || hostOverride.isPresent();
-        return new SdkStorageCache.Key(hostOverride, projectId, Optional.empty(), anonymous);
+        Optional<String> userProject = config.getParameter(GCS_USER_PROJECT).filter(s -> !s.isBlank());
+        return new SdkStorageCache.Key(hostOverride, projectId, Optional.empty(), anonymous, userProject);
     }
 }

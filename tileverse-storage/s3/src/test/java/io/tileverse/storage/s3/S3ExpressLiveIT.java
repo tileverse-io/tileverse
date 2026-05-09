@@ -50,7 +50,7 @@ class S3ExpressLiveIT {
         S3StorageBucketKey ref = S3StorageBucketKey.parse(baseUri);
         String region = Optional.ofNullable(System.getenv("AWS_REGION")).orElse("us-west-2");
         S3ClientCache.Key key = S3ClientCache.key(region, null, false, null, null, null, false);
-        storage = new S3Storage(baseUri, ref, cache.acquire(key));
+        storage = new S3Storage(baseUri, ref, cache.acquire(key), false);
     }
 
     @AfterAll

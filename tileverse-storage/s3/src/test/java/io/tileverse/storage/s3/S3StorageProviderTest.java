@@ -21,6 +21,7 @@ import static io.tileverse.storage.s3.S3StorageProvider.S3_AWS_SECRET_ACCESS_KEY
 import static io.tileverse.storage.s3.S3StorageProvider.S3_DEFAULT_CREDENTIALS_PROFILE;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_FORCE_PATH_STYLE;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_REGION;
+import static io.tileverse.storage.s3.S3StorageProvider.S3_REQUESTER_PAYS;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_USE_DEFAULT_CREDENTIALS_PROVIDER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -82,12 +83,21 @@ class S3StorageProviderTest {
         assertThat(parameters)
                 .isEqualTo(List.of(
                         S3_FORCE_PATH_STYLE,
+                        S3_REQUESTER_PAYS,
                         S3_REGION,
                         S3_ANONYMOUS,
                         S3_AWS_ACCESS_KEY_ID,
                         S3_AWS_SECRET_ACCESS_KEY,
                         S3_USE_DEFAULT_CREDENTIALS_PROVIDER,
                         S3_DEFAULT_CREDENTIALS_PROFILE));
+    }
+
+    @Test
+    void requesterPays_parameterShape() {
+        assertThat(S3_REQUESTER_PAYS.key()).isEqualTo("storage.s3.requester-pays");
+        assertThat(S3_REQUESTER_PAYS.type()).isEqualTo(Boolean.class);
+        assertThat(S3_REQUESTER_PAYS.defaultValue()).hasValue(false);
+        assertThat(S3_REQUESTER_PAYS.group()).isEqualTo(S3StorageProvider.ID);
     }
 
     @Test

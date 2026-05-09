@@ -22,9 +22,12 @@ import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Bucket;
+import com.google.cloud.storage.Storage.BlobGetOption;
 import com.google.cloud.storage.Storage.BlobListOption;
+import com.google.cloud.storage.Storage.BlobSourceOption;
 import com.google.cloud.storage.Storage.BlobTargetOption;
 import com.google.cloud.storage.Storage.BlobWriteOption;
+import com.google.cloud.storage.Storage.BucketGetOption;
 import com.google.cloud.storage.Storage.CopyRequest;
 import com.google.cloud.storage.Storage.SignUrlOption;
 import com.google.cloud.storage.StorageException;
@@ -67,6 +70,7 @@ import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -87,23 +91,30 @@ final class GoogleCloudStorage implements Storage {
     private final GcsClientHandle handle;
     private final StorageCapabilities capabilities;
     private final boolean isHns;
+    private final Optional<String> userProject;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    GoogleCloudStorage(URI baseUri, SdkStorageLocation location, SdkStorageCache.Lease lease) {
-        this(baseUri, location, new LeasedGcsHandle(lease));
+    GoogleCloudStorage(
+            URI baseUri, SdkStorageLocation location, SdkStorageCache.Lease lease, Optional<String> userProject) {
+        this(baseUri, location, new LeasedGcsHandle(lease), userProject);
     }
 
-    GoogleCloudStorage(URI baseUri, SdkStorageLocation location, GcsClientHandle handle) {
+    GoogleCloudStorage(URI baseUri, SdkStorageLocation location, GcsClientHandle handle, Optional<String> userProject) {
         this.baseUri = baseUri;
         this.location = location;
         this.handle = handle;
-        this.isHns = detectHns(handle.client(), location.bucket());
+        this.userProject = userProject;
+        this.isHns = detectHns(handle.client(), location.bucket(), userProject);
         this.capabilities = buildCapabilities(this.isHns);
     }
 
-    private static boolean detectHns(com.google.cloud.storage.Storage client, String bucket) {
+    private static boolean detectHns(
+            com.google.cloud.storage.Storage client, String bucket, Optional<String> userProject) {
         try {
-            Bucket b = client.get(bucket);
+            BucketGetOption[] opts = userProject
+                    .map(p -> new BucketGetOption[] {BucketGetOption.userProject(p)})
+                    .orElseGet(() -> new BucketGetOption[0]);
+            Bucket b = client.get(bucket, opts);
             if (b == null) {
                 return false;
             }
@@ -112,6 +123,14 @@ final class GoogleCloudStorage implements Storage {
         } catch (StorageException e) {
             return false;
         }
+    }
+
+    /**
+     * Appends a {@code userProject} option of the requested type when this Storage is configured for a Requester Pays
+     * bucket. Centralised so the conditional does not have to be repeated at every per-call site.
+     */
+    private <O> void addUserProject(List<O> opts, Function<String, O> factory) {
+        userProject.ifPresent(p -> opts.add(factory.apply(p)));
     }
 
     private static StorageCapabilities buildCapabilities(boolean isHns) {
@@ -179,7 +198,9 @@ final class GoogleCloudStorage implements Storage {
     public Optional<StorageEntry.File> stat(String key) {
         requireOpen();
         try {
-            Blob blob = handle.client().get(blobId(key));
+            List<BlobGetOption> getOpts = new ArrayList<>();
+            addUserProject(getOpts, BlobGetOption::userProject);
+            Blob blob = handle.client().get(blobId(key), getOpts.toArray(BlobGetOption[]::new));
             if (blob == null) {
                 return Optional.empty();
             }
@@ -222,6 +243,7 @@ final class GoogleCloudStorage implements Storage {
             opts.add(BlobListOption.currentDirectory());
         }
         options.pageSize().ifPresent(p -> opts.add(BlobListOption.pageSize(p)));
+        addUserProject(opts, BlobListOption::userProject);
 
         Page<Blob> page;
         Iterator<Blob> rawItems;
@@ -289,7 +311,8 @@ final class GoogleCloudStorage implements Storage {
         if (stat(key).isEmpty()) {
             throw new NotFoundException("Blob not found: gs://" + location.bucket() + "/" + location.resolve(key));
         }
-        return new GoogleCloudStorageRangeReader(handle.client(), location.bucket(), location.resolve(key));
+        return new GoogleCloudStorageRangeReader(
+                handle.client(), location.bucket(), location.resolve(key), userProject);
     }
 
     /**
@@ -319,7 +342,9 @@ final class GoogleCloudStorage implements Storage {
             generation = Long.parseLong(options.versionId().orElseThrow());
         }
         BlobId id = blobId(key, generation);
-        Blob blob = handle.client().get(id);
+        List<BlobGetOption> getOpts = new ArrayList<>();
+        addUserProject(getOpts, BlobGetOption::userProject);
+        Blob blob = handle.client().get(id, getOpts.toArray(BlobGetOption[]::new));
         if (blob == null) {
             String absoluteKey = location.resolve(key);
             throw new NotFoundException("Blob not found: gs://%s/%s".formatted(location.bucket(), absoluteKey));
@@ -422,6 +447,7 @@ final class GoogleCloudStorage implements Storage {
         if (options.ifNotExists()) {
             opts.add(BlobTargetOption.doesNotExist());
         }
+        addUserProject(opts, BlobTargetOption::userProject);
         try {
             handle.client().create(bib.build(), data, opts.toArray(BlobTargetOption[]::new));
         } catch (StorageException e) {
@@ -446,6 +472,7 @@ final class GoogleCloudStorage implements Storage {
         if (options.ifNotExists()) {
             opts.add(BlobWriteOption.doesNotExist());
         }
+        addUserProject(opts, BlobWriteOption::userProject);
         try {
             handle.client().createFrom(bib.build(), source, opts.toArray(BlobWriteOption[]::new));
         } catch (StorageException e) {
@@ -472,6 +499,7 @@ final class GoogleCloudStorage implements Storage {
         if (options.ifNotExists()) {
             opts.add(BlobWriteOption.doesNotExist());
         }
+        addUserProject(opts, BlobWriteOption::userProject);
         WriteChannel writer = handle.client().writer(bib.build(), opts.toArray(BlobWriteOption[]::new));
         OutputStream sink = Channels.newOutputStream(writer);
         return new FilterOutputStream(sink) {
@@ -504,7 +532,9 @@ final class GoogleCloudStorage implements Storage {
     public void delete(String key) {
         requireOpen();
         try {
-            handle.client().delete(blobId(key));
+            List<BlobSourceOption> opts = new ArrayList<>();
+            addUserProject(opts, BlobSourceOption::userProject);
+            handle.client().delete(blobId(key), opts.toArray(BlobSourceOption[]::new));
         } catch (StorageException e) {
             throw SdkExceptionMapper.map(e, key);
         }
@@ -518,22 +548,47 @@ final class GoogleCloudStorage implements Storage {
         Set<String> deleted = new HashSet<>();
         Set<String> didNotExist = new HashSet<>();
         Map<String, io.tileverse.storage.StorageException> failed = new HashMap<>();
-        try {
-            List<Boolean> results = handle.client().delete(ids);
-            for (int i = 0; i < results.size(); i++) {
-                String key = keyList.get(i);
-                if (Boolean.TRUE.equals(results.get(i))) {
-                    deleted.add(key);
-                } else {
-                    didNotExist.add(key);
-                }
-            }
-        } catch (StorageException e) {
-            for (String key : keyList) {
-                failed.put(key, SdkExceptionMapper.map(e, key));
+        List<Boolean> results = bulkDelete(ids, keyList, failed);
+        for (int i = 0; i < results.size(); i++) {
+            String key = keyList.get(i);
+            if (Boolean.TRUE.equals(results.get(i))) {
+                deleted.add(key);
+            } else if (!failed.containsKey(key)) {
+                didNotExist.add(key);
             }
         }
         return new DeleteResult(deleted, didNotExist, failed);
+    }
+
+    /**
+     * GCS's {@code delete(Iterable<BlobId>)} accepts no per-call options, so when this Storage is configured for a
+     * Requester Pays bucket we fall back to a per-id loop that attaches {@code userProject} to each request. The shape
+     * of the result list is preserved in either case so the caller's index-based correlation still works.
+     */
+    private List<Boolean> bulkDelete(
+            List<BlobId> ids, List<String> keyList, Map<String, io.tileverse.storage.StorageException> failed) {
+        if (userProject.isEmpty()) {
+            try {
+                return handle.client().delete(ids);
+            } catch (StorageException e) {
+                for (String key : keyList) {
+                    failed.put(key, SdkExceptionMapper.map(e, key));
+                }
+                return List.of();
+            }
+        }
+        List<Boolean> results = new ArrayList<>(ids.size());
+        BlobSourceOption userProjectOption = BlobSourceOption.userProject(userProject.orElseThrow());
+        for (int i = 0; i < ids.size(); i++) {
+            String key = keyList.get(i);
+            try {
+                results.add(handle.client().delete(ids.get(i), userProjectOption));
+            } catch (StorageException e) {
+                results.add(Boolean.FALSE);
+                failed.put(key, SdkExceptionMapper.map(e, key));
+            }
+        }
+        return results;
     }
 
     @Override
@@ -559,11 +614,16 @@ final class GoogleCloudStorage implements Storage {
             throw new PreconditionFailedException("Destination already exists: " + dstKey);
         }
         try {
-            CopyRequest req = CopyRequest.newBuilder()
-                    .setSource(blobId(srcKey))
-                    .setTarget(BlobId.of(dst.location.bucket(), dst.location.resolve(dstKey)))
-                    .build();
-            handle.client().copy(req).getResult();
+            BlobId targetId = BlobId.of(dst.location.bucket(), dst.location.resolve(dstKey));
+            CopyRequest.Builder reqBuilder = CopyRequest.newBuilder().setSource(blobId(srcKey));
+            if (userProject.isPresent()) {
+                String p = userProject.orElseThrow();
+                reqBuilder.setSourceOptions(BlobSourceOption.userProject(p));
+                reqBuilder.setTarget(targetId, BlobTargetOption.userProject(p));
+            } else {
+                reqBuilder.setTarget(targetId);
+            }
+            handle.client().copy(reqBuilder.build()).getResult();
         } catch (StorageException e) {
             throw SdkExceptionMapper.map(e, srcKey);
         }
@@ -588,13 +648,12 @@ final class GoogleCloudStorage implements Storage {
         }
         try {
             BlobInfo info = BlobInfo.newBuilder(blobId(key)).build();
+            List<SignUrlOption> signOpts = new ArrayList<>();
+            signOpts.add(SignUrlOption.withV4Signature());
+            signOpts.add(SignUrlOption.httpMethod(com.google.cloud.storage.HttpMethod.GET));
+            userProject.ifPresent(p -> signOpts.add(SignUrlOption.withQueryParams(Map.of("userProject", p))));
             return URI.create(handle.client()
-                    .signUrl(
-                            info,
-                            ttl.toSeconds(),
-                            TimeUnit.SECONDS,
-                            SignUrlOption.withV4Signature(),
-                            SignUrlOption.httpMethod(com.google.cloud.storage.HttpMethod.GET))
+                    .signUrl(info, ttl.toSeconds(), TimeUnit.SECONDS, signOpts.toArray(SignUrlOption[]::new))
                     .toString());
         } catch (StorageException e) {
             throw SdkExceptionMapper.map(e, key);
@@ -611,13 +670,12 @@ final class GoogleCloudStorage implements Storage {
         try {
             BlobInfo.Builder bib = BlobInfo.newBuilder(blobId(key));
             options.contentType().ifPresent(bib::setContentType);
+            List<SignUrlOption> signOpts = new ArrayList<>();
+            signOpts.add(SignUrlOption.withV4Signature());
+            signOpts.add(SignUrlOption.httpMethod(com.google.cloud.storage.HttpMethod.PUT));
+            userProject.ifPresent(p -> signOpts.add(SignUrlOption.withQueryParams(Map.of("userProject", p))));
             return URI.create(handle.client()
-                    .signUrl(
-                            bib.build(),
-                            ttl.toSeconds(),
-                            TimeUnit.SECONDS,
-                            SignUrlOption.withV4Signature(),
-                            SignUrlOption.httpMethod(com.google.cloud.storage.HttpMethod.PUT))
+                    .signUrl(bib.build(), ttl.toSeconds(), TimeUnit.SECONDS, signOpts.toArray(SignUrlOption[]::new))
                     .toString());
         } catch (StorageException e) {
             throw SdkExceptionMapper.map(e, key);

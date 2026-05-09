@@ -15,8 +15,9 @@
  */
 package io.tileverse.geotools.parquet;
 
-import io.tileverse.rangereader.RangeReader;
-import io.tileverse.rangereader.RangeReaderFactory;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -59,15 +60,18 @@ public class GeoparquetContentDataStore extends ContentDataStore implements File
     private final String typeName;
     private final FilterPredicateBuilder filterPredicateBuilder = new FilterPredicateBuilder();
 
+    private final Storage storage;
     private final RangeReader rangeReader;
     private final GeoParquetRecordSource recordSource;
     private final SimpleFeatureType featureType;
     private final GeoParquetMetadata geoParquetMetadata;
     private final Set<String> wkbGeometryColumns;
 
-    private GeoparquetContentDataStore(URI uri, RangeReader rangeReader, GeoParquetRecordSource recordSource) {
+    private GeoparquetContentDataStore(
+            URI uri, Storage storage, RangeReader rangeReader, GeoParquetRecordSource recordSource) {
         this.uri = Objects.requireNonNull(uri, "uri");
         this.typeName = typeNameFrom(uri);
+        this.storage = Objects.requireNonNull(storage, "storage");
         this.rangeReader = Objects.requireNonNull(rangeReader, "rangeReader");
         this.recordSource = Objects.requireNonNull(recordSource, "recordSource");
         this.featureType = new SchemaBuilder().build(typeName, recordSource.getSchema());
@@ -110,13 +114,26 @@ public class GeoparquetContentDataStore extends ContentDataStore implements File
             throw new IOException(e);
         }
         Properties config = rangeReaderConfig == null ? new Properties() : rangeReaderConfig;
-        RangeReader rangeReader = RangeReaderFactory.create(uri, config);
+        // The Storage is rooted at the parent of the leaf URI; openRangeReader(uri) then resolves the leaf
+        // back to a key relative to that root. Both objects need to live as long as the data store.
+        URI parent = uri.resolve(".");
+        Storage storage = StorageFactory.open(parent, config);
         try {
-            GeoParquetRecordSource recordSource = recordSourceFactory.create(rangeReader);
-            return new GeoparquetContentDataStore(uri, rangeReader, recordSource);
+            RangeReader rangeReader = storage.openRangeReader(uri);
+            try {
+                GeoParquetRecordSource recordSource = recordSourceFactory.create(rangeReader);
+                return new GeoparquetContentDataStore(uri, storage, rangeReader, recordSource);
+            } catch (IOException | RuntimeException t) {
+                try {
+                    rangeReader.close();
+                } catch (IOException closeError) {
+                    t.addSuppressed(closeError);
+                }
+                throw t;
+            }
         } catch (IOException | RuntimeException t) {
             try {
-                rangeReader.close();
+                storage.close();
             } catch (IOException closeError) {
                 t.addSuppressed(closeError);
             }
@@ -186,6 +203,11 @@ public class GeoparquetContentDataStore extends ContentDataStore implements File
             rangeReader.close();
         } catch (IOException e) {
             LOGGER.fine(() -> "Error closing RangeReader: " + e.getMessage());
+        }
+        try {
+            storage.close();
+        } catch (IOException e) {
+            LOGGER.fine(() -> "Error closing Storage: " + e.getMessage());
         }
     }
 

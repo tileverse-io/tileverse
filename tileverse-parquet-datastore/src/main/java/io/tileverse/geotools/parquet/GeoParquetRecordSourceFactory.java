@@ -15,7 +15,7 @@
  */
 package io.tileverse.geotools.parquet;
 
-import io.tileverse.rangereader.RangeReader;
+import io.tileverse.storage.RangeReader;
 import java.io.IOException;
 
 @FunctionalInterface

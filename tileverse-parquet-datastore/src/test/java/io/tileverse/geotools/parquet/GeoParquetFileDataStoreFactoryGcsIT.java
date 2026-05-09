@@ -78,11 +78,11 @@ class GeoParquetFileDataStoreFactoryGcsIT {
         Map<String, Object> params = Map.of(
                 "url",
                 gcsFixtureUrl,
-                "io.tileverse.rangereader.provider",
+                "storage.provider",
                 "gcs",
-                "io.tileverse.rangereader.gcs.project-id",
+                "storage.gcs.project-id",
                 PROJECT_ID,
-                "io.tileverse.rangereader.gcs.default-credentials-chain",
+                "storage.gcs.default-credentials-chain",
                 false);
 
         GeoParquetDatastoreCloudITSupport.assertReadsSampleGeoParquet(params);

@@ -10,7 +10,7 @@
 
   <groupId>io.tileverse.parquet</groupId>
   <artifactId>tileverse-parquet-datastore</artifactId>
-  <name>Tileverse Parquet :: DataStore</name>
+  <name>Tileverse :: Parquet :: DataStore</name>
   <description>GeoTools DataStore implementation for tileverse-parquet</description>
   <properties>
     <gt.version>35-SNAPSHOT</gt.version>

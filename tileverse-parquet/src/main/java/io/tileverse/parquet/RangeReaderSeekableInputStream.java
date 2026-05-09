@@ -17,8 +17,8 @@ package io.tileverse.parquet;
 
 import io.tileverse.io.ByteBufferPool;
 import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
-import io.tileverse.rangereader.RangeReader;
-import io.tileverse.rangereader.adapters.RangeReaderSeekableByteChannel;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.adapters.RangeReaderSeekableByteChannel;
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;

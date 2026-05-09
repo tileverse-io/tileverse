@@ -7,27 +7,38 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tileverse.parquet.ParquetDataset;
 import io.tileverse.parquet.RangeReaderInputFile;
-import io.tileverse.rangereader.RangeReader;
-import io.tileverse.rangereader.RangeReaderFactory;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageEntry;
+import io.tileverse.storage.StorageFactory;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.geotools.api.data.Query;
 import org.geotools.api.filter.Filter;
 import org.geotools.api.filter.FilterFactory;
 import org.geotools.data.simple.SimpleFeatureIterator;
 import org.geotools.factory.CommonFactoryFinder;
 import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
@@ -65,16 +76,65 @@ class OvertureS3GeoParquetIT {
     private static final String BBOX_PROPERTY = "overture.s3.bbox";
     private static final String MAX_FEATURES_PROPERTY = "overture.s3.maxFeatures";
     private static final String BRAZIL_COAST_BBOX = "-33.85,-39.2,-27.79,-27.7";
-    private static final String BATHYMETRY_PART0 =
-            "s3://overturemaps-us-west-2/release/2026-02-18.0/theme=base/type=bathymetry/part-00000-78f26a81-6a8f-4536-b468-fdc24c8fab33-c000.zstd.parquet";
-    private static final String BBOX_SAMPLE_RESOURCE = "geojson/bathymetry-overturemaps-bboxsample.geojson";
+    private static final String OVERTURE_BUCKET = "overturemaps-us-west-2";
+    private static final URI STAC_CATALOG = URI.create("https://stac.overturemaps.org/catalog.json");
+    private static final Pattern LATEST_FIELD = Pattern.compile("\"latest\"\\s*:\\s*\"([^\"]+)\"");
     private static final FilterFactory FF = CommonFactoryFinder.getFilterFactory();
     private static final WKBReader WKB_READER = new WKBReader();
+
+    /**
+     * s3:// URL of the first {@code part-NNNNN-*.zstd.parquet} under {@code theme=base/type=bathymetry/} of the latest
+     * release. Resolved at suite startup so the test stays current as Overture cuts new releases.
+     */
+    private static String bathymetryPart0;
+
+    @BeforeAll
+    static void resolveLatestBathymetryPart() throws IOException, InterruptedException {
+        String latest = fetchLatestRelease();
+        URI releaseRoot = URI.create("s3://" + OVERTURE_BUCKET + "/release/" + latest + "/");
+        try (Storage storage = StorageFactory.open(releaseRoot, anonymousS3());
+                Stream<StorageEntry> stream = storage.list("theme=base/type=bathymetry/*.parquet")) {
+            String firstKey = stream.filter(e -> e instanceof StorageEntry.File)
+                    .map(StorageEntry::key)
+                    .findFirst()
+                    .orElseThrow(() ->
+                            new AssertionError("no bathymetry parquet files found in Overture release " + latest));
+            bathymetryPart0 = "s3://" + OVERTURE_BUCKET + "/release/" + latest + "/" + firstKey;
+        }
+    }
+
+    private static String fetchLatestRelease() throws IOException, InterruptedException {
+        HttpClient http =
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+        HttpRequest req = HttpRequest.newBuilder(STAC_CATALOG)
+                .timeout(Duration.ofSeconds(10))
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() != 200) {
+            throw new IOException("STAC catalog returned HTTP " + resp.statusCode());
+        }
+        Matcher m = LATEST_FIELD.matcher(resp.body());
+        if (!m.find()) {
+            throw new IOException("STAC catalog has no 'latest' field");
+        }
+        return m.group(1);
+    }
+
+    private static Properties anonymousS3() {
+        Properties props = new Properties();
+        props.setProperty("storage.s3.anonymous", "true");
+        return props;
+    }
 
     @Test
     void parquetDataset_opensAndReadsMetadataFromFirstS3Url() throws Exception {
         URI readableUri = toReadableUri(configuredFirstUrl());
-        try (RangeReader rangeReader = RangeReaderFactory.create(readableUri)) {
+        // Overture buckets are public; force the S3 provider into anonymous mode so it doesn't try the
+        // AWS default credentials chain.
+        try (Storage storage = StorageFactory.open(readableUri.resolve("."), anonymousS3());
+                RangeReader rangeReader = storage.openRangeReader(readableUri)) {
             ParquetDataset dataset = ParquetDataset.open(new RangeReaderInputFile(rangeReader));
             Map<String, String> metadata = dataset.getKeyValueMetadata();
             assertThat(metadata).containsKey("geo");
@@ -87,7 +147,8 @@ class OvertureS3GeoParquetIT {
     void datastore_readsFirst100FeaturesFromFirstS3Url() throws Exception {
         URI readableUri = toReadableUri(configuredFirstUrl());
         GeoParquetFileDataStoreFactory factory = new GeoParquetFileDataStoreFactory();
-        var dataStore = factory.createDataStore(readableUri.toURL());
+        // Overture buckets are public; route via the S3 provider in anonymous mode.
+        var dataStore = factory.createDataStore(Map.of("url", readableUri.toURL(), "storage.s3.anonymous", true));
         try {
             String typeName = dataStore.getTypeNames()[0];
             Query query = new Query(typeName, configuredBboxFilter(), new String[] {"id", "geometry"});
@@ -113,22 +174,51 @@ class OvertureS3GeoParquetIT {
     }
 
     @Test
-    void datastore_brazilCoastBbox_matchesSampleGeoJson() throws Exception {
-        URI readableUri = toReadableUri(BATHYMETRY_PART0);
+    void datastore_brazilCoastBbox_returnsFeaturesWithinBbox() throws Exception {
+        // The exact feature set against the Brazil-coast bbox depends on the Overture release in use, so we
+        // can't assert byte-equality against a stored fixture (those drift as releases ship). Assert the
+        // structural invariants instead: at least one feature comes back, every geometry is non-null, and
+        // every geometry's envelope intersects the queried bbox.
+        URI readableUri = toReadableUri(bathymetryPart0);
         GeoParquetFileDataStoreFactory factory = new GeoParquetFileDataStoreFactory();
-        var dataStore = factory.createDataStore(readableUri.toURL());
+        var dataStore = factory.createDataStore(Map.of("url", readableUri.toURL(), "storage.s3.anonymous", true));
         try {
             String typeName = dataStore.getTypeNames()[0];
             Filter bboxFilter = parseBbox(BRAZIL_COAST_BBOX);
             Query query = new Query(typeName, bboxFilter, new String[] {"id", "geometry"});
             query.setMaxFeatures(100);
 
-            BuildResult result = buildGeoJson(dataStore, typeName, query, 100);
-            String expected = loadResourceText(BBOX_SAMPLE_RESOURCE);
-            assertThat(canonicalJson(result.geoJson())).isEqualTo(canonicalJson(expected));
+            org.locationtech.jts.geom.Envelope queryEnvelope = bboxEnvelope(BRAZIL_COAST_BBOX);
+            int count = 0;
+            try (SimpleFeatureIterator it =
+                    dataStore.getFeatureSource(typeName).getFeatures(query).features()) {
+                while (it.hasNext()) {
+                    var feature = it.next();
+                    assertThat(feature.getAttribute("id")).isNotNull();
+                    Geometry geometry = toGeometry(feature.getAttribute("geometry"));
+                    assertThat(geometry).isNotNull();
+                    assertThat(geometry.getEnvelopeInternal().intersects(queryEnvelope))
+                            .as("feature geometry envelope intersects query bbox")
+                            .isTrue();
+                    count++;
+                }
+            }
+            assertThat(count).isBetween(1, 100);
         } finally {
             dataStore.dispose();
         }
+    }
+
+    private static org.locationtech.jts.geom.Envelope bboxEnvelope(String raw) {
+        String[] parts = raw.split("[,\\s]+");
+        if (parts.length != 4) {
+            throw new IllegalArgumentException("Invalid bbox value. Expected minX,minY,maxX,maxY");
+        }
+        double minX = Double.parseDouble(parts[0]);
+        double minY = Double.parseDouble(parts[1]);
+        double maxX = Double.parseDouble(parts[2]);
+        double maxY = Double.parseDouble(parts[3]);
+        return new org.locationtech.jts.geom.Envelope(minX, maxX, minY, maxY);
     }
 
     private static Filter configuredBboxFilter() {
@@ -195,19 +285,6 @@ class OvertureS3GeoParquetIT {
         double maxX = Double.parseDouble(parts[2]);
         double maxY = Double.parseDouble(parts[3]);
         return FF.bbox(FF.property("geometry"), minX, minY, maxX, maxY, "EPSG:4326");
-    }
-
-    private static String loadResourceText(String resourcePath) throws IOException {
-        try (var in = OvertureS3GeoParquetIT.class.getClassLoader().getResourceAsStream(resourcePath)) {
-            if (in == null) {
-                throw new IllegalArgumentException("Missing resource: " + resourcePath);
-            }
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        }
-    }
-
-    private static String canonicalJson(String json) {
-        return json.replaceAll("\\s+", "");
     }
 
     private record BuildResult(String geoJson, int count) {}
@@ -349,7 +426,7 @@ class OvertureS3GeoParquetIT {
             configured = System.getenv(URLS_ENV);
         }
         if (configured == null || configured.isEmpty()) {
-            configured = BATHYMETRY_PART0;
+            configured = bathymetryPart0;
         }
         Assumptions.assumeTrue(
                 configured != null && !configured.isBlank(), () -> "Missing " + URLS_PROPERTY + " or " + URLS_ENV);

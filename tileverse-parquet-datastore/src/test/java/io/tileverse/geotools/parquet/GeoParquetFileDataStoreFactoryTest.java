@@ -20,7 +20,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tileverse.parquet.ParquetDataset;
 import io.tileverse.parquet.RangeReaderInputFile;
-import io.tileverse.rangereader.file.FileRangeReader;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -72,12 +74,12 @@ class GeoParquetFileDataStoreFactoryTest {
                 .extracting(p -> p.key)
                 .contains(
                         "url",
-                        "io.tileverse.rangereader.provider",
-                        "io.tileverse.rangereader.caching.enabled",
-                        "io.tileverse.rangereader.http.timeout-millis",
-                        "io.tileverse.rangereader.azure.account-key",
-                        "io.tileverse.rangereader.s3.region",
-                        "io.tileverse.rangereader.gcs.project-id");
+                        "storage.provider",
+                        "storage.caching.enabled",
+                        "storage.http.timeout-millis",
+                        "storage.azure.account-key",
+                        "storage.s3.region",
+                        "storage.gcs.project-id");
         assertThat(factory.getParametersInfo()[0].key).isEqualTo("url");
 
         assertThat(factory.canProcess((URL) null)).isFalse();
@@ -124,15 +126,10 @@ class GeoParquetFileDataStoreFactoryTest {
     void createDataStoreFromMap_acceptsRangeReaderConfiguration() throws Exception {
         Path path = extractToTempFile(FIXTURE_RESOURCE);
         Properties expected = new Properties();
-        expected.setProperty("io.tileverse.rangereader.caching.enabled", "true");
-        expected.setProperty("io.tileverse.rangereader.caching.blocksize", "4096");
-        Map<String, Object> params = Map.of(
-                "url",
-                path.toUri().toURL(),
-                "io.tileverse.rangereader.caching.enabled",
-                true,
-                "io.tileverse.rangereader.caching.blocksize",
-                4096);
+        expected.setProperty("storage.caching.enabled", "true");
+        expected.setProperty("storage.caching.blocksize", "4096");
+        Map<String, Object> params =
+                Map.of("url", path.toUri().toURL(), "storage.caching.enabled", true, "storage.caching.blocksize", 4096);
 
         assertThat(GeoParquetRangeReaderParams.toProperties(params)).isEqualTo(expected);
 
@@ -211,7 +208,9 @@ class GeoParquetFileDataStoreFactoryTest {
 
     @Test
     void geoparquetMetadata_isPresentAndConsistent() throws Exception {
-        try (FileRangeReader rangeReader = FileRangeReader.of(extractToTempFile(FIXTURE_RESOURCE))) {
+        Path file = extractToTempFile(FIXTURE_RESOURCE);
+        try (Storage storage = StorageFactory.open(file.getParent().toUri());
+                RangeReader rangeReader = storage.openRangeReader(file.toUri())) {
             ParquetDataset dataset = ParquetDataset.open(new RangeReaderInputFile(rangeReader));
             Map<String, String> metadata = dataset.getKeyValueMetadata();
             assertThat(metadata).containsKey("geo");
@@ -380,7 +379,9 @@ class GeoParquetFileDataStoreFactoryTest {
     @Test
     void overtureBuildings_readsRealFeaturesAndMetadata() throws Exception {
         URL url = overtureBuildingsFixtureUrl();
-        try (FileRangeReader rangeReader = FileRangeReader.of(extractToTempFile(OVERTURE_BUILDINGS_FIXTURE_RESOURCE))) {
+        Path overtureFile = extractToTempFile(OVERTURE_BUILDINGS_FIXTURE_RESOURCE);
+        try (Storage storage = StorageFactory.open(overtureFile.getParent().toUri());
+                RangeReader rangeReader = storage.openRangeReader(overtureFile.toUri())) {
             ParquetDataset dataset = ParquetDataset.open(new RangeReaderInputFile(rangeReader));
             Map<String, String> metadata = dataset.getKeyValueMetadata();
             assertThat(metadata).doesNotContainKey("geo");
@@ -479,8 +480,9 @@ class GeoParquetFileDataStoreFactoryTest {
     @Test
     void dtFeatureBuilding_readsMetadataAndFeatures() throws Exception {
         URL url = dtFeatureBuildingFixtureUrl();
-        try (FileRangeReader rangeReader =
-                FileRangeReader.of(extractToTempFile(DT_FEATURE_BUILDING_FIXTURE_RESOURCE))) {
+        Path dtFile = extractToTempFile(DT_FEATURE_BUILDING_FIXTURE_RESOURCE);
+        try (Storage storage = StorageFactory.open(dtFile.getParent().toUri());
+                RangeReader rangeReader = storage.openRangeReader(dtFile.toUri())) {
             ParquetDataset dataset = ParquetDataset.open(new RangeReaderInputFile(rangeReader));
             Map<String, String> metadata = dataset.getKeyValueMetadata();
             assertThat(metadata).isNotNull();

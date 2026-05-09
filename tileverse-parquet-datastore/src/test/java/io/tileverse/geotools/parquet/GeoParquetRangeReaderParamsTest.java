@@ -78,32 +78,32 @@ class GeoParquetRangeReaderParamsTest {
         Map<String, Object> params = Map.ofEntries(
                 entry("url", url),
                 entry("unrelated", "ignored"),
-                entry("io.tileverse.rangereader.provider", "s3"),
-                entry("io.tileverse.rangereader.caching.enabled", true),
-                entry("io.tileverse.rangereader.caching.blockaligned", false),
-                entry("io.tileverse.rangereader.caching.blocksize", 8192),
-                entry("io.tileverse.rangereader.http.timeout-millis", 1500),
-                entry("io.tileverse.rangereader.http.username", "alice"),
-                entry("io.tileverse.rangereader.http.password", "secret"),
-                entry("io.tileverse.rangereader.s3.region", "us-east-1"),
-                entry("io.tileverse.rangereader.s3.force-path-style", true),
-                entry("io.tileverse.rangereader.gcs.project-id", "test-project"),
-                entry("io.tileverse.rangereader.gcs.default-credentials-chain", false));
+                entry("storage.provider", "s3"),
+                entry("storage.caching.enabled", true),
+                entry("storage.caching.blockaligned", false),
+                entry("storage.caching.blocksize", 8192),
+                entry("storage.http.timeout-millis", 1500),
+                entry("storage.http.username", "alice"),
+                entry("storage.http.password", "secret"),
+                entry("storage.s3.region", "us-east-1"),
+                entry("storage.s3.force-path-style", true),
+                entry("storage.gcs.project-id", "test-project"),
+                entry("storage.gcs.default-credentials-chain", false));
 
         Properties properties = GeoParquetRangeReaderParams.toProperties(params);
 
         assertThat(properties)
-                .containsEntry("io.tileverse.rangereader.provider", "s3")
-                .containsEntry("io.tileverse.rangereader.caching.enabled", "true")
-                .containsEntry("io.tileverse.rangereader.caching.blockaligned", "false")
-                .containsEntry("io.tileverse.rangereader.caching.blocksize", "8192")
-                .containsEntry("io.tileverse.rangereader.http.timeout-millis", "1500")
-                .containsEntry("io.tileverse.rangereader.http.username", "alice")
-                .containsEntry("io.tileverse.rangereader.http.password", "secret")
-                .containsEntry("io.tileverse.rangereader.s3.region", "us-east-1")
-                .containsEntry("io.tileverse.rangereader.s3.force-path-style", "true")
-                .containsEntry("io.tileverse.rangereader.gcs.project-id", "test-project")
-                .containsEntry("io.tileverse.rangereader.gcs.default-credentials-chain", "false");
+                .containsEntry("storage.provider", "s3")
+                .containsEntry("storage.caching.enabled", "true")
+                .containsEntry("storage.caching.blockaligned", "false")
+                .containsEntry("storage.caching.blocksize", "8192")
+                .containsEntry("storage.http.timeout-millis", "1500")
+                .containsEntry("storage.http.username", "alice")
+                .containsEntry("storage.http.password", "secret")
+                .containsEntry("storage.s3.region", "us-east-1")
+                .containsEntry("storage.s3.force-path-style", "true")
+                .containsEntry("storage.gcs.project-id", "test-project")
+                .containsEntry("storage.gcs.default-credentials-chain", "false");
         assertThat(properties).doesNotContainKeys("url", "unrelated");
     }
 }

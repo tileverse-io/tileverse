@@ -8,7 +8,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
-import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.util.Map;
@@ -54,19 +53,14 @@ class GeoParquetFileDataStoreFactoryAzuriteIT {
     void createDataStore_requiresAzureConnectionParametersForAzuriteHttpUrl() {
         assertThatThrownBy(() ->
                         GeoParquetDatastoreCloudITSupport.FACTORY.createDataStore(Map.of("url", azuriteFixtureUrl)))
-                .isInstanceOf(IOException.class)
-                .hasMessageContaining("AuthorizationFailure");
+                .isInstanceOf(io.tileverse.storage.AccessDeniedException.class)
+                .hasMessageContaining("403");
     }
 
     @Test
     void createDataStore_readsParquetThroughParameterizedAzureRangeReader() throws Exception {
-        Map<String, Object> params = Map.of(
-                "url",
-                azuriteFixtureUrl,
-                "io.tileverse.rangereader.provider",
-                "azure",
-                "io.tileverse.rangereader.azure.account-key",
-                ACCOUNT_KEY);
+        Map<String, Object> params =
+                Map.of("url", azuriteFixtureUrl, "storage.provider", "azure", "storage.azure.account-key", ACCOUNT_KEY);
 
         GeoParquetDatastoreCloudITSupport.assertReadsSampleGeoParquet(params);
     }

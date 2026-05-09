@@ -15,7 +15,7 @@
  */
 package io.tileverse.parquet;
 
-import io.tileverse.rangereader.RangeReader;
+import io.tileverse.storage.RangeReader;
 import java.io.IOException;
 import java.util.Objects;
 import org.apache.parquet.io.InputFile;

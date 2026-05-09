@@ -5,7 +5,7 @@ package io.tileverse.geotools.parquet;
 
 import io.tileverse.parquet.CloseableIterator;
 import io.tileverse.parquet.RangeReaderInputFile;
-import io.tileverse.rangereader.RangeReader;
+import io.tileverse.storage.RangeReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Map;

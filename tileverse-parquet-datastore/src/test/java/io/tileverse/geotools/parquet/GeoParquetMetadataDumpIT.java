@@ -7,8 +7,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tileverse.parquet.ParquetDataset;
 import io.tileverse.parquet.RangeReaderInputFile;
-import io.tileverse.rangereader.RangeReader;
-import io.tileverse.rangereader.RangeReaderFactory;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
@@ -41,7 +42,8 @@ class GeoParquetMetadataDumpIT {
                 "Set -" + URL_PROPERTY + "=<file|http|s3 url> to run this IT");
 
         URI readableUri = toReadableUri(configured);
-        try (RangeReader reader = RangeReaderFactory.create(readableUri)) {
+        try (Storage storage = StorageFactory.open(readableUri.resolve("."));
+                RangeReader reader = storage.openRangeReader(readableUri)) {
             ParquetDataset dataset = ParquetDataset.open(new RangeReaderInputFile(reader));
             Map<String, String> metadata = dataset.getKeyValueMetadata();
             String geo = metadata.get("geo");

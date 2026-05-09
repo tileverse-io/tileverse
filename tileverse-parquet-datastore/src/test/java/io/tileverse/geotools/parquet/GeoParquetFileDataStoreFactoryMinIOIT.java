@@ -5,7 +5,6 @@ package io.tileverse.geotools.parquet;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.util.Map;
@@ -46,7 +45,7 @@ class GeoParquetFileDataStoreFactoryMinIOIT {
     void createDataStore_requiresS3ConnectionParametersForMinioHttpUrl() {
         assertThatThrownBy(
                         () -> GeoParquetDatastoreCloudITSupport.FACTORY.createDataStore(Map.of("url", minioFixtureUrl)))
-                .isInstanceOf(IOException.class);
+                .isInstanceOf(io.tileverse.storage.AccessDeniedException.class);
     }
 
     @Test
@@ -54,15 +53,15 @@ class GeoParquetFileDataStoreFactoryMinIOIT {
         Map<String, Object> params = Map.of(
                 "url",
                 minioFixtureUrl,
-                "io.tileverse.rangereader.provider",
+                "storage.provider",
                 "s3",
-                "io.tileverse.rangereader.s3.force-path-style",
+                "storage.s3.force-path-style",
                 true,
-                "io.tileverse.rangereader.s3.region",
+                "storage.s3.region",
                 "us-east-1",
-                "io.tileverse.rangereader.s3.aws-access-key-id",
+                "storage.s3.aws-access-key-id",
                 minio.getUserName(),
-                "io.tileverse.rangereader.s3.aws-secret-access-key",
+                "storage.s3.aws-secret-access-key",
                 minio.getPassword());
 
         GeoParquetDatastoreCloudITSupport.assertReadsSampleGeoParquet(params);

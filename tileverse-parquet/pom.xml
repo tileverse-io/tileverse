@@ -10,7 +10,7 @@
 
   <groupId>io.tileverse.parquet</groupId>
   <artifactId>tileverse-parquet</artifactId>
-  <name>Tileverse Parquet</name>
+  <name>Tileverse :: Parquet</name>
   <description>Bridges tileverse-storage to Apache Parquet's InputFile abstraction, enabling Parquet file reading from local, HTTP, and cloud storage without Hadoop I/O</description>
   <dependencyManagement>
     <dependencies>

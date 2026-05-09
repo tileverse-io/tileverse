@@ -18,8 +18,9 @@ package io.tileverse.parquet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.tileverse.rangereader.RangeReader;
-import io.tileverse.rangereader.file.FileRangeReader;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -27,6 +28,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Random;
 import org.apache.parquet.io.SeekableInputStream;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -36,19 +38,33 @@ class RangeReaderSeekableInputStreamTest {
     @TempDir
     Path tempDir;
 
+    private static final String TEST_FILE_NAME = "test-data.bin";
+    private static final int TEST_FILE_SIZE = 4096;
+
     private Path testFile;
     private byte[] testData;
+    private Storage storage;
     private RangeReader rangeReader;
-    private static final int TEST_FILE_SIZE = 4096;
 
     @BeforeEach
     void setUp() throws IOException {
-        testFile = tempDir.resolve("test-data.bin");
+        testFile = tempDir.resolve(TEST_FILE_NAME);
         Random random = new Random(42);
         testData = new byte[TEST_FILE_SIZE];
         random.nextBytes(testData);
         Files.write(testFile, testData);
-        rangeReader = FileRangeReader.of(testFile);
+        storage = StorageFactory.open(tempDir.toUri());
+        rangeReader = storage.openRangeReader(TEST_FILE_NAME);
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        if (rangeReader != null) {
+            rangeReader.close();
+        }
+        if (storage != null) {
+            storage.close();
+        }
     }
 
     private SeekableInputStream newStream() {

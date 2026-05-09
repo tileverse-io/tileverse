@@ -55,6 +55,7 @@ import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -80,6 +81,7 @@ import software.amazon.awssdk.services.s3.model.MetadataDirective;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.RequestPayer;
 import software.amazon.awssdk.services.s3.model.S3Error;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
@@ -105,18 +107,31 @@ final class S3Storage implements Storage {
     private final S3ClientHandle handle;
     private final StorageCapabilities capabilities;
     private final boolean isDirectoryBucket;
+    private final boolean requesterPays;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    S3Storage(URI baseUri, S3StorageBucketKey ref, S3ClientCache.Lease lease) {
-        this(baseUri, ref, new LeasedS3Handle(lease));
+    S3Storage(URI baseUri, S3StorageBucketKey ref, S3ClientCache.Lease lease, boolean requesterPays) {
+        this(baseUri, ref, new LeasedS3Handle(lease), requesterPays);
     }
 
-    S3Storage(URI baseUri, S3StorageBucketKey ref, S3ClientHandle handle) {
+    S3Storage(URI baseUri, S3StorageBucketKey ref, S3ClientHandle handle, boolean requesterPays) {
         this.baseUri = baseUri;
         this.ref = ref;
         this.handle = handle;
+        this.requesterPays = requesterPays;
         this.isDirectoryBucket = EXPRESS_BUCKET_PATTERN.matcher(ref.bucket()).matches();
         this.capabilities = buildCapabilities(this.isDirectoryBucket);
+    }
+
+    /**
+     * Applies {@link RequestPayer#REQUESTER} to the given AWS request builder when this Storage is configured for a
+     * Requester Pays bucket. Centralised so the conditional does not have to be repeated at every {@code *.builder()}
+     * call site.
+     */
+    private void applyRequesterPays(Consumer<RequestPayer> setter) {
+        if (requesterPays) {
+            setter.accept(RequestPayer.REQUESTER);
+        }
     }
 
     private S3AsyncClient asyncClient() {
@@ -208,11 +223,10 @@ final class S3Storage implements Storage {
         requireOpen();
         String fullKey = resolve(key);
         try {
-            HeadObjectResponse resp = handle.client()
-                    .headObject(HeadObjectRequest.builder()
-                            .bucket(ref.bucket())
-                            .key(fullKey)
-                            .build());
+            HeadObjectRequest.Builder requestBuilder =
+                    HeadObjectRequest.builder().bucket(ref.bucket()).key(fullKey);
+            applyRequesterPays(requestBuilder::requestPayer);
+            HeadObjectResponse resp = handle.client().headObject(requestBuilder.build());
             return Optional.of(new StorageEntry.File(
                     key,
                     resp.contentLength(),
@@ -249,6 +263,7 @@ final class S3Storage implements Storage {
         if (options.pageSize().isPresent()) {
             requestBuilder.maxKeys(options.pageSize().getAsInt());
         }
+        applyRequesterPays(requestBuilder::requestPayer);
 
         // Force the first page read up-front so wrong-region / missing-bucket / permission
         // errors propagate synchronously as a typed StorageException from the list(...) call
@@ -327,7 +342,7 @@ final class S3Storage implements Storage {
             throw new NotFoundException("Object not found: s3://" + ref.bucket() + "/" + fullKey);
         }
         // Reuse our cached S3Client (which already has the right endpoint, region, credentials).
-        return new S3RangeReader(handle.client(), new S3Reference(null, ref.bucket(), fullKey, null));
+        return new S3RangeReader(handle.client(), new S3Reference(null, ref.bucket(), fullKey, null), requesterPays);
     }
 
     @Override
@@ -349,6 +364,7 @@ final class S3Storage implements Storage {
         }
         options.ifMatchEtag().ifPresent(requestBuilder::ifMatch);
         options.ifModifiedSince().ifPresent(requestBuilder::ifModifiedSince);
+        applyRequesterPays(requestBuilder::requestPayer);
         try {
             // Route through the CRT async client so a large GET (whole-object or large range)
             // can be split across connections internally; the toBlockingInputStream() transformer
@@ -532,11 +548,10 @@ final class S3Storage implements Storage {
         requireOpen();
         String fullKey = resolve(key);
         try {
-            handle.client()
-                    .deleteObject(DeleteObjectRequest.builder()
-                            .bucket(ref.bucket())
-                            .key(fullKey)
-                            .build());
+            DeleteObjectRequest.Builder requestBuilder =
+                    DeleteObjectRequest.builder().bucket(ref.bucket()).key(fullKey);
+            applyRequesterPays(requestBuilder::requestPayer);
+            handle.client().deleteObject(requestBuilder.build());
         } catch (S3Exception e) {
             throw S3ExceptionMapper.map(e, key);
         }
@@ -558,11 +573,11 @@ final class S3Storage implements Storage {
                     .map(k -> ObjectIdentifier.builder().key(resolve(k)).build())
                     .toList();
             try {
-                DeleteObjectsRequest deleteObjectsRequest = DeleteObjectsRequest.builder()
+                DeleteObjectsRequest.Builder deleteObjectsBuilder = DeleteObjectsRequest.builder()
                         .bucket(ref.bucket())
-                        .delete(d -> d.objects(ids).quiet(false))
-                        .build();
-                DeleteObjectsResponse resp = client.deleteObjects(deleteObjectsRequest);
+                        .delete(d -> d.objects(ids).quiet(false));
+                applyRequesterPays(deleteObjectsBuilder::requestPayer);
+                DeleteObjectsResponse resp = client.deleteObjects(deleteObjectsBuilder.build());
                 for (DeletedObject d : resp.deleted()) {
                     deleted.add(ref.relativize(d.key()));
                 }
@@ -610,6 +625,7 @@ final class S3Storage implements Storage {
             requestBuilder.metadataDirective(MetadataDirective.REPLACE);
             requestBuilder.metadata(md);
         });
+        applyRequesterPays(requestBuilder::requestPayer);
         try {
             handle.client().copyObject(requestBuilder.build());
         } catch (S3Exception e) {
@@ -635,7 +651,10 @@ final class S3Storage implements Storage {
         }
         GetObjectPresignRequest presignReq = GetObjectPresignRequest.builder()
                 .signatureDuration(ttl)
-                .getObjectRequest(r -> r.bucket(ref.bucket()).key(resolve(key)))
+                .getObjectRequest(r -> {
+                    r.bucket(ref.bucket()).key(resolve(key));
+                    applyRequesterPays(r::requestPayer);
+                })
                 .build();
         URL url = presigner().presignGetObject(presignReq).url();
         return URI.create(url.toString());
@@ -653,6 +672,7 @@ final class S3Storage implements Storage {
                 .putObjectRequest(b -> {
                     b.bucket(ref.bucket()).key(resolve(key));
                     options.contentType().ifPresent(b::contentType);
+                    applyRequesterPays(b::requestPayer);
                 })
                 .build();
         URL url = presigner().presignPutObject(presignReq).url();
@@ -681,6 +701,7 @@ final class S3Storage implements Storage {
             builder.ifNoneMatch("*");
         }
         options.ifMatchEtag().ifPresent(builder::ifMatch);
+        applyRequesterPays(builder::requestPayer);
         return builder;
     }
 }

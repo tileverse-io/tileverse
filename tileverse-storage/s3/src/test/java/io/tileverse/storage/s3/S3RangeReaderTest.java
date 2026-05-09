@@ -122,7 +122,7 @@ class S3RangeReaderTest {
         // Create the reader directly via the package-private constructor.
         // The Builder is gone in 2.0; tests in this package construct readers via the
         // package-private constructor (production paths use Storage.openRangeReader).
-        reader = new S3RangeReader(s3Client, new S3Reference(null, BUCKET, KEY, null));
+        reader = new S3RangeReader(s3Client, new S3Reference(null, BUCKET, KEY, null), false);
     }
 
     @Test

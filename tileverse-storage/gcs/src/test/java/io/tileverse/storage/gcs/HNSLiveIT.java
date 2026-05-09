@@ -44,8 +44,9 @@ class HNSLiveIT {
         cache = new SdkStorageCache();
         URI baseUri = URI.create("gs://" + bucket + "/");
         SdkStorageLocation location = SdkStorageLocation.parse(baseUri);
-        SdkStorageCache.Key key = new SdkStorageCache.Key(Optional.empty(), Optional.empty(), Optional.empty(), false);
-        storage = new GoogleCloudStorage(baseUri, location, cache.acquire(key));
+        SdkStorageCache.Key key =
+                new SdkStorageCache.Key(Optional.empty(), Optional.empty(), Optional.empty(), false, Optional.empty());
+        storage = new GoogleCloudStorage(baseUri, location, cache.acquire(key), Optional.empty());
     }
 
     @AfterAll

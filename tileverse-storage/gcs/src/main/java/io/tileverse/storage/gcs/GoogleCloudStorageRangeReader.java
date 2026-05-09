@@ -21,6 +21,7 @@ import com.google.cloud.ReadChannel;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.Storage.BlobGetOption;
 import com.google.cloud.storage.StorageException;
 import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.NotFoundException;
@@ -28,6 +29,9 @@ import io.tileverse.storage.RangeReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import java.util.OptionalLong;
 import lombok.extern.slf4j.Slf4j;
 
@@ -56,13 +60,15 @@ final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements
      * @param objectName The GCS object name
      * @throws io.tileverse.storage.StorageException If a storage error occurs
      */
-    GoogleCloudStorageRangeReader(Storage storage, String bucket, String objectName) {
+    GoogleCloudStorageRangeReader(Storage storage, String bucket, String objectName, Optional<String> userProject) {
         this.storage = requireNonNull(storage, "Storage client cannot be null");
         this.bucket = requireNonNull(bucket, "Bucket name cannot be null");
         this.objectName = requireNonNull(objectName, "Object name cannot be null");
         BlobId blobId = BlobId.of(bucket, objectName);
+        List<BlobGetOption> getOpts = new ArrayList<>();
+        userProject.ifPresent(p -> getOpts.add(BlobGetOption.userProject(p)));
         try {
-            this.blob = storage.get(blobId);
+            this.blob = storage.get(blobId, getOpts.toArray(BlobGetOption[]::new));
         } catch (StorageException e) {
             throw SdkExceptionMapper.map(e, objectName);
         }

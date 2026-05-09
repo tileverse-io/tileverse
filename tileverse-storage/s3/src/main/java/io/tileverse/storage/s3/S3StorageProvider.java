@@ -102,6 +102,40 @@ public class S3StorageProvider extends AbstractStorageProvider {
             .defaultValue(true)
             .build();
 
+    /**
+     * A {@link StorageParameter} to enable Requester Pays for the bucket. When {@code true}, every request adds the
+     * {@code x-amz-request-payer: requester} header so that the requester (not the bucket owner) is billed for egress
+     * and operations. Required to access buckets configured with the Requester Pays billing model (e.g.
+     * {@code s3://noaa-nexrad-level2/}); without it those buckets reject reads with {@code 403 Forbidden}.
+     *
+     * <p><b>Authentication is mandatory.</b> AWS rejects anonymous (unsigned) requests against Requester Pays buckets
+     * unconditionally; AWS uses the signed identity to determine the account to bill. Combine this flag with real
+     * credentials (default credential chain, named profile, or static access/secret key) and do <i>not</i> combine it
+     * with {@link #S3_ANONYMOUS}.
+     */
+    public static final StorageParameter<Boolean> S3_REQUESTER_PAYS = StorageParameter.builder()
+            .key("storage.s3.requester-pays")
+            .title("Requester Pays bucket")
+            .description("""
+                    When enabled, every S3 request adds the x-amz-request-payer: requester header so that \
+                    the requester (rather than the bucket owner) is billed for egress and per-operation costs.
+
+                    Required to access buckets configured with the Requester Pays billing model. Without the \
+                    header, such buckets respond with 403 Forbidden. Examples include several AWS Open Data \
+                    and NOAA datasets (e.g. s3://noaa-nexrad-level2/).
+
+                    Authentication is mandatory: AWS rejects anonymous (unsigned) requests against Requester \
+                    Pays buckets, since the signed identity is what AWS uses to determine the billed account. \
+                    Combine this flag with real credentials (default credential chain, named profile, or static \
+                    access/secret key) and do not combine it with storage.s3.anonymous=true.
+
+                    The flag has no effect against regular buckets; the header is silently ignored.
+                    """)
+            .type(Boolean.class)
+            .group(ID)
+            .defaultValue(false)
+            .build();
+
     /** Configuration parameter for AWS S3 region. */
     public static final StorageParameter<String> S3_REGION = StorageParameter.builder()
             .key("storage.s3.region")
@@ -236,6 +270,7 @@ public class S3StorageProvider extends AbstractStorageProvider {
 
     static final List<StorageParameter<?>> PARAMS = List.of(
             S3_FORCE_PATH_STYLE,
+            S3_REQUESTER_PAYS,
             S3_REGION,
             S3_ANONYMOUS,
             S3_AWS_ACCESS_KEY_ID,
@@ -300,7 +335,7 @@ public class S3StorageProvider extends AbstractStorageProvider {
             throw new IllegalArgumentException("bundle");
         }
         S3StorageBucketKey ref = S3StorageBucketKey.parse(uri);
-        return new S3Storage(uri, ref, new BorrowedS3Handle(bundle));
+        return new S3Storage(uri, ref, new BorrowedS3Handle(bundle), false);
     }
 
     @Override
@@ -372,7 +407,8 @@ public class S3StorageProvider extends AbstractStorageProvider {
         URI uri = config.baseUri();
         S3StorageBucketKey ref = S3StorageBucketKey.parse(uri);
         S3ClientCache.Lease lease = clientCache.acquire(keyFor(config));
-        return new S3Storage(uri, ref, lease);
+        boolean requesterPays = config.getParameter(S3_REQUESTER_PAYS).orElse(false);
+        return new S3Storage(uri, ref, lease, requesterPays);
     }
 
     /**

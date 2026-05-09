@@ -385,6 +385,60 @@ try (Storage storage = StorageFactory.open(URI.create("gs://my-bucket/"), props)
 
 When a host override is in effect, credentials default to anonymous (the emulator typically doesn't validate them).
 
+## Requester Pays buckets
+
+Some publicly accessible buckets are configured for **Requester Pays**: the bucket owner pays for storage, and the
+**requester** pays for egress and per-operation costs. Hitting such a bucket without the protocol-level opt-in returns
+`403 Forbidden` (S3) or `400 UserProjectMissing` (GCS).
+
+!!! warning "Authentication is required"
+    Requester Pays cannot be combined with anonymous access on either S3 or GCS. The cloud needs an authenticated
+    identity to determine who to bill. Configure real credentials (default chain, named profile, static key, or
+    SDK injection) before enabling these parameters.
+
+    - S3: AWS rejects anonymous (unsigned) requests against Requester Pays buckets unconditionally. Do not set
+      `storage.s3.requester-pays=true` together with `storage.s3.anonymous=true`.
+    - GCS: the requester must be an authenticated principal that holds `serviceusage.services.use` on the project
+      named in `storage.gcs.user-project`. Anonymous calls cannot satisfy either requirement.
+
+### S3
+
+Set `storage.s3.requester-pays=true` to add `x-amz-request-payer: requester` to every request:
+
+```java
+Properties props = new Properties();
+props.setProperty("storage.s3.requester-pays", "true");
+// Requester Pays buckets reject unsigned requests; supply real credentials (the requester's, not the bucket owner's).
+props.setProperty("storage.s3.use-default-credentials-provider", "true");
+props.setProperty("storage.s3.region", "us-east-1");
+
+URI uri = URI.create("s3://noaa-nexrad-level2/2024/01/01/KAMA/");
+try (Storage storage = StorageFactory.open(uri, props)) {
+    // stat / list / openRangeReader / ... succeed and the requester is billed
+}
+```
+
+The flag is silently ignored by regular buckets, so it is safe to set unconditionally for callers that may target both.
+
+### GCS
+
+Set `storage.gcs.user-project=<billing-project-id>` to attach `userProject=<id>` to every request, alongside an
+authenticated credentials chain that has `serviceusage.services.use` on that project:
+
+```java
+Properties props = new Properties();
+props.setProperty("storage.gcs.user-project", "my-billing-project");
+// Requester Pays needs authenticated credentials on the billing project.
+props.setProperty("storage.gcs.default-credentials-chain", "true");
+
+URI uri = URI.create("gs://requester-pays-public-bucket/path/data.bin");
+try (Storage storage = StorageFactory.open(uri, props)) {
+    // ...
+}
+```
+
+Azure has no equivalent billing model and is not affected.
+
 ## Sensitive parameters
 
 Parameters carrying secrets are flagged with `password=true` on their `StorageParameter` declaration. Tools that render

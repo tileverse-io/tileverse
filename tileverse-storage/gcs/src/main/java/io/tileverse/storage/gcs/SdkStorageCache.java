@@ -46,12 +46,14 @@ final class SdkStorageCache {
             Optional<String> hostOverride,
             Optional<String> projectId,
             Optional<String> credentialsSource,
-            boolean anonymous) {
+            boolean anonymous,
+            Optional<String> userProject) {
 
         Key {
             Objects.requireNonNull(hostOverride, "hostOverride");
             Objects.requireNonNull(projectId, "projectId");
             Objects.requireNonNull(credentialsSource, "credentialsSource");
+            Objects.requireNonNull(userProject, "userProject");
         }
     }
 

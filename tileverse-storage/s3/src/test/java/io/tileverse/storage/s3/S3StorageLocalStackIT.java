@@ -97,7 +97,7 @@ class S3StorageLocalStackIT extends StorageTCK {
         URI baseUri = URI.create("s3://" + bucket + "/");
         S3StorageBucketKey ref = S3StorageBucketKey.parse(baseUri);
         S3ClientCache.Lease lease = cache.acquire(keyFor());
-        return new S3Storage(baseUri, ref, lease);
+        return new S3Storage(baseUri, ref, lease, false);
     }
 
     /**

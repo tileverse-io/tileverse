@@ -45,11 +45,34 @@ class GoogleCloudStorageProviderTest {
                         GoogleCloudStorageProvider.GCS_PROJECT_ID,
                         GoogleCloudStorageProvider.GCS_QUOTA_PROJECT_ID,
                         GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS,
+                        GoogleCloudStorageProvider.GCS_USER_PROJECT,
                         GoogleCloudStorageProvider.GCS_HOST);
 
         StorageConfig defaults = provider.getDefaultConfig();
         assertThat(defaults.getParameter(GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS))
                 .hasValue(false);
+    }
+
+    @Test
+    void userProjectParameterShape() {
+        assertThat(GoogleCloudStorageProvider.GCS_USER_PROJECT.key()).isEqualTo("storage.gcs.user-project");
+        assertThat(GoogleCloudStorageProvider.GCS_USER_PROJECT.type()).isEqualTo(String.class);
+        assertThat(GoogleCloudStorageProvider.GCS_USER_PROJECT.defaultValue()).isEmpty();
+        assertThat(GoogleCloudStorageProvider.GCS_USER_PROJECT.group()).isEqualTo(GoogleCloudStorageProvider.ID);
+    }
+
+    @Test
+    void userProjectFlowsIntoCacheKey() {
+        StorageConfig config = new StorageConfig("gs://bucket/file.bin")
+                .setParameter(GoogleCloudStorageProvider.GCS_USER_PROJECT, "my-billing-project");
+        assertThat(GoogleCloudStorageProvider.keyFor(config).userProject()).hasValue("my-billing-project");
+    }
+
+    @Test
+    void blankUserProjectIsTreatedAsAbsent() {
+        StorageConfig config = new StorageConfig("gs://bucket/file.bin")
+                .setParameter(GoogleCloudStorageProvider.GCS_USER_PROJECT, "   ");
+        assertThat(GoogleCloudStorageProvider.keyFor(config).userProject()).isEmpty();
     }
 
     @Test

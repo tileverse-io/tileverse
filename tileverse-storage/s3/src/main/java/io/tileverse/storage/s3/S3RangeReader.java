@@ -33,6 +33,7 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.RequestPayer;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 /**
@@ -78,6 +79,7 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
 
     private final S3Client s3Client;
     private final S3Reference s3Location;
+    private final boolean requesterPays;
 
     private final OptionalLong contentLength;
 
@@ -86,19 +88,22 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
      *
      * @param s3Client The S3 client to use
      * @param s3Location The S3 reference (bucket + key)
+     * @param requesterPays when {@code true}, every request adds {@code x-amz-request-payer: requester}
      * @throws StorageException If a storage error occurs
      */
-    S3RangeReader(S3Client s3Client, S3Reference s3Location) {
+    S3RangeReader(S3Client s3Client, S3Reference s3Location, boolean requesterPays) {
         this.s3Client = Objects.requireNonNull(s3Client, "S3Client cannot be null");
         this.s3Location = Objects.requireNonNull(s3Location, "S3Location cannot be null");
+        this.requesterPays = requesterPays;
         // Eager HEAD: throw NotFoundException at construction time so callers don't get
         // mid-stream failures, and cache the content length for subsequent size() calls.
         try {
-            HeadObjectRequest headRequest = HeadObjectRequest.builder()
-                    .bucket(s3Location.bucket())
-                    .key(s3Location.key())
-                    .build();
-            HeadObjectResponse headResponse = s3Client.headObject(headRequest);
+            HeadObjectRequest.Builder headBuilder =
+                    HeadObjectRequest.builder().bucket(s3Location.bucket()).key(s3Location.key());
+            if (requesterPays) {
+                headBuilder.requestPayer(RequestPayer.REQUESTER);
+            }
+            HeadObjectResponse headResponse = s3Client.headObject(headBuilder.build());
             Long size = headResponse.contentLength();
             this.contentLength = size == null ? OptionalLong.empty() : OptionalLong.of(size);
         } catch (NoSuchKeyException e) {
@@ -114,12 +119,14 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
     protected int readRangeNoFlip(final long offset, final int actualLength, ByteBuffer target) {
         long rangeEnd = offset + actualLength - 1;
         try {
-            GetObjectRequest rangeRequest = GetObjectRequest.builder()
+            GetObjectRequest.Builder rangeBuilder = GetObjectRequest.builder()
                     .bucket(s3Location.bucket())
                     .key(s3Location.key())
-                    .range("bytes=" + offset + "-" + rangeEnd)
-                    .build();
-            ResponseBytes<GetObjectResponse> objectBytes = s3Client.getObjectAsBytes(rangeRequest);
+                    .range("bytes=" + offset + "-" + rangeEnd);
+            if (requesterPays) {
+                rangeBuilder.requestPayer(RequestPayer.REQUESTER);
+            }
+            ResponseBytes<GetObjectResponse> objectBytes = s3Client.getObjectAsBytes(rangeBuilder.build());
             if (objectBytes.response().contentLength() != actualLength) {
                 throw new StorageException("Unexpected content length: got "
                         + objectBytes.response().contentLength()

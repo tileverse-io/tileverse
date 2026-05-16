@@ -10,12 +10,13 @@ These libraries are designed to be **composable**: pick the ones you need for yo
 | :--- | :--- | :--- |
 | **[Storage](storage/index.md)** | `tileverse-storage-all` | **Object Storage Abstraction**: Full container API (list, range/streaming reads, atomic writes, deletes, server-side copy, presigned URLs) across local files, HTTP, S3 (GP + Express), Azure (Blob + Data Lake Gen2), and GCS (flat + HNS). Includes the byte-range [`RangeReader`](storage/reference/rangereader.md) API used by PMTiles, COG, and single-file Parquet. |
 | **[PMTiles](pmtiles/index.md)** | `tileverse-pmtiles` | **Archive Format**: Read PMTiles v3 archives over Storage / RangeReader. Returns raw tile bytes via `PMTilesReader`, decoded `VectorTile`s via `PMTilesVectorTileStore`, and decoded `RenderedImage`s (PNG / JPEG / WebP) via `PMTilesRasterTileStore`. |
+| **[Versatiles](versatiles/index.md)** | `tileverse-versatiles` | **Archive Format**: Read VersaTiles 2 containers over Storage / RangeReader. Returns tile bytes via `VersatilesReader`, decoded `VectorTile`s via `VersatilesVectorTileStore`, and decoded `RenderedImage`s (PNG / JPEG / WebP) via `VersatilesRasterTileStore`. |
 | **[Vector Tiles](vectortiles/index.md)** | `tileverse-vectortiles` | **Codec**: High-performance encoding and decoding of Mapbox Vector Tiles (MVT) to/from JTS Geometries. |
 | **[Tile Matrix Set](tilematrixset/index.md)** | `tileverse-tilematrixset` | **Math & Logic**: Implementation of the OGC Tile Matrix Set standard for calculating tile pyramids and grids. |
 
 ## Ecosystem
 
-While `tileverse-pmtiles` naturally uses the other libraries, **Storage**, **Vector Tiles**, and **Tile Matrix Set** are completely standalone.
+While `tileverse-pmtiles` and `tileverse-versatiles` naturally use the other libraries, **Storage**, **Vector Tiles**, and **Tile Matrix Set** are completely standalone.
 
 *   Building a GeoParquet datastore that needs to list and read partitioned files in S3 / Azure / GCS? Use **Storage**.
 *   Reading COGs (Cloud Optimized GeoTIFFs) with byte-range requests? Use **Storage** (its `RangeReader` API) directly.
@@ -33,6 +34,7 @@ graph TD
     subgraph "Formats"
         VT[Vector Tiles]
         PMT[PMTiles]
+        VER[Versatiles]
     end
 
     subgraph "Spatial"
@@ -42,9 +44,14 @@ graph TD
     App --> ST
     App --> VT
     App --> PMT
+    App --> VER
     App --> TMS
 
     PMT -.-> ST
     PMT -.-> VT
     PMT -.-> TMS
+
+    VER -.-> ST
+    VER -.-> VT
+    VER -.-> TMS
 ```

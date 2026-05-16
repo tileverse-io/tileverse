@@ -66,6 +66,11 @@
         <artifactId>tileverse-pmtiles</artifactId>
         <version>${project.version}</version>
       </dependency>
+      <dependency>
+        <groupId>io.tileverse.versatiles</groupId>
+        <artifactId>tileverse-versatiles</artifactId>
+        <version>${project.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
   <build>

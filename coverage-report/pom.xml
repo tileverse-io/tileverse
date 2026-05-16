@@ -60,6 +60,12 @@
       <groupId>io.tileverse.pmtiles</groupId>
       <artifactId>tileverse-pmtiles</artifactId>
     </dependency>
+
+    <!-- Versatiles module -->
+    <dependency>
+      <groupId>io.tileverse.versatiles</groupId>
+      <artifactId>tileverse-versatiles</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

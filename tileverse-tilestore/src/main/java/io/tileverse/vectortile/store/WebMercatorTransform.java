@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.pmtiles.store;
+package io.tileverse.vectortile.store;
 
 import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.common.Coordinate;
@@ -30,7 +30,7 @@ import io.tileverse.tiling.pyramid.TileIndex;
  *
  * @since 1.0
  */
-final class WebMercatorTransform {
+public final class WebMercatorTransform {
 
     /** Earth radius in meters (WGS84 semi-major axis). */
     private static final double EARTH_RADIUS = 6378137.0;
@@ -51,8 +51,8 @@ final class WebMercatorTransform {
      * <p>Uses the standard Spherical Mercator projection formulas:
      *
      * <ul>
-     *   <li>x = a * λ (where λ is longitude in radians)
-     *   <li>y = a * ln[tan(π/4 + φ/2)] (where φ is latitude in radians)
+     *   <li>{@code x = a * λ} (where {@code λ} is longitude in radians)
+     *   <li>{@code y = a * ln[tan(π/4 + φ/2)]} (where {@code φ} is latitude in radians)
      * </ul>
      *
      * @param longitude longitude in decimal degrees

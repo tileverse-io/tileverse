@@ -35,6 +35,7 @@ import io.tileverse.tiling.pyramid.TileRange;
 import io.tileverse.tiling.store.TileData;
 import io.tileverse.vectortile.model.VectorTile;
 import io.tileverse.vectortile.mvt.VectorTileCodec;
+import io.tileverse.vectortile.store.WebMercatorTransform;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;

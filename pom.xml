@@ -30,8 +30,9 @@
   <modules>
     <module>bom</module>
     <module>tileverse-storage</module>
-    <module>tileverse-vectortiles</module>
     <module>tileverse-tilematrixset</module>
+    <module>tileverse-vectortiles</module>
+    <module>tileverse-tilestore</module>
     <module>tileverse-pmtiles</module>
   </modules>
 
@@ -571,6 +572,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-resources-plugin</artifactId>
+        <version>3.5.0</version>
         <executions>
           <execution>
             <id>copy-license-and-notice</id>

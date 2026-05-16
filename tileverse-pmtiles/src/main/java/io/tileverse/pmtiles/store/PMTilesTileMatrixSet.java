@@ -20,10 +20,13 @@ import io.tileverse.pmtiles.PMTilesReader;
 import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.matrix.DefaultTileMatrixSets;
 import io.tileverse.tiling.matrix.TileMatrixSet;
+import io.tileverse.vectortile.store.WebMercatorTransform;
 
 /**
- * Factory methods for creating TileMatrixSet instances from PMTiles data. Provides convenient methods to create tile
- * matrix sets that match the coverage and zoom levels of PMTiles files.
+ * Factory for creating {@link TileMatrixSet} instances tailored to a PMTiles archive's metadata.
+ *
+ * <p>This utility class provides methods to derive a tiling scheme that matches the spatial extent and zoom level range
+ * defined in a PMTiles header.
  *
  * @since 1.0
  */
@@ -34,11 +37,10 @@ public final class PMTilesTileMatrixSet {
     }
 
     /**
-     * Creates a WebMercator TileMatrixSet from a PMTilesReader. Convenience method that extracts the header and creates
-     * the tile matrix set.
+     * Creates a Web Mercator (EPSG:3857) tile matrix set from a {@link PMTilesReader}.
      *
-     * @param pmtilesReader the PMTiles reader
-     * @return a TileMatrixSet covering the PMTiles zoom range
+     * @param pmtilesReader the reader for the PMTiles archive
+     * @return a tile matrix set matching the archive's configuration
      * @throws IllegalArgumentException if the zoom range is invalid
      */
     public static TileMatrixSet fromWebMercator(PMTilesReader pmtilesReader) {
@@ -46,15 +48,13 @@ public final class PMTilesTileMatrixSet {
     }
 
     /**
-     * Creates a WebMercator TileMatrixSet that matches both the zoom level range and geographic bounds defined in a
-     * PMTiles header. Uses the standard OGC WebMercatorQuad tile matrix set as the base and creates a subset covering
-     * only the tiles that intersect with the PMTiles bounding box.
+     * Creates a Web Mercator (EPSG:3857) tile matrix set from a {@link PMTilesHeader}.
      *
-     * <p>This assumes the PMTiles uses WebMercator projection (EPSG:3857), which is the most common case for PMTiles
-     * files.
+     * <p>The resulting set is a subset of the standard OGC WebMercatorQuad, restricted to the geographic extent and
+     * zoom range specified in the header.
      *
-     * @param pmtilesHeader the PMTiles header containing zoom level and bounds information
-     * @return a TileMatrixSet covering the PMTiles geographic and zoom extent
+     * @param pmtilesHeader the PMTiles archive header
+     * @return a tile matrix set covering the archive's spatial and zoom extent
      * @throws IllegalArgumentException if the zoom range is invalid
      */
     public static TileMatrixSet fromWebMercator(PMTilesHeader pmtilesHeader) {
@@ -71,11 +71,12 @@ public final class PMTilesTileMatrixSet {
     }
 
     /**
-     * Creates a WebMercator TileMatrixSet with 512px tiles that matches both the zoom level range and geographic bounds
-     * defined in a PMTiles header. Uses the standard OGC WebMercatorQuad x2 tile matrix set as the base.
+     * Creates a Web Mercator tile matrix set with 512px tiles from a {@link PMTilesHeader}.
      *
-     * @param pmtilesHeader the PMTiles header containing zoom level and bounds information
-     * @return a TileMatrixSet with 512px tiles covering the PMTiles extent
+     * <p>Uses the standard OGC WebMercatorQuadx2 as the base.
+     *
+     * @param pmtilesHeader the PMTiles archive header
+     * @return a 512px tile matrix set matching the archive's extent
      * @throws IllegalArgumentException if the zoom range is invalid
      */
     public static TileMatrixSet fromWebMercator512(PMTilesHeader pmtilesHeader) {
@@ -92,11 +93,12 @@ public final class PMTilesTileMatrixSet {
     }
 
     /**
-     * Creates a geographic (EPSG:4326) TileMatrixSet that matches both the zoom level range and geographic bounds
-     * defined in a PMTiles header. Uses the standard WorldCRS84Quad tile matrix set as the base.
+     * Creates a geographic (EPSG:4326) tile matrix set from a {@link PMTilesHeader}.
      *
-     * @param pmtilesHeader the PMTiles header containing zoom level and bounds information
-     * @return a TileMatrixSet covering the PMTiles extent in EPSG:4326
+     * <p>Uses the standard WorldCRS84Quad as the base.
+     *
+     * @param pmtilesHeader the PMTiles archive header
+     * @return a geographic tile matrix set matching the archive's extent
      * @throws IllegalArgumentException if the zoom range is invalid
      */
     public static TileMatrixSet fromCRS84(PMTilesHeader pmtilesHeader) {
@@ -112,11 +114,10 @@ public final class PMTilesTileMatrixSet {
     }
 
     /**
-     * Creates a geographic (EPSG:4326) TileMatrixSet from a PMTilesReader. Convenience method that extracts the header
-     * and creates the tile matrix set.
+     * Creates a geographic (EPSG:4326) tile matrix set from a {@link PMTilesReader}.
      *
-     * @param pmtilesReader the PMTiles reader
-     * @return a TileMatrixSet covering the PMTiles zoom range in EPSG:4326
+     * @param pmtilesReader the reader for the PMTiles archive
+     * @return a geographic tile matrix set matching the archive's extent
      * @throws IllegalArgumentException if the zoom range is invalid
      */
     public static TileMatrixSet fromCRS84(PMTilesReader pmtilesReader) {

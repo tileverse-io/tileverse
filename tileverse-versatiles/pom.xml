@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.tileverse</groupId>
+    <artifactId>tileverse-parent</artifactId>
+    <version>${revision}</version>
+  </parent>
+
+  <groupId>io.tileverse.versatiles</groupId>
+  <artifactId>tileverse-versatiles</artifactId>
+  <name>Tileverse :: Versatiles</name>
+  <description>Versatiles container format implementation</description>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>io.tileverse</groupId>
+        <artifactId>tileverse-bom</artifactId>
+        <version>${project.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!--
+     Adding bom as a dependency with type=pom and scope=provided here
+     does not change the dependency tree for the submodules at all, but forces the BOM to be installed
+     in the local maven repository first.
+    -->
+    <dependency>
+      <groupId>io.tileverse</groupId>
+      <artifactId>tileverse-bom</artifactId>
+      <version>${project.version}</version>
+      <type>pom</type>
+      <scope>provided</scope>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.tilematrixset</groupId>
+      <artifactId>tileverse-tilematrixset</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.vectortiles</groupId>
+      <artifactId>tileverse-vectortiles</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.tilestore</groupId>
+      <artifactId>tileverse-tilestore</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.storage</groupId>
+      <artifactId>tileverse-storage-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.storage</groupId>
+      <artifactId>tileverse-storage-s3</artifactId>
+      <scope>runtime</scope>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.storage</groupId>
+      <artifactId>tileverse-storage-azure</artifactId>
+      <scope>runtime</scope>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.storage</groupId>
+      <artifactId>tileverse-storage-gcs</artifactId>
+      <scope>runtime</scope>
+      <optional>true</optional>
+    </dependency>
+
+    <dependency>
+      <groupId>tools.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.github.ben-manes.caffeine</groupId>
+      <artifactId>caffeine</artifactId>
+    </dependency>
+    <!-- Compression: gzip via commons-compress, Brotli via org.brotli:dec, Zstandard via zstd-jni -->
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-compress</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.brotli</groupId>
+      <artifactId>dec</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.github.luben</groupId>
+      <artifactId>zstd-jni</artifactId>
+    </dependency>
+    <!-- ImageIO plugin for WebP-encoded raster tiles; PNG/JPEG come with the JDK. -->
+    <dependency>
+      <groupId>com.github.usefulness</groupId>
+      <artifactId>webp-imageio</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <id>coverage</id>
+      <activation>
+        <property>
+          <name>coverage</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.jacoco</groupId>
+            <artifactId>jacoco-maven-plugin</artifactId>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

@@ -26,5 +26,5 @@ To avoid network latency, the `CachingRangeReader` implements a two-tier cache:
 The system is designed for extension via interfaces:
 
 *   Implement `StorageProvider` (registered via `ServiceLoader`) to add an in-scope storage backend - for example, an internal CAS-style store, a store with its own URI scheme, or a test harness. Native protocols like OpenStack Swift, Azure Files (SMB), or HDFS-via-WebHDFS are intentionally out of scope; see [Why tileverse-storage?](../../storage/explanation/why.md#when-not-to-use-this-library).
-*   Subclass `AbstractTileStore<T>` to expose a different archive format under the same `TileStore<T>` contract (for example, Versatiles or MBTiles).
+*   Subclass `AbstractTileStore<T>` to expose a different archive format under the same `TileStore<T>` contract, as `tileverse-versatiles` does for VersaTiles containers. MBTiles would fit the same way.
 *   Implement `TileMatrixSet` to support non-Earth or custom grids while reusing the rest of the stack unchanged.

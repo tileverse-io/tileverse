@@ -121,6 +121,12 @@ nav:
       - Use PMTiles in cloud storage: pmtiles/how-to/cloud-storage.md
     - Reference:
       - Tile Stores: pmtiles/reference/tile-stores.md
+  - Versatiles:
+    - Overview: versatiles/index.md
+    - How-to guides:
+      - Read Versatiles: versatiles/how-to/read-versatiles.md
+    - Reference:
+      - Format support: versatiles/reference/format-support.md
   - Vector Tiles:
     - Overview: vectortiles/index.md
     - Tutorial: vectortiles/tutorial.md

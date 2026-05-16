@@ -23,8 +23,11 @@ import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.matrix.Tile;
 import io.tileverse.tiling.store.TileData;
 import io.tileverse.vectortile.model.VectorTile;
+import io.tileverse.vectortile.mvt.VectorTileCodec;
+import io.tileverse.vectortile.store.VectorTileCache;
+import io.tileverse.vectortile.store.VectorTileStore;
+import io.tileverse.vectortile.store.WebMercatorTransform;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Objects;
@@ -33,38 +36,42 @@ import org.jspecify.annotations.NullMarked;
 import org.locationtech.jts.geom.Envelope;
 
 /**
- * A VectorTileStore implementation backed by a PMTiles file.
+ * A {@link VectorTileStore} implementation backed by a PMTiles archive.
  *
- * <p>This store provides access to vector tiles stored in a PMTiles archive. It uses a {@link PMTilesReader} to fetch
- * the raw tile data and decodes it into {@link VectorTile} objects.
+ * <p>This store provides access to vector tiles stored in a PMTiles file. It uses a {@link PMTilesReader} to fetch the
+ * raw tile data and decodes it into {@link VectorTile} objects.
  *
- * <p>Features:
- *
- * <ul>
- *   <li>Efficient tile access using the PMTiles directory structure
- *   <li>Caching of decoded {@link VectorTile} objects
- *   <li>Integration with the {@link VectorTileStore} abstraction
- * </ul>
+ * <p>The store manages a {@link VectorTileCache} to optimize performance when multiple layers or features are requested
+ * from the same tile.
  */
 @NullMarked
 public class PMTilesVectorTileStore extends VectorTileStore {
 
     private final PMTilesReader reader;
 
-    /**
-     * Short-lived (expireAfterAccess) {@link VectorTile} cache to account for consecutive single-layer requests.
-     *
-     * <p>Since {@link VectorTile} objects are immutable and relatively expensive to decode, caching them improves
-     * performance when multiple layers are requested for the same tile.
-     */
+    /** Cache for decoded {@link VectorTile} objects to avoid redundant decoding overhead. */
     private final VectorTileCache vectorTileCache;
 
+    /**
+     * Creates a new PMTiles vector tile store.
+     *
+     * @param reader the reader for the underlying PMTiles archive
+     */
     public PMTilesVectorTileStore(PMTilesReader reader) {
         super(PMTilesTileMatrixSet.fromWebMercator(reader));
         this.reader = Objects.requireNonNull(reader);
-        this.vectorTileCache = new VectorTileCache(reader);
+        VectorTileCodec decoder = new VectorTileCodec();
+        this.vectorTileCache = new VectorTileCache(
+                reader.getSourceIdentifier(),
+                tileIndex -> reader.getTile(reader.getTileId(tileIndex), decoder::decode));
     }
 
+    /**
+     * Configures a {@link CacheManager} for both the PMTiles reader and the vector tile cache.
+     *
+     * @param cacheManager the cache manager to use
+     * @return this store instance for method chaining
+     */
     public PMTilesVectorTileStore cacheManager(CacheManager cacheManager) {
         reader.cacheManager(cacheManager);
         vectorTileCache.setCacheManager(cacheManager);
@@ -72,22 +79,28 @@ public class PMTilesVectorTileStore extends VectorTileStore {
     }
 
     /**
-     * @throws UncheckedIOException if an IO exception happens when obtaining the {@link PMTilesMetadata} containing the
-     *     list of {@link VectorLayer}
+     * Returns the metadata for all vector layers available in the PMTiles archive.
+     *
+     * @return a list of vector layer metadata
      */
     @Override
     public List<VectorLayer> getVectorLayersMetadata() {
         return getMetadata().vectorLayers();
     }
 
+    /**
+     * Returns the full PMTiles metadata as parsed at reader construction time.
+     *
+     * @return the archive metadata
+     */
     public PMTilesMetadata getMetadata() {
         return reader.getMetadata();
     }
 
     /**
-     * {@inheritDoc}
+     * Returns the geographic extent of the data in the PMTiles archive, converted to Web Mercator.
      *
-     * @return the extent declared in the {@link PMTilesReader#getHeader() PMTiles header}, converted to WebMercator
+     * @return the extent in Web Mercator (EPSG:3857)
      */
     @Override
     public BoundingBox2D getExtent() {
@@ -96,8 +109,14 @@ public class PMTilesVectorTileStore extends VectorTileStore {
     }
 
     /**
-     * Delegates to {@link PMTilesReader#getTile(long, io.tileverse.io.IOFunction)} with a decoding function to parse
-     * the {@link InputStream} blob as a {@link VectorTile}.
+     * Loads a single vector tile from the archive.
+     *
+     * <p>This method first checks the cache and, if not found, uses the PMTiles reader to fetch and decode the tile
+     * data.
+     *
+     * @param tile the tile metadata
+     * @return an optional containing the tile data, or empty if not found
+     * @throws UncheckedIOException if an error occurs during loading
      */
     @Override
     public Optional<TileData<VectorTile>> loadTile(Tile tile) {

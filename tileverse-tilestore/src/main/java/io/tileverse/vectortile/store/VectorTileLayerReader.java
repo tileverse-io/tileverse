@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.pmtiles.store;
+package io.tileverse.vectortile.store;
 
 import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.store.TileData;
@@ -26,8 +26,22 @@ import java.util.stream.Stream;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.util.AffineTransformation;
 
+/**
+ * Internal reader that extracts features from a specific {@link VectorTile.Layer} within a tile.
+ *
+ * <p>This reader handles geometry decoding, coordinate transformations, and feature filtering.
+ *
+ * @param layer the specific layer to read from
+ * @param tileData the tile metadata (used for coordinate transformation)
+ * @param query the query parameters
+ */
 record VectorTileLayerReader(VectorTile.Layer layer, TileData<VectorTile> tileData, VectorTilesQuery query) {
 
+    /**
+     * Extracts matching features from the layer.
+     *
+     * @return a stream of features with decoded and transformed geometries
+     */
     public Stream<VectorTile.Layer.Feature> getFeatures() {
         if (layer.count() == 0) {
             return Stream.empty();
@@ -38,6 +52,11 @@ record VectorTileLayerReader(VectorTile.Layer layer, TileData<VectorTile> tileDa
         return layer.getFeatures(filter, decoder);
     }
 
+    /**
+     * Builds a {@link GeometryReader} configured according to the query parameters.
+     *
+     * @return a configured geometry reader
+     */
     public GeometryReader buildTileGeometryDecoder() {
         GeometryReader geometryReader = VectorTileCodec.newGeometryReader();
 
@@ -75,11 +94,12 @@ record VectorTileLayerReader(VectorTile.Layer layer, TileData<VectorTile> tileDa
     }
 
     /**
-     * Creates an AffineTransformation that maps tile coordinates to CRS coordinates.
+     * Creates an {@link AffineTransformation} that maps tile coordinates (typically 0,0 to 4096,4096) to CRS
+     * coordinates.
      *
-     * @param tileExtent The tile extent in tile coordinate system (typically 0,0 to 4096,4096)
-     * @param tileEnvelope The corresponding envelope in the target CRS coordinate system
-     * @return AffineTransformation for converting tile coords to CRS coords
+     * @param tileExtent the tile extent in tile coordinate system
+     * @param tileEnvelope the corresponding envelope in the target CRS coordinate system
+     * @return an affine transformation for converting tile coords to CRS coords
      */
     public static AffineTransformation createTileToCrsTransformation(int tileExtent, BoundingBox2D tileEnvelope) {
 

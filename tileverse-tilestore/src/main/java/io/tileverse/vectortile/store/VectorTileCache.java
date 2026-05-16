@@ -13,19 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.pmtiles.store;
+package io.tileverse.vectortile.store;
 
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.github.benmanes.caffeine.cache.Scheduler;
 import io.tileverse.cache.CacheManager;
 import io.tileverse.cache.CaffeineCache;
-import io.tileverse.pmtiles.PMTilesReader;
 import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.vectortile.model.VectorTile;
-import io.tileverse.vectortile.mvt.VectorTileCodec;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
@@ -34,11 +31,34 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
+/**
+ * A format-neutral, thread-safe cache for decoded {@link VectorTile} objects.
+ *
+ * <p>This cache is keyed by {@link TileIndex} and is designed to minimize the overhead of decoding vector tiles when
+ * multiple layers or features are requested for the same tile. It uses a {@link VectorTileLoader} to fetch and decode
+ * tiles from an underlying source.
+ *
+ * <p>The cache is partitioned by a {@code sourceIdentifier} to allow sharing a single cache instance across multiple
+ * vector tile sources while avoiding key collisions.
+ */
 @Slf4j
 @NullMarked
-class VectorTileCache {
+public class VectorTileCache {
 
-    private static final String SHARED_CACHE_NAME = "tileverse-pmtiles-vectortile-cache";
+    /** Functional interface for loading a decoded {@link VectorTile} for a specific tile index. */
+    @FunctionalInterface
+    public interface VectorTileLoader {
+        /**
+         * Loads and decodes a vector tile.
+         *
+         * @param tileIndex the index of the tile to load
+         * @return an optional containing the decoded vector tile, or empty if it doesn't exist
+         * @throws IOException if an error occurs during loading or decoding
+         */
+        Optional<VectorTile> load(TileIndex tileIndex) throws IOException;
+    }
+
+    private static final String SHARED_CACHE_NAME = "tileverse-vectortile-cache";
 
     private static final int DEFAULT_MAX_HEAP_PERCENT = 15;
 
@@ -64,24 +84,31 @@ class VectorTileCache {
      */
     private static final int AVERAGE_TILE_WEIGHT = 1024 * 400;
 
-    private final PMTilesReader reader;
+    private final String sourceIdentifier;
+
+    private final VectorTileLoader loader;
 
     @Nullable
     private CacheManager cacheManager;
 
     /**
-     * Decodes {@code ByteBuffer} blobs from {@link PMTilesReader#getTile(TileIndex, java.util.function.Function)
-     * PMTilesReader} as {@link VectorTile}s
+     * Creates a new cache instance for the specified source.
      *
-     * @see #decodeVectorTile(ByteBuffer)
+     * @param sourceIdentifier a unique identifier for the tile source
+     * @param loader the loader used to fetch and decode tiles
      */
-    private final VectorTileCodec vectorTileDecoder;
-
-    public VectorTileCache(PMTilesReader reader) {
-        this.reader = Objects.requireNonNull(reader);
-        this.vectorTileDecoder = new VectorTileCodec();
+    public VectorTileCache(String sourceIdentifier, VectorTileLoader loader) {
+        this.sourceIdentifier = Objects.requireNonNull(sourceIdentifier);
+        this.loader = Objects.requireNonNull(loader);
     }
 
+    /**
+     * Sets the cache manager to use for this cache.
+     *
+     * <p>If a different manager was previously set, all existing entries in this cache will be invalidated.
+     *
+     * @param cacheManager the cache manager to use
+     */
     public void setCacheManager(CacheManager cacheManager) {
         if (this.cacheManager != null) {
             cache().invalidateAll();
@@ -100,7 +127,7 @@ class VectorTileCache {
             this.cacheManager = CacheManager.getDefault();
         }
         CacheManager manager = this.cacheManager;
-        return manager.getCache(SHARED_CACHE_NAME, this::buildCache).subCache(reader.getSourceIdentifier());
+        return manager.getCache(SHARED_CACHE_NAME, this::buildCache).subCache(sourceIdentifier);
     }
 
     private io.tileverse.cache.Cache<TileIndex, Optional<VectorTile>> buildCache() {
@@ -115,6 +142,14 @@ class VectorTileCache {
                 .build();
     }
 
+    /**
+     * Retrieves a decoded vector tile from the cache, loading it through the configured {@link VectorTileLoader} on a
+     * miss.
+     *
+     * @param tileIndex the index of the tile to retrieve
+     * @return an optional containing the vector tile, or empty if no tile exists at that index
+     * @throws IOException if an error occurs while loading the tile
+     */
     @SuppressWarnings("java:S2637") // can't return null
     public Optional<VectorTile> getVectorTile(TileIndex tileIndex) throws IOException {
         try {
@@ -127,8 +162,7 @@ class VectorTileCache {
     @NonNull
     private Optional<VectorTile> loadVectorTile(TileIndex tileIndex) {
         try {
-            long tileId = reader.getTileId(tileIndex);
-            return reader.getTile(tileId, vectorTileDecoder::decode);
+            return loader.load(tileIndex);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

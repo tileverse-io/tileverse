@@ -1,0 +1,44 @@
+/*
+ * (c) Copyright 2025 Multiversio LLC. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *          http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.tileverse.tiling.store;
+
+import static java.util.Objects.requireNonNull;
+
+import io.tileverse.tiling.matrix.TileMatrixSet;
+
+/**
+ * Base implementation of {@link TileStore} that manages the common {@link TileMatrixSet}.
+ *
+ * @param <T> the type of data associated with tiles
+ */
+public abstract class AbstractTileStore<T> implements TileStore<T> {
+    /** The tile matrix set defining the tiling scheme used by this store. */
+    protected final TileMatrixSet matrixSet;
+
+    /**
+     * Initializes the store with the specified tile matrix set.
+     *
+     * @param matrixSet the tile matrix set to use
+     */
+    protected AbstractTileStore(TileMatrixSet matrixSet) {
+        this.matrixSet = requireNonNull(matrixSet);
+    }
+
+    @Override
+    public TileMatrixSet matrixSet() {
+        return matrixSet;
+    }
+}

@@ -8,10 +8,10 @@
     <version>${revision}</version>
   </parent>
 
-  <groupId>io.tileverse.pmtiles</groupId>
-  <artifactId>tileverse-pmtiles</artifactId>
-  <name>Tileverse :: PMTiles</name>
-  <description>PMTiles format implementation</description>
+  <groupId>io.tileverse.tilestore</groupId>
+  <artifactId>tileverse-tilestore</artifactId>
+  <name>Tileverse :: TileStore</name>
+  <description>Format-neutral TileStore abstraction with vector tile store, query API, and cache</description>
 
   <dependencyManagement>
     <dependencies>
@@ -41,57 +41,41 @@
       <scope>provided</scope>
       <optional>true</optional>
     </dependency>
+
+    <!-- Tile pyramid model used by TileStore -->
     <dependency>
       <groupId>io.tileverse.tilematrixset</groupId>
       <artifactId>tileverse-tilematrixset</artifactId>
     </dependency>
+
+    <!-- Vector tile model and MVT codec used by VectorTileStore -->
     <dependency>
       <groupId>io.tileverse.vectortiles</groupId>
       <artifactId>tileverse-vectortiles</artifactId>
     </dependency>
-    <dependency>
-      <groupId>io.tileverse.tilestore</groupId>
-      <artifactId>tileverse-tilestore</artifactId>
-    </dependency>
+
+    <!-- Cache abstractions (CacheManager / CaffeineCache) used by VectorTileCache -->
     <dependency>
       <groupId>io.tileverse.storage</groupId>
       <artifactId>tileverse-storage-core</artifactId>
     </dependency>
-    <dependency>
-      <groupId>io.tileverse.storage</groupId>
-      <artifactId>tileverse-storage-s3</artifactId>
-      <scope>runtime</scope>
-      <optional>true</optional>
-    </dependency>
-    <dependency>
-      <groupId>io.tileverse.storage</groupId>
-      <artifactId>tileverse-storage-azure</artifactId>
-      <scope>runtime</scope>
-      <optional>true</optional>
-    </dependency>
-    <dependency>
-      <groupId>io.tileverse.storage</groupId>
-      <artifactId>tileverse-storage-gcs</artifactId>
-      <scope>runtime</scope>
-      <optional>true</optional>
-    </dependency>
 
+    <!-- Jackson 3 for TileJSON metadata records -->
     <dependency>
       <groupId>tools.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
     </dependency>
+
+    <!-- Caffeine for VectorTileCache -->
     <dependency>
       <groupId>com.github.ben-manes.caffeine</groupId>
       <artifactId>caffeine</artifactId>
     </dependency>
-    <!-- Compression -->
+
+    <!-- JTS for geometry transformation in VectorTileLayerReader / WebMercatorTransform -->
     <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-compress</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.github.luben</groupId>
-      <artifactId>zstd-jni</artifactId>
+      <groupId>org.locationtech.jts</groupId>
+      <artifactId>jts-core</artifactId>
     </dependency>
   </dependencies>
 

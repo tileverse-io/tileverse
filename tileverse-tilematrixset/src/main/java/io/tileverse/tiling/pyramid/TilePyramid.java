@@ -16,7 +16,6 @@
 package io.tileverse.tiling.pyramid;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import io.tileverse.tiling.common.CornerOfOrigin;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;

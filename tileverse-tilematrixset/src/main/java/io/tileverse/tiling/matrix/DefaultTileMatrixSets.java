@@ -15,12 +15,13 @@
  */
 package io.tileverse.tiling.matrix;
 
-import static io.tileverse.tiling.common.CornerOfOrigin.TOP_LEFT;
+import static io.tileverse.tiling.pyramid.CornerOfOrigin.TOP_LEFT;
 
-import io.tileverse.tiling.common.BoundingBox2D;
-import io.tileverse.tiling.common.Coordinate;
+import io.tileverse.geom.BoundingBox2D;
+import io.tileverse.geom.Coordinate;
 import io.tileverse.tiling.pyramid.TilePyramid;
 import io.tileverse.tiling.pyramid.TileRange;
+import java.net.URI;
 
 /**
  * Standard tile matrix sets commonly used in web mapping applications. Provides constants and factory methods for
@@ -42,6 +43,16 @@ public final class DefaultTileMatrixSets {
     private DefaultTileMatrixSets() {
         // utility class
     }
+
+    // OGC well-known scale set URIs from http://www.opengis.net/def/wkss/OGC/1.0/
+    private static final URI WKSS_GOOGLE_MAPS_COMPATIBLE =
+            URI.create("http://www.opengis.net/def/wkss/OGC/1.0/GoogleMapsCompatible");
+    private static final URI WKSS_GOOGLE_CRS84_QUAD =
+            URI.create("http://www.opengis.net/def/wkss/OGC/1.0/GoogleCRS84Quad");
+
+    // CRS URI references
+    private static final URI CRS_EPSG_3857 = URI.create("http://www.opengis.net/def/crs/EPSG/0/3857");
+    private static final URI CRS_EPSG_4326 = URI.create("http://www.opengis.net/def/crs/EPSG/0/4326");
 
     private static final Coordinate WEBMERCATOR_BOTTOM_LEFT = new Coordinate(-20037508.3427892, -20037508.3427892);
     private static final Coordinate WEBMERCATOR_TOP_RIGHT = new Coordinate(20037508.3427892, 20037508.3427892);
@@ -201,8 +212,10 @@ public final class DefaultTileMatrixSets {
         }
 
         return TileMatrixSet.builder()
+                .identifier(tileSize == 256 ? "WORLD_EPSG4326" : "WORLD_EPSG4326x" + (tileSize / 256))
                 .tilePyramid(pyramid)
                 .crs("EPSG:4326")
+                .supportedCRS(CRS_EPSG_4326)
                 .tileSize(tileSize, tileSize)
                 .extent(WORLD4326)
                 .resolutions(resolutions)
@@ -231,11 +244,14 @@ public final class DefaultTileMatrixSets {
         }
 
         return TileMatrixSet.builder()
+                .identifier(tileSize == 256 ? "WORLD_EPSG3857" : "WORLD_EPSG3857x" + (tileSize / 256))
                 .tilePyramid(pyramid)
                 .crs("EPSG:3857")
+                .supportedCRS(CRS_EPSG_3857)
                 .tileSize(tileSize, tileSize)
                 .extent(WebMercatorBounds)
                 .resolutions(resolutions)
+                .wellKnownScaleSet(WKSS_GOOGLE_MAPS_COMPATIBLE)
                 .build();
     }
 
@@ -264,11 +280,14 @@ public final class DefaultTileMatrixSets {
 
         BoundingBox2D world38572 = WebMercatorBounds;
         return TileMatrixSet.builder()
+                .identifier(tileSize == 256 ? "WebMercatorQuad" : "WebMercatorQuadx" + (tileSize / 256))
                 .tilePyramid(pyramid)
                 .crs("EPSG:3857")
+                .supportedCRS(CRS_EPSG_3857)
                 .tileSize(tileSize, tileSize)
                 .extent(world38572)
                 .resolutions(resolutions)
+                .wellKnownScaleSet(WKSS_GOOGLE_MAPS_COMPATIBLE)
                 .build();
     }
 
@@ -296,11 +315,14 @@ public final class DefaultTileMatrixSets {
         }
 
         return TileMatrixSet.builder()
+                .identifier(tileSize == 256 ? "WorldCRS84Quad" : "WorldCRS84Quadx" + (tileSize / 256))
                 .tilePyramid(pyramid)
                 .crs("EPSG:4326")
+                .supportedCRS(CRS_EPSG_4326)
                 .tileSize(tileSize, tileSize)
                 .extent(WORLD4326)
                 .resolutions(resolutions)
+                .wellKnownScaleSet(WKSS_GOOGLE_CRS84_QUAD)
                 .build();
     }
 }

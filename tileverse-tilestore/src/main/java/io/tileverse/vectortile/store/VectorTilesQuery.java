@@ -17,7 +17,7 @@ package io.tileverse.vectortile.store;
 
 import static java.util.Objects.requireNonNull;
 
-import io.tileverse.tiling.common.BoundingBox2D;
+import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.tiling.store.TileStore;
 import io.tileverse.tiling.store.TileStore.Strategy;
 import io.tileverse.vectortile.model.VectorTile.Layer.Feature;

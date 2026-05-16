@@ -15,12 +15,15 @@
  */
 package io.tileverse.tiling.matrix;
 
-import io.tileverse.tiling.common.BoundingBox2D;
-import io.tileverse.tiling.common.Coordinate;
-import io.tileverse.tiling.common.CornerOfOrigin;
+import static java.util.Objects.requireNonNull;
+
+import io.tileverse.geom.BoundingBox2D;
+import io.tileverse.geom.Coordinate;
+import io.tileverse.tiling.pyramid.CornerOfOrigin;
 import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.pyramid.TilePyramid;
 import io.tileverse.tiling.pyramid.TileRange;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -39,22 +42,58 @@ import java.util.Optional;
  *   <li>Custom projected coordinate systems
  * </ul>
  *
+ * @param identifier the OGC TMS identifier (clause 7.1)
  * @param tilePyramid the tile pyramid defining the tiling structure
  * @param crsId the coordinate reference system identifier
+ * @param supportedCRS URI form of the CRS (clause 7.1); may equal {@code URI.create(crsId)} when {@code crsId} is
+ *     already a URI
  * @param tileWidth the width of each tile in pixels
  * @param tileHeight the height of each tile in pixels
  * @param extent the bounding box covering all tiles
  * @param resolutions the map resolution for each zoom level
+ * @param title optional human-readable title (clause 7.1)
+ * @param abstractDescription optional narrative description (clause 7.1)
+ * @param keywords optional keywords (clause 7.1)
+ * @param wellKnownScaleSet optional URI of a well-known scale set (clause 7.1)
  * @since 1.0
  */
+@SuppressWarnings("java:S6207")
 public record StandardTileMatrixSet(
+        String identifier,
         TilePyramid tilePyramid,
         String crsId,
+        URI supportedCRS,
         int tileWidth,
         int tileHeight,
         BoundingBox2D extent,
-        double[] resolutions)
+        double[] resolutions,
+        Optional<String> title,
+        Optional<String> abstractDescription,
+        List<String> keywords,
+        Optional<URI> wellKnownScaleSet)
         implements TileMatrixSet {
+
+    /** Compact constructor: validates required fields and defensively copies the keywords list. */
+    public StandardTileMatrixSet {
+        requireNonNull(identifier, "identifier");
+        requireNonNull(tilePyramid, "tilePyramid");
+        requireNonNull(crsId, "crsId");
+        requireNonNull(supportedCRS, "supportedCRS");
+        requireNonNull(extent, "extent");
+        requireNonNull(resolutions, "resolutions");
+        requireNonNull(title, "title");
+        requireNonNull(abstractDescription, "abstractDescription");
+        requireNonNull(wellKnownScaleSet, "wellKnownScaleSet");
+        keywords = List.copyOf(requireNonNull(keywords, "keywords"));
+        if (identifier.isBlank()) {
+            throw new IllegalArgumentException("identifier cannot be blank");
+        }
+    }
+
+    @Override
+    public String identifier() {
+        return identifier;
+    }
 
     @Override
     public TilePyramid tilePyramid() {
@@ -64,6 +103,31 @@ public record StandardTileMatrixSet(
     @Override
     public String crsId() {
         return crsId;
+    }
+
+    @Override
+    public URI supportedCRS() {
+        return supportedCRS;
+    }
+
+    @Override
+    public Optional<String> title() {
+        return title;
+    }
+
+    @Override
+    public Optional<String> abstractDescription() {
+        return abstractDescription;
+    }
+
+    @Override
+    public List<String> keywords() {
+        return keywords;
+    }
+
+    @Override
+    public Optional<URI> wellKnownScaleSet() {
+        return wellKnownScaleSet;
     }
 
     @Override
@@ -179,10 +243,19 @@ public record StandardTileMatrixSet(
 
     static TileMatrixSetBuilder toBuilder(TileMatrixSet orig) {
         TileMatrixSetBuilder builder = new TileMatrixSetBuilder()
+                .identifier(orig.identifier())
                 .tilePyramid(orig.tilePyramid())
                 .crs(orig.crsId())
+                .supportedCRS(orig.supportedCRS())
                 .tileSize(orig.tileWidth(), orig.tileHeight())
                 .extent(orig.boundingBox());
+
+        orig.title().ifPresent(builder::title);
+        orig.abstractDescription().ifPresent(builder::abstractDescription);
+        if (!orig.keywords().isEmpty()) {
+            builder.keywords(orig.keywords());
+        }
+        orig.wellKnownScaleSet().ifPresent(builder::wellKnownScaleSet);
 
         // For StandardTileMatrixSet records, we can access the arrays directly
         if (orig instanceof StandardTileMatrixSet std) {
@@ -227,22 +300,39 @@ public record StandardTileMatrixSet(
         }
         return tileWidth == other.tileWidth
                 && tileHeight == other.tileHeight
+                && Objects.equals(identifier, other.identifier)
                 && Objects.equals(tilePyramid, other.tilePyramid)
                 && Objects.equals(crsId, other.crsId)
+                && Objects.equals(supportedCRS, other.supportedCRS)
                 && Objects.equals(extent, other.extent)
-                && Arrays.equals(resolutions, other.resolutions);
+                && Arrays.equals(resolutions, other.resolutions)
+                && Objects.equals(title, other.title)
+                && Objects.equals(abstractDescription, other.abstractDescription)
+                && Objects.equals(keywords, other.keywords)
+                && Objects.equals(wellKnownScaleSet, other.wellKnownScaleSet);
     }
 
     @Override
     public int hashCode() {
-        int result = Objects.hash(tilePyramid, crsId, tileWidth, tileHeight, extent);
+        int result = Objects.hash(
+                identifier,
+                tilePyramid,
+                crsId,
+                supportedCRS,
+                tileWidth,
+                tileHeight,
+                extent,
+                title,
+                abstractDescription,
+                keywords,
+                wellKnownScaleSet);
         result = 31 * result + Arrays.hashCode(resolutions);
         return result;
     }
 
     @Override
     public String toString() {
-        return "StandardTileMatrixSet[tilePyramid=" + tilePyramid + ", crsId=" + crsId + ", tileWidth=" + tileWidth
+        return "StandardTileMatrixSet[identifier=" + identifier + ", crsId=" + crsId + ", tileWidth=" + tileWidth
                 + ", tileHeight=" + tileHeight + ", extent=" + extent + ", resolutions="
                 + Arrays.toString(resolutions) + "]";
     }

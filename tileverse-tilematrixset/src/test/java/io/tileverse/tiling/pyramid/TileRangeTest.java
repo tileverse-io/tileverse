@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.tileverse.tiling.common.CornerOfOrigin;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;

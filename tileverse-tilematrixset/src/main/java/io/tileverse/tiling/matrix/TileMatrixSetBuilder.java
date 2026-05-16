@@ -15,17 +15,96 @@
  */
 package io.tileverse.tiling.matrix;
 
-import io.tileverse.tiling.common.BoundingBox2D;
+import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.tiling.pyramid.TilePyramid;
+import java.net.URI;
+import java.util.List;
+import java.util.Optional;
 
 /** Builder for creating StandardTileMatrixSet instances. */
 public class TileMatrixSetBuilder {
+    private String identifier;
     private TilePyramid tilePyramid;
     private String crsId;
+    private URI supportedCRS;
     private int tileWidth = 256;
     private int tileHeight = 256;
     private BoundingBox2D extent;
     private double[] resolutions;
+    private Optional<String> title = Optional.empty();
+    private Optional<String> abstractDescription = Optional.empty();
+    private List<String> keywords = List.of();
+    private Optional<URI> wellKnownScaleSet = Optional.empty();
+
+    /**
+     * Sets the OGC TMS {@code identifier} (clause 7.1). Required.
+     *
+     * @param identifier the tile matrix set identifier
+     * @return this builder
+     */
+    public TileMatrixSetBuilder identifier(String identifier) {
+        this.identifier = identifier;
+        return this;
+    }
+
+    /**
+     * Sets the OGC TMS {@code supportedCRS} URI (clause 7.1).
+     *
+     * <p>If not set, defaults to {@code URI.create(crsId)} at build time, which is correct only when {@code crsId} is
+     * itself a URI.
+     *
+     * @param supportedCRS the CRS as a URI
+     * @return this builder
+     */
+    public TileMatrixSetBuilder supportedCRS(URI supportedCRS) {
+        this.supportedCRS = supportedCRS;
+        return this;
+    }
+
+    /**
+     * Sets the optional OGC TMS {@code title} (clause 7.1).
+     *
+     * @param title the title (may be null to clear)
+     * @return this builder
+     */
+    public TileMatrixSetBuilder title(String title) {
+        this.title = Optional.ofNullable(title);
+        return this;
+    }
+
+    /**
+     * Sets the optional OGC TMS {@code abstract} (clause 7.1). Named {@code abstractDescription} because
+     * {@code abstract} is a Java keyword.
+     *
+     * @param abstractDescription the narrative description (may be null to clear)
+     * @return this builder
+     */
+    public TileMatrixSetBuilder abstractDescription(String abstractDescription) {
+        this.abstractDescription = Optional.ofNullable(abstractDescription);
+        return this;
+    }
+
+    /**
+     * Sets the optional OGC TMS {@code keywords} (clause 7.1).
+     *
+     * @param keywords the keywords (null becomes empty list)
+     * @return this builder
+     */
+    public TileMatrixSetBuilder keywords(List<String> keywords) {
+        this.keywords = keywords == null ? List.of() : List.copyOf(keywords);
+        return this;
+    }
+
+    /**
+     * Sets the optional OGC TMS {@code wellKnownScaleSet} URI (clause 7.1).
+     *
+     * @param wellKnownScaleSet the WKSS URI (may be null to clear)
+     * @return this builder
+     */
+    public TileMatrixSetBuilder wellKnownScaleSet(URI wellKnownScaleSet) {
+        this.wellKnownScaleSet = Optional.ofNullable(wellKnownScaleSet);
+        return this;
+    }
 
     /**
      * Sets the tile pyramid that defines the discrete grid structure.
@@ -135,6 +214,9 @@ public class TileMatrixSetBuilder {
      * @throws IllegalStateException if required properties are not set
      */
     public TileMatrixSet build() {
+        if (identifier == null) {
+            throw new IllegalStateException("identifier is required");
+        }
         if (tilePyramid == null) {
             throw new IllegalStateException("tilePyramid is required");
         }
@@ -163,6 +245,19 @@ public class TileMatrixSetBuilder {
             }
         }
 
-        return new StandardTileMatrixSet(tilePyramid, crsId, tileWidth, tileHeight, extent, resolutions);
+        URI crsUri = supportedCRS != null ? supportedCRS : URI.create(crsId);
+        return new StandardTileMatrixSet(
+                identifier,
+                tilePyramid,
+                crsId,
+                crsUri,
+                tileWidth,
+                tileHeight,
+                extent,
+                resolutions,
+                title,
+                abstractDescription,
+                keywords,
+                wellKnownScaleSet);
     }
 }

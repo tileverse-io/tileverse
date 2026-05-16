@@ -13,10 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.tiling.common;
-
-import io.tileverse.tiling.pyramid.TileIndex;
-import io.tileverse.tiling.pyramid.TileRange;
+package io.tileverse.tiling.pyramid;
 
 /**
  * Defines the coordinate system origin for tile pyramids and ranges. Specifies where the (0,0) coordinate is
@@ -135,7 +132,7 @@ public enum CornerOfOrigin {
      * @param extent the spatial extent
      * @return the coordinate for tile (0,0) based on this corner of origin
      */
-    public io.tileverse.tiling.common.Coordinate pointOfOrigin(io.tileverse.tiling.common.BoundingBox2D extent) {
+    public io.tileverse.geom.Coordinate pointOfOrigin(io.tileverse.geom.BoundingBox2D extent) {
         return switch (this) {
             case TOP_LEFT -> extent.upperLeft();
             case BOTTOM_LEFT -> extent.lowerLeft();

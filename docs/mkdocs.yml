@@ -133,6 +133,7 @@ nav:
       - Quick Start: tilematrixset/user-guide/quick-start.md
       - Tile Pyramids: tilematrixset/user-guide/tile-pyramids.md
       - Standard Sets: tilematrixset/user-guide/standard-sets.md
+      - OGC Compliance: tilematrixset/user-guide/ogc-compliance.md
   - Developer Guide:
     - Overview: developer-guide/index.md
     - Building: developer-guide/building.md

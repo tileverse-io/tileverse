@@ -1,12 +1,14 @@
 # Tile Matrix Set
 
-A Java implementation of the OGC Two-Phase Tile Matrix Set (TMS) standard. This library handles the mathematical complexity of tile pyramids, coordinate systems, and grid definitions.
+A Java implementation of the [OGC Two Dimensional Tile Matrix Set (17-083r2)](https://docs.ogc.org/is/17-083r2/17-083r2.html) standard. The library handles the mathematical model of tile pyramids, coordinate systems and grid definitions, and provides JSON and XML readers and writers for the OGC encodings defined in Annex C and Annex D.
 
 ## Features
 
-- **OGC Compliance**: Implements the data model for Tile Matrix Sets.
-- **Standard Sets**: Includes built-in definitions for `WebMercatorQuad` and `WorldCRS84Quad`.
-- **Math Utilities**: Helper functions for converting between bounding boxes, geographic coordinates, and tile indices.
+- **OGC TMS 2D data model**: identifier, optional title/abstract/keywords, supportedCRS URI, well-known scale set, tile matrices.
+- **Scale algebra**: `scaleDenominator` derived from CRS units via the standard 0.28 mm rendering pixel size.
+- **Standard sets**: bundled definitions for `WebMercatorQuad`, `WorldCRS84Quad` and legacy variants.
+- **Limits and links**: `TileMatrixLimits`, `TileMatrixSetLimits`, `TileMatrixSetLink`, `VariableMatrixWidth`.
+- **Encodings**: round-trip JSON (Annex C) and XML (Annex D) through `TileMatrixSetIO`.
 
 ## Installation
 
@@ -19,20 +21,25 @@ A Java implementation of the OGC Two-Phase Tile Matrix Set (TMS) standard. This 
 
 ## Usage
 
-### Working with Coordinates
+### Looking up tiles for a bounding box
 
 ```java
+import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.matrix.DefaultTileMatrixSets;
+import io.tileverse.tiling.matrix.TileMatrix;
+import io.tileverse.tiling.matrix.TileMatrixSet;
 
-var tms = DefaultTileMatrixSets.WEB_MERCATOR_QUAD;
-var matrix = tms.tileMatrix(12); // Zoom level 12
+TileMatrixSet tms = DefaultTileMatrixSets.WEB_MERCATOR_QUAD;
+TileMatrix matrix = tms.getTileMatrix(12);
 
-// Calculate which tiles cover a specific geographic area
-var bbox = new BoundingBox2D(-74.0, 40.7, -73.9, 40.8); // NYC
-var tileRange = matrix.getTilesIntersecting(bbox);
+// Bounding box in the TMS CRS (here EPSG:3857 meters)
+BoundingBox2D nyc = BoundingBox2D.extent(-8238000, 4965000, -8230000, 4975000);
 
-System.out.println("Tiles needed: " + tileRange.size());
-for (var tile : tileRange) {
-    System.out.printf("Fetch z=%d x=%d y=%d%n", 12, tile.x(), tile.y());
-}
+matrix.extentToRange(nyc).ifPresent(range -> {
+    System.out.println("Tiles needed: " + range.count());
+    range.all().forEach(idx ->
+        System.out.printf("Fetch z=%d x=%d y=%d%n", idx.z(), idx.x(), idx.y()));
+});
 ```
+
+See the [User Guide](user-guide/index.md) for a deeper walkthrough and the [OGC Compliance](user-guide/ogc-compliance.md) page for the JSON and XML encodings.

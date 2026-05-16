@@ -15,8 +15,8 @@
  */
 package io.tileverse.vectortile.store;
 
+import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.jackson.databind.tilejson.v3.VectorLayer;
-import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.matrix.TileMatrixSet;
 import io.tileverse.tiling.store.AbstractTileStore;
 import io.tileverse.tiling.store.TileData;

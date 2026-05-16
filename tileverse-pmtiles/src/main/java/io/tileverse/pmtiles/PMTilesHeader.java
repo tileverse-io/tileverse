@@ -15,9 +15,9 @@
  */
 package io.tileverse.pmtiles;
 
+import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.io.ByteBufferPool;
 import io.tileverse.io.ByteRange;
-import io.tileverse.tiling.common.BoundingBox2D;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;

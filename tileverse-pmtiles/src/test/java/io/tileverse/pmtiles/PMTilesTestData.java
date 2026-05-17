@@ -43,6 +43,21 @@ public class PMTilesTestData {
         return andorraPmTiles;
     }
 
+    /**
+     * Materialize {@code flowers.pmtiles} into {@code tmpFolder} and return its path. The fixture is a small
+     * WebP-encoded raster pyramid (zoom 0-21, ~7 MB) sourced from https://air.mtn.tw/flowers.pmtiles.
+     */
+    public static Path flowers(Path tmpFolder) throws IOException {
+        Path target = tmpFolder.resolve("flowers.pmtiles");
+        if (!Files.isRegularFile(target)) {
+            try (InputStream in = requireNonNull(
+                    PMTilesReaderTest.class.getResourceAsStream("/io/tileverse/pmtiles/flowers.pmtiles"))) {
+                Files.copy(in, target);
+            }
+        }
+        return target;
+    }
+
     public static RangeReader andorraFileRangeReader(Path tmpFolder) throws IOException {
         Path file = andorra(tmpFolder);
         URI leaf = file.toUri();

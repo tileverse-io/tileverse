@@ -88,6 +88,11 @@
     <slf4j-api.version>2.0.17</slf4j-api.version>
     <zstd-jni.version>1.5.7-6</zstd-jni.version>
     <lombok.version>1.18.46</lombok.version>
+    <!--
+    Fork of luciad/gotson webp-imageio with arm64 macOS natives and active maintenance.
+    See https://github.com/usefulness/webp-imageio
+    -->
+    <webp-imageio.version>0.10.0</webp-imageio.version>
 
     <!-- Test Dependency versions -->
     <assertj.version>3.27.7</assertj.version>
@@ -179,6 +184,13 @@
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <version>${lombok.version}</version>
+      </dependency>
+
+      <!-- ImageIO plugin for WebP decoding (PNG/JPEG are JDK-built-in; AVIF intentionally omitted). -->
+      <dependency>
+        <groupId>com.github.usefulness</groupId>
+        <artifactId>webp-imageio</artifactId>
+        <version>${webp-imageio.version}</version>
       </dependency>
 
       <!-- Testing -->

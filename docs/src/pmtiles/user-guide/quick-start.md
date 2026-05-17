@@ -119,6 +119,31 @@ try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/"), props)
 }
 ```
 
+## Decoded Vector and Raster Tiles
+
+`PMTilesReader.getTile(...)` returns the raw on-disk tile bytes. Most callers want a decoded model — the `PMTilesVectorTileStore` and `PMTilesRasterTileStore` wrappers handle the decoding step (and validate that the archive's tile type matches):
+
+```java
+import io.tileverse.pmtiles.PMTilesReader;
+import io.tileverse.pmtiles.store.PMTilesRasterTileStore;
+import io.tileverse.tiling.pyramid.TileIndex;
+import io.tileverse.tiling.store.TileData;
+import java.awt.image.RenderedImage;
+import java.util.Optional;
+
+try (PMTilesReader reader = PMTilesReader.open(URI.create("s3://my-bucket/imagery.pmtiles"))) {
+    PMTilesRasterTileStore store = new PMTilesRasterTileStore(reader);
+
+    var tile = store.matrixSet().getTileMatrix(10).tile(TileIndex.xyz(885, 412, 10)).orElseThrow();
+    Optional<TileData<RenderedImage>> decoded = store.loadTile(tile);
+    decoded.ifPresent(td -> {
+        RenderedImage img = td.data();   // ready for ImageIO.write, GridCoverage2D, etc.
+    });
+}
+```
+
+WebP decoding is bundled with `tileverse-pmtiles` (an `ImageIO` plugin pulled in transitively). PNG and JPEG ship with the JDK. See [Reading PMTiles](reading.md) for the vector store equivalent.
+
 ## Processing Multiple Tiles
 
 `PMTilesReader.open(URI)` is the simplest entry point — it opens the

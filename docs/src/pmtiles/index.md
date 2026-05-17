@@ -9,7 +9,7 @@ This library is focused on efficient, cloud-optimized reading of PMTiles archive
 - **Cloud-Optimized Reads**: Range-based access tuned for archives served from object storage.
 - **Storage Agnostic**: Works seamlessly with any [`RangeReader`](../storage/rangereader/index.md) backend from `tileverse-storage` (S3, HTTP, Local File, Azure Blob, GCS).
 - **Spatial Indexing**: Implements Hilbert curve indexing for O(log N) tile lookups.
-- **Type Support**: Handles both vector (MVT) and raster (PNG, JPG, WebP) tiles.
+- **Vector and Raster Tiles**: `PMTilesReader` returns the raw tile bytes for any tile type (MVT, PNG, JPEG, WebP, AVIF). For decoded results, the higher-level `PMTilesVectorTileStore` returns parsed `VectorTile` objects and `PMTilesRasterTileStore` returns decoded `java.awt.image.RenderedImage`s. WebP decoding is enabled by default through a bundled `ImageIO` plugin.
 
 ## Installation
 

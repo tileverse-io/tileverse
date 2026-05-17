@@ -11,8 +11,8 @@ When a `PMTilesReader` requests a tile `(z, x, y)`:
 1.  **Spatial Index Lookup**: The reader calculates the Hilbert ID for the requested tile.
 2.  **Directory Fetch**: It checks if the relevant directory section is in memory. If not, it issues a byte-range request to the `RangeReader`.
 3.  **Offset Calculation**: Using the directory data, it finds the exact byte offset and length of the tile data in the archive.
-4.  **Data Fetch**: It issues a second byte-range request to the `RangeReader` for the actual tile body.
-5.  **Decoding**: The raw bytes are passed to the `VectorTileCodec` (if MVT) or returned as-is (if Raster).
+4.  **Data Fetch**: It issues a second byte-range request to the `RangeReader` for the actual tile body, exposed to callers as a streaming `InputStream`.
+5.  **Optional Decoding**: `PMTilesReader.getTile(...)` itself just returns the raw bytes. Higher-level wrappers run a decoder against the same stream: `PMTilesVectorTileStore` feeds it to `VectorTileCodec` to produce a `VectorTile`; `PMTilesRasterTileStore` feeds it to `javax.imageio.ImageIO` to produce a `RenderedImage`. Decoding the tile body never materializes an intermediate `ByteBuffer` because the streaming `IOFunction<InputStream, D>` overload runs the mapper directly on the channel-backed stream.
 
 ### 2. Caching Strategy
 

@@ -67,4 +67,4 @@ The `pmtiles` library demonstrates the power of composition:
 
 1.  Accepts a `RangeReader` interface (polymorphic backend).
 2.  Uses `HilbertCurve` (internal) for index lookup.
-3.  Returns raw bytes or uses `vectortiles` to return parsed geometry.
+3.  Returns raw bytes at the reader level; high-level `*TileStore` wrappers decode on the fly: `PMTilesVectorTileStore` uses `vectortiles` to return parsed `VectorTile` objects, `PMTilesRasterTileStore` uses `javax.imageio.ImageIO` to return decoded `RenderedImage` objects. Both run their decoder against the streaming `InputStream` overload so no intermediate `ByteBuffer` is allocated per tile.

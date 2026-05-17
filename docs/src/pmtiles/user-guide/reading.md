@@ -47,8 +47,10 @@ The header contains essential metadata about the tileset:
 try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
     PMTilesHeader header = reader.getHeader();
 
-    // Tile format (MVT, PNG, JPEG, WEBP, etc.)
-    String tileType = header.tileType();
+    // Tile type byte (compare against PMTilesHeader.TILETYPE_MVT, _PNG, _JPEG, _WEBP, _AVIF).
+    byte tileType = header.tileType();
+    String mimeType = header.tileMimeType();   // e.g. "application/vnd.mapbox-vector-tile", "image/webp"
+    boolean isRaster = header.isRasterTileType();
 
     // Zoom level range
     int minZoom = header.minZoom();
@@ -112,6 +114,79 @@ IntStream.range(880, 891)
             });
         });
     });
+```
+
+## High-Level Tile Stores
+
+`PMTilesReader.getTile(...)` returns the raw on-disk tile bytes. For most consumers it's more convenient to work with the decoded tile model. The `*TileStore` classes wrap a `PMTilesReader` and expose a uniform `TileStore<T>` API parameterized on the decoded payload type, while reusing the same `TileMatrixSet` math for tile coordinate / extent conversions.
+
+| Archive type | Wrapper class | Payload type | Decoder |
+| :--- | :--- | :--- | :--- |
+| MVT (`tileType == TILETYPE_MVT`) | `PMTilesVectorTileStore` | `io.tileverse.vectortile.model.VectorTile` | `VectorTileCodec` |
+| Raster (`TILETYPE_PNG/JPEG/WEBP/AVIF`) | `PMTilesRasterTileStore` | `java.awt.image.RenderedImage` | `javax.imageio.ImageIO` |
+
+Both wrappers validate the archive's `tileType` at construction and throw `UnsupportedTileTypeException` if you point a vector store at a raster archive (or vice versa), so a misconfigured URI fails fast.
+
+### Reading Vector Tiles
+
+```java
+import io.tileverse.pmtiles.PMTilesReader;
+import io.tileverse.pmtiles.store.PMTilesVectorTileStore;
+import io.tileverse.tiling.matrix.Tile;
+import io.tileverse.tiling.pyramid.TileIndex;
+import io.tileverse.tiling.store.TileData;
+import io.tileverse.vectortile.model.VectorTile;
+
+try (PMTilesReader reader = PMTilesReader.open(uri)) {
+    PMTilesVectorTileStore store = new PMTilesVectorTileStore(reader);
+
+    Tile tile = store.matrixSet().getTileMatrix(10).tile(TileIndex.xyz(885, 412, 10)).orElseThrow();
+    Optional<TileData<VectorTile>> data = store.loadTile(tile);
+
+    data.ifPresent(td -> {
+        VectorTile vt = td.data();
+        // walk layers / features…
+    });
+}
+```
+
+### Reading Raster Tiles
+
+`PMTilesRasterTileStore` decodes WebP/PNG/JPEG straight from the channel via `ImageIO.read`, so the encoded payload never sits in a separately allocated `ByteBuffer`. WebP support ships with `tileverse-pmtiles` (via a transitively pulled-in `ImageIO` plugin); PNG and JPEG decoders come with the JDK.
+
+```java
+import io.tileverse.pmtiles.PMTilesReader;
+import io.tileverse.pmtiles.store.PMTilesRasterTileStore;
+import io.tileverse.tiling.matrix.Tile;
+import io.tileverse.tiling.pyramid.TileIndex;
+import io.tileverse.tiling.store.TileData;
+import java.awt.image.RenderedImage;
+import java.util.Optional;
+
+try (PMTilesReader reader = PMTilesReader.open(uri)) {
+    PMTilesRasterTileStore store = new PMTilesRasterTileStore(reader);
+
+    System.out.println("MIME type: " + store.mimeType());  // "image/webp", "image/png", etc.
+
+    Tile tile = store.matrixSet().getTileMatrix(10).tile(TileIndex.xyz(885, 412, 10)).orElseThrow();
+    Optional<TileData<RenderedImage>> data = store.loadTile(tile);
+
+    data.ifPresent(td -> {
+        RenderedImage img = td.data();
+        // hand to javax.imageio.ImageIO.write, paint into a BufferedImage, build a GridCoverage2D, …
+    });
+}
+```
+
+The store's payload type is the `RenderedImage` interface (not the concrete `BufferedImage` that `ImageIO.read` produces), so the result flows directly into APIs like `GridCoverageFactory.create(String, RenderedImage, ReferencedEnvelope)` without intermediate copies.
+
+If you need the raw encoded bytes (e.g. an HTTP proxy that serves WebP straight to clients), bypass the store and use the streaming `PMTilesReader` overload with your own mapper — no `ByteBuffer` allocation, no double-copy:
+
+```java
+import io.tileverse.io.IOFunction;
+
+IOFunction<InputStream, byte[]> toBytes = in -> in.readAllBytes();
+Optional<byte[]> encoded = reader.getTile(reader.getTileId(TileIndex.xyz(885, 412, 10)), toBytes);
 ```
 
 ## Performance Tips

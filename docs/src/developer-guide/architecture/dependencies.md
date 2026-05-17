@@ -10,6 +10,7 @@ Tileverse aims to minimize transitive dependencies while leveraging established 
 | **[Caffeine](https://github.com/ben-manes/caffeine)** | High-performance in-memory caching | `storage-core` |
 | **[Jackson](https://github.com/FasterXML/jackson)** | JSON parsing (metadata, configurations) | `pmtiles` |
 | **[Google Protocol Buffers](https://github.com/protocolbuffers/protobuf)** | MVT binary encoding/decoding | `vectortiles` |
+| **[webp-imageio](https://github.com/usefulness/webp-imageio)** | `ImageIO` plugin for WebP-encoded raster tiles (registered via JDK SPI; ships native libs for Linux/Mac/Windows on x86_64 and arm64) | `pmtiles` |
 | **[SLF4J](https://www.slf4j.org/)** | Logging abstraction | All |
 
 ## Optional Dependencies

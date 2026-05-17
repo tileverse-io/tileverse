@@ -17,8 +17,8 @@ package io.tileverse.tiling.matrix;
 
 import static java.util.Objects.requireNonNull;
 
-import io.tileverse.tiling.common.BoundingBox2D;
-import io.tileverse.tiling.common.Coordinate;
+import io.tileverse.geom.BoundingBox2D;
+import io.tileverse.geom.Coordinate;
 import io.tileverse.tiling.pyramid.TilePyramid;
 import java.util.List;
 import java.util.Objects;
@@ -159,6 +159,36 @@ class TileMatrixSetView implements TileMatrixSet {
         }
 
         return basePyramid;
+    }
+
+    @Override
+    public String identifier() {
+        return delegate.identifier();
+    }
+
+    @Override
+    public Optional<String> title() {
+        return delegate.title();
+    }
+
+    @Override
+    public Optional<String> abstractDescription() {
+        return delegate.abstractDescription();
+    }
+
+    @Override
+    public List<String> keywords() {
+        return delegate.keywords();
+    }
+
+    @Override
+    public java.net.URI supportedCRS() {
+        return delegate.supportedCRS();
+    }
+
+    @Override
+    public Optional<java.net.URI> wellKnownScaleSet() {
+        return delegate.wellKnownScaleSet();
     }
 
     @Override

@@ -15,7 +15,7 @@
  */
 package io.tileverse.tiling.matrix;
 
-import io.tileverse.tiling.common.Coordinate;
+import io.tileverse.geom.Coordinate;
 import io.tileverse.tiling.pyramid.TileRange;
 
 /** Builder for creating TileMatrix instances. */

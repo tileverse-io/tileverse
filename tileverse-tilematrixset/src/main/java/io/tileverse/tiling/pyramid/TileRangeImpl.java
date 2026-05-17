@@ -15,8 +15,6 @@
  */
 package io.tileverse.tiling.pyramid;
 
-import io.tileverse.tiling.common.CornerOfOrigin;
-
 /**
  * Standard implementation of TileRange representing a rectangular range of individual tiles.
  *

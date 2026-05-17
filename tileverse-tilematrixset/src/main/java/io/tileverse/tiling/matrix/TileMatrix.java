@@ -17,9 +17,9 @@ package io.tileverse.tiling.matrix;
 
 import static java.util.Objects.requireNonNull;
 
-import io.tileverse.tiling.common.BoundingBox2D;
-import io.tileverse.tiling.common.Coordinate;
-import io.tileverse.tiling.common.CornerOfOrigin;
+import io.tileverse.geom.BoundingBox2D;
+import io.tileverse.geom.Coordinate;
+import io.tileverse.tiling.pyramid.CornerOfOrigin;
 import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.pyramid.TileRange;
 import java.util.List;
@@ -84,6 +84,45 @@ public record TileMatrix(
 
     public BoundingBox2D boundingBox() {
         return calculateExtent(tileRange, pointOfOrigin(), resolution(), tileWidth(), tileHeight());
+    }
+
+    /**
+     * OGC TMS identifier for this tile matrix, unique within its parent {@link TileMatrixSet}.
+     *
+     * <p>This implementation derives the identifier from the {@link #zoomLevel() zoom level} as
+     * {@code String.valueOf(zoomLevel())}, which matches the convention used by all bundled tile matrix sets and the
+     * OGC 17-083r2 examples.
+     *
+     * @return tile matrix identifier
+     * @since 1.4
+     */
+    public String identifier() {
+        return Integer.toString(zoomLevel());
+    }
+
+    /**
+     * OGC scale denominator for this tile matrix, computed from {@link #resolution()} using the standard 0.28 mm
+     * rendering pixel size and the CRS units coefficient (clause 8 of OGC 17-083r2).
+     *
+     * @return scale denominator (dimensionless)
+     * @since 1.4
+     */
+    public double scaleDenominator() {
+        return CrsUnits.resolutionToScaleDenominator(resolution, crsId);
+    }
+
+    /**
+     * Top-left corner of this tile matrix in CRS coordinates, as mandated by OGC 17-083r2 clause 7.1.
+     *
+     * <p>For matrices with {@link CornerOfOrigin#TOP_LEFT TOP_LEFT} origin this is the {@link #pointOfOrigin()}; for
+     * {@link CornerOfOrigin#BOTTOM_LEFT BOTTOM_LEFT} origin it is computed from the {@link #boundingBox()}.
+     *
+     * @return CRS coordinate of the matrix's top-left corner
+     * @since 1.4
+     */
+    public Coordinate topLeftCorner() {
+        BoundingBox2D bbox = boundingBox();
+        return new Coordinate(bbox.minX(), bbox.maxY());
     }
 
     /**

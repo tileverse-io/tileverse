@@ -16,10 +16,10 @@
 package io.tileverse.pmtiles.store;
 
 import io.tileverse.cache.CacheManager;
+import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
 import io.tileverse.jackson.databind.tilejson.v3.VectorLayer;
 import io.tileverse.pmtiles.PMTilesReader;
-import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.matrix.Tile;
 import io.tileverse.tiling.store.TileData;
 import io.tileverse.vectortile.model.VectorTile;

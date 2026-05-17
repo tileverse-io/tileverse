@@ -15,15 +15,14 @@
  */
 package io.tileverse.tiling.pyramid;
 
-import static io.tileverse.tiling.common.CornerOfOrigin.BOTTOM_LEFT;
-import static io.tileverse.tiling.common.CornerOfOrigin.TOP_LEFT;
+import static io.tileverse.tiling.pyramid.CornerOfOrigin.BOTTOM_LEFT;
+import static io.tileverse.tiling.pyramid.CornerOfOrigin.TOP_LEFT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.tileverse.tiling.common.CornerOfOrigin;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;

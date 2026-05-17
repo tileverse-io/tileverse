@@ -15,11 +15,12 @@
  */
 package io.tileverse.tiling.matrix;
 
-import io.tileverse.tiling.common.BoundingBox2D;
-import io.tileverse.tiling.common.Coordinate;
+import io.tileverse.geom.BoundingBox2D;
+import io.tileverse.geom.Coordinate;
 import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.pyramid.TilePyramid;
 import io.tileverse.tiling.pyramid.TileRange;
+import java.net.URI;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,6 +45,65 @@ import java.util.Optional;
  * @since 1.0
  */
 public interface TileMatrixSet {
+
+    /**
+     * OGC TMS identifier for this tile matrix set, unique across a server, as mandated by OGC 17-083r2 clause 7.1.
+     *
+     * @return tile matrix set identifier
+     * @since 1.4
+     */
+    String identifier();
+
+    /**
+     * Optional human-readable title.
+     *
+     * @since 1.4
+     */
+    default Optional<String> title() {
+        return Optional.empty();
+    }
+
+    /**
+     * Optional brief narrative description.
+     *
+     * @since 1.4
+     */
+    default Optional<String> abstractDescription() {
+        return Optional.empty();
+    }
+
+    /**
+     * Optional unordered list of words or phrases describing the data set.
+     *
+     * @since 1.4
+     */
+    default List<String> keywords() {
+        return List.of();
+    }
+
+    /**
+     * OGC TMS {@code supportedCRS} field: URI form of the coordinate reference system used by this set, as mandated by
+     * clause 7.1.
+     *
+     * <p>Defaults to a {@link URI} created from {@link #crsId()} which suffices when {@code crsId()} is already a URI
+     * (for example {@code http://www.opengis.net/def/crs/EPSG/0/3857}). Sets created with the short {@code EPSG:NNNN}
+     * convention should provide an explicit value via {@link TileMatrixSetBuilder#supportedCRS(URI)}.
+     *
+     * @return URI form of the CRS
+     * @since 1.4
+     */
+    default URI supportedCRS() {
+        return URI.create(crsId());
+    }
+
+    /**
+     * Optional reference to a well-known scale set, in URI form, as defined by OGC 17-083r2 clause 7.1.
+     *
+     * @since 1.4
+     */
+    default Optional<URI> wellKnownScaleSet() {
+        return Optional.empty();
+    }
 
     /**
      * Returns the underlying tile pyramid that defines the discrete grid structure.

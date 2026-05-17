@@ -23,3 +23,4 @@ Learn how to work with tile pyramids and matrix sets.
 - [Quick Start](quick-start.md)
 - [Tile Pyramids](tile-pyramids.md)
 - [Standard Sets](standard-sets.md)
+- [OGC Compliance](ogc-compliance.md)

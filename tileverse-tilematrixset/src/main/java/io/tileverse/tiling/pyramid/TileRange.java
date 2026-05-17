@@ -17,7 +17,6 @@ package io.tileverse.tiling.pyramid;
 
 import static java.util.Objects.requireNonNull;
 
-import io.tileverse.tiling.common.CornerOfOrigin;
 import java.util.Comparator;
 import java.util.Objects;
 import java.util.Optional;

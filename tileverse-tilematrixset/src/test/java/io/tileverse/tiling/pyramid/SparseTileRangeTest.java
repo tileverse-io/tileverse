@@ -19,7 +19,6 @@ import static io.tileverse.tiling.pyramid.TileIndex.xyz;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.tileverse.tiling.common.CornerOfOrigin;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;

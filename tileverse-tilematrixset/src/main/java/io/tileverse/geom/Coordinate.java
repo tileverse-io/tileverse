@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.tiling.common;
+package io.tileverse.geom;
 
 /**
  * Represents a 2D coordinate in map space (CRS coordinates). This is a simple, GIS-library-agnostic representation that

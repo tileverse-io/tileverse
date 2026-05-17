@@ -18,8 +18,8 @@ package io.tileverse.vectortile.store;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
-import io.tileverse.tiling.common.BoundingBox2D;
-import io.tileverse.tiling.common.Coordinate;
+import io.tileverse.geom.BoundingBox2D;
+import io.tileverse.geom.Coordinate;
 import io.tileverse.tiling.pyramid.TileIndex;
 import org.junit.jupiter.api.Test;
 

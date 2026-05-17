@@ -15,7 +15,7 @@
  */
 package io.tileverse.tiling.matrix;
 
-import static io.tileverse.tiling.common.BoundingBox2D.extent;
+import static io.tileverse.geom.BoundingBox2D.extent;
 import static io.tileverse.tiling.pyramid.TileIndex.xyz;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -25,9 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.tileverse.tiling.common.BoundingBox2D;
-import io.tileverse.tiling.common.Coordinate;
-import io.tileverse.tiling.common.CornerOfOrigin;
+import io.tileverse.geom.BoundingBox2D;
+import io.tileverse.geom.Coordinate;
+import io.tileverse.tiling.pyramid.CornerOfOrigin;
 import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.pyramid.TileRange;
 import java.util.Optional;

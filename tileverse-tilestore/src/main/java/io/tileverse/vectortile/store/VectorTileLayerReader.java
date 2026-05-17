@@ -15,7 +15,7 @@
  */
 package io.tileverse.vectortile.store;
 
-import io.tileverse.tiling.common.BoundingBox2D;
+import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.tiling.store.TileData;
 import io.tileverse.vectortile.model.GeometryReader;
 import io.tileverse.vectortile.model.VectorTile;

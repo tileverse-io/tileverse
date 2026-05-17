@@ -17,7 +17,7 @@ package io.tileverse.tiling.store;
 
 import static java.util.Objects.requireNonNull;
 
-import io.tileverse.tiling.common.BoundingBox2D;
+import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.tiling.matrix.Tile;
 import io.tileverse.tiling.matrix.TileMatrix;
 import io.tileverse.tiling.matrix.TileMatrixSet;

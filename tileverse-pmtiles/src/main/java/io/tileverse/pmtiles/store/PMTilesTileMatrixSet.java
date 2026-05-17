@@ -15,9 +15,9 @@
  */
 package io.tileverse.pmtiles.store;
 
+import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.pmtiles.PMTilesHeader;
 import io.tileverse.pmtiles.PMTilesReader;
-import io.tileverse.tiling.common.BoundingBox2D;
 import io.tileverse.tiling.matrix.DefaultTileMatrixSets;
 import io.tileverse.tiling.matrix.TileMatrixSet;
 import io.tileverse.vectortile.store.WebMercatorTransform;

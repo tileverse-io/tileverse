@@ -93,6 +93,11 @@
       <groupId>com.github.luben</groupId>
       <artifactId>zstd-jni</artifactId>
     </dependency>
+    <!-- ImageIO plugin for WebP-encoded raster tiles; PNG/JPEG come with the JDK. -->
+    <dependency>
+      <groupId>com.github.usefulness</groupId>
+      <artifactId>webp-imageio</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

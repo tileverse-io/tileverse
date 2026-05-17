@@ -19,7 +19,9 @@ import io.tileverse.cache.CacheManager;
 import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
 import io.tileverse.jackson.databind.tilejson.v3.VectorLayer;
+import io.tileverse.pmtiles.PMTilesHeader;
 import io.tileverse.pmtiles.PMTilesReader;
+import io.tileverse.pmtiles.UnsupportedTileTypeException;
 import io.tileverse.tiling.matrix.Tile;
 import io.tileverse.tiling.store.TileData;
 import io.tileverse.vectortile.model.VectorTile;
@@ -56,10 +58,17 @@ public class PMTilesVectorTileStore extends VectorTileStore {
      * Creates a new PMTiles vector tile store.
      *
      * @param reader the reader for the underlying PMTiles archive
+     * @throws UnsupportedTileTypeException if the archive does not hold MVT tiles
      */
-    public PMTilesVectorTileStore(PMTilesReader reader) {
+    public PMTilesVectorTileStore(PMTilesReader reader) throws UnsupportedTileTypeException {
         super(PMTilesTileMatrixSet.fromWebMercator(reader));
         this.reader = Objects.requireNonNull(reader);
+        PMTilesHeader header = reader.getHeader();
+        if (header.tileType() != PMTilesHeader.TILETYPE_MVT) {
+            throw new UnsupportedTileTypeException(
+                    "PMTiles archive at %s holds tile type 0x%02X (%s); this store handles only MVT (vector) tiles."
+                            .formatted(reader.getSourceIdentifier(), header.tileType(), header.tileMimeType()));
+        }
         VectorTileCodec decoder = new VectorTileCodec();
         this.vectorTileCache = new VectorTileCache(
                 reader.getSourceIdentifier(),

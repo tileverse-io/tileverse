@@ -185,6 +185,38 @@ public record PMTilesHeader(
     }
 
     /**
+     * Returns the IANA media type that corresponds to {@link #tileType()}.
+     *
+     * <p>MVT tiles map to {@code application/vnd.mapbox-vector-tile}, MLT map to
+     * {@code application/vnd.maplibre-vector-tile}. Image tile types map to their standard image MIME type.
+     * {@link #TILETYPE_UNKNOWN} maps to {@code application/octet-stream}.
+     *
+     * @return the MIME type string, never {@code null}
+     */
+    public String tileMimeType() {
+        return switch (tileType) {
+            case TILETYPE_MVT -> "application/vnd.mapbox-vector-tile";
+            case TILETYPE_PNG -> "image/png";
+            case TILETYPE_JPEG -> "image/jpeg";
+            case TILETYPE_WEBP -> "image/webp";
+            case TILETYPE_AVIF -> "image/avif";
+            case TILETYPE_MLT -> "application/vnd.maplibre-vector-tile";
+            default -> "application/octet-stream";
+        };
+    }
+
+    /**
+     * @return {@code true} when {@link #tileType()} is one of {@link #TILETYPE_PNG}, {@link #TILETYPE_JPEG},
+     *     {@link #TILETYPE_WEBP}, {@link #TILETYPE_AVIF}.
+     */
+    public boolean isRasterTileType() {
+        return tileType == TILETYPE_PNG
+                || tileType == TILETYPE_JPEG
+                || tileType == TILETYPE_WEBP
+                || tileType == TILETYPE_AVIF;
+    }
+
+    /**
      * Serializes the header to a byte array.
      *
      * @return A byte array containing the serialized header.

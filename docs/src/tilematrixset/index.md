@@ -10,6 +10,20 @@ A Java implementation of the [OGC Two Dimensional Tile Matrix Set (17-083r2)](ht
 - **Limits and links**: `TileMatrixLimits`, `TileMatrixSetLimits`, `TileMatrixSetLink`, `VariableMatrixWidth`.
 - **Encodings**: round-trip JSON (Annex C) and XML (Annex D) through `TileMatrixSetIO`.
 
+## Core types
+
+| Type | Role |
+| :--- | :--- |
+| `TileMatrixSet` | Top-level OGC TMS object: identifier, CRS, extent, list of matrices. |
+| `TileMatrix` | A single zoom level: tile width / height in pixels, scale denominator, top-left corner, matrix dimensions. |
+| `TilePyramid` | Grid arithmetic alone (no CRS): a sequence of `TileRange` levels with a shared `CornerOfOrigin`. |
+| `TileRange` | A rectangular tile-index region at one zoom level. |
+| `Tile` | A single tile: `TileIndex` (z, x, y) + the bounding box in CRS units. |
+| `TileIndex` | The three integers `(z, x, y)`. |
+| `BoundingBox2D` | Axis-aligned extent in CRS units. |
+| `TileMatrixSetIO` | Read / write JSON (OGC Annex C) and XML (OGC Annex D). |
+| `DefaultTileMatrixSets` | Static constants for `WebMercatorQuad`, `WorldCRS84Quad`, and legacy variants. |
+
 ## Installation
 
 ```xml
@@ -42,4 +56,10 @@ matrix.extentToRange(nyc).ifPresent(range -> {
 });
 ```
 
-See the [User Guide](user-guide/index.md) for a deeper walkthrough and the [OGC Compliance](user-guide/ogc-compliance.md) page for the JSON and XML encodings.
+See the [Tutorial](tutorial.md) for a deeper walkthrough and the [OGC Compliance](reference/ogc-compliance.md) page for the JSON and XML encodings.
+
+## Component view
+
+![tileverse-tilematrixset components](../assets/images/storage/structurizr-TileMatrixSetComponents.svg)
+
+`TileMatrixSet` is the top-level OGC TMS object; `TilePyramid` carries the grid arithmetic alone (no CRS). `DefaultTileMatrixSets` ships bundled definitions of `WebMercatorQuad`, `WorldCRS84Quad`, and legacy variants. `TileMatrixSetIO` handles the OGC Annex C (JSON) and Annex D (XML) encodings.

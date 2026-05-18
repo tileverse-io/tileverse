@@ -56,7 +56,7 @@ try (Storage storage = StorageFactory.open(bucket);
         RangeReader baseReader = storage.openRangeReader(leaf);
         // 2. Wrap with performance optimizations
         RangeReader reader = CachingRangeReader.builder(baseReader)
-            .capacity(1024 * 1024 * 10) // 10 MB cache
+            .maxSizeBytes(10L * 1024 * 1024) // 10 MB total weight
             .build()) {
 
     // 3. Read arbitrary byte ranges

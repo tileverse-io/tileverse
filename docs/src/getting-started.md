@@ -112,7 +112,7 @@ try (Storage storage = StorageFactory.open(bucket, props);
 
         // Wrap with in-memory caching for performance
         RangeReader cachedSource = CachingRangeReader.builder(s3Source)
-            .capacity(50_000_000) // 50MB cache
+            .maxSizeBytes(50_000_000) // 50 MB total weight
             .build();
         PMTilesReader reader = new PMTilesReader(cachedSource)) {
     // ...
@@ -122,4 +122,4 @@ try (Storage storage = StorageFactory.open(bucket, props);
 ## Requirements
 
 - **Java 17** or later.
-- Maven 3.8+ or Gradle 7+.
+- Maven 3.9+ or Gradle 7+.

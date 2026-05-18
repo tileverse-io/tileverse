@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-# Development server script for Tileverse Range Reader Documentation
-# This script activates the virtual environment and starts the development server
+# Development server script for the Tileverse documentation site.
+# Activates the Python virtual environment and starts mkdocs serve.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="${SCRIPT_DIR}/.venv"
@@ -10,8 +10,8 @@ VENV_DIR="${SCRIPT_DIR}/.venv"
 # Change to the directory where the script is located
 cd "${SCRIPT_DIR}"
 
-echo "🌐 Starting Tileverse Range Reader Documentation Server"
-echo "===================================================="
+echo "🌐 Starting Tileverse Documentation Server"
+echo "==========================================="
 
 # Check if virtual environment exists
 if [ ! -d "$VENV_DIR" ]; then

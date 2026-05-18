@@ -4,10 +4,10 @@ Welcome to the Tileverse Developer Guide. This section provides everything you n
 
 ## Contents
 
-*   **[Building](building.md)**: How to compile and package the project.
-*   **[Testing](testing.md)**: Running unit, integration, and performance tests.
-*   **[Contributing](contributing.md)**: Code style, pull request process, and contribution guidelines.
-*   **[Architecture](architecture/index.md)**: High-level system design and module relationships.
+*   **[Build from source](how-to/build.md)**: How to compile and package the project.
+*   **[Run tests](how-to/test.md)**: Running unit, integration, and performance tests.
+*   **[Contribute](how-to/contribute.md)**: Code style, pull request process, and contribution guidelines.
+*   **[System architecture](explanation/architecture.md)**: High-level system design and module relationships.
 
 ## Core Principles
 

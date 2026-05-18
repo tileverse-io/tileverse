@@ -24,17 +24,18 @@ A high-performance library for encoding and decoding [Mapbox Vector Tiles (MVT)]
 Convert raw MVT bytes (e.g., from a PMTiles archive or network request) into a structured Java object.
 
 ```java
+import io.tileverse.vectortile.model.VectorTile;
 import io.tileverse.vectortile.mvt.VectorTileCodec;
 
 byte[] rawBytes = ...; // your MVT data
 
-var codec = VectorTileCodec.getDefault();
-var tile = codec.decode(rawBytes);
+VectorTileCodec codec = new VectorTileCodec();
+VectorTile tile = codec.decode(rawBytes);
 
-for (var layer : tile.getLayers()) {
+for (VectorTile.Layer layer : tile.getLayers()) {
     System.out.println("Layer: " + layer.getName());
-    
-    for (var feature : layer.getFeatures()) {
+
+    for (VectorTile.Layer.Feature feature : layer.getFeatures()) {
         // Access JTS Geometry directly
         org.locationtech.jts.geom.Geometry geom = feature.getGeometry();
         Map<String, Object> props = feature.getAttributes();
@@ -49,14 +50,21 @@ Create MVTs from scratch using JTS geometries.
 ```java
 import io.tileverse.vectortile.mvt.VectorTileBuilder;
 
-var builder = VectorTileBuilder.create();
-var layer = builder.layer("buildings");
-
-layer.feature()
-     .id(123)
-     .geometry(jtsPolygon)
-     .attribute("height", 50)
-     .attribute("type", "residential");
+VectorTileBuilder builder = new VectorTileBuilder();
+builder.layer()
+        .name("buildings")
+        .feature()
+            .id(123)
+            .geometry(jtsPolygon)
+            .attribute("height", 50)
+            .attribute("type", "residential")
+            .build();
 
 byte[] encoded = codec.encode(builder.build());
 ```
+
+## Component view
+
+![tileverse-vectortiles components](../assets/images/storage/structurizr-VectorTilesComponents.svg)
+
+`VectorTileCodec` handles both encoding and decoding (between MVT bytes and the `VectorTile` model). `VectorTileBuilder` is the fluent constructor for `VectorTile` instances with JTS `Geometry` payloads.

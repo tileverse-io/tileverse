@@ -127,6 +127,8 @@ IntStream.range(880, 891)
 
 Both wrappers validate the archive's `tileType` at construction and throw `UnsupportedTileTypeException` if you point a vector store at a raster archive (or vice versa), so a misconfigured URI fails fast.
 
+For the full API surface (interfaces, base classes, the TileJSON v3 model) see the [Tile Stores Reference](../reference/tile-stores.md).
+
 ### Reading Vector Tiles
 
 ```java
@@ -202,7 +204,7 @@ See [Cloud Storage](cloud-storage.md) for detailed performance optimization stra
 
 ```java
 try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
-    Optional<byte[]> tile = reader.getTile(zoom, x, y);
+    Optional<ByteBuffer> tile = reader.getTile(zoom, x, y);
     // Process tile...
 } catch (UncheckedIOException e) {
     // Handle I/O errors (network issues, file not found, etc.)

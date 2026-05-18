@@ -1,124 +1,176 @@
 # Tileverse Documentation
 
-This directory contains the complete documentation for the Tileverse Range Reader library, built with MkDocs Material theme and featuring C4 model architectural diagrams.
+This directory contains the documentation for the entire Tileverse toolkit: `tileverse-storage` (with the `RangeReader` byte-range API), `tileverse-pmtiles`, `tileverse-vectortiles`, `tileverse-tilematrixset`, and the format-agnostic `tileverse-tilestore` abstraction. The site is built with MkDocs Material and includes C4 architectural diagrams generated from a Structurizr DSL.
+
+The published site is [tileverse.io](https://tileverse.io).
 
 ## Quick Start
 
-### Build Documentation
+### Build the site
 
 ```bash
-# One-time setup and build
+# One-time setup and build (creates .venv, regenerates diagrams, runs mkdocs build)
 ./build.sh
 ```
 
-### Development Server
+### Development server
 
 ```bash
-# Start development server with auto-reload
+# Auto-reloading server at http://127.0.0.1:8000
 ./serve.sh
 ```
 
-### Clean Build
+### Clean rebuild
 
 ```bash
-# Remove all generated files and rebuild
 ./clean.sh && ./build.sh
 ```
 
-## Documentation Structure
+## Directory layout
 
 ```
 docs/
-├── build.sh              # Main build script (sets up venv, generates diagrams, builds docs)
-├── serve.sh              # Development server script
-├── clean.sh              # Clean build artifacts script
+├── build.sh              # End-to-end build: venv + diagrams + mkdocs
+├── serve.sh              # Live dev server
+├── clean.sh              # Remove site/ and generated artifacts
 ├── update-supporters.sh  # Regenerates the root SUPPORTERS.md file
-├── requirements.txt      # Python dependencies for MkDocs
-├── mkdocs.yml            # MkDocs configuration for the entire monorepo
+├── requirements.txt      # Python deps for MkDocs Material
+├── mkdocs.yml            # MkDocs configuration for the whole monorepo
 ├── resources/            # Supporters maintenance inputs
 │   ├── additional-individual-supporters.txt
 │   ├── contributor-aliases.txt
 │   └── ignored-contributors.txt
 │
-├── src/                  # Documentation source files (Markdown)
-│   ├── index.md          # Monorepo homepage
-│   ├── getting-started.md# Guide for new users to get started with the project
-│   ├── developer-guide/  # General developer documentation
-│   │   ├── index.md      # Overview of development
-│   │   ├── building.md   # Build instructions for the monorepo
-│   │   ├── testing.md    # General testing strategy
-│   │   ├── contributing.md # Guidelines for contributing
-│   │   └── architecture/ # Core architecture documents and diagrams
-│   ├── rangereader/      # Range Reader module documentation
-│   │   └── developer-guide/ # Range Reader specific architecture/performance
-│   ├── pmtiles/          # PMTiles module documentation
-│   ├── vectortiles/      # Vector Tiles module documentation
-│   ├── tilematrixset/    # Tile Matrix Set module documentation
-│   └── assets/           # Static assets (images, CSS, JS)
+├── src/                  # Markdown sources (docs_dir in mkdocs.yml). Each library
+│   │                     # section follows the same Diataxis layout: tutorial.md
+│   │                     # at the top, plus how-to/, reference/, and explanation/
+│   │                     # subdirectories as needed.
+│   ├── index.md          # Site homepage
+│   ├── getting-started.md
+│   ├── storage/
+│   │   ├── index.md
+│   │   ├── how-to/       # install, use-each-backend, configure, authenticate, ...
+│   │   ├── reference/    # rangereader API, recipes, quick-start
+│   │   └── explanation/  # why, internals (architecture + performance)
+│   ├── pmtiles/
+│   │   ├── index.md
+│   │   ├── tutorial.md
+│   │   ├── how-to/       # read-pmtiles, cloud-storage
+│   │   └── reference/    # tile-stores
+│   ├── vectortiles/
+│   │   ├── index.md
+│   │   ├── tutorial.md
+│   │   └── how-to/       # encode, decode
+│   ├── tilematrixset/
+│   │   ├── index.md
+│   │   ├── tutorial.md
+│   │   ├── how-to/       # tile-pyramids, standard-sets
+│   │   └── reference/    # ogc-compliance
+│   ├── developer-guide/
+│   │   ├── index.md
+│   │   ├── how-to/       # build, test, contribute
+│   │   └── explanation/  # architecture, system-design, dependencies
+│   └── assets/
 │       └── images/
-│           ├── supporters/   # Supporters logos used by the repository README
-│           └── rangereader/  # Generated SVG diagrams for Range Reader
-│               └── .gitkeep  # Preserves directory in git
+│           ├── storage/  # Generated Structurizr C4 SVGs (consumed by .md pages)
+│           ├── supporters/
+│           └── tileverse-logo.svg
 │
-├── structurizr/          # C4 model architectural diagrams definitions (source)
-│   ├── workspace.dsl     # Main C4 model definition
-│   ├── dynamic-views.dsl # Dynamic view definitions
-│   ├── exports/          # Generated PlantUML files (.puml)
-│   │   └── .gitkeep      # Preserves directory in git
-│   ├── structurizr-generate-diagrams.sh    # Generates PlantUML from DSL
-│   └── plantuml-generate-svg.sh            # Converts PlantUML to SVG
-│
-└── site/                 # Generated static documentation (after build)
+└── structurizr/          # C4 model source
+    ├── workspace.dsl     # Whole-Tileverse softwareSystem with per-module containers/components
+    ├── dynamic-views.dsl # Runtime / sequence views
+    ├── exports/          # Generated PlantUML (.puml); regenerated by build.sh
+    ├── structurizr-generate-diagrams.sh
+    └── plantuml-generate-svg.sh
 ```
 
-## Features
+`site/` is generated by `mkdocs build` and is gitignored.
 
-### C4 Model Integration (Range Reader)
+## C4 diagrams
 
-The documentation for the Range Reader module includes automatically generated C4 architectural diagrams:
+`structurizr/workspace.dsl` models the whole `Tileverse` software system, with one container per Maven module and component views for each. `build.sh` runs the Structurizr Docker image to export PlantUML, then converts to SVG and drops the files in `src/assets/images/storage/` for the Markdown pages to reference.
 
-- **System Context**: Shows how the Range Reader fits in the broader ecosystem
-- **Container View**: Displays the modular architecture of Range Reader
-- **Component Views**: Details internal structure of Range Reader's core and all modules
-- **Runtime Views**: Dynamic scenarios (work in progress)
+Defined views:
 
-## Build Process
+| View key | What it shows |
+| :--- | :--- |
+| `SystemContext` | Tileverse in context of external storage systems and consumers |
+| `Containers` | All six Maven modules and how they depend on each other |
+| `CoreComponents` | `tileverse-storage-core` internals (Storage, RangeReader, decorators, SPI) |
+| `AllModuleComponents` | The `tileverse-storage-all` aggregator |
+| `PMTilesComponents` | `tileverse-pmtiles` internals (reader, header, Hilbert, store wrappers) |
+| `VectorTilesComponents` | `tileverse-vectortiles` (codec, builder, model) |
+| `TileMatrixSetComponents` | `tileverse-tilematrixset` (TMS, TilePyramid, IO) |
+| `TileStoreComponents` | `tileverse-tilestore` (TileStore<T>, VectorTileStore, RasterTileStore, TileJSON) |
 
-The `build.sh` script handles the complete build process:
+Dynamic views (e.g. `BasicFileRead`, `MultiLevelCaching`, `S3Authentication`) come from `dynamic-views.dsl`.
 
-1. **Environment Setup**: Creates Python virtual environment and installs dependencies
-2. **Diagram Generation**: 
-   - Runs Structurizr CLI to generate PlantUML from DSL files
-   - Converts PlantUML to SVG using Docker
-   - Copies SVGs to `src/assets/images/rangereader/` directory
-3. **Documentation Build**: Uses MkDocs to build the complete site
-4. **Validation**: Ensures all links and references are valid
+To add a new diagram: edit `workspace.dsl` (or `dynamic-views.dsl`), rerun `./build.sh`, then embed the resulting SVG from `src/assets/images/storage/structurizr-<ViewKey>.svg` on the relevant Markdown page.
+
+## Build process
+
+`build.sh` runs end-to-end:
+
+1. **Python venv**: creates `.venv/` if missing and installs `requirements.txt`.
+2. **Diagrams**: runs the Structurizr Docker image against `workspace.dsl` and `dynamic-views.dsl`, then converts the resulting PlantUML to SVG and copies it into `src/assets/images/storage/`.
+3. **Site**: `mkdocs build --strict --verbose` writes the static site to `site/`.
 
 ## Requirements
 
-- **Python 3.8+**: For MkDocs and dependencies
-- **Docker**: For C4 diagram generation (Structurizr CLI and PlantUML)
-- **Internet connection**: For pulling Docker images during diagram generation
+- Python 3.8+
+- Docker (for the Structurizr CLI and PlantUML images)
+- Internet access on first run to pull the Docker images
 
-## Contributing
+## Style and contribution guide
 
-When contributing to documentation:
+Documentation in this repository follows a few non-negotiable conventions. Apply them when adding or editing pages.
 
-1. Follow the existing structure and style
-2. Update both content and navigation in `mkdocs.yml`
-3. Test with `./serve.sh` before submitting
-4. Ensure all links work with `./build.sh`
-5. Include relevant architectural updates in C4 diagrams if needed
+### Diataxis structure
 
-## Supporters Maintenance
+The site is organised by the [Diataxis framework](https://diataxis.fr/): each library section groups its pages under **Tutorial** (learning-oriented), **How-to guides** (problem-oriented), **Reference** (information-oriented), and **Explanation** (understanding-oriented). Keep each page single-quadrant. If a page mixes a walkthrough with reference tables, split it.
 
-The supporters list published in the repository root at `SUPPORTERS.md` is maintained from the documentation tree.
+### Accuracy over fluency
 
-- The generator script lives at `docs/update-supporters.sh`.
-- Additional individual supporters are maintained in `docs/resources/additional-individual-supporters.txt`.
-- Contributor aliases can be normalized in `docs/resources/contributor-aliases.txt`.
-- Entries that should not appear as individual supporters can be excluded in `docs/resources/ignored-contributors.txt`.
-- The sponsors list published in the repository root at `SPONSORS.md` is maintained manually.
+Every code snippet must match the current source. Before publishing or editing a snippet, grep the source for the methods you reference. The most common drift bugs in this repo have been builder method names (`CachingRangeReader.builder()`), static factories that never existed (`VectorTileCodec.getDefault()`), and `Optional<byte[]>` vs `Optional<ByteBuffer>` return types. If you cannot run the snippet, at least verify the signatures with `grep` / your IDE.
+
+### Plain prose, no marketing
+
+Match the existing tone: short declarative sentences, no superlatives, no "robust" / "powerful" / "blazing fast". Lead with what a thing is and what it does. Reserve adjectives for things the reader genuinely needs to know about (e.g. "thread-safe", "synchronous", "off-heap").
+
+### Typography
+
+- ASCII only. Use plain hyphens (`-`), not en dashes or em dashes. Use straight quotes (`"`, `'`).
+- No decorative emoji in body text. Material admonitions (`!!! note`, `!!! info`) carry their own iconography.
+
+### Cross-linking
+
+Link liberally using relative paths between pages (e.g. `[Tile Matrix Set](../../tilematrixset/index.md)`). Internal links are validated by `mkdocs build --strict` - run it before pushing.
+
+### When you add a page
+
+1. Add the file under `src/<library>/...` in the appropriate Diataxis quadrant subdirectory.
+2. Add it to `mkdocs.yml`'s `nav:` block under the right section group.
+3. Cross-link to it from at least one neighbouring page so it is discoverable from prose, not just the nav.
+4. Run `./serve.sh` and click through the new page locally.
+5. Run `./build.sh` if your change touches the Structurizr DSL or embeds new diagrams.
+
+### Style for code blocks
+
+- Always fully qualify the first occurrence of a non-obvious type via `import` lines at the top of the snippet. Don't rely on the reader's IDE.
+- Prefer `try-with-resources` for anything `Closeable` (`Storage`, `RangeReader`, `PMTilesReader`).
+- Use explicit types over `var` in published snippets - the reader needs to see what's returned.
+- Use `Path.of("...").toUri()` for local files in examples, not `new URI("file:///...")`.
+
+## Supporters maintenance
+
+The supporters list published at the repository root (`SUPPORTERS.md`) is regenerated from this directory.
+
+- Generator: `docs/update-supporters.sh`.
+- Curated inputs:
+    - `docs/resources/additional-individual-supporters.txt` - hand-added individuals.
+    - `docs/resources/contributor-aliases.txt` - normalize multiple commit identities to a single supporter entry.
+    - `docs/resources/ignored-contributors.txt` - exclude bot accounts or duplicates.
+- `SPONSORS.md` at the repo root is maintained by hand.
 
 Run:
 

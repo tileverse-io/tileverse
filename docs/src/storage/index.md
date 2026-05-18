@@ -41,7 +41,7 @@ Tested or known to work via this path:
 Credentials and region come from the same parameters as AWS S3 (`storage.s3.aws-access-key-id`, `storage.s3.aws-secret-access-key`, `storage.s3.region`); the SDK's default credential chain is used when none are set. If the HEAD probe fails (firewalled endpoint, custom auth required to GET headers), force the provider explicitly via `storage.providerId=s3` in the config.
 
 !!! info "Native protocols for OpenStack Swift, Azure Files, FTP, etc. are intentionally not supported"
-    `tileverse-storage`'s scope is *cloud-optimized object storage for the GeoTools/GeoServer ecosystem*. Native OpenStack Swift, Azure Files (SMB), HDFS-via-WebHDFS, FTP, and similar are out of scope: the audience is overwhelmingly served by S3-compatible endpoints (which all of the above offer), and adding alternate-protocol backends would multiply the maintenance surface without serving a real user. See [Why tileverse-storage?](why.md#when-not-to-use-this-library) for the broader scope rationale.
+    `tileverse-storage`'s scope is *cloud-optimized object storage for the GeoTools/GeoServer ecosystem*. Native OpenStack Swift, Azure Files (SMB), HDFS-via-WebHDFS, FTP, and similar are out of scope: the audience is overwhelmingly served by S3-compatible endpoints (which all of the above offer), and adding alternate-protocol backends would multiply the maintenance surface without serving a real user. See [Why tileverse-storage?](explanation/why.md#when-not-to-use-this-library) for the broader scope rationale.
 
 ## Capability matrix
 
@@ -215,7 +215,7 @@ Legacy `io.tileverse.rangereader.*` keys are still accepted with a one-time WARN
 
 ## See also
 
-- [Why tileverse-storage?](why.md) - the rationale for this library and how it compares to alternatives (Hadoop FS, jclouds, Micronaut, Spring Resource, NIO providers)
-- [Quick Start](user-guide/quick-start.md) - hands-on examples for each backend
-- [Range Reader](rangereader/index.md) - the byte-range read API used by PMTiles / COG / single-file Parquet
+- [Why tileverse-storage?](explanation/why.md) - the rationale for this library and how it compares to alternatives (Hadoop FS, jclouds, Micronaut, Spring Resource, NIO providers)
+- [Use each backend](how-to/use-each-backend.md) - hands-on examples for each backend
+- [Range Reader](reference/rangereader.md) - the byte-range read API used by PMTiles / COG / single-file Parquet
 - [PMTiles](../pmtiles/index.md) - the canonical consumer of the Storage / RangeReader stack

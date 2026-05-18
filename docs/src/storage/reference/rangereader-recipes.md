@@ -1,6 +1,6 @@
-# User Guide
+# Range Reader Recipes
 
-Welcome to the `tileverse-storage` user guide! This section covers how to use the byte-range [`RangeReader`](../index.md) API of `tileverse-storage` from your applications. For the full container API (listing, writes, copy/move, presigning), see the [Storage overview](../../index.md).
+This page collects task-oriented recipes for the byte-range [`RangeReader`](rangereader.md) API of `tileverse-storage`. For the full container API (listing, writes, copy/move, presigning), see the [Storage overview](../index.md).
 
 ## What You'll Learn
 
@@ -49,9 +49,9 @@ This guide is designed for:
 
 If you're in a hurry, start with these essentials:
 
-1. **[Installation](../../user-guide/installation.md)** - Add the library to your project
-2. **[Quick Start](quick-start.md)** - Basic usage examples
-3. **[Configuration](../../user-guide/configuration.md)** - Performance optimization
+1. **[Installation](../how-to/install.md)** - Add the library to your project
+2. **[Quick Start](rangereader-quick-start.md)** - Basic usage examples
+3. **[Configuration](../how-to/configure.md)** - Performance optimization
 
 ## Library Overview
 
@@ -189,7 +189,7 @@ Ready to get started? Choose your path:
 
     Add the library to your Maven project
 
-    [:octicons-arrow-right-24: Install](../../user-guide/installation.md)
+    [:octicons-arrow-right-24: Install](../how-to/install.md)
 
 -   :material-rocket: **Quick Start**
 
@@ -197,7 +197,7 @@ Ready to get started? Choose your path:
 
     Basic examples for each data source
 
-    [:octicons-arrow-right-24: Examples](quick-start.md)
+    [:octicons-arrow-right-24: Examples](rangereader-quick-start.md)
 
 -   :material-tune: **Configuration**
 
@@ -205,7 +205,7 @@ Ready to get started? Choose your path:
 
     Optimize performance for your use case
 
-    [:octicons-arrow-right-24: Configure](../../user-guide/configuration.md)
+    [:octicons-arrow-right-24: Configure](../how-to/configure.md)
 
 -   :material-shield-key: **Authentication**
 
@@ -213,13 +213,13 @@ Ready to get started? Choose your path:
 
     Set up secure access to your data
 
-    [:octicons-arrow-right-24: Auth Setup](../../user-guide/authentication.md)
+    [:octicons-arrow-right-24: Auth Setup](../how-to/authenticate.md)
 
 </div>
 
 ## Need Help?
 
-- Check the **[Troubleshooting](../../user-guide/troubleshooting.md)** guide for common issues
-- Review the **[Quick Start](quick-start.md)** for code examples
-- Read the **[Configuration](../../user-guide/configuration.md)** guide for advanced setup
+- Check the **[Troubleshooting](../how-to/troubleshoot.md)** guide for common issues
+- Review the **[Quick Start](rangereader-quick-start.md)** for code examples
+- Read the **[Configuration](../how-to/configure.md)** guide for advanced setup
 - Visit our **[GitHub repository](https://github.com/tileverse-io/tileverse)** for the latest updates

@@ -8,7 +8,7 @@ Get started with Tileverse Vector Tiles quickly.
 import io.tileverse.vectortile.mvt.VectorTileCodec;
 import io.tileverse.vectortile.model.VectorTile;
 
-VectorTileCodec codec = VectorTileCodec.getDefault();
+VectorTileCodec codec = new VectorTileCodec();
 byte[] mvtBytes = ...; // Load from file, network, etc.
 
 VectorTile tile = codec.decode(mvtBytes);
@@ -29,12 +29,13 @@ for (VectorTile.Layer layer : tile.getLayers()) {
 ```java
 import io.tileverse.vectortile.mvt.VectorTileBuilder;
 
-VectorTileBuilder builder = VectorTileBuilder.create();
-
-builder.layer("poi")
-    .feature()
-        .geometry(point)
-        .attributes(Map.of("name", "Restaurant"));
+VectorTileBuilder builder = new VectorTileBuilder();
+builder.layer()
+        .name("poi")
+        .feature()
+            .geometry(point)
+            .attributes(Map.of("name", "Restaurant"))
+            .build();
 
 VectorTile tile = builder.build();
 byte[] mvtBytes = codec.encode(tile);
@@ -42,5 +43,5 @@ byte[] mvtBytes = codec.encode(tile);
 
 ## Next Steps
 
-- [Encoding Tiles](encoding.md)
-- [Decoding Tiles](decoding.md)
+- [Encoding Tiles](how-to/encode.md)
+- [Decoding Tiles](how-to/decode.md)

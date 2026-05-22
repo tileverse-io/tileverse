@@ -2,158 +2,146 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://tileverse.io/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/getting-started/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/developer-guide/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/developer-guide/building/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/developer-guide/explanation/architecture/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/developer-guide/contributing/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/developer-guide/explanation/dependencies/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/developer-guide/testing/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/developer-guide/explanation/system-design/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/developer-guide/architecture/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/developer-guide/how-to/build/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/developer-guide/architecture/dependencies/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/developer-guide/how-to/contribute/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/developer-guide/architecture/system-design/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/developer-guide/how-to/test/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/pmtiles/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/pmtiles/user-guide/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/pmtiles/tutorial/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/pmtiles/user-guide/cloud-storage/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/pmtiles/how-to/cloud-storage/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/pmtiles/user-guide/quick-start/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/pmtiles/how-to/read-pmtiles/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/pmtiles/user-guide/reading/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/pmtiles/reference/tile-stores/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/storage/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/migration-1.4-to-2.0/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/storage/explanation/internals/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/why/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/storage/explanation/performance/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/rangereader/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/storage/explanation/why/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/rangereader/developer-guide/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/storage/how-to/authenticate/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/rangereader/developer-guide/architecture/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/storage/how-to/configure/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/rangereader/developer-guide/performance/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/storage/how-to/install/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/rangereader/user-guide/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/storage/how-to/migrate-from-1.4/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/rangereader/user-guide/quick-start/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/storage/how-to/troubleshoot/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/user-guide/authentication/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/storage/how-to/use-each-backend/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/user-guide/configuration/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/storage/reference/rangereader-quick-start/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/user-guide/installation/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/storage/reference/rangereader-recipes/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/user-guide/quick-start/</loc>
-         <lastmod>2026-05-17</lastmod>
-    </url>
-    <url>
-         <loc>https://tileverse.io/storage/user-guide/troubleshooting/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/storage/reference/rangereader/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/tilematrixset/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/tilematrixset/user-guide/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/tilematrixset/tutorial/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/tilematrixset/user-guide/ogc-compliance/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/tilematrixset/how-to/standard-sets/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/tilematrixset/user-guide/quick-start/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/tilematrixset/how-to/tile-pyramids/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/tilematrixset/user-guide/standard-sets/</loc>
-         <lastmod>2026-05-17</lastmod>
-    </url>
-    <url>
-         <loc>https://tileverse.io/tilematrixset/user-guide/tile-pyramids/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/tilematrixset/reference/ogc-compliance/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/vectortiles/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/vectortiles/user-guide/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/vectortiles/tutorial/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/vectortiles/user-guide/decoding/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/vectortiles/how-to/decode/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/vectortiles/user-guide/encoding/</loc>
-         <lastmod>2026-05-17</lastmod>
-    </url>
-    <url>
-         <loc>https://tileverse.io/vectortiles/user-guide/quick-start/</loc>
-         <lastmod>2026-05-17</lastmod>
+         <loc>https://tileverse.io/vectortiles/how-to/encode/</loc>
+         <lastmod>2026-05-22</lastmod>
     </url>
 </urlset>

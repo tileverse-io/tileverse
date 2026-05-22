@@ -92,7 +92,7 @@ This is the same pattern Iceberg used for parquet-java: keep the substrate clean
 - **You're already inside a Hadoop-based pipeline (Spark, Flink, Hive).** Use `org.apache.hadoop.fs.FileSystem` with the standard cloud connectors. Bridging to `tileverse-storage` from inside Hadoop is friction with no upside.
 - **You need a transactional document store or a queue.** This is a blob abstraction, not a database.
 - **Your application is Micronaut-native and you're happy with the `Set<String>` listing surface.** Micronaut Object Storage is well-supported and integrated with the Micronaut runtime.
-- **Your data lives behind a non-S3-compatible protocol (native OpenStack Swift, Azure Files / SMB, HDFS-via-WebHDFS, FTP/SFTP, Cassandra, etc.).** These are out of scope by design — the audience is overwhelmingly served by S3-compatible endpoints, and S3-compatibility is supported transparently for any service that returns `x-amz-*` headers (Ceph RGW, MinIO, Swift via the `s3api` middleware, R2, B2, Wasabi, IBM COS, OVHcloud, etc.). See the [S3-compatible endpoints](index.md#s3-compatible-endpoints) section for the list.
+- **Your data lives behind a non-S3-compatible protocol (native OpenStack Swift, Azure Files / SMB, HDFS-via-WebHDFS, FTP/SFTP, Cassandra, etc.).** These are out of scope by design — the audience is overwhelmingly served by S3-compatible endpoints, and S3-compatibility is supported transparently for any service that returns `x-amz-*` headers (Ceph RGW, MinIO, Swift via the `s3api` middleware, R2, B2, Wasabi, IBM COS, OVHcloud, etc.). See the [S3-compatible endpoints](../index.md#s3-compatible-endpoints) section for the list.
 
 ## Summary
 

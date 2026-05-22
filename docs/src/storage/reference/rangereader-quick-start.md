@@ -287,6 +287,6 @@ public void processLargeFile(Path filePath, int chunkSize) throws IOException {
 
 ## Next Steps
 
-- **[Configuration](../../user-guide/configuration.md)**: Learn about performance tuning
-- **[Authentication](../../user-guide/authentication.md)**: Set up cloud provider access
-- **[Troubleshooting](../../user-guide/troubleshooting.md)**: Common issues and solutions
+- **[Configure for performance](../how-to/configure.md)**: Learn about performance tuning
+- **[Authenticate](../how-to/authenticate.md)**: Set up cloud provider access
+- **[Troubleshoot](../how-to/troubleshoot.md)**: Common issues and solutions

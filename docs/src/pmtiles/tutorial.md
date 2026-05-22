@@ -142,7 +142,7 @@ try (PMTilesReader reader = PMTilesReader.open(URI.create("s3://my-bucket/imager
 }
 ```
 
-WebP decoding is bundled with `tileverse-pmtiles` (an `ImageIO` plugin pulled in transitively). PNG and JPEG ship with the JDK. See [Reading PMTiles](reading.md) for the vector store equivalent.
+WebP decoding is bundled with `tileverse-pmtiles` (an `ImageIO` plugin pulled in transitively). PNG and JPEG ship with the JDK. See [Reading PMTiles](how-to/read-pmtiles.md) for the vector store equivalent.
 
 ## Processing Multiple Tiles
 
@@ -171,6 +171,6 @@ try (PMTilesReader reader = PMTilesReader.open(URI.create("s3://my-bucket/world.
 
 ## Next Steps
 
-- **[Reading PMTiles](reading.md)**: Learn more about reading operations
-- **[Cloud Storage](cloud-storage.md)**: Deep dive into cloud storage integration
-- **[Storage Guide](../../storage/index.md)** and **[Range Reader Guide](../../storage/rangereader/user-guide/index.md)**: Understand the underlying data access layer
+- **[Reading PMTiles](how-to/read-pmtiles.md)**: Learn more about reading operations
+- **[Cloud Storage](how-to/cloud-storage.md)**: Deep dive into cloud storage integration
+- **[Storage Guide](../storage/index.md)** and **[Range Reader Reference](../storage/reference/rangereader.md)**: Understand the underlying data access layer

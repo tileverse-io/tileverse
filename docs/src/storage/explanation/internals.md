@@ -1,8 +1,8 @@
-# Architecture
+# Storage internals
 
-This document explains the internal design of the Range Reader library, detailing how it achieves a unified API across diverse storage backends.
+This document explains the internal design of `tileverse-storage`, with a focus on the `RangeReader` byte-range path: how it achieves a unified API across diverse storage backends and where the seams are for adding a new one.
 
-![System Context Diagram](../../../assets/images/storage/structurizr-SystemContext.svg)
+![System Context Diagram](../../assets/images/storage/structurizr-SystemContext.svg)
 
 ## Core Design
 
@@ -27,7 +27,7 @@ public interface RangeReader extends Closeable {
 
 ## Implementation Hierarchy
 
-![Core Module Components](../../../assets/images/storage/structurizr-CoreComponents.svg)
+![Core Module Components](../../assets/images/storage/structurizr-CoreComponents.svg)
 
 ### Base Layer: `AbstractRangeReader`
 This abstract class handles the boilerplate:
@@ -56,13 +56,13 @@ We use the Decorator pattern to add behaviors without modifying backends.
 The runtime view describes the dynamic behavior of the library.
 
 ### Basic File Range Reading
-![Basic File Read](../../../assets/images/storage/structurizr-BasicFileRead.svg)
+![Basic File Read](../../assets/images/storage/structurizr-BasicFileRead.svg)
 
 ### HTTP Range Reading with Authentication
-![HTTP Range Read](../../../assets/images/storage/structurizr-HttpRangeRead.svg)
+![HTTP Range Read](../../assets/images/storage/structurizr-HttpRangeRead.svg)
 
 ### Multi-Level Caching Scenario
-![Multi-Level Caching](../../../assets/images/storage/structurizr-MultiLevelCaching.svg)
+![Multi-Level Caching](../../assets/images/storage/structurizr-MultiLevelCaching.svg)
 
 ## Service Provider Interface (SPI)
 
@@ -77,7 +77,7 @@ To support dynamic loading (e.g., for configuration-driven applications), we exp
 
 ## Dependency Structure
 
-![Container Diagram](../../../assets/images/storage/structurizr-Containers.svg)
+![Container Diagram](../../assets/images/storage/structurizr-Containers.svg)
 
 To avoid "dependency hell" (e.g., conflicting Netty versions between Azure and AWS SDKs), the core module has zero heavy dependencies.
 

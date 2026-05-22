@@ -25,5 +25,6 @@ To avoid network latency, the `CachingRangeReader` implements a two-tier cache:
 
 The system is designed for extension via interfaces:
 
-*   Implement `RangeReader` to support a new storage backend (e.g., Hadoop HDFS, FTP).
-*   Implement `TileMatrixSet` to support exotic non-Earth coordinate systems.
+*   Implement `StorageProvider` (registered via `ServiceLoader`) to add an in-scope storage backend - for example, a new S3-compatible service that does not advertise `x-amz-*` headers, an internal CAS-style store, or a test harness. Native protocols like OpenStack Swift, Azure Files (SMB), or HDFS-via-WebHDFS are intentionally out of scope; see [Why tileverse-storage?](../../storage/explanation/why.md#when-not-to-use-this-library).
+*   Subclass `AbstractTileStore<T>` to expose a different archive format under the same `TileStore<T>` contract (for example, Versatiles or MBTiles).
+*   Implement `TileMatrixSet` to support non-Earth or custom grids while reusing the rest of the stack unchanged.

@@ -97,52 +97,53 @@ nav:
   - Getting Started: getting-started.md
   - Storage:
     - Overview: storage/index.md
-    - Why tileverse-storage?: storage/why.md
-    - Installation: storage/user-guide/installation.md
-    - Quick Start: storage/user-guide/quick-start.md
-    - Configuration: storage/user-guide/configuration.md
-    - Authentication: storage/user-guide/authentication.md
-    - Troubleshooting: storage/user-guide/troubleshooting.md
-    - Migrating from 1.4.x: storage/migration-1.4-to-2.0.md
-    - Range Reader:
-      - Overview: storage/rangereader/index.md
-      - User Guide: storage/rangereader/user-guide/index.md
-      - Quick Start: storage/rangereader/user-guide/quick-start.md
-    - Internals:
-      - Overview: storage/rangereader/developer-guide/index.md
-      - Architecture: storage/rangereader/developer-guide/architecture.md
-      - Performance: storage/rangereader/developer-guide/performance.md
+    - How-to guides:
+      - Install: storage/how-to/install.md
+      - Use each backend: storage/how-to/use-each-backend.md
+      - Configure for performance: storage/how-to/configure.md
+      - Authenticate: storage/how-to/authenticate.md
+      - Troubleshoot: storage/how-to/troubleshoot.md
+      - Migrate from 1.4.x: storage/how-to/migrate-from-1.4.md
+    - Reference:
+      - Range Reader API: storage/reference/rangereader.md
+      - Range Reader recipes: storage/reference/rangereader-recipes.md
+      - Range Reader quick start: storage/reference/rangereader-quick-start.md
+    - Explanation:
+      - Why tileverse-storage?: storage/explanation/why.md
+      - Internals - architecture: storage/explanation/internals.md
+      - Internals - performance: storage/explanation/performance.md
   - PMTiles:
     - Overview: pmtiles/index.md
-    - User Guide:
-      - Introduction: pmtiles/user-guide/index.md
-      - Quick Start: pmtiles/user-guide/quick-start.md
-      - Reading PMTiles: pmtiles/user-guide/reading.md
-      - Cloud Storage: pmtiles/user-guide/cloud-storage.md
+    - Tutorial: pmtiles/tutorial.md
+    - How-to guides:
+      - Read PMTiles: pmtiles/how-to/read-pmtiles.md
+      - Use PMTiles in cloud storage: pmtiles/how-to/cloud-storage.md
+    - Reference:
+      - Tile Stores: pmtiles/reference/tile-stores.md
   - Vector Tiles:
     - Overview: vectortiles/index.md
-    - User Guide:
-      - Introduction: vectortiles/user-guide/index.md
-      - Quick Start: vectortiles/user-guide/quick-start.md
-      - Encoding Tiles: vectortiles/user-guide/encoding.md
-      - Decoding Tiles: vectortiles/user-guide/decoding.md
+    - Tutorial: vectortiles/tutorial.md
+    - How-to guides:
+      - Encode vector tiles: vectortiles/how-to/encode.md
+      - Decode vector tiles: vectortiles/how-to/decode.md
   - Tile Matrix Set:
     - Overview: tilematrixset/index.md
-    - User Guide:
-      - Introduction: tilematrixset/user-guide/index.md
-      - Quick Start: tilematrixset/user-guide/quick-start.md
-      - Tile Pyramids: tilematrixset/user-guide/tile-pyramids.md
-      - Standard Sets: tilematrixset/user-guide/standard-sets.md
-      - OGC Compliance: tilematrixset/user-guide/ogc-compliance.md
+    - Tutorial: tilematrixset/tutorial.md
+    - How-to guides:
+      - Tile pyramids and ranges: tilematrixset/how-to/tile-pyramids.md
+      - Standard tile matrix sets: tilematrixset/how-to/standard-sets.md
+    - Reference:
+      - OGC compliance and encodings: tilematrixset/reference/ogc-compliance.md
   - Developer Guide:
     - Overview: developer-guide/index.md
-    - Building: developer-guide/building.md
-    - Testing: developer-guide/testing.md
-    - Contributing: developer-guide/contributing.md
-    - Architecture:
-      - Overview: developer-guide/architecture/index.md
-      - System Design: developer-guide/architecture/system-design.md
-      - Module Dependencies: developer-guide/architecture/dependencies.md
+    - How-to guides:
+      - Build from source: developer-guide/how-to/build.md
+      - Run tests: developer-guide/how-to/test.md
+      - Contribute: developer-guide/how-to/contribute.md
+    - Explanation:
+      - System architecture: developer-guide/explanation/architecture.md
+      - System design and data flow: developer-guide/explanation/system-design.md
+      - Module dependencies: developer-guide/explanation/dependencies.md
 
 extra:
   analytics:

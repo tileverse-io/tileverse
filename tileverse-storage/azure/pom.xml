@@ -64,4 +64,33 @@
     </dependency>
 
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>ban-heavy-transports</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <bannedDependencies>
+                  <excludes>
+                    <exclude>io.netty:*</exclude>
+                    <exclude>com.azure:azure-core-http-netty</exclude>
+                  </excludes>
+                  <searchTransitive>true</searchTransitive>
+                  <message>tileverse-storage-azure uses azure-core-http-jdk-httpclient; Netty must not be on its classpath.</message>
+                </bannedDependencies>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>

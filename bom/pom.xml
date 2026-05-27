@@ -11,8 +11,20 @@
   <name>Tileverse :: BOM</name>
   <description>Bill of Materials for managing Tileverse module versions</description>
 
+  <properties>
+    <cloud-dependencies-bom.version>1.0.3</cloud-dependencies-bom.version>
+  </properties>
+
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <!-- Cloud SDK dependencies (AWS, Azure, GCS, Jackson 2, convergence overrides) -->
+        <groupId>io.tileverse</groupId>
+        <artifactId>cloud-dependencies-bom</artifactId>
+        <version>${cloud-dependencies-bom.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
       <dependency>
         <groupId>io.tileverse.storage</groupId>
         <artifactId>tileverse-storage-core</artifactId>

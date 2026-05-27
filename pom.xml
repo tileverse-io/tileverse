@@ -79,7 +79,12 @@
     <palantirJavaFormat.version>2.90.0</palantirJavaFormat.version>
 
     <!-- Dependency versions -->
-    <cloud-dependencies-bom.version>1.0.2</cloud-dependencies-bom.version>
+    <!--
+      When bumping cloud-dependencies-bom.version, also bump the same property in bom/pom.xml.
+      The published tileverse-bom is flattened with flattenMode=ossrh, which drops <parent>/<properties>
+      and only interpolates the dependencyManagement against the module's own properties, hence it cannot inherit this value.
+    -->
+    <cloud-dependencies-bom.version>1.0.3</cloud-dependencies-bom.version>
     <caffeine.version>3.2.3</caffeine.version>
     <commons-compress.version>1.28.0</commons-compress.version>
     <jackson.version>3.1.2</jackson.version>
@@ -115,8 +120,8 @@
 
   <dependencyManagement>
     <dependencies>
-      <!-- Cloud SDK dependencies (AWS, Azure, GCS, Jackson 2, convergence overrides) -->
       <dependency>
+        <!-- Cloud SDK dependencies (AWS, Azure, GCS, Jackson 2, convergence overrides) -->
         <groupId>io.tileverse</groupId>
         <artifactId>cloud-dependencies-bom</artifactId>
         <version>${cloud-dependencies-bom.version}</version>

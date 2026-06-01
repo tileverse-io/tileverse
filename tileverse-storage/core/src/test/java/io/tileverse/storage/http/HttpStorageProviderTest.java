@@ -161,6 +161,20 @@ class HttpStorageProviderTest {
                 .isInstanceOf(BasicAuthentication.class);
     }
 
+    @Test
+    void getParameters_ExposesHttpAuthAndTuningParameters() {
+        assertThat(provider.getParameters())
+                .contains(
+                        HTTP_CONNECTION_TIMEOUT_MILLIS,
+                        HTTP_TRUST_ALL_SSL_CERTIFICATES,
+                        HTTP_AUTH_USERNAME,
+                        HTTP_AUTH_PASSWORD,
+                        HTTP_AUTH_BEARER_TOKEN,
+                        HTTP_AUTH_API_KEY_HEADERNAME,
+                        HTTP_AUTH_API_KEY,
+                        HTTP_AUTH_API_KEY_VALUE_PREFIX);
+    }
+
     private StorageConfig createConfig(Properties props) {
         props.put(StorageConfig.URI_KEY, TEST_URI);
         return StorageConfig.fromProperties(props);

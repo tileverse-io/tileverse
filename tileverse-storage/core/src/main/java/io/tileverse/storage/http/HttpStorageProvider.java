@@ -24,6 +24,7 @@ import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -290,6 +291,16 @@ public class HttpStorageProvider extends AbstractStorageProvider {
             .subgroup(SUBGROUP_AUTHENTICATION)
             .build();
 
+    static final List<StorageParameter<?>> PARAMS = List.of(
+            HTTP_CONNECTION_TIMEOUT_MILLIS,
+            HTTP_TRUST_ALL_SSL_CERTIFICATES,
+            HTTP_AUTH_USERNAME,
+            HTTP_AUTH_PASSWORD,
+            HTTP_AUTH_BEARER_TOKEN,
+            HTTP_AUTH_API_KEY_HEADERNAME,
+            HTTP_AUTH_API_KEY,
+            HTTP_AUTH_API_KEY_VALUE_PREFIX);
+
     /**
      * Creates a new HttpRangeReaderProvider with support for caching parameters
      *
@@ -299,6 +310,11 @@ public class HttpStorageProvider extends AbstractStorageProvider {
      */
     public HttpStorageProvider() {
         super(true);
+    }
+
+    @Override
+    protected List<StorageParameter<?>> buildParameters() {
+        return PARAMS;
     }
 
     @Override

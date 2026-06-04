@@ -124,6 +124,11 @@ record AzureBlobLocation(String endpoint, String accountName, String container, 
         return p;
     }
 
+    /** Returns a copy targeting the given Blob service endpoint, keeping the account, container, and prefix. */
+    AzureBlobLocation withEndpoint(String endpoint) {
+        return new AzureBlobLocation(endpoint, accountName, container, prefix);
+    }
+
     String resolve(String relativeKey) {
         io.tileverse.storage.Storage.requireSafeKey(relativeKey);
         return prefix + relativeKey;

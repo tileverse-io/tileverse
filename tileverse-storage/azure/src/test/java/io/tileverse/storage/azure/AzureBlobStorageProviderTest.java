@@ -63,6 +63,7 @@ class AzureBlobStorageProviderTest {
                         AzureBlobStorageProvider.AZURE_ACCOUNT_KEY,
                         AzureBlobStorageProvider.AZURE_SAS_TOKEN,
                         AzureBlobStorageProvider.AZURE_CONNECTION_STRING,
+                        AzureBlobStorageProvider.AZURE_ENDPOINT,
                         AzureBlobStorageProvider.AZURE_MAX_RETRIES,
                         AzureBlobStorageProvider.AZURE_RETRY_DELAY,
                         AzureBlobStorageProvider.AZURE_MAX_RETRY_DELAY,

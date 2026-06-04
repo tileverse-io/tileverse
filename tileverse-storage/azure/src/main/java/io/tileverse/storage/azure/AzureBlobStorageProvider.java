@@ -30,6 +30,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * {@link StorageProvider} implementation for Azure Blob Storage.
@@ -167,6 +168,37 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
             .password(true)
             .build();
 
+    /**
+     * Overrides the Blob service endpoint to let a short-form {@code az://account/container} URI target an emulator
+     * (Azurite), a sovereign cloud (Azure Government, Azure China), or a custom domain instead of the public
+     * {@code https://<account>.blob.core.windows.net} endpoint inferred from the account name.
+     *
+     * <p>When set, it replaces the endpoint derived from the URI. Because the {@code https://} and {@code abfs[s]://}
+     * URI forms already encode the endpoint in their host, this parameter is mainly useful for the {@code az://} short
+     * form.
+     *
+     * <p><b>Key:</b> {@code storage.azure.endpoint}
+     */
+    public static final StorageParameter<URI> AZURE_ENDPOINT = StorageParameter.builder()
+            .key("storage.azure.endpoint")
+            .title("Blob service endpoint")
+            .description("""
+                    Override the Blob service endpoint URL to let a short-form az://account/container URI target \
+                    an emulator, a sovereign cloud, or a custom domain instead of the public \
+                    https://<account>.blob.core.windows.net endpoint.
+
+                    The value is the full Blob service endpoint, including the account where the service expects it in \
+                    the path. For the Azurite emulator that is http://127.0.0.1:10000/devstoreaccount1; for Azure \
+                    Government it is https://<account>.blob.core.usgovcloudapi.net.
+
+                    When set, it replaces the endpoint derived from the URI. Because the https:// and abfs(s):// URI \
+                    forms already encode the endpoint in their host, this parameter is mainly useful for the az:// \
+                    short form. Leave it unset to use the public Azure endpoint for the account.
+                    """)
+            .type(URI.class)
+            .group(ID)
+            .build();
+
     /** Maximum number of retry attempts for Azure SDK requests. Default {@code 3}. */
     public static final StorageParameter<Integer> AZURE_MAX_RETRIES = StorageParameter.builder()
             .key("storage.azure.max-retries")
@@ -214,6 +246,7 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
             AZURE_ACCOUNT_KEY,
             AZURE_SAS_TOKEN,
             AZURE_CONNECTION_STRING,
+            AZURE_ENDPOINT,
             AZURE_MAX_RETRIES,
             AZURE_RETRY_DELAY,
             AZURE_MAX_RETRY_DELAY,
@@ -325,9 +358,23 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
     @Override
     public Storage createStorage(StorageConfig config) {
         URI uri = config.baseUri();
-        AzureBlobLocation location = AzureBlobLocation.parse(uri);
+        AzureBlobLocation location = locationFor(config);
         AzureClientCache.Lease lease = clientCache.acquire(keyFor(config, location));
         return new AzureBlobStorage(uri, location, lease);
+    }
+
+    /**
+     * Parses the base URI into an {@link AzureBlobLocation}, applying {@link #AZURE_ENDPOINT} when set. The override
+     * then becomes the single source of truth for both the cache key and the {@link AzureBlobStorage}. Package-private
+     * to let unit tests exercise endpoint resolution without acquiring a real SDK client lease.
+     */
+    static AzureBlobLocation locationFor(StorageConfig config) {
+        AzureBlobLocation location = AzureBlobLocation.parse(config.baseUri());
+        Optional<URI> endpointOverride = config.getParameter(AZURE_ENDPOINT);
+        if (endpointOverride.isPresent()) {
+            return location.withEndpoint(endpointOverride.orElseThrow().toString());
+        }
+        return location;
     }
 
     /**

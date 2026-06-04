@@ -138,4 +138,58 @@ class AzureBlobStorageProviderConfigTest {
         assertThat(AzureBlobStorageProvider.keyFor(a, locationOf(BLOB_URI)))
                 .isNotEqualTo(AzureBlobStorageProvider.keyFor(b, locationOf(BLOB_URI)));
     }
+
+    @Test
+    void endpointOverride_absentKeepsUriDerivedEndpoint() {
+        StorageConfig config = new StorageConfig("az://devstoreaccount1/my-container/file.bin");
+
+        assertThat(AzureBlobStorageProvider.locationFor(config).endpoint())
+                .isEqualTo("https://devstoreaccount1.blob.core.windows.net");
+    }
+
+    @Test
+    void endpointOverride_redirectsAzShortFormToCustomEndpoint() {
+        StorageConfig config = new StorageConfig("az://devstoreaccount1/my-container/file.bin")
+                .setParameter(
+                        AzureBlobStorageProvider.AZURE_ENDPOINT, URI.create("http://127.0.0.1:10000/devstoreaccount1"));
+
+        assertThat(AzureBlobStorageProvider.locationFor(config).endpoint())
+                .isEqualTo("http://127.0.0.1:10000/devstoreaccount1");
+    }
+
+    @Test
+    void endpointOverride_winsOverUriDerivedEndpoint() {
+        StorageConfig config = new StorageConfig(BLOB_URI)
+                .setParameter(
+                        AzureBlobStorageProvider.AZURE_ENDPOINT,
+                        URI.create("https://devstoreaccount1.blob.core.usgovcloudapi.net"));
+
+        assertThat(AzureBlobStorageProvider.locationFor(config).endpoint())
+                .isEqualTo("https://devstoreaccount1.blob.core.usgovcloudapi.net");
+    }
+
+    @Test
+    void endpointOverride_preservesAccountContainerAndPrefix() {
+        StorageConfig config = new StorageConfig("az://devstoreaccount1/my-container/data/")
+                .setParameter(
+                        AzureBlobStorageProvider.AZURE_ENDPOINT, URI.create("http://127.0.0.1:10000/devstoreaccount1"));
+
+        AzureBlobLocation location = AzureBlobStorageProvider.locationFor(config);
+        assertThat(location.accountName()).isEqualTo("devstoreaccount1");
+        assertThat(location.container()).isEqualTo("my-container");
+        assertThat(location.prefix()).isEqualTo("data/");
+    }
+
+    @Test
+    void differentEndpointsProduceDifferentCacheKeys() {
+        StorageConfig a = new StorageConfig("az://devstoreaccount1/my-container")
+                .setParameter(
+                        AzureBlobStorageProvider.AZURE_ENDPOINT, URI.create("http://127.0.0.1:10000/devstoreaccount1"));
+        StorageConfig b = new StorageConfig("az://devstoreaccount1/my-container")
+                .setParameter(
+                        AzureBlobStorageProvider.AZURE_ENDPOINT, URI.create("http://127.0.0.1:10001/devstoreaccount1"));
+
+        assertThat(AzureBlobStorageProvider.keyFor(a, AzureBlobStorageProvider.locationFor(a)))
+                .isNotEqualTo(AzureBlobStorageProvider.keyFor(b, AzureBlobStorageProvider.locationFor(b)));
+    }
 }

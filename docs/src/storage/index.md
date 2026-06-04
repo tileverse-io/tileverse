@@ -210,6 +210,7 @@ Per-backend configuration uses the `storage.*` flat namespace, e.g.:
 | `storage.s3.force-path-style` | S3 |
 | `storage.azure.account-key`, `storage.azure.sas-token` | Azure Blob |
 | `storage.azure.connection-string` | Azure Blob (Azurite, dev) |
+| `storage.azure.endpoint` | Azure Blob (redirect `az://` to an emulator, sovereign cloud, or custom domain) |
 | `storage.azure.anonymous=true` | Azure Blob (public containers, no credentials) |
 | `storage.gcs.project-id`, `storage.gcs.default-credentials-chain` | GCS |
 | `storage.http.timeout-millis`, `storage.http.auth-bearer-token` | HTTP |

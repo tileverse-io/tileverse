@@ -107,6 +107,18 @@ try (Storage storage = StorageFactory.open(URI.create(
 
 Authentication uses `DefaultAzureCredential` by default (env vars, managed identity, Azure CLI). Provide `storage.azure.account-key` or `storage.azure.sas-token` in `StorageConfig` for explicit credentials.
 
+The `https://` and `abfs[s]://` URI forms already encode the endpoint in their host. The short-form `az://account/container` URI, by contrast, resolves to the public `https://<account>.blob.core.windows.net` endpoint. Set `storage.azure.endpoint` to redirect it to an emulator, a sovereign cloud (Azure Government, Azure China), or a custom domain. The value is the full Blob service endpoint, including the account where the service expects it in the path (the Azurite emulator embeds the account in the path):
+
+```java
+Properties props = new Properties();
+props.setProperty("storage.azure.endpoint", "http://127.0.0.1:10000/devstoreaccount1"); // Azurite
+props.setProperty("storage.azure.connection-string", "UseDevelopmentStorage=true");
+
+try (Storage storage = StorageFactory.open(URI.create("az://devstoreaccount1/my-container/"), props)) {
+    storage.put("file.bin", new byte[100]);
+}
+```
+
 ## Azure Data Lake Storage Gen2 (HNS)
 
 ```java

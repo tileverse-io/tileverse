@@ -72,6 +72,24 @@ try (Storage storage = StorageFactory.open(
 
 Authentication uses the AWS default credential chain unless you provide `storage.s3.aws-access-key-id` / `storage.s3.aws-secret-access-key` in a `StorageConfig`.
 
+To target an S3-compatible service (MinIO, Ceph, Cloudflare R2, DigitalOcean Spaces, ...) while keeping a canonical `s3://bucket/key` URI, set `storage.s3.endpoint`; path-style addressing is auto-enabled:
+
+```java
+import java.util.Properties;
+
+Properties props = new Properties();
+props.setProperty("storage.s3.endpoint", "http://localhost:9000"); // MinIO
+props.setProperty("storage.s3.aws-access-key-id", "minioadmin");
+props.setProperty("storage.s3.aws-secret-access-key", "minioadmin");
+props.setProperty("storage.s3.region", "us-east-1");
+
+try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/datasets/"), props)) {
+    storage.put("file.parquet", Path.of("/local/file.parquet"), WriteOptions.defaults());
+}
+```
+
+See [Configure - Custom endpoint](configure.md#custom-endpoint-minio-and-other-s3-compatible-services) for how `storage.s3.endpoint` interacts with `force-path-style`, `region`, and credentials.
+
 ## Azure Blob Storage
 
 ```java
@@ -88,6 +106,18 @@ try (Storage storage = StorageFactory.open(URI.create(
 ```
 
 Authentication uses `DefaultAzureCredential` by default (env vars, managed identity, Azure CLI). Provide `storage.azure.account-key` or `storage.azure.sas-token` in `StorageConfig` for explicit credentials.
+
+The `https://` and `abfs[s]://` URI forms already encode the endpoint in their host. The short-form `az://account/container` URI, by contrast, resolves to the public `https://<account>.blob.core.windows.net` endpoint. Set `storage.azure.endpoint` to redirect it to an emulator, a sovereign cloud (Azure Government, Azure China), or a custom domain. The value is the full Blob service endpoint, including the account where the service expects it in the path (the Azurite emulator embeds the account in the path):
+
+```java
+Properties props = new Properties();
+props.setProperty("storage.azure.endpoint", "http://127.0.0.1:10000/devstoreaccount1"); // Azurite
+props.setProperty("storage.azure.connection-string", "UseDevelopmentStorage=true");
+
+try (Storage storage = StorageFactory.open(URI.create("az://devstoreaccount1/my-container/"), props)) {
+    storage.put("file.bin", new byte[100]);
+}
+```
 
 ## Azure Data Lake Storage Gen2 (HNS)
 
@@ -183,7 +213,7 @@ try {
 
 ## Resource cleanup
 
-Always close `Storage`, the listing `Stream`, and any `InputStream` / `OutputStream` returned by Storage methods. The internal SDK client cache is reference-counted, so closing one `Storage` instance does not affect siblings against the same account.
+Always close `Storage`, the listing `Stream`, and any `InputStream` / `OutputStream` returned by Storage methods. Because the internal SDK client cache is reference-counted, closing one `Storage` instance does not affect siblings against the same account.
 
 ```java
 try (Storage storage = StorageFactory.open(uri);

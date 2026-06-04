@@ -84,6 +84,32 @@ try (Storage storage = S3StorageProvider.open(bucket, s3Client);
 }
 ```
 
+#### Custom endpoint (MinIO and other S3-compatible services)
+
+To target a non-AWS S3-compatible service (MinIO, Ceph RGW, Cloudflare R2, DigitalOcean Spaces, Wasabi, LocalStack) you can either encode the service host into an `http(s)://host/bucket/key` URI, or keep a canonical `s3://bucket/key` URI and set the endpoint out of band with `storage.s3.endpoint`:
+
+```java
+Properties props = new Properties();
+props.setProperty("storage.s3.endpoint", "http://localhost:9000"); // MinIO
+props.setProperty("storage.s3.aws-access-key-id", "minioadmin");
+props.setProperty("storage.s3.aws-secret-access-key", "minioadmin");
+props.setProperty("storage.s3.region", "us-east-1"); // any valid region; the SDK requires one
+
+URI bucket = URI.create("s3://my-bucket/");
+URI leaf = URI.create("s3://my-bucket/planet.pmtiles");
+try (Storage storage = StorageFactory.open(bucket, props);
+        RangeReader reader = storage.openRangeReader(leaf)) {
+    // ...
+}
+```
+
+How `storage.s3.endpoint` interacts with the other S3 parameters:
+
+- **Precedence**: an explicit `storage.s3.endpoint` wins over any endpoint inferred from an `http(s)://host/bucket/key` URI. Leave it unset to use the default AWS endpoints for the region.
+- **`storage.s3.force-path-style`**: defaults to `true` whenever an endpoint override is in effect (from either the parameter or the URI), and `false` for canonical AWS URIs. Most S3-compatible services require path-style. Set `storage.s3.force-path-style` explicitly to override the default.
+- **`storage.s3.region`**: still required by the SDK even for services that ignore it (e.g. MinIO). It falls back to `us-east-1` when neither the parameter nor the URI specifies one. For Cloudflare R2, use `storage.s3.region=auto`.
+- **Credentials** (`storage.s3.anonymous`, `storage.s3.aws-access-key-id` / `storage.s3.aws-secret-access-key`, `storage.s3.default-credentials-profile`, the default chain): fully orthogonal to the endpoint. The endpoint selects the service; credentials select the identity. Static access-key + secret is the usual pairing for self-hosted services.
+
 ### HTTP / HTTPS
 
 The connect timeout and trust-all-certificates flag are configurable via `Properties`:
@@ -102,7 +128,7 @@ try (Storage storage = StorageFactory.open(parent, props);
 }
 ```
 
-For full `HttpClient` customization (custom proxy, executor, SSL context, request timeout per call), build the `HttpClient` yourself and pass it through `HttpStorageProvider.open(URI, HttpClient[, HttpAuthentication])`. The returned `Storage` **borrows** the client; closing the `Storage` does NOT close it. The Properties path (`StorageFactory.open(uri, props)`) instead acquires a refcounted lease from `HttpClientCache`, so identical configs across multiple `Storage` instances share one underlying client.
+For full `HttpClient` customization (custom proxy, executor, SSL context, request timeout per call), build the `HttpClient` yourself and pass it through `HttpStorageProvider.open(URI, HttpClient[, HttpAuthentication])`. The returned `Storage` **borrows** the client; closing the `Storage` does NOT close it. The Properties path (`StorageFactory.open(uri, props)`) instead acquires a refcounted lease from `HttpClientCache`, which lets identical configs across multiple `Storage` instances share one underlying client.
 
 ### Global Properties
 

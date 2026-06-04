@@ -19,6 +19,7 @@ import static io.tileverse.storage.s3.S3StorageProvider.S3_ANONYMOUS;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_AWS_ACCESS_KEY_ID;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_AWS_SECRET_ACCESS_KEY;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_DEFAULT_CREDENTIALS_PROFILE;
+import static io.tileverse.storage.s3.S3StorageProvider.S3_ENDPOINT;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_FORCE_PATH_STYLE;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_REGION;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_REQUESTER_PAYS;
@@ -84,6 +85,7 @@ class S3StorageProviderTest {
                 .isEqualTo(List.of(
                         S3_FORCE_PATH_STYLE,
                         S3_REQUESTER_PAYS,
+                        S3_ENDPOINT,
                         S3_REGION,
                         S3_ANONYMOUS,
                         S3_AWS_ACCESS_KEY_ID,

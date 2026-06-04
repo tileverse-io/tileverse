@@ -31,16 +31,23 @@ class GoogleCloudStorageProviderConfigTest {
     private static final URI GS_URI = URI.create("gs://my-bucket/file.bin");
 
     @Test
-    void hostOverride_explicitParameterWins() {
-        StorageConfig config =
-                new StorageConfig(GS_URI).setParameter(GoogleCloudStorageProvider.GCS_HOST, "http://localhost:4443");
+    void endpoint_explicitParameterWins() {
+        StorageConfig config = new StorageConfig(GS_URI)
+                .setParameter(GoogleCloudStorageProvider.GCS_ENDPOINT, URI.create("http://localhost:4443"));
 
         assertThat(GoogleCloudStorageProvider.keyFor(config).hostOverride()).hasValue("http://localhost:4443");
     }
 
     @Test
-    void hostOverride_blankParameterIgnored() {
-        StorageConfig config = new StorageConfig(GS_URI).setParameter(GoogleCloudStorageProvider.GCS_HOST, "  ");
+    void legacyHostKey_promotedToEndpoint() {
+        StorageConfig config = new StorageConfig(GS_URI).setParameter("storage.gcs.host", "http://localhost:4443");
+
+        assertThat(GoogleCloudStorageProvider.keyFor(config).hostOverride()).hasValue("http://localhost:4443");
+    }
+
+    @Test
+    void blankEndpointIgnored() {
+        StorageConfig config = new StorageConfig(GS_URI).setParameter("storage.gcs.host", "  ");
 
         assertThat(GoogleCloudStorageProvider.keyFor(config).hostOverride()).isEmpty();
     }
@@ -69,8 +76,8 @@ class GoogleCloudStorageProviderConfigTest {
 
     @Test
     void anonymousMode_whenHostOverridePresent() {
-        StorageConfig config =
-                new StorageConfig(GS_URI).setParameter(GoogleCloudStorageProvider.GCS_HOST, "http://localhost:4443");
+        StorageConfig config = new StorageConfig(GS_URI)
+                .setParameter(GoogleCloudStorageProvider.GCS_ENDPOINT, URI.create("http://localhost:4443"));
 
         assertThat(GoogleCloudStorageProvider.keyFor(config).anonymous()).isTrue();
     }
@@ -102,11 +109,11 @@ class GoogleCloudStorageProviderConfigTest {
     }
 
     @Test
-    void differentHostOverridesProduceDifferentCacheKeys() {
-        StorageConfig a =
-                new StorageConfig(GS_URI).setParameter(GoogleCloudStorageProvider.GCS_HOST, "http://localhost:4443");
-        StorageConfig b =
-                new StorageConfig(GS_URI).setParameter(GoogleCloudStorageProvider.GCS_HOST, "http://localhost:4444");
+    void differentEndpointsProduceDifferentCacheKeys() {
+        StorageConfig a = new StorageConfig(GS_URI)
+                .setParameter(GoogleCloudStorageProvider.GCS_ENDPOINT, URI.create("http://localhost:4443"));
+        StorageConfig b = new StorageConfig(GS_URI)
+                .setParameter(GoogleCloudStorageProvider.GCS_ENDPOINT, URI.create("http://localhost:4444"));
 
         assertThat(GoogleCloudStorageProvider.keyFor(a)).isNotEqualTo(GoogleCloudStorageProvider.keyFor(b));
     }

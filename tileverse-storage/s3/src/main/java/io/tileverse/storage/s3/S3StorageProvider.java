@@ -136,6 +136,36 @@ public class S3StorageProvider extends AbstractStorageProvider {
             .defaultValue(false)
             .build();
 
+    /**
+     * A {@link StorageParameter} to override the S3 service endpoint, letting a canonical {@code s3://bucket/key} URI
+     * target a non-AWS S3-compatible service (MinIO, Ceph, Cloudflare R2, DigitalOcean Spaces, Wasabi, LocalStack)
+     * without encoding the service host into the URI.
+     *
+     * <p>When set, this takes precedence over any endpoint inferred from an {@code http(s)://host/bucket/key} base URI.
+     * Because custom endpoints almost always require path-style addressing, setting an endpoint defaults
+     * {@link #S3_FORCE_PATH_STYLE} to {@code true}; set {@code storage.s3.force-path-style} explicitly to override.
+     */
+    public static final StorageParameter<URI> S3_ENDPOINT = StorageParameter.builder()
+            .key("storage.s3.endpoint")
+            .title("Service endpoint")
+            .description("""
+                    Override the S3 service endpoint to let a canonical s3://bucket/key URI target a non-AWS \
+                    S3-compatible service (e.g. http://localhost:9000 for MinIO, https://<account>.r2.cloudflarestorage.com \
+                    for Cloudflare R2, https://<region>.digitaloceanspaces.com for DigitalOcean Spaces).
+
+                    The value is the service root (scheme, host, and optional port) without a bucket or key, \
+                    for example http://localhost:9000.
+
+                    When set, it takes precedence over any endpoint inferred from an http(s)://host/bucket/key base URI. \
+                    Leave it unset to use the default AWS endpoints for the configured region.
+
+                    Because custom endpoints almost always require path-style addressing, setting an endpoint \
+                    defaults storage.s3.force-path-style to true. Set storage.s3.force-path-style explicitly to override.
+                    """)
+            .type(URI.class)
+            .group(ID)
+            .build();
+
     /** Configuration parameter for AWS S3 region. */
     public static final StorageParameter<String> S3_REGION = StorageParameter.builder()
             .key("storage.s3.region")
@@ -271,6 +301,7 @@ public class S3StorageProvider extends AbstractStorageProvider {
     static final List<StorageParameter<?>> PARAMS = List.of(
             S3_FORCE_PATH_STYLE,
             S3_REQUESTER_PAYS,
+            S3_ENDPOINT,
             S3_REGION,
             S3_ANONYMOUS,
             S3_AWS_ACCESS_KEY_ID,
@@ -423,6 +454,17 @@ public class S3StorageProvider extends AbstractStorageProvider {
      *   <li>region parsed from the URI itself (e.g. {@code *.s3.us-west-2.amazonaws.com})
      *   <li>fallback to {@code us-east-1}
      * </ol>
+     *
+     * <p>Endpoint resolution order:
+     *
+     * <ol>
+     *   <li>explicit {@code storage.s3.endpoint} in {@code StorageConfig}
+     *   <li>endpoint parsed from an {@code http(s)://host/bucket/key} base URI
+     *   <li>none (default AWS endpoints for the resolved region)
+     * </ol>
+     *
+     * <p>{@code storage.s3.force-path-style} defaults to {@code true} whenever an endpoint override is in effect (from
+     * either source) and {@code false} for canonical AWS URIs; an explicit value always wins.
      */
     static S3ClientCache.Key keyFor(StorageConfig config) {
         URI uri = config.baseUri();
@@ -434,8 +476,8 @@ public class S3StorageProvider extends AbstractStorageProvider {
         Optional<String> accessKey = config.getParameter(S3_AWS_ACCESS_KEY_ID);
         Optional<String> secretKey = config.getParameter(S3_AWS_SECRET_ACCESS_KEY);
         Optional<String> profile = config.getParameter(S3_DEFAULT_CREDENTIALS_PROFILE);
-        boolean forcePathStyle = config.getParameter(S3_FORCE_PATH_STYLE).orElse(false);
-        Optional<URI> endpointOverride = s3Ref.endpointOverride();
+        Optional<URI> endpointOverride = config.getParameter(S3_ENDPOINT).or(s3Ref::endpointOverride);
+        boolean forcePathStyle = config.getParameter(S3_FORCE_PATH_STYLE).orElse(endpointOverride.isPresent());
         return new S3ClientCache.Key(
                 region, endpointOverride, anonymous, accessKey, secretKey, profile, forcePathStyle);
     }

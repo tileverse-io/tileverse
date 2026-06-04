@@ -20,7 +20,7 @@ The `Storage` API is the recommended entrypoint when you need anything beyond by
 The `s3://` backend transparently handles **any S3-compatible service**, not just AWS. Provider selection works in two ways:
 
 - For an `s3://bucket/key` URI, the S3 backend is selected outright.
-- For an `http(s)://endpoint/bucket/key` URI, the resolver issues a HEAD request and selects the S3 backend if the response carries an `x-amz-*` header (`x-amz-request-id` in particular). All major S3-compatible services do.
+- For an `http(s)://endpoint/bucket/key` URI, the resolver issues a HEAD request and selects the S3 backend if the response returns an `x-amz-*` header (`x-amz-request-id` in particular). All major S3-compatible services do.
 
 Tested or known to work via this path:
 
@@ -40,8 +40,10 @@ Tested or known to work via this path:
 
 Credentials and region come from the same parameters as AWS S3 (`storage.s3.aws-access-key-id`, `storage.s3.aws-secret-access-key`, `storage.s3.region`); the SDK's default credential chain is used when none are set. If the HEAD probe fails (firewalled endpoint, custom auth required to GET headers), force the provider explicitly via `storage.providerId=s3` in the config.
 
+Alternatively, keep a canonical `s3://bucket/key` URI and point it at the custom service with `storage.s3.endpoint` (e.g. `http://localhost:9000` for MinIO). This separates *where the object lives* (the URI) from *where the service is* (the endpoint), and auto-enables path-style addressing. See [Configure - Amazon S3](how-to/configure.md#amazon-s3).
+
 !!! info "Native protocols for OpenStack Swift, Azure Files, FTP, etc. are intentionally not supported"
-    `tileverse-storage`'s scope is *cloud-optimized object storage for the GeoTools/GeoServer ecosystem*. Native OpenStack Swift, Azure Files (SMB), HDFS-via-WebHDFS, FTP, and similar are out of scope: the audience is overwhelmingly served by S3-compatible endpoints (which all of the above offer), and adding alternate-protocol backends would multiply the maintenance surface without serving a real user. See [Why tileverse-storage?](explanation/why.md#when-not-to-use-this-library) for the broader scope rationale.
+    `tileverse-storage`'s scope is *cloud-optimized object storage for the GeoTools/GeoServer ecosystem*. Native OpenStack Swift, Azure Files (SMB), HDFS-via-WebHDFS, FTP, and similar are out of scope: the audience is overwhelmingly served by S3-compatible endpoints (which all of the above offer), and adding alternate-protocol backends would multiply the maintenance burden without serving a real user. See [Why tileverse-storage?](explanation/why.md#when-not-to-use-this-library) for the broader scope rationale.
 
 ## Capability matrix
 
@@ -204,11 +206,14 @@ Per-backend configuration uses the `storage.*` flat namespace, e.g.:
 |---|---|
 | `storage.s3.region` | S3 |
 | `storage.s3.aws-access-key-id`, `storage.s3.aws-secret-access-key` | S3 |
+| `storage.s3.endpoint` | S3 |
 | `storage.s3.force-path-style` | S3 |
 | `storage.azure.account-key`, `storage.azure.sas-token` | Azure Blob |
 | `storage.azure.connection-string` | Azure Blob (Azurite, dev) |
+| `storage.azure.endpoint` | Azure Blob (redirect `az://` to an emulator, sovereign cloud, or custom domain) |
 | `storage.azure.anonymous=true` | Azure Blob (public containers, no credentials) |
 | `storage.gcs.project-id`, `storage.gcs.default-credentials-chain` | GCS |
+| `storage.gcs.endpoint` | GCS (fake-gcs-server / emulators; full URL, not a hostname) |
 | `storage.http.timeout-millis`, `storage.http.auth-bearer-token` | HTTP |
 
 Legacy `io.tileverse.rangereader.*` keys are still accepted with a one-time WARN per distinct key; migrate to `storage.*` at your convenience.

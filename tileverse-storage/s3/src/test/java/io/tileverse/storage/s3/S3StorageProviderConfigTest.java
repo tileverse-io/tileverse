@@ -75,6 +75,33 @@ class S3StorageProviderConfigTest {
     }
 
     @Test
+    void endpointOverride_explicitParameterUsedForCanonicalS3Uri() {
+        StorageConfig config = new StorageConfig("s3://my-bucket/file.txt")
+                .setParameter(S3StorageProvider.S3_ENDPOINT, URI.create("http://localhost:9000"));
+
+        assertThat(S3StorageProvider.keyFor(config).endpointOverride()).hasValue(URI.create("http://localhost:9000"));
+    }
+
+    @Test
+    void endpointOverride_explicitParameterWinsOverUriDerivedEndpoint() {
+        StorageConfig config = new StorageConfig("http://localhost:9000/my-bucket/file.txt")
+                .setParameter(S3StorageProvider.S3_ENDPOINT, URI.create("https://minio.example.com"));
+
+        assertThat(S3StorageProvider.keyFor(config).endpointOverride())
+                .hasValue(URI.create("https://minio.example.com"));
+    }
+
+    @Test
+    void differentEndpointsProduceDifferentCacheKeys() {
+        StorageConfig a = new StorageConfig("s3://my-bucket/file.txt")
+                .setParameter(S3StorageProvider.S3_ENDPOINT, URI.create("http://localhost:9000"));
+        StorageConfig b = new StorageConfig("s3://my-bucket/file.txt")
+                .setParameter(S3StorageProvider.S3_ENDPOINT, URI.create("http://localhost:9001"));
+
+        assertThat(S3StorageProvider.keyFor(a)).isNotEqualTo(S3StorageProvider.keyFor(b));
+    }
+
+    @Test
     void credentials_staticAccessAndSecretKeyAreCarriedOnTheKey() {
         StorageConfig config = new StorageConfig("s3://my-bucket/file.txt")
                 .setParameter(S3StorageProvider.S3_AWS_ACCESS_KEY_ID, "AKIA-static")
@@ -116,6 +143,30 @@ class S3StorageProviderConfigTest {
                 .setParameter(S3StorageProvider.S3_FORCE_PATH_STYLE, true);
 
         assertThat(S3StorageProvider.keyFor(config).forcePathStyle()).isTrue();
+    }
+
+    @Test
+    void forcePathStyle_defaultsToTrueWhenExplicitEndpointParamSet() {
+        StorageConfig config = new StorageConfig("s3://my-bucket/file.txt")
+                .setParameter(S3StorageProvider.S3_ENDPOINT, URI.create("http://localhost:9000"));
+
+        assertThat(S3StorageProvider.keyFor(config).forcePathStyle()).isTrue();
+    }
+
+    @Test
+    void forcePathStyle_defaultsToTrueForUriDerivedCustomEndpoint() {
+        StorageConfig config = new StorageConfig("http://localhost:9000/my-bucket/file.txt");
+
+        assertThat(S3StorageProvider.keyFor(config).forcePathStyle()).isTrue();
+    }
+
+    @Test
+    void forcePathStyle_explicitFalseOverridesEndpointDefault() {
+        StorageConfig config = new StorageConfig("s3://my-bucket/file.txt")
+                .setParameter(S3StorageProvider.S3_ENDPOINT, URI.create("http://localhost:9000"))
+                .setParameter(S3StorageProvider.S3_FORCE_PATH_STYLE, false);
+
+        assertThat(S3StorageProvider.keyFor(config).forcePathStyle()).isFalse();
     }
 
     @Test

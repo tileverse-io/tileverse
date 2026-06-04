@@ -52,6 +52,13 @@ public class StorageConfig {
      */
     public static final String LEGACY_KEY_PREFIX = "io.tileverse.rangereader.";
 
+    /**
+     * Parameter keys renamed within the {@code storage.*} namespace, mapping each deprecated key to its canonical
+     * replacement. Applied by {@link #normalizeKey(String)} after legacy-prefix rewriting, which lets both the
+     * legacy-prefixed and the {@code storage.*} spellings of a deprecated key resolve to the new key.
+     */
+    private static final Map<String, String> RENAMED_KEYS = Map.of("storage.gcs.host", "storage.gcs.endpoint");
+
     private static final Set<String> warnedLegacyKeys = ConcurrentHashMap.newKeySet();
 
     /** The canonical key used in {@link Properties} to specify the URI of the resource. */
@@ -415,18 +422,32 @@ public class StorageConfig {
      * @return The normalized key, or {@code key} unchanged if it does not use the legacy prefix.
      */
     public static String normalizeKey(String key) {
-        if (key != null && key.startsWith(LEGACY_KEY_PREFIX)) {
-            String normalized = KEY_PREFIX + key.substring(LEGACY_KEY_PREFIX.length());
+        if (key == null) {
+            return null;
+        }
+        String normalized = key;
+        if (normalized.startsWith(LEGACY_KEY_PREFIX)) {
+            String rewritten = KEY_PREFIX + normalized.substring(LEGACY_KEY_PREFIX.length());
             if (warnedLegacyKeys.add(key)) {
                 log.warn(
                         "Legacy parameter key '{}' -- use '{}'. Legacy keys remain accepted for backwards compatibility; new configurations should use the '{}*' form.",
                         key,
-                        normalized,
+                        rewritten,
                         KEY_PREFIX);
             }
-            return normalized;
+            normalized = rewritten;
         }
-        return key;
+        String renamed = RENAMED_KEYS.get(normalized);
+        if (renamed != null) {
+            if (warnedLegacyKeys.add(normalized)) {
+                log.warn(
+                        "Deprecated parameter key '{}' -- use '{}'. The old key remains accepted for backwards compatibility.",
+                        normalized,
+                        renamed);
+            }
+            normalized = renamed;
+        }
+        return normalized;
     }
 
     /**

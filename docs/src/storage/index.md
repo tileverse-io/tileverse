@@ -213,6 +213,7 @@ Per-backend configuration uses the `storage.*` flat namespace, e.g.:
 | `storage.azure.endpoint` | Azure Blob (redirect `az://` to an emulator, sovereign cloud, or custom domain) |
 | `storage.azure.anonymous=true` | Azure Blob (public containers, no credentials) |
 | `storage.gcs.project-id`, `storage.gcs.default-credentials-chain` | GCS |
+| `storage.gcs.endpoint` | GCS (fake-gcs-server / emulators; full URL, not a hostname) |
 | `storage.http.timeout-millis`, `storage.http.auth-bearer-token` | HTTP |
 
 Legacy `io.tileverse.rangereader.*` keys are still accepted with a one-time WARN per distinct key; migrate to `storage.*` at your convenience.

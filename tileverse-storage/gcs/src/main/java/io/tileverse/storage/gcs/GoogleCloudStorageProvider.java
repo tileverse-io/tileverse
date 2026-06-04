@@ -177,26 +177,34 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
             .build();
 
     /**
-     * Custom GCS endpoint host override (e.g. {@code http://localhost:4443} for fake-gcs-server emulators). When set,
-     * the provider talks to this host instead of the default {@code https://storage.googleapis.com}, and credentials
+     * Custom GCS endpoint override (e.g. {@code http://localhost:4443} for fake-gcs-server emulators). When set, the
+     * provider talks to this endpoint instead of the default {@code https://storage.googleapis.com}, and credentials
      * default to anonymous unless explicitly configured otherwise.
      *
-     * <p><b>Key:</b> {@code storage.gcs.host}
+     * <p>The value is a full endpoint URL with scheme (the Google SDK's {@code StorageOptions.Builder.setHost} expects
+     * a URI, not a bare hostname).
+     *
+     * <p><b>Key:</b> {@code storage.gcs.endpoint}
      */
-    public static final StorageParameter<String> GCS_HOST = StorageParameter.builder()
-            .key("storage.gcs.host")
-            .title("Custom GCS endpoint host")
+    public static final StorageParameter<URI> GCS_ENDPOINT = StorageParameter.builder()
+            .key("storage.gcs.endpoint")
+            .title("Custom GCS endpoint")
             .description("""
-                    Custom endpoint host for GCS-compatible servers (e.g. fake-gcs-server: http://localhost:4443). \
-                    When set, the SDK targets this host instead of the public Google endpoint. \
-                    Authentication defaults to anonymous when a host override is in effect.
+                    Custom endpoint for GCS-compatible servers (e.g. fake-gcs-server: http://localhost:4443). \
+                    When set, the SDK targets this endpoint instead of the public Google endpoint. \
+                    The value is a full endpoint URL with scheme, not a bare hostname. \
+                    Authentication defaults to anonymous when an endpoint override is in effect.
                     """)
-            .type(String.class)
+            .type(URI.class)
             .group(ID)
             .build();
 
     private static final List<StorageParameter<?>> PARAMS = List.of(
-            GCS_PROJECT_ID, GCS_QUOTA_PROJECT_ID, GCS_USE_DEFAULT_APPLICTION_CREDENTIALS, GCS_USER_PROJECT, GCS_HOST);
+            GCS_PROJECT_ID,
+            GCS_QUOTA_PROJECT_ID,
+            GCS_USE_DEFAULT_APPLICTION_CREDENTIALS,
+            GCS_USER_PROJECT,
+            GCS_ENDPOINT);
 
     private final SdkStorageCache clientCache = new SdkStorageCache();
 
@@ -278,21 +286,25 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
      * Resolves the {@link SdkStorageCache.Key} cache discriminator for the given config. Package-private so unit tests
      * can exercise host-override / project-id / credential precedence without acquiring a real SDK client lease.
      *
-     * <p>Host-override resolution order:
+     * <p>Endpoint-override resolution order:
      *
      * <ol>
-     *   <li>explicit {@code storage.gcs.host} parameter (used for fake-gcs-server etc.)
+     *   <li>explicit {@code storage.gcs.endpoint} parameter (used for fake-gcs-server etc.); the deprecated
+     *       {@code storage.gcs.host} key is promoted to it by {@link StorageConfig#normalizeKey(String)}
      *   <li>derived from {@code http(s)://host/storage/v1/b/...} emulator-style URIs
      *   <li>none (use the default Google endpoint)
      * </ol>
      *
-     * <p>When a host override is in effect, credentials default to anonymous unless the application default chain is
-     * explicitly enabled.
+     * <p>When an endpoint override is in effect, credentials default to anonymous unless the application default chain
+     * is explicitly enabled.
      */
     static SdkStorageCache.Key keyFor(StorageConfig config) {
         URI uri = config.baseUri();
         Optional<String> projectId = config.getParameter(GCS_PROJECT_ID);
-        Optional<String> hostOverride = config.getParameter(GCS_HOST).filter(s -> !s.isBlank());
+        // Read the endpoint as a string rather than via GCS_ENDPOINT (URI): a blank value (e.g. a promoted blank
+        // storage.gcs.host) must be ignored here instead of failing URI parsing.
+        Optional<String> hostOverride =
+                config.getParameter(GCS_ENDPOINT.key(), String.class).filter(s -> !s.isBlank());
         if (hostOverride.isEmpty()) {
             String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
             if ((scheme.equals("http") || scheme.equals("https"))

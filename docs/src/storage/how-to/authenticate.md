@@ -371,11 +371,11 @@ try (Storage storage = StorageFactory.open(URI.create("gs://gcp-public-data-land
 
 ### fake-gcs-server (emulators)
 
-Either rely on URI-pattern detection (`http(s)://host/storage/v1/b/...`) or set `storage.gcs.host` explicitly:
+Either rely on URI-pattern detection (`http(s)://host/storage/v1/b/...`) or set `storage.gcs.endpoint` explicitly. The value is a full endpoint URL with scheme, not a bare hostname:
 
 ```java
 Properties props = new Properties();
-props.setProperty("storage.gcs.host", "http://localhost:4443");
+props.setProperty("storage.gcs.endpoint", "http://localhost:4443");
 
 try (Storage storage = StorageFactory.open(URI.create("gs://my-bucket/"), props);
         RangeReader reader = storage.openRangeReader("data.bin")) {
@@ -383,7 +383,9 @@ try (Storage storage = StorageFactory.open(URI.create("gs://my-bucket/"), props)
 }
 ```
 
-When a host override is in effect, credentials default to anonymous (the emulator typically doesn't validate them).
+When an endpoint override is in effect, credentials default to anonymous (the emulator typically doesn't validate them).
+
+The earlier key `storage.gcs.host` is still accepted: it is promoted to `storage.gcs.endpoint` when a configuration is loaded.
 
 ## Requester Pays buckets
 

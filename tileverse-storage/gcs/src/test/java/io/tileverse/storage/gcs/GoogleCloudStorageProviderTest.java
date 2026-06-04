@@ -46,7 +46,7 @@ class GoogleCloudStorageProviderTest {
                         GoogleCloudStorageProvider.GCS_QUOTA_PROJECT_ID,
                         GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS,
                         GoogleCloudStorageProvider.GCS_USER_PROJECT,
-                        GoogleCloudStorageProvider.GCS_HOST);
+                        GoogleCloudStorageProvider.GCS_ENDPOINT);
 
         StorageConfig defaults = provider.getDefaultConfig();
         assertThat(defaults.getParameter(GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS))

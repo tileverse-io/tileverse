@@ -45,6 +45,25 @@ class RangeReaderConfigTest {
     }
 
     @Test
+    void normalizeKey_renamedGcsHost_promotedToEndpoint() {
+        assertThat(StorageConfig.normalizeKey("storage.gcs.host")).isEqualTo("storage.gcs.endpoint");
+    }
+
+    @Test
+    void normalizeKey_legacyGcsHost_promotedToEndpoint() {
+        assertThat(StorageConfig.normalizeKey("io.tileverse.rangereader.gcs.host"))
+                .isEqualTo("storage.gcs.endpoint");
+    }
+
+    @Test
+    void setParameter_gcsHostKey_storedAsEndpoint() {
+        StorageConfig config =
+                new StorageConfig("gs://bucket/o").setParameter("storage.gcs.host", "http://localhost:4443");
+
+        assertThat(config.getParameter("storage.gcs.endpoint")).hasValue("http://localhost:4443");
+    }
+
+    @Test
     void normalizeKey_null_passthrough() {
         assertThat(StorageConfig.normalizeKey(null)).isNull();
     }

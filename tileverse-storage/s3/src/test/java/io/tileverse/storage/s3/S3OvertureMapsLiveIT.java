@@ -28,18 +28,13 @@ import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.StorageFactory;
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -49,39 +44,35 @@ import org.junit.jupiter.api.Test;
  * Hive-style partition layout ({@code theme=X/type=Y/part-NNNNN-*.zstd.parquet}) is the same case duckdb's
  * {@code glob('s3://overturemaps-us-west-2/release/<latest>/theme=addresses/**\/*.parquet')} hits.
  *
- * <p>The release version is resolved at runtime from {@code https://stac.overturemaps.org/catalog.json}'s
- * {@code latest} field so the test stays current as Overture cuts new releases.
+ * <p>The release version is resolved at runtime by listing the bucket's {@code release/} prefix and taking the latest
+ * version directory. This keeps the test current as Overture cuts new releases.
  */
 class S3OvertureMapsLiveIT {
 
-    private static final URI STAC_CATALOG = URI.create("https://stac.overturemaps.org/catalog.json");
-    private static final Pattern LATEST_FIELD = Pattern.compile("\"latest\"\\s*:\\s*\"([^\"]+)\"");
+    private static final URI RELEASES_ROOT = URI.create("s3://overturemaps-us-west-2/release/");
 
     private static URI baseUri;
 
     @BeforeAll
-    static void check() throws IOException, InterruptedException {
-        String latest = fetchLatestRelease();
-        baseUri = URI.create("s3://overturemaps-us-west-2/release/" + latest + "/");
+    static void check() throws IOException {
+        baseUri = RELEASES_ROOT.resolve(latestRelease() + "/");
     }
 
-    private static String fetchLatestRelease() throws IOException, InterruptedException {
-        HttpClient http =
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-        HttpRequest req = HttpRequest.newBuilder(STAC_CATALOG)
-                .timeout(Duration.ofSeconds(10))
-                .header("Accept", "application/json")
-                .GET()
-                .build();
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() != 200) {
-            throw new IOException("STAC catalog returned HTTP " + resp.statusCode());
+    /**
+     * Resolves the most recent Overture release by listing the public {@code release/} prefix and taking the
+     * lexicographically greatest version directory (Overture names releases {@code YYYY-MM-DD.N}). Deriving the release
+     * from the bucket under test avoids depending on the external STAC catalog, whose CloudFront front-end returns 403
+     * to some CI networks.
+     */
+    private static String latestRelease() throws IOException {
+        try (Storage storage = StorageFactory.open(RELEASES_ROOT, anonymous());
+                Stream<StorageEntry> stream = storage.list("")) {
+            return stream.filter(e -> e instanceof StorageEntry.Prefix)
+                    .map(StorageEntry::key)
+                    .map(key -> key.endsWith("/") ? key.substring(0, key.length() - 1) : key)
+                    .max(Comparator.naturalOrder())
+                    .orElseThrow(() -> new IOException("No Overture releases found under " + RELEASES_ROOT));
         }
-        Matcher m = LATEST_FIELD.matcher(resp.body());
-        if (!m.find()) {
-            throw new IOException("STAC catalog has no 'latest' field");
-        }
-        return m.group(1);
     }
 
     @Test

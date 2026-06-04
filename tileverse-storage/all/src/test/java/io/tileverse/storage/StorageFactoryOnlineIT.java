@@ -127,13 +127,13 @@ class StorageFactoryOnlineIT {
     }
 
     /**
-     * This is an S3-hosted URL with a custom virtual hosted style, not a valid S3 URL, hence {@link StorageFactory}
-     * should use {@link HttpStorageProvider}
+     * A custom-domain HTTPS URL with a single-segment path: the S3 provider cannot parse a bucket and object key out of
+     * it, hence {@link StorageFactory} should use {@link HttpStorageProvider}.
      */
     @Test
-    @DisplayName("HTTPS URL on S3 with invalid path-style falls back to HttpRangeReader")
-    void s3OnlineCustomVirtualHostedStyleFallsBackToHttp() throws IOException {
-        URI uri = URI.create("https://demo-bucket.protomaps.com/v4.pmtiles");
+    @DisplayName("Custom-domain HTTPS URL that isn't a parseable S3 URL falls back to HttpRangeReader")
+    void customDomainUrlNotParseableAsS3FallsBackToHttp() throws IOException {
+        URI uri = URI.create("https://pmtiles.io/protomaps(vector)ODbL_firenze.pmtiles");
         testFindBestProvider(uri, HttpStorageProvider.class);
         testCreate(new StorageConfig(uri));
     }

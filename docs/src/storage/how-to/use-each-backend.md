@@ -72,6 +72,24 @@ try (Storage storage = StorageFactory.open(
 
 Authentication uses the AWS default credential chain unless you provide `storage.s3.aws-access-key-id` / `storage.s3.aws-secret-access-key` in a `StorageConfig`.
 
+To target an S3-compatible service (MinIO, Ceph, Cloudflare R2, DigitalOcean Spaces, ...) while keeping a canonical `s3://bucket/key` URI, set `storage.s3.endpoint`; path-style addressing is auto-enabled:
+
+```java
+import java.util.Properties;
+
+Properties props = new Properties();
+props.setProperty("storage.s3.endpoint", "http://localhost:9000"); // MinIO
+props.setProperty("storage.s3.aws-access-key-id", "minioadmin");
+props.setProperty("storage.s3.aws-secret-access-key", "minioadmin");
+props.setProperty("storage.s3.region", "us-east-1");
+
+try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/datasets/"), props)) {
+    storage.put("file.parquet", Path.of("/local/file.parquet"), WriteOptions.defaults());
+}
+```
+
+See [Configure - Custom endpoint](configure.md#custom-endpoint-minio-and-other-s3-compatible-services) for how `storage.s3.endpoint` interacts with `force-path-style`, `region`, and credentials.
+
 ## Azure Blob Storage
 
 ```java
@@ -183,7 +201,7 @@ try {
 
 ## Resource cleanup
 
-Always close `Storage`, the listing `Stream`, and any `InputStream` / `OutputStream` returned by Storage methods. The internal SDK client cache is reference-counted, so closing one `Storage` instance does not affect siblings against the same account.
+Always close `Storage`, the listing `Stream`, and any `InputStream` / `OutputStream` returned by Storage methods. Because the internal SDK client cache is reference-counted, closing one `Storage` instance does not affect siblings against the same account.
 
 ```java
 try (Storage storage = StorageFactory.open(uri);

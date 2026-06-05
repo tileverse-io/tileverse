@@ -16,6 +16,7 @@
 package io.tileverse.io;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
 import java.time.Duration;
@@ -35,7 +36,11 @@ class ByteBufferPoolLeakDetectionTest {
 
         abandonBorrow(pool); // borrows and drops the handle without closing it
 
-        assertThat(awaitLeakCount(pool, 1)).isGreaterThanOrEqualTo(1);
+        // Each poll nudges the collector; the Cleaner records the leak once the handle is reclaimed.
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            System.gc();
+            assertThat(pool.getLeakCount()).isGreaterThanOrEqualTo(1);
+        });
     }
 
     @Test
@@ -47,8 +52,8 @@ class ByteBufferPoolLeakDetectionTest {
             pooled.buffer();
         }
 
-        forceGarbageCollection();
-        assertThat(pool.getLeakCount()).isZero();
+        System.gc();
+        assertNoLeakDetected(pool);
     }
 
     @Test
@@ -60,8 +65,8 @@ class ByteBufferPoolLeakDetectionTest {
 
         abandonBorrow(pool);
 
-        forceGarbageCollection();
-        assertThat(pool.getLeakCount()).isZero();
+        System.gc();
+        assertNoLeakDetected(pool);
     }
 
     /** Borrows a buffer and lets the handle go out of scope without closing it. */
@@ -70,20 +75,10 @@ class ByteBufferPoolLeakDetectionTest {
         pooled.buffer();
     }
 
-    private static long awaitLeakCount(ByteBufferPool pool, long target) {
-        long deadlineNanos = System.nanoTime() + Duration.ofSeconds(5).toNanos();
-        while (pool.getLeakCount() < target && System.nanoTime() < deadlineNanos) {
-            forceGarbageCollection();
-        }
-        return pool.getLeakCount();
-    }
-
-    private static void forceGarbageCollection() {
-        System.gc();
-        try {
-            Thread.sleep(50);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+    /** Gives the collector and the Cleaner time to run, then asserts no leak was recorded. */
+    private static void assertNoLeakDetected(ByteBufferPool pool) {
+        await().pollDelay(Duration.ofMillis(200))
+                .atMost(Duration.ofMillis(600))
+                .untilAsserted(() -> assertThat(pool.getLeakCount()).isZero());
     }
 }

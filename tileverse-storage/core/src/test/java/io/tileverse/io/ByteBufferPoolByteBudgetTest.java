@@ -31,8 +31,8 @@ import org.junit.jupiter.api.Test;
  */
 class ByteBufferPoolByteBudgetTest {
 
-    private static ByteBufferPool poolWithDirectByteBudget(long maxDirectBytes) {
-        return ByteBufferPool.builder()
+    private static DefaultByteBufferPool poolWithDirectByteBudget(long maxDirectBytes) {
+        return (DefaultByteBufferPool) ByteBufferPool.builder()
                 .maxDirectBuffers(100) // high, so the byte budget is the only limit
                 .maxHeapBuffers(100)
                 .blockSize(1024)
@@ -43,7 +43,7 @@ class ByteBufferPoolByteBudgetTest {
 
     @Test
     void retainedDirectBytes_areCappedByBudget() {
-        ByteBufferPool pool = poolWithDirectByteBudget(4096);
+        DefaultByteBufferPool pool = poolWithDirectByteBudget(4096);
 
         List<PooledByteBuffer> borrowed = new ArrayList<>();
         for (int i = 0; i < 4; i++) {
@@ -60,7 +60,7 @@ class ByteBufferPoolByteBudgetTest {
 
     @Test
     void borrowNeverBlocks_evenWhenRequestExceedsTheWholeBudget() {
-        ByteBufferPool pool = poolWithDirectByteBudget(4096);
+        DefaultByteBufferPool pool = poolWithDirectByteBudget(4096);
 
         try (PooledByteBuffer pooled = pool.borrowDirect(8192)) {
             assertThat(pooled.buffer().capacity()).isEqualTo(8192);
@@ -73,7 +73,7 @@ class ByteBufferPoolByteBudgetTest {
 
     @Test
     void incomingBuffer_notLargerThanRetained_isDiscardedWhenBudgetFull() {
-        ByteBufferPool pool = poolWithDirectByteBudget(4096);
+        DefaultByteBufferPool pool = poolWithDirectByteBudget(4096);
 
         pool.returnBuffer(ByteBuffer.allocateDirect(2048));
         pool.returnBuffer(ByteBuffer.allocateDirect(2048));
@@ -89,7 +89,7 @@ class ByteBufferPoolByteBudgetTest {
 
     @Test
     void largerIncomingBuffer_evictsSmallerOnesToFitBudget() {
-        ByteBufferPool pool = poolWithDirectByteBudget(4096);
+        DefaultByteBufferPool pool = poolWithDirectByteBudget(4096);
 
         pool.returnBuffer(ByteBuffer.allocateDirect(2048));
         pool.returnBuffer(ByteBuffer.allocateDirect(2048)); // free list holds [2048, 2048], budget full

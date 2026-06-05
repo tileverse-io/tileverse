@@ -16,6 +16,7 @@
 package io.tileverse.io;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import io.tileverse.io.ByteBufferPool.PoolStatistics;
 import java.nio.ByteBuffer;
@@ -29,8 +30,8 @@ import org.junit.jupiter.api.Test;
  */
 class ByteBufferPoolIdleEvictionTest {
 
-    private static ByteBufferPool poolWithIdleTimeout(Duration idleTimeout) {
-        return ByteBufferPool.builder()
+    private static DefaultByteBufferPool poolWithIdleTimeout(Duration idleTimeout) {
+        return (DefaultByteBufferPool) ByteBufferPool.builder()
                 .maxDirectBuffers(10)
                 .maxHeapBuffers(10)
                 .blockSize(1024)
@@ -40,7 +41,7 @@ class ByteBufferPoolIdleEvictionTest {
 
     @Test
     void evictAllRetained_freesEveryRetainedBuffer() {
-        ByteBufferPool pool = poolWithIdleTimeout(Duration.ZERO); // scheduler disabled; drive eviction directly
+        DefaultByteBufferPool pool = poolWithIdleTimeout(Duration.ZERO); // scheduler disabled; drive eviction directly
         pool.returnBuffer(ByteBuffer.allocateDirect(2048));
         pool.returnBuffer(ByteBuffer.allocate(2048));
         assertThat(pool.getDirectPoolStatistics().poolSize()).isEqualTo(1);
@@ -56,7 +57,7 @@ class ByteBufferPoolIdleEvictionTest {
 
     @Test
     void evictAllRetained_countsDiscardsAndPreservesCumulativeStats() {
-        ByteBufferPool pool = poolWithIdleTimeout(Duration.ZERO);
+        DefaultByteBufferPool pool = poolWithIdleTimeout(Duration.ZERO);
         pool.returnBuffer(ByteBuffer.allocateDirect(2048));
         pool.returnBuffer(ByteBuffer.allocateDirect(2048));
 
@@ -69,32 +70,26 @@ class ByteBufferPoolIdleEvictionTest {
     }
 
     @Test
-    void scheduler_drainsPoolAfterInactivity() throws InterruptedException {
-        ByteBufferPool pool = poolWithIdleTimeout(Duration.ofMillis(60));
+    void scheduler_drainsPoolAfterInactivity() {
+        DefaultByteBufferPool pool = poolWithIdleTimeout(Duration.ofMillis(60));
         pool.returnBuffer(ByteBuffer.allocateDirect(2048)); // returning is activity, schedules a sweep
         pool.returnBuffer(ByteBuffer.allocate(2048));
 
-        long deadlineNanos = System.nanoTime() + Duration.ofSeconds(3).toNanos();
-        while (retainedBuffers(pool) > 0 && System.nanoTime() < deadlineNanos) {
-            Thread.sleep(10);
-        }
-
-        assertThat(pool.getDirectPoolStatistics().poolSize()).isZero();
-        assertThat(pool.getHeapPoolStatistics().poolSize()).isZero();
+        await().atMost(Duration.ofSeconds(3)).untilAsserted(() -> {
+            assertThat(pool.getDirectPoolStatistics().poolSize()).isZero();
+            assertThat(pool.getHeapPoolStatistics().poolSize()).isZero();
+        });
     }
 
     @Test
-    void disabledTimeout_retainsBuffersWhileQuiet() throws InterruptedException {
-        ByteBufferPool pool = poolWithIdleTimeout(Duration.ZERO);
+    void disabledTimeout_retainsBuffersWhileQuiet() {
+        DefaultByteBufferPool pool = poolWithIdleTimeout(Duration.ZERO);
         pool.returnBuffer(ByteBuffer.allocateDirect(2048));
 
-        Thread.sleep(150);
-
-        assertThat(pool.getDirectPoolStatistics().poolSize()).isEqualTo(1);
-    }
-
-    private static int retainedBuffers(ByteBufferPool pool) {
-        return pool.getDirectPoolStatistics().poolSize()
-                + pool.getHeapPoolStatistics().poolSize();
+        // The buffer must still be there after a quiet period, proving idle eviction did not run.
+        await().pollDelay(Duration.ofMillis(150))
+                .atMost(Duration.ofMillis(500))
+                .untilAsserted(() ->
+                        assertThat(pool.getDirectPoolStatistics().poolSize()).isEqualTo(1));
     }
 }

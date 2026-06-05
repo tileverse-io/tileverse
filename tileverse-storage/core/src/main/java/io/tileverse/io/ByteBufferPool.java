@@ -15,6 +15,7 @@
  */
 package io.tileverse.io;
 
+import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -105,6 +106,9 @@ public class ByteBufferPool {
     /** Default idle period after which a quiet pool releases its whole free list. */
     public static final Duration DEFAULT_IDLE_TIMEOUT = Duration.ofSeconds(30);
 
+    /** Minimum spacing between leak warnings, so a recurring leak does not flood the log. */
+    private static final long LEAK_WARN_INTERVAL_NANOS = Duration.ofSeconds(60).toNanos();
+
     /** Default singleton instance, backed by the discovered allocation provider (or the built-in backend). */
     private static final ByteBufferPool DEFAULT_INSTANCE = new ByteBufferPool(
             DEFAULT_MAX_DIRECT_BUFFERS, DEFAULT_MAX_HEAP_BUFFERS, DEFAULT_BLOCK_SIZE, discoverAllocator());
@@ -129,6 +133,15 @@ public class ByteBufferPool {
 
     /** Guards against scheduling more than one pending idle sweep at a time. */
     private final AtomicBoolean sweepScheduled = new AtomicBoolean(false);
+
+    /** Whether borrowed buffers are watched for being garbage-collected without being closed. */
+    private final boolean leakDetectionEnabled;
+
+    /** Total number of borrows detected as leaked (garbage-collected without close). */
+    private final AtomicLong leakCount = new AtomicLong(0);
+
+    /** Nanotime of the most recent leak warning, used to rate-limit warnings. */
+    private final AtomicLong lastLeakWarnNanos = new AtomicLong(Long.MIN_VALUE);
 
     /** Creates a new ByteBuffer pool with default settings. */
     public ByteBufferPool() {
@@ -169,13 +182,15 @@ public class ByteBufferPool {
                 allocator,
                 DEFAULT_MAX_DIRECT_BYTES,
                 DEFAULT_MAX_HEAP_BYTES,
-                DEFAULT_IDLE_TIMEOUT);
+                DEFAULT_IDLE_TIMEOUT,
+                true);
     }
 
     /**
      * Canonical constructor wiring the full configuration. The byte budgets bound the bytes retained in the free list;
      * they never block or refuse a borrow, only what the pool keeps after a buffer is returned. The idle timeout
-     * controls when a quiet pool releases its whole free list.
+     * controls when a quiet pool releases its whole free list. Leak detection watches for borrows discarded without
+     * being closed.
      */
     private ByteBufferPool(
             int maxDirectBuffers,
@@ -184,7 +199,8 @@ public class ByteBufferPool {
             ByteBufferAllocator allocator,
             long maxDirectBytes,
             long maxHeapBytes,
-            Duration idleTimeout) {
+            Duration idleTimeout,
+            boolean leakDetectionEnabled) {
         if (maxDirectBuffers <= 0) {
             throw new IllegalArgumentException("maxDirectBuffers must be positive: " + maxDirectBuffers);
         }
@@ -208,6 +224,7 @@ public class ByteBufferPool {
         this.blockSize = blockSize;
         this.idleTimeoutNanos = idleTimeout == null ? 0L : idleTimeout.toNanos();
         this.lastAccessNanos = System.nanoTime();
+        this.leakDetectionEnabled = leakDetectionEnabled;
 
         // Use Integer.MAX_VALUE for max individual buffer size, effectively allowing any
         // size to be pooled as long as it fits within the count and byte limits.
@@ -495,6 +512,36 @@ public class ByteBufferPool {
     }
 
     /**
+     * Records a leaked borrow (a {@link PooledByteBuffer} garbage-collected without {@link PooledByteBuffer#close()})
+     * and warns about it, rate-limited so a recurring leak does not flood the log. The leak is only reported; the
+     * buffer is not freed or re-pooled here, because the slice handed to the caller aliases the backing memory and the
+     * JVM reclaims a truly unreachable direct buffer on its own.
+     */
+    private void recordLeak() {
+        long total = leakCount.incrementAndGet();
+        long now = System.nanoTime();
+        long last = lastLeakWarnNanos.get();
+        if (now - last >= LEAK_WARN_INTERVAL_NANOS && lastLeakWarnNanos.compareAndSet(last, now)) {
+            log.warn(
+                    "A pooled buffer was garbage-collected without being closed; a borrow site is missing a "
+                            + "try-with-resources. Total leaks detected: {}.",
+                    total);
+        } else {
+            log.debug("Pooled buffer leak detected; total {}", total);
+        }
+    }
+
+    /**
+     * Returns the number of borrows detected as leaked (garbage-collected without {@link PooledByteBuffer#close()}). A
+     * non-zero value indicates a borrow site that does not close its buffer.
+     *
+     * @return the cumulative leak count
+     */
+    public long getLeakCount() {
+        return leakCount.get();
+    }
+
+    /**
      * Clears all pooled buffers, releasing their memory.
      *
      * <p>This method is useful for cleanup or when you want to start with a fresh pool. After calling this method, the
@@ -548,6 +595,7 @@ public class ByteBufferPool {
         private long maxHeapBytes = DEFAULT_MAX_HEAP_BYTES;
         private ByteBufferAllocator allocator = BuiltinByteBufferAllocator.INSTANCE;
         private Duration idleTimeout = DEFAULT_IDLE_TIMEOUT;
+        private boolean leakDetection = true;
 
         private Builder() {
             // use ByteBufferPool.builder()
@@ -598,10 +646,26 @@ public class ByteBufferPool {
             return this;
         }
 
+        /**
+         * Enables or disables watching borrowed buffers for being garbage-collected without being closed. Detection is
+         * on by default; turn it off to avoid the small per-borrow overhead on a hot path that is known to be correct.
+         */
+        public Builder leakDetection(boolean leakDetection) {
+            this.leakDetection = leakDetection;
+            return this;
+        }
+
         /** Builds the configured pool. */
         public ByteBufferPool build() {
             return new ByteBufferPool(
-                    maxDirectBuffers, maxHeapBuffers, blockSize, allocator, maxDirectBytes, maxHeapBytes, idleTimeout);
+                    maxDirectBuffers,
+                    maxHeapBuffers,
+                    blockSize,
+                    allocator,
+                    maxDirectBytes,
+                    maxHeapBytes,
+                    idleTimeout,
+                    leakDetection);
         }
     }
 
@@ -649,16 +713,33 @@ public class ByteBufferPool {
         private ByteBuffer slice;
         private ByteBufferPool pool;
 
+        /** Fires {@link LeakGuard#run()} if this handle is collected without {@link #close()}; null when disabled. */
+        private final LeakGuard leakGuard;
+
+        private final Cleaner.Cleanable leakCleanable;
+
         PooledByteBufferImpl(ByteBuffer pooled, ByteBuffer slice, ByteBufferPool pool) {
             this.pooled = pooled;
             this.slice = slice;
             this.pool = pool;
+            if (pool.leakDetectionEnabled) {
+                this.leakGuard = new LeakGuard(pool);
+                this.leakCleanable = LeakCleaner.CLEANER.register(this, leakGuard);
+            } else {
+                this.leakGuard = null;
+                this.leakCleanable = null;
+            }
         }
 
         @Override
         public void close() {
             if (pooled == null) {
                 return;
+            }
+            if (leakGuard != null) {
+                // Mark this borrow as properly closed, then run the cleanable so it deregisters and never fires.
+                leakGuard.release();
+                leakCleanable.clean();
             }
             pool.returnBuffer(this.pooled);
             pooled = null;
@@ -939,6 +1020,43 @@ public class ByteBufferPool {
             thread.setDaemon(true);
             thread.setContextClassLoader(ClassLoader.getSystemClassLoader());
             return thread;
+        }
+    }
+
+    /**
+     * The cleaning action registered for a borrowed buffer. It references only the pool, never the
+     * {@link PooledByteBufferImpl} it guards, so the handle stays collectible. {@link #run()} runs either when the
+     * handle is closed (after {@link #release()}, so it does nothing) or when the handle is garbage-collected without
+     * being closed (then it reports a leak).
+     */
+    private static final class LeakGuard implements Runnable {
+
+        private final ByteBufferPool pool;
+        private volatile boolean released;
+
+        LeakGuard(ByteBufferPool pool) {
+            this.pool = pool;
+        }
+
+        void release() {
+            released = true;
+        }
+
+        @Override
+        public void run() {
+            if (!released) {
+                pool.recordLeak();
+            }
+        }
+    }
+
+    /** Holds the single {@link Cleaner} shared by all pools for leak detection; lazily created on first use. */
+    private static final class LeakCleaner {
+
+        static final Cleaner CLEANER = Cleaner.create();
+
+        private LeakCleaner() {
+            // no-op
         }
     }
 }

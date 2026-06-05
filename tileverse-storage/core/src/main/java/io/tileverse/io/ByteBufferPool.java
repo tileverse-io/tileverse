@@ -91,6 +91,12 @@ public class ByteBufferPool {
     /** Default block size for allocation alignment and pooling (8KB). */
     public static final int DEFAULT_BLOCK_SIZE = 8192;
 
+    /** Default upper bound on direct bytes retained in the free list (64 MiB). */
+    public static final long DEFAULT_MAX_DIRECT_BYTES = 64L * 1024 * 1024;
+
+    /** Default upper bound on heap bytes retained in the free list (32 MiB). */
+    public static final long DEFAULT_MAX_HEAP_BYTES = 32L * 1024 * 1024;
+
     /** Default singleton instance, backed by the discovered allocation provider (or the built-in backend). */
     private static final ByteBufferPool DEFAULT_INSTANCE = new ByteBufferPool(
             DEFAULT_MAX_DIRECT_BUFFERS, DEFAULT_MAX_HEAP_BUFFERS, DEFAULT_BLOCK_SIZE, discoverAllocator());
@@ -139,6 +145,20 @@ public class ByteBufferPool {
      * @throws NullPointerException if {@code allocator} is null
      */
     public ByteBufferPool(int maxDirectBuffers, int maxHeapBuffers, int blockSize, ByteBufferAllocator allocator) {
+        this(maxDirectBuffers, maxHeapBuffers, blockSize, allocator, DEFAULT_MAX_DIRECT_BYTES, DEFAULT_MAX_HEAP_BYTES);
+    }
+
+    /**
+     * Canonical constructor wiring the full configuration. The byte budgets bound the bytes retained in the free list;
+     * they never block or refuse a borrow, only what the pool keeps after a buffer is returned.
+     */
+    private ByteBufferPool(
+            int maxDirectBuffers,
+            int maxHeapBuffers,
+            int blockSize,
+            ByteBufferAllocator allocator,
+            long maxDirectBytes,
+            long maxHeapBytes) {
         if (maxDirectBuffers <= 0) {
             throw new IllegalArgumentException("maxDirectBuffers must be positive: " + maxDirectBuffers);
         }
@@ -148,6 +168,12 @@ public class ByteBufferPool {
         if (blockSize <= 0) {
             throw new IllegalArgumentException("blockSize must be positive: " + blockSize);
         }
+        if (maxDirectBytes <= 0) {
+            throw new IllegalArgumentException("maxDirectBytes must be positive: " + maxDirectBytes);
+        }
+        if (maxHeapBytes <= 0) {
+            throw new IllegalArgumentException("maxHeapBytes must be positive: " + maxHeapBytes);
+        }
         if (allocator == null) {
             throw new NullPointerException("allocator cannot be null");
         }
@@ -156,19 +182,36 @@ public class ByteBufferPool {
         this.blockSize = blockSize;
 
         // Use Integer.MAX_VALUE for max individual buffer size, effectively allowing any
-        // size to be pooled as long as it fits in the count limit.
+        // size to be pooled as long as it fits within the count and byte limits.
         this.directBuffers = new BufferQueue(
-                maxDirectBuffers, blockSize, Integer.MAX_VALUE, allocator::allocateDirect, allocator::free);
+                maxDirectBuffers,
+                blockSize,
+                Integer.MAX_VALUE,
+                maxDirectBytes,
+                allocator::allocateDirect,
+                allocator::free);
 
-        this.heapBuffers =
-                new BufferQueue(maxHeapBuffers, blockSize, Integer.MAX_VALUE, allocator::allocateHeap, allocator::free);
+        this.heapBuffers = new BufferQueue(
+                maxHeapBuffers, blockSize, Integer.MAX_VALUE, maxHeapBytes, allocator::allocateHeap, allocator::free);
 
         log.debug(
-                "Created ByteBufferPool: maxDirect={}, maxHeap={}, blockSize={}, allocator={}",
+                "Created ByteBufferPool: maxDirect={} ({} bytes), maxHeap={} ({} bytes), blockSize={}, allocator={}",
                 maxDirectBuffers,
+                maxDirectBytes,
                 maxHeapBuffers,
+                maxHeapBytes,
                 blockSize,
                 allocator.getClass().getName());
+    }
+
+    /**
+     * Creates a {@link Builder} for configuring a pool. Use this when you need to set the retention byte budgets or a
+     * non-default allocation backend; the constructors cover the common cases.
+     *
+     * @return a new builder seeded with the default settings
+     */
+    public static Builder builder() {
+        return new Builder();
     }
 
     /**
@@ -423,6 +466,66 @@ public class ByteBufferPool {
                 .formatted(identityString, heapPoolStatistics, directPoolStatistics);
     }
 
+    /**
+     * Fluent configuration for a {@link ByteBufferPool}. Every setting defaults to the pool's documented default, so
+     * only the knobs that matter for a given use case need to be set.
+     */
+    public static final class Builder {
+
+        private int maxDirectBuffers = DEFAULT_MAX_DIRECT_BUFFERS;
+        private int maxHeapBuffers = DEFAULT_MAX_HEAP_BUFFERS;
+        private int blockSize = DEFAULT_BLOCK_SIZE;
+        private long maxDirectBytes = DEFAULT_MAX_DIRECT_BYTES;
+        private long maxHeapBytes = DEFAULT_MAX_HEAP_BYTES;
+        private ByteBufferAllocator allocator = BuiltinByteBufferAllocator.INSTANCE;
+
+        private Builder() {
+            // use ByteBufferPool.builder()
+        }
+
+        /** Sets the maximum number of direct buffers retained in the free list. */
+        public Builder maxDirectBuffers(int maxDirectBuffers) {
+            this.maxDirectBuffers = maxDirectBuffers;
+            return this;
+        }
+
+        /** Sets the maximum number of heap buffers retained in the free list. */
+        public Builder maxHeapBuffers(int maxHeapBuffers) {
+            this.maxHeapBuffers = maxHeapBuffers;
+            return this;
+        }
+
+        /** Sets the block size for allocation alignment and the minimum pooling threshold. */
+        public Builder blockSize(int blockSize) {
+            this.blockSize = blockSize;
+            return this;
+        }
+
+        /** Sets the upper bound on direct bytes retained in the free list. */
+        public Builder maxDirectBytes(long maxDirectBytes) {
+            this.maxDirectBytes = maxDirectBytes;
+            return this;
+        }
+
+        /** Sets the upper bound on heap bytes retained in the free list. */
+        public Builder maxHeapBytes(long maxHeapBytes) {
+            this.maxHeapBytes = maxHeapBytes;
+            return this;
+        }
+
+        /** Sets the allocation backend supplying and releasing pooled buffers. */
+        public Builder allocator(ByteBufferAllocator allocator) {
+            this.allocator = allocator;
+            return this;
+        }
+
+        /** Builds the configured pool. */
+        public ByteBufferPool build() {
+            return new ByteBufferPool(
+                    maxDirectBuffers, maxHeapBuffers, blockSize, allocator, maxDirectBytes, maxHeapBytes);
+        }
+    }
+
     /** Immutable statistics snapshot for a ByteBuffer pool. */
     public record PoolStatistics(
             int maxSize, int poolSize, long bytesSize, long created, long reused, long returned, long discarded) {
@@ -521,6 +624,7 @@ public class ByteBufferPool {
         private final int queueCapacity;
         private final int minBufferCapacity;
         private final int maxBufferCapacity;
+        private final long maxBytes;
         private final IntFunction<ByteBuffer> factory;
         private final Consumer<ByteBuffer> evictionListener;
 
@@ -528,6 +632,7 @@ public class ByteBufferPool {
          * @param queueCapacity the maximum number of buffers to hold
          * @param minBufferCapacity minimum buffer capacity to keep in the pool
          * @param maxBufferCapacity the maximum size of a single byte buffer to be held
+         * @param maxBytes the maximum total bytes to retain across all held buffers
          * @param factory function to create new buffers
          * @param evictionListener listener called when a buffer is discarded/evicted
          */
@@ -535,11 +640,13 @@ public class ByteBufferPool {
                 int queueCapacity,
                 int minBufferCapacity,
                 int maxBufferCapacity,
+                long maxBytes,
                 IntFunction<ByteBuffer> factory,
                 Consumer<ByteBuffer> evictionListener) {
             this.queueCapacity = queueCapacity;
             this.minBufferCapacity = minBufferCapacity;
             this.maxBufferCapacity = maxBufferCapacity;
+            this.maxBytes = maxBytes;
             this.factory = factory;
             this.evictionListener = evictionListener;
             this.buffers = new ArrayList<>();
@@ -625,45 +732,65 @@ public class ByteBufferPool {
          */
         public boolean returnBuffer(ByteBuffer returningBuffer) {
             final int capacity = returningBuffer.capacity();
-            if (capacity < minBufferCapacity || capacity > maxBufferCapacity) {
-                buffersDiscarded.incrementAndGet();
-                discardedSize.addAndGet(returningBuffer.capacity());
-                evictionListener.accept(returningBuffer);
-                return false;
+            // A buffer below the pooling threshold, above the per-buffer cap, or larger than the whole
+            // byte budget can never be retained, so discard it without taking the lock.
+            if (capacity < minBufferCapacity || capacity > maxBufferCapacity || capacity > maxBytes) {
+                return discard(returningBuffer);
             }
 
             lock.lock();
             try {
                 returningBuffer.clear();
-                if (buffers.size() == queueCapacity) {
-                    ByteBuffer smallest = buffers.get(0);
-
-                    // If the returning buffer is not larger than the smallest buffer we already
-                    // have, there is no point in keeping it (we prefer larger buffers).
-                    if (capacity <= smallest.capacity()) {
-                        buffersDiscarded.incrementAndGet();
-                        discardedSize.addAndGet(returningBuffer.capacity());
-                        evictionListener.accept(returningBuffer);
-                        return false;
-                    } else {
-                        // Evict the smallest to make room for this larger one
-                        ByteBuffer removed = buffers.remove(0);
-                        bytesSize.addAndGet(-removed.capacity());
-                        buffersDiscarded.incrementAndGet();
-                        discardedSize.addAndGet(removed.capacity());
-                        evictionListener.accept(smallest);
-                    }
+                evictSmallestToMakeRoom(capacity);
+                if (!fitsWithin(capacity)) {
+                    // The free list is full of buffers no smaller than this one (by count or bytes); keep them.
+                    return discard(returningBuffer);
                 }
 
-                // Add buffer in sorted order
                 int insertionPoint = binarySearchLowerBound(capacity);
                 buffers.add(insertionPoint, returningBuffer);
-                bytesSize.addAndGet(returningBuffer.capacity());
+                bytesSize.addAndGet(capacity);
                 buffersReturned.incrementAndGet();
                 return true;
             } finally {
                 lock.unlock();
             }
+        }
+
+        /**
+         * True when a buffer of the given capacity fits within both the count and byte budgets. Caller holds the lock.
+         */
+        private boolean fitsWithin(int capacity) {
+            return buffers.size() < queueCapacity && bytesSize.get() + capacity <= maxBytes;
+        }
+
+        /**
+         * Evicts the smallest retained buffers, one at a time, while the incoming buffer does not fit and is larger
+         * than the smallest retained one. Stops without evicting when the incoming buffer is no larger than the
+         * smallest, so the pool keeps its larger buffers. Caller holds the lock.
+         */
+        private void evictSmallestToMakeRoom(int capacity) {
+            while (!fitsWithin(capacity) && !buffers.isEmpty()) {
+                ByteBuffer smallest = buffers.get(0);
+                if (capacity <= smallest.capacity()) {
+                    return;
+                }
+                buffers.remove(0);
+                bytesSize.addAndGet(-smallest.capacity());
+                recordDiscard(smallest);
+            }
+        }
+
+        /** Discards a buffer (counts it and hands it to the eviction listener) and reports it as not retained. */
+        private boolean discard(ByteBuffer buffer) {
+            recordDiscard(buffer);
+            return false;
+        }
+
+        private void recordDiscard(ByteBuffer buffer) {
+            buffersDiscarded.incrementAndGet();
+            discardedSize.addAndGet(buffer.capacity());
+            evictionListener.accept(buffer);
         }
 
         /**

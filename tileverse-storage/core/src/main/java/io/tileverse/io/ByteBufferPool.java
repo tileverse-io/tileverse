@@ -16,10 +16,15 @@
 package io.tileverse.io;
 
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -97,6 +102,9 @@ public class ByteBufferPool {
     /** Default upper bound on heap bytes retained in the free list (32 MiB). */
     public static final long DEFAULT_MAX_HEAP_BYTES = 32L * 1024 * 1024;
 
+    /** Default idle period after which a quiet pool releases its whole free list. */
+    public static final Duration DEFAULT_IDLE_TIMEOUT = Duration.ofSeconds(30);
+
     /** Default singleton instance, backed by the discovered allocation provider (or the built-in backend). */
     private static final ByteBufferPool DEFAULT_INSTANCE = new ByteBufferPool(
             DEFAULT_MAX_DIRECT_BUFFERS, DEFAULT_MAX_HEAP_BUFFERS, DEFAULT_BLOCK_SIZE, discoverAllocator());
@@ -112,6 +120,15 @@ public class ByteBufferPool {
 
     /** Block size for allocation alignment and minimum pooling threshold. */
     private final int blockSize;
+
+    /** Idle period before a quiet pool releases its free list, in nanoseconds; zero or less disables idle eviction. */
+    private final long idleTimeoutNanos;
+
+    /** Nanotime of the most recent borrow or return, used to detect inactivity. */
+    private volatile long lastAccessNanos;
+
+    /** Guards against scheduling more than one pending idle sweep at a time. */
+    private final AtomicBoolean sweepScheduled = new AtomicBoolean(false);
 
     /** Creates a new ByteBuffer pool with default settings. */
     public ByteBufferPool() {
@@ -145,12 +162,20 @@ public class ByteBufferPool {
      * @throws NullPointerException if {@code allocator} is null
      */
     public ByteBufferPool(int maxDirectBuffers, int maxHeapBuffers, int blockSize, ByteBufferAllocator allocator) {
-        this(maxDirectBuffers, maxHeapBuffers, blockSize, allocator, DEFAULT_MAX_DIRECT_BYTES, DEFAULT_MAX_HEAP_BYTES);
+        this(
+                maxDirectBuffers,
+                maxHeapBuffers,
+                blockSize,
+                allocator,
+                DEFAULT_MAX_DIRECT_BYTES,
+                DEFAULT_MAX_HEAP_BYTES,
+                DEFAULT_IDLE_TIMEOUT);
     }
 
     /**
      * Canonical constructor wiring the full configuration. The byte budgets bound the bytes retained in the free list;
-     * they never block or refuse a borrow, only what the pool keeps after a buffer is returned.
+     * they never block or refuse a borrow, only what the pool keeps after a buffer is returned. The idle timeout
+     * controls when a quiet pool releases its whole free list.
      */
     private ByteBufferPool(
             int maxDirectBuffers,
@@ -158,7 +183,8 @@ public class ByteBufferPool {
             int blockSize,
             ByteBufferAllocator allocator,
             long maxDirectBytes,
-            long maxHeapBytes) {
+            long maxHeapBytes,
+            Duration idleTimeout) {
         if (maxDirectBuffers <= 0) {
             throw new IllegalArgumentException("maxDirectBuffers must be positive: " + maxDirectBuffers);
         }
@@ -180,6 +206,8 @@ public class ByteBufferPool {
 
         this.allocator = allocator;
         this.blockSize = blockSize;
+        this.idleTimeoutNanos = idleTimeout == null ? 0L : idleTimeout.toNanos();
+        this.lastAccessNanos = System.nanoTime();
 
         // Use Integer.MAX_VALUE for max individual buffer size, effectively allowing any
         // size to be pooled as long as it fits within the count and byte limits.
@@ -329,6 +357,7 @@ public class ByteBufferPool {
             throw new IllegalArgumentException("minCapacity cannot be negative: " + size);
         }
 
+        recordActivity();
         int alignedCapacity = roundUpToBlockSize(size);
         ByteBuffer buffer = pool.getBuffer(alignedCapacity);
         buffer.limit(size);
@@ -411,6 +440,7 @@ public class ByteBufferPool {
             return;
         }
 
+        recordActivity();
         boolean returned;
         if (buffer.isDirect()) {
             returned = directBuffers.returnBuffer(buffer);
@@ -423,6 +453,45 @@ public class ByteBufferPool {
         } else {
             log.trace("Discarded buffer (pool full): capacity={}", buffer.capacity());
         }
+    }
+
+    /**
+     * Records a borrow or return as activity and, when idle eviction is enabled, ensures a sweep is scheduled to
+     * release the free list once the pool stays quiet for the idle timeout.
+     */
+    private void recordActivity() {
+        if (idleTimeoutNanos <= 0) {
+            return;
+        }
+        lastAccessNanos = System.nanoTime();
+        if (sweepScheduled.compareAndSet(false, true)) {
+            scheduleSweep(idleTimeoutNanos);
+        }
+    }
+
+    private void scheduleSweep(long delayNanos) {
+        IdleEvictionScheduler.EXECUTOR.schedule(this::sweepIfIdle, delayNanos, TimeUnit.NANOSECONDS);
+    }
+
+    /**
+     * Releases the free list when the pool has been idle for at least the timeout; otherwise reschedules itself for the
+     * remaining time. Runs on the shared eviction thread.
+     */
+    private void sweepIfIdle() {
+        long idleNanos = System.nanoTime() - lastAccessNanos;
+        if (idleNanos >= idleTimeoutNanos) {
+            evictAllRetained();
+            sweepScheduled.set(false); // the next borrow or return reschedules
+        } else {
+            scheduleSweep(idleTimeoutNanos - idleNanos);
+        }
+    }
+
+    /** Releases every retained buffer in both queues, freeing their memory but keeping cumulative statistics. */
+    // visible for testing
+    void evictAllRetained() {
+        directBuffers.evictAll();
+        heapBuffers.evictAll();
     }
 
     /**
@@ -478,6 +547,7 @@ public class ByteBufferPool {
         private long maxDirectBytes = DEFAULT_MAX_DIRECT_BYTES;
         private long maxHeapBytes = DEFAULT_MAX_HEAP_BYTES;
         private ByteBufferAllocator allocator = BuiltinByteBufferAllocator.INSTANCE;
+        private Duration idleTimeout = DEFAULT_IDLE_TIMEOUT;
 
         private Builder() {
             // use ByteBufferPool.builder()
@@ -519,10 +589,19 @@ public class ByteBufferPool {
             return this;
         }
 
+        /**
+         * Sets how long a pool may stay idle before releasing its whole free list. A zero or negative duration disables
+         * idle eviction.
+         */
+        public Builder idleTimeout(Duration idleTimeout) {
+            this.idleTimeout = idleTimeout;
+            return this;
+        }
+
         /** Builds the configured pool. */
         public ByteBufferPool build() {
             return new ByteBufferPool(
-                    maxDirectBuffers, maxHeapBuffers, blockSize, allocator, maxDirectBytes, maxHeapBytes);
+                    maxDirectBuffers, maxHeapBuffers, blockSize, allocator, maxDirectBytes, maxHeapBytes, idleTimeout);
         }
     }
 
@@ -696,6 +775,25 @@ public class ByteBufferPool {
         }
 
         /**
+         * Releases every retained buffer, freeing its memory and counting it as discarded, but keeping the cumulative
+         * lifetime counters. Used by idle eviction, which empties a quiet pool without resetting its statistics.
+         */
+        public void evictAll() {
+            lock.lock();
+            try {
+                for (ByteBuffer buffer : buffers) {
+                    buffersDiscarded.incrementAndGet();
+                    discardedSize.addAndGet(buffer.capacity());
+                    evictionListener.accept(buffer);
+                }
+                buffers.clear();
+                bytesSize.set(0);
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        /**
          * Returns the smallest {@link ByteBuffer} whose capacity is greater than or equal to the given key. Uses the
          * provided factory function to create one if there is no such key.
          */
@@ -815,6 +913,32 @@ public class ByteBufferPool {
                 }
             }
             return low;
+        }
+    }
+
+    /**
+     * Holds the single daemon scheduler shared by all pools for idle eviction. Lazily created on first use; its thread
+     * is a daemon and uses the system class loader so it never keeps the JVM alive or pins an application class loader.
+     */
+    private static final class IdleEvictionScheduler {
+
+        static final ScheduledExecutorService EXECUTOR = create();
+
+        private IdleEvictionScheduler() {
+            // no-op
+        }
+
+        private static ScheduledExecutorService create() {
+            ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1, IdleEvictionScheduler::newThread);
+            executor.setRemoveOnCancelPolicy(true);
+            return executor;
+        }
+
+        private static Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "tileverse-bytebufferpool-idle-eviction");
+            thread.setDaemon(true);
+            thread.setContextClassLoader(ClassLoader.getSystemClassLoader());
+            return thread;
         }
     }
 }

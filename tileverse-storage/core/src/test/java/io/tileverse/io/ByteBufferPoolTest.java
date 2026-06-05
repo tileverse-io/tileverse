@@ -33,11 +33,19 @@ import org.junit.jupiter.api.Test;
 
 class ByteBufferPoolTest {
 
-    private ByteBufferPool pool;
+    private DefaultByteBufferPool pool;
+
+    private static DefaultByteBufferPool newPool(int maxDirectBuffers, int maxHeapBuffers, int blockSize) {
+        return (DefaultByteBufferPool) ByteBufferPool.builder()
+                .maxDirectBuffers(maxDirectBuffers)
+                .maxHeapBuffers(maxHeapBuffers)
+                .blockSize(blockSize)
+                .build();
+    }
 
     @BeforeEach
     void setUp() {
-        pool = new ByteBufferPool(4, 8, 1024); // Small limits for testing
+        pool = newPool(4, 8, 1024); // Small limits for testing
     }
 
     @AfterEach
@@ -47,7 +55,7 @@ class ByteBufferPoolTest {
 
     @Test
     void constructor_withValidParameters_createsPool() {
-        ByteBufferPool customPool = new ByteBufferPool(10, 20, 512);
+        DefaultByteBufferPool customPool = newPool(10, 20, 512);
         assertThat(customPool).isNotNull();
         assertThat(customPool.toString())
                 .contains(
@@ -56,15 +64,15 @@ class ByteBufferPoolTest {
 
     @Test
     void constructor_withInvalidParameters_throwsException() {
-        assertThatThrownBy(() -> new ByteBufferPool(0, 10, 1024))
+        assertThatThrownBy(() -> newPool(0, 10, 1024))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maxDirectBuffers must be positive");
 
-        assertThatThrownBy(() -> new ByteBufferPool(10, 0, 1024))
+        assertThatThrownBy(() -> newPool(10, 0, 1024))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maxHeapBuffers must be positive");
 
-        assertThatThrownBy(() -> new ByteBufferPool(10, 20, 0))
+        assertThatThrownBy(() -> newPool(10, 20, 0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("blockSize must be positive");
     }
@@ -133,13 +141,13 @@ class ByteBufferPoolTest {
             // Modify buffer to ensure it gets cleared
             buffer.putInt(12345);
             buffer.flip();
-            pooled = ((ByteBufferPool.PooledByteBufferImpl) pooledBuffer).pooled();
+            pooled = ((DefaultByteBufferPool.PooledByteBufferImpl) pooledBuffer).pooled();
         }
 
         // Borrow again and verify it's reused and cleared
         try (PooledByteBuffer pooledBuffer = pool.borrowHeap(2048)) {
 
-            assertThat(((ByteBufferPool.PooledByteBufferImpl) pooledBuffer).pooled())
+            assertThat(((DefaultByteBufferPool.PooledByteBufferImpl) pooledBuffer).pooled())
                     .isSameAs(pooled);
 
             ByteBuffer reused = pooledBuffer.buffer();
@@ -195,20 +203,20 @@ class ByteBufferPoolTest {
 
         // Request 2500 - rounds to 3072. Should match b3072.
         try (PooledByteBuffer pooled = pool.borrowDirect(2500)) {
-            ByteBuffer buffer = ((ByteBufferPool.PooledByteBufferImpl) pooled).pooled();
+            ByteBuffer buffer = ((DefaultByteBufferPool.PooledByteBufferImpl) pooled).pooled();
             assertThat(buffer.capacity()).isEqualTo(3072);
             assertThat(pool.getDirectPoolStatistics().poolSize()).isEqualTo(2);
         }
 
         // Request 1500 - rounds to 2048. Should match b2048.
         try (PooledByteBuffer pooled = pool.borrowDirect(1500)) {
-            ByteBuffer buffer = ((ByteBufferPool.PooledByteBufferImpl) pooled).pooled();
+            ByteBuffer buffer = ((DefaultByteBufferPool.PooledByteBufferImpl) pooled).pooled();
             assertThat(buffer.capacity()).isEqualTo(2048);
         }
 
         // Request 3500 - rounds to 4096. Should match b4096.
         try (PooledByteBuffer pooled = pool.borrowDirect(3500)) {
-            ByteBuffer buffer = ((ByteBufferPool.PooledByteBufferImpl) pooled).pooled();
+            ByteBuffer buffer = ((DefaultByteBufferPool.PooledByteBufferImpl) pooled).pooled();
             assertThat(buffer.capacity()).isEqualTo(4096);
         }
     }
@@ -225,7 +233,7 @@ class ByteBufferPoolTest {
 
         // Request 5000 - rounds to 5120. No match in pool (largest 3072). Should create new.
         try (PooledByteBuffer pooled = pool.borrowDirect(5000)) {
-            ByteBuffer buffer = ((ByteBufferPool.PooledByteBufferImpl) pooled).pooled();
+            ByteBuffer buffer = ((DefaultByteBufferPool.PooledByteBufferImpl) pooled).pooled();
             assertThat(buffer.capacity()).isGreaterThanOrEqualTo(5120);
             // Crucial check: The 2 smaller buffers should STILL be in the pool
             assertThat(pool.getDirectPoolStatistics().poolSize()).isEqualTo(2);
@@ -254,12 +262,12 @@ class ByteBufferPoolTest {
 
         // Verify we have 3072...6144 available
         try (PooledByteBuffer p = pool.borrowDirect(5500)) { // Rounds to 6144. Matches b6144
-            assertThat(((ByteBufferPool.PooledByteBufferImpl) p).pooled().capacity())
+            assertThat(((DefaultByteBufferPool.PooledByteBufferImpl) p).pooled().capacity())
                     .isEqualTo(6144);
         }
 
         try (PooledByteBuffer p = pool.borrowDirect(2500)) { // Rounds to 3072. Matches b3072
-            assertThat(((ByteBufferPool.PooledByteBufferImpl) p).pooled().capacity())
+            assertThat(((DefaultByteBufferPool.PooledByteBufferImpl) p).pooled().capacity())
                     .isEqualTo(3072);
         }
 
@@ -274,7 +282,7 @@ class ByteBufferPoolTest {
         // Borrowing 2500 (needs 3072) should still find 3072.
 
         try (PooledByteBuffer p = pool.borrowDirect(2500)) {
-            assertThat(((ByteBufferPool.PooledByteBufferImpl) p).pooled().capacity())
+            assertThat(((DefaultByteBufferPool.PooledByteBufferImpl) p).pooled().capacity())
                     .isEqualTo(3072);
         }
     }
@@ -476,7 +484,7 @@ class ByteBufferPoolTest {
     @Test
     void customBlockSize_affectsAllocationAndPooling() {
         // Create pool with 2KB block size
-        ByteBufferPool customPool = new ByteBufferPool(4, 8, 2048);
+        DefaultByteBufferPool customPool = newPool(4, 8, 2048);
 
         // Test allocation rounding and that buffers get pooled
         // Borrow two buffers simultaneously to force creation of 2 buffers

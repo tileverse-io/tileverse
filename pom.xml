@@ -486,7 +486,7 @@
                   <exclude>logback-test.xml</exclude>
                   <!-- Test-only ServiceLoader registrations must not leak into the test-jar: sibling modules
                        consume tileverse-storage-core's test-jar and would otherwise discover test providers. -->
-                  <exclude>META-INF/services/io.tileverse.io.ByteBufferAllocator</exclude>
+                  <exclude>META-INF/services/io.tileverse.io.ByteBufferPool</exclude>
                 </excludes>
               </configuration>
             </execution>

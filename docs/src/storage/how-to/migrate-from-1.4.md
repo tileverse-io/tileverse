@@ -47,6 +47,24 @@ Update every Java import:
 Generic utilities (`ByteRange`, `ByteBufferPool`, `IOFunction`, the
 `io.tileverse.cache` infrastructure) stay at their original paths.
 
+`ByteBufferPool` changed from a class to an interface; the pooling
+implementation can now be supplied through `ServiceLoader`. Its static
+entrypoints (`getDefault()`, `directBuffer(int)`, `heapBuffer(int)`) and the
+nested `PooledByteBuffer` are unchanged. Replace any direct construction with
+the builder:
+
+```java
+// 1.4.x
+ByteBufferPool pool = new ByteBufferPool(50, 100, 1024);
+
+// 2.0.x
+ByteBufferPool pool = ByteBufferPool.builder()
+        .maxDirectBuffers(50)
+        .maxHeapBuffers(100)
+        .blockSize(1024)
+        .build();
+```
+
 A `find`/`sed` over your source tree is usually enough:
 
 ```bash

@@ -18,6 +18,8 @@ package io.tileverse.io;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.ServiceConfigurationError;
+import java.util.ServiceLoader;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -80,9 +82,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ByteBufferPool {
 
-    /** Default singleton instance for convenient access. */
-    private static final ByteBufferPool DEFAULT_INSTANCE = new ByteBufferPool();
-
     /** Default maximum number of direct buffers to pool. */
     public static final int DEFAULT_MAX_DIRECT_BUFFERS = 32;
 
@@ -91,6 +90,13 @@ public class ByteBufferPool {
 
     /** Default block size for allocation alignment and pooling (8KB). */
     public static final int DEFAULT_BLOCK_SIZE = 8192;
+
+    /** Default singleton instance, backed by the discovered allocation provider (or the built-in backend). */
+    private static final ByteBufferPool DEFAULT_INSTANCE = new ByteBufferPool(
+            DEFAULT_MAX_DIRECT_BUFFERS, DEFAULT_MAX_HEAP_BUFFERS, DEFAULT_BLOCK_SIZE, discoverAllocator());
+
+    /** Allocation backend supplying and releasing the pooled buffers. */
+    private final ByteBufferAllocator allocator;
 
     /** Pool of direct ByteBuffers. */
     private final BufferQueue directBuffers;
@@ -107,7 +113,7 @@ public class ByteBufferPool {
     }
 
     /**
-     * Creates a new ByteBuffer pool with custom settings.
+     * Creates a new ByteBuffer pool with custom settings, using the built-in allocation backend.
      *
      * @param maxDirectBuffers maximum number of direct buffers to pool
      * @param maxHeapBuffers maximum number of heap buffers to pool
@@ -115,6 +121,24 @@ public class ByteBufferPool {
      * @throws IllegalArgumentException if any parameter is negative or zero
      */
     public ByteBufferPool(int maxDirectBuffers, int maxHeapBuffers, int blockSize) {
+        this(maxDirectBuffers, maxHeapBuffers, blockSize, BuiltinByteBufferAllocator.INSTANCE);
+    }
+
+    /**
+     * Creates a new ByteBuffer pool with custom settings and an explicit allocation backend.
+     *
+     * <p>The {@code allocator} supplies every pooled buffer and releases it when the pool evicts or clears it. Use this
+     * constructor to bind a pool to a specific backend; {@link #getDefault()} instead discovers one through
+     * {@link ServiceLoader}.
+     *
+     * @param maxDirectBuffers maximum number of direct buffers to pool
+     * @param maxHeapBuffers maximum number of heap buffers to pool
+     * @param blockSize block size for allocation alignment and minimum pooling threshold (bytes)
+     * @param allocator the allocation backend supplying and releasing pooled buffers
+     * @throws IllegalArgumentException if any numeric parameter is negative or zero
+     * @throws NullPointerException if {@code allocator} is null
+     */
+    public ByteBufferPool(int maxDirectBuffers, int maxHeapBuffers, int blockSize, ByteBufferAllocator allocator) {
         if (maxDirectBuffers <= 0) {
             throw new IllegalArgumentException("maxDirectBuffers must be positive: " + maxDirectBuffers);
         }
@@ -124,32 +148,27 @@ public class ByteBufferPool {
         if (blockSize <= 0) {
             throw new IllegalArgumentException("blockSize must be positive: " + blockSize);
         }
+        if (allocator == null) {
+            throw new NullPointerException("allocator cannot be null");
+        }
 
+        this.allocator = allocator;
         this.blockSize = blockSize;
 
-        // Initialize buffer queues
-        // Use Integer.MAX_VALUE for max individual buffer size effectively allowing any
-        // size
-        // to be pooled as long as it fits in the count limit
+        // Use Integer.MAX_VALUE for max individual buffer size, effectively allowing any
+        // size to be pooled as long as it fits in the count limit.
         this.directBuffers = new BufferQueue(
-                maxDirectBuffers,
-                blockSize,
-                Integer.MAX_VALUE,
-                ByteBuffer::allocateDirect,
-                DirectByteBufferCleaner::releaseDirectBuffer); // Use cleaner for direct buffers
+                maxDirectBuffers, blockSize, Integer.MAX_VALUE, allocator::allocateDirect, allocator::free);
 
-        this.heapBuffers = new BufferQueue(
-                maxHeapBuffers,
-                blockSize,
-                Integer.MAX_VALUE,
-                ByteBuffer::allocate,
-                b -> {}); // No-op for heap buffers (GC handles them)
+        this.heapBuffers =
+                new BufferQueue(maxHeapBuffers, blockSize, Integer.MAX_VALUE, allocator::allocateHeap, allocator::free);
 
         log.debug(
-                "Created ByteBufferPool: maxDirect={}, maxHeap={}, blockSize={}",
+                "Created ByteBufferPool: maxDirect={}, maxHeap={}, blockSize={}, allocator={}",
                 maxDirectBuffers,
                 maxHeapBuffers,
-                blockSize);
+                blockSize,
+                allocator.getClass().getName());
     }
 
     /**
@@ -162,6 +181,52 @@ public class ByteBufferPool {
      */
     public static ByteBufferPool getDefault() {
         return DEFAULT_INSTANCE;
+    }
+
+    /**
+     * Discovers the allocation backend for the default pool through {@link ServiceLoader}, falling back to the built-in
+     * backend when no provider is registered. A broken provider does not break the pool: discovery failures fall back
+     * to the built-in backend.
+     */
+    private static ByteBufferAllocator discoverAllocator() {
+        try {
+            List<ByteBufferAllocator> providers = new ArrayList<>();
+            for (ByteBufferAllocator provider : ServiceLoader.load(ByteBufferAllocator.class)) {
+                providers.add(provider);
+            }
+            return selectAllocator(providers);
+        } catch (RuntimeException | ServiceConfigurationError error) {
+            log.warn("Failed to load a ByteBufferAllocator provider; using the built-in backend.", error);
+            return BuiltinByteBufferAllocator.INSTANCE;
+        }
+    }
+
+    /**
+     * Picks the allocation backend from the discovered providers: the built-in backend when none are present, otherwise
+     * the first provider (warning when more than one is registered, since the choice is then ambiguous).
+     */
+    // visible for testing
+    static ByteBufferAllocator selectAllocator(List<ByteBufferAllocator> providers) {
+        if (providers.isEmpty()) {
+            return BuiltinByteBufferAllocator.INSTANCE;
+        }
+        ByteBufferAllocator selected = providers.get(0);
+        if (providers.size() > 1) {
+            log.warn(
+                    "Found {} ByteBufferAllocator providers; using {}. Register at most one.",
+                    providers.size(),
+                    selected.getClass().getName());
+        } else {
+            log.info(
+                    "Using ByteBufferAllocator provider {}", selected.getClass().getName());
+        }
+        return selected;
+    }
+
+    /** Returns the allocation backend supplying this pool's buffers. */
+    // visible for testing
+    ByteBufferAllocator allocator() {
+        return allocator;
     }
 
     /**
@@ -623,83 +688,6 @@ public class ByteBufferPool {
                 }
             }
             return low;
-        }
-    }
-
-    /**
-     * Reflective access to {@code sun.misc.Unsafe.invokeCleaner} (and a Java 8 fallback path) is the only way to
-     * release a direct {@link ByteBuffer}'s native memory eagerly without waiting for GC. The
-     * {@link java.lang.reflect.AccessibleObject#setAccessible(boolean)} calls below are required for that and are
-     * intentional; suppressing S3011 at the class level keeps the rest of the codebase honest about reflection usage.
-     */
-    @SuppressWarnings("java:S3011")
-    private static final class DirectByteBufferCleaner {
-        // internal unsafe instance for direct buffer cleanup
-        private static final Object UNSAFE;
-        private static final java.lang.reflect.Method INVOKE_CLEANER;
-
-        static {
-            Object unsafe = null;
-            java.lang.reflect.Method invokeCleaner = null;
-            try {
-                Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
-                java.lang.reflect.Field theUnsafe = unsafeClass.getDeclaredField("theUnsafe");
-                theUnsafe.setAccessible(true);
-                unsafe = theUnsafe.get(null);
-
-                // Available in Java 9+
-                try {
-                    invokeCleaner = unsafeClass.getMethod("invokeCleaner", ByteBuffer.class);
-                } catch (NoSuchMethodException e) {
-                    // Fallback for Java 8 not needed since we are on Java 17, but good for safety
-                }
-            } catch (Exception e) {
-                log.warn("Could not get access to sun.misc.Unsafe. Direct buffer memory release will rely on GC.", e);
-            }
-            UNSAFE = unsafe;
-            INVOKE_CLEANER = invokeCleaner;
-        }
-
-        private DirectByteBufferCleaner() {
-            // no-op
-        }
-
-        /**
-         * Attempts to immediately release the memory of a direct ByteBuffer.
-         *
-         * @param buffer the buffer to release
-         */
-        static void releaseDirectBuffer(ByteBuffer buffer) {
-            if (buffer == null || !buffer.isDirect()) {
-                return;
-            }
-
-            if (UNSAFE != null && INVOKE_CLEANER != null) {
-                try {
-                    INVOKE_CLEANER.invoke(UNSAFE, buffer);
-                    return;
-                } catch (Exception e) {
-                    // log once or debug
-                    log.debug("Failed to invoke cleaner via Unsafe", e);
-                }
-            }
-
-            // Fallback to classic reflection (Java 8 style) or if Unsafe failed
-            // This will likely fail on Java 17+ without --add-opens, but we try anyway
-            try {
-                java.lang.reflect.Method cleanerMethod = buffer.getClass().getMethod("cleaner");
-                cleanerMethod.setAccessible(true);
-                Object cleaner = cleanerMethod.invoke(buffer);
-
-                if (cleaner != null) {
-                    java.lang.reflect.Method cleanMethod = cleaner.getClass().getMethod("clean");
-                    cleanMethod.setAccessible(true);
-                    cleanMethod.invoke(cleaner);
-                }
-            } catch (Exception e) {
-                // InaccessibleObjectException (Java 9+) or other errors
-                log.debug("Failed to release direct buffer memory via reflection", e);
-            }
         }
     }
 }

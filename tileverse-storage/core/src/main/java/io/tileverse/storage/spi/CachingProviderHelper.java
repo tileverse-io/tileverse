@@ -159,18 +159,17 @@ public final class CachingProviderHelper {
         if (!enableCaching) {
             return Optional.empty();
         }
-        Optional<Boolean> blockAligned = opts.getParameter(MEMORY_CACHE_BLOCK_ALIGNED);
-        Optional<Integer> blockSize = opts.getParameter(MEMORY_CACHE_BLOCK_SIZE);
+        final boolean blockAligned =
+                opts.getParameter(MEMORY_CACHE_BLOCK_ALIGNED).orElse(true);
+        final Optional<Integer> blockSize = opts.getParameter(MEMORY_CACHE_BLOCK_SIZE);
         return Optional.of(reader -> {
             Builder builder = CachingRangeReader.builder(reader);
-            if (blockAligned.isPresent()) {
-                if (blockSize.isPresent()) {
-                    builder.blockSize(blockSize.get());
-                } else {
-                    builder.withBlockAlignment();
-                }
-            } else {
+            if (!blockAligned) {
                 builder.withoutBlockAlignment();
+            } else if (blockSize.isPresent()) {
+                builder.blockSize(blockSize.get());
+            } else {
+                builder.withBlockAlignment();
             }
             return builder.build();
         });

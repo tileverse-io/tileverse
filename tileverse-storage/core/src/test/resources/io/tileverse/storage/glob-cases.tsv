@@ -1,0 +1,42 @@
+# Golden glob-matching table: the shared cross-repo contract for DuckDB glob parity.
+#
+# Tab-separated columns: glob <TAB> key <TAB> expected <TAB> source
+#   source=duckdb     expected captured from the real duckdb binary; StoragePattern must match it.
+#   source=tileverse  brace alternation, a tileverse/parquetry extension DuckDB lacks; expected is our own spec.
+#
+# Replayed by StoragePatternTest.GlobToRegex. Keep this file identical in parquetry's copy of the translator.
+# Re-derive/verify the duckdb rows with verify-glob-cases.sh (needs the duckdb CLI on PATH).
+#
+# glob	key	expected	source
+**/*.parquet	data.parquet	true	duckdb
+**/*.parquet	year=2024/data.parquet	true	duckdb
+**/*.parquet	a/b/c/data.parquet	true	duckdb
+*.parquet	data.parquet	true	duckdb
+*.parquet	year=2024/data.parquet	false	duckdb
+data/*.parquet	data/file.parquet	true	duckdb
+data/*.parquet	data/sub/file.parquet	false	duckdb
+data/**	data/sub/f.parquet	true	duckdb
+data/**/theme=buildings/f.parquet	data/theme=buildings/f.parquet	true	duckdb
+data/**/theme=buildings/f.parquet	data/r=1/x=2/theme=buildings/f.parquet	true	duckdb
+data/**/theme=buildings/f.parquet	data/r=1/theme=buildings/sub/f.parquet	false	duckdb
+f[A-C].txt	fB.txt	true	duckdb
+f[A-C].txt	fD.txt	false	duckdb
+part[12].txt	part1.txt	true	duckdb
+part[12].txt	partX.txt	false	duckdb
+part[!12].txt	partX.txt	true	duckdb
+part[!12].txt	part1.txt	false	duckdb
+part[^12].txt	part1.txt	true	duckdb
+part[^12].txt	partX.txt	false	duckdb
+a[!z]b.txt	axb.txt	true	duckdb
+a[!z]b.txt	a/b.txt	false	duckdb
+lt[1.txt	lt[1.txt	true	duckdb
+lt[1.txt	lt1.txt	false	duckdb
+br{a.txt	br{a.txt	true	duckdb
+br{a.txt	bra.txt	false	duckdb
+{example.parquet}	example.parquet	true	tileverse
+{example.parquet}	example.parquet.bak	false	tileverse
+{example.parquet}	sub/example.parquet	false	tileverse
+{*.parquet,**/*.parquet}	data.parquet	true	tileverse
+{*.parquet,**/*.parquet}	year=2024/data.parquet	true	tileverse
+file{a,b,}.txt	filea.txt	true	tileverse
+file{a,b,}.txt	file.txt	false	tileverse

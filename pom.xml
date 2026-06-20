@@ -106,7 +106,7 @@
     <junit.version>6.0.3</junit.version>
     <logback.version>1.5.18</logback.version>
     <mockito.version>5.18.0</mockito.version>
-    <testcontainers.version>1.21.4</testcontainers.version>
+    <testcontainers.version>2.0.5</testcontainers.version>
     <wiremock.version>3.13.1</wiremock.version>
     <surefire.skip>false</surefire.skip>
     <failsafe.skip>false</failsafe.skip>
@@ -226,7 +226,7 @@
       <dependency>
         <groupId>io.aiven</groupId>
         <artifactId>testcontainers-fake-gcs-server</artifactId>
-        <version>0.2.0</version>
+        <version>0.3.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>

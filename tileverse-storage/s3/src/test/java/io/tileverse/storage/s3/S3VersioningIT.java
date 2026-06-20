@@ -24,10 +24,9 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.testcontainers.containers.localstack.LocalStackContainer;
-import org.testcontainers.containers.localstack.LocalStackContainer.Service;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -46,14 +45,14 @@ class S3VersioningIT {
 
     @Container
     static final LocalStackContainer LOCALSTACK =
-            new LocalStackContainer(DockerImageName.parse("localstack/localstack:3.7")).withServices(Service.S3);
+            new LocalStackContainer(DockerImageName.parse("localstack/localstack:3.7")).withServices("s3");
 
     private S3Client adminClient;
 
     @BeforeAll
     void provisionVersionedBucket() {
         adminClient = S3Client.builder()
-                .endpointOverride(LOCALSTACK.getEndpointOverride(Service.S3))
+                .endpointOverride(LOCALSTACK.getEndpoint())
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(LOCALSTACK.getAccessKey(), LOCALSTACK.getSecretKey())))
                 .region(Region.of(LOCALSTACK.getRegion()))

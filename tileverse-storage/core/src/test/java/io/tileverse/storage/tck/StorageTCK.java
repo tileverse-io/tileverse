@@ -16,8 +16,8 @@
 package io.tileverse.storage.tck;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.Assert.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import io.tileverse.storage.CopyOptions;
@@ -381,8 +381,7 @@ public abstract class StorageTCK {
     @Test
     void deleteIsIdempotentOnMissingKey() {
         requireWrites();
-        storage.delete("never-existed"); // no exception
-        assertTrue(true);
+        assertThatNoException().isThrownBy(() -> storage.delete("never-existed"));
     }
 
     @Test

@@ -25,9 +25,9 @@ import java.net.URI;
 import java.nio.file.Path;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.testcontainers.containers.localstack.LocalStackContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -55,9 +55,8 @@ class S3RangeReaderLocalStackIT extends AbstractRangeReaderIT {
 
     @Container
     @SuppressWarnings("resource")
-    static LocalStackContainer localstack = new LocalStackContainer(
-                    DockerImageName.parse("localstack/localstack:3.2.0"))
-            .withServices(LocalStackContainer.Service.S3);
+    static LocalStackContainer localstack =
+            new LocalStackContainer(DockerImageName.parse("localstack/localstack:3.2.0")).withServices("s3");
 
     @BeforeAll
     static void setupS3() throws IOException {

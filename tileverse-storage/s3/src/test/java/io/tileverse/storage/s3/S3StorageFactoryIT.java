@@ -15,8 +15,8 @@
  */
 package io.tileverse.storage.s3;
 
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assume.assumeNoException;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.abort;
 
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageFactory;
@@ -146,7 +146,7 @@ class S3StorageFactoryIT {
         try {
             defaultCredentialsProvider.resolveCredentials();
         } catch (SdkClientException noCredentials) {
-            assumeNoException("Test requires AWS credentials", noCredentials);
+            abort("Test requires AWS credentials: " + noCredentials.getMessage());
         }
     }
 
@@ -160,7 +160,7 @@ class S3StorageFactoryIT {
         // would race with sibling ITs over ambient AWS credentials in sys props.
         StorageConfig config = new StorageConfig(s3Uri);
         StorageProvider provider = StorageFactory.findProvider(config);
-        assertNotNull("Should resolve a provider for " + description, provider);
+        assertThat(provider).as("Should resolve a provider for " + description).isNotNull();
         // Either the S3 provider or (for ambiguous custom-domain HTTPS URLs that don't HEAD-probe
         // as S3 in this environment) the generic HTTP provider is acceptable - both prove the URL
         // parser accepted the input.

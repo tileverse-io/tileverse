@@ -62,6 +62,10 @@ public final class CachingProviderHelper {
     /**
      * A {@link StorageParameter} to control whether cached byte ranges should be block-aligned. Block alignment can
      * improve performance for certain storage types by optimizing read patterns.
+     *
+     * <p>Disabled by default: the formats this library targets (PMTiles, GeoParquet, COPC, GeoZarr) issue precise range
+     * reads, and block alignment would inflate them. Enable it explicitly through this parameter, or by calling
+     * {@code CachingRangeReader.Builder#withBlockAlignment()} directly.
      */
     public static final StorageParameter<Boolean> MEMORY_CACHE_BLOCK_ALIGNED = StorageParameter.builder()
             .key("storage.caching.blockaligned")
@@ -76,11 +80,14 @@ public final class CachingProviderHelper {
 
                     It also helps in reducing the number of small, fragmented reads.
 
+                    Disabled by default; formats designed for ranged reads request exactly \
+                    the bytes they need.
+
                     This setting is only effective when caching is enabled.
                     """)
             .type(Boolean.class)
             .group(GROUP_CACHING)
-            .defaultValue(true)
+            .defaultValue(false)
             .build();
 
     /**
@@ -160,7 +167,7 @@ public final class CachingProviderHelper {
             return Optional.empty();
         }
         final boolean blockAligned =
-                opts.getParameter(MEMORY_CACHE_BLOCK_ALIGNED).orElse(true);
+                opts.getParameter(MEMORY_CACHE_BLOCK_ALIGNED).orElse(false);
         final Optional<Integer> blockSize = opts.getParameter(MEMORY_CACHE_BLOCK_SIZE);
         return Optional.of(reader -> {
             Builder builder = CachingRangeReader.builder(reader);

@@ -34,8 +34,9 @@ public abstract class AbstractStorageProvider implements StorageProvider {
 
     /**
      * Re-export of {@link CachingProviderHelper#MEMORY_CACHE_BLOCK_ALIGNED}. When enabled, all read requests are
-     * aligned to the configured block boundaries before consulting the {@link CachingRangeReader} cache. Only
-     * meaningful when {@link #MEMORY_CACHE_ENABLED} is true.
+     * aligned to the configured block boundaries before consulting the {@link CachingRangeReader} cache. Disabled by
+     * default; enable explicitly for storage backends that benefit from block-sized reads. Only meaningful when
+     * {@link #MEMORY_CACHE_ENABLED} is true.
      */
     public static final StorageParameter<Boolean> MEMORY_CACHE_BLOCK_ALIGNED =
             CachingProviderHelper.MEMORY_CACHE_BLOCK_ALIGNED;

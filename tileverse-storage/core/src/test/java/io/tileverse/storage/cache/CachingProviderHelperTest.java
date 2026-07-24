@@ -61,7 +61,7 @@ class CachingProviderHelperTest {
     }
 
     @Test
-    void blockalignedDefaultStillAligns() throws IOException {
+    void blockalignedAbsentDoesNotAlign() throws IOException {
         Path testFile = writeRandomFile();
 
         StorageConfig opts =
@@ -75,7 +75,57 @@ class CachingProviderHelperTest {
             ByteBuffer out = ByteBuffer.allocate(16);
             reader.readRange(2000, 1, out);
 
+            assertThat(reader.getEstimatedCacheSizeBytes()).isEqualTo(1L);
+        }
+    }
+
+    @Test
+    void blockalignedTrueAligns() throws IOException {
+        Path testFile = writeRandomFile();
+
+        StorageConfig opts = new StorageConfig(testFile.toUri())
+                .setParameter(CachingProviderHelper.MEMORY_CACHE_ENABLED, true)
+                .setParameter(CachingProviderHelper.MEMORY_CACHE_BLOCK_ALIGNED, true);
+
+        try (RangeReader base = RangeReaderTestSupport.fileReader(testFile);
+                CachingRangeReader reader = (CachingRangeReader) CachingProviderHelper.cachingDecoratorFor(opts)
+                        .orElseThrow()
+                        .apply(base)) {
+
+            ByteBuffer out = ByteBuffer.allocate(16);
+            reader.readRange(2000, 1, out);
+
             assertThat(reader.getEstimatedCacheSizeBytes()).isEqualTo(64L * 1024);
+        }
+    }
+
+    @Test
+    void blockalignedDeclaredDefaultIsFalse() {
+        assertThat(CachingProviderHelper.MEMORY_CACHE_BLOCK_ALIGNED.defaultValue())
+                .contains(false);
+    }
+
+    /**
+     * {@code StorageProvider.createConfig()} pre-populates configs with the declared parameter defaults; the resulting
+     * config must not enable block alignment either.
+     */
+    @Test
+    void configWithDeclaredDefaultsDoesNotAlign() throws IOException {
+        Path testFile = writeRandomFile();
+
+        StorageConfig opts = StorageConfig.withDefaults(CachingProviderHelper.configParameters())
+                .baseUri(testFile.toUri())
+                .setParameter(CachingProviderHelper.MEMORY_CACHE_ENABLED, true);
+
+        try (RangeReader base = RangeReaderTestSupport.fileReader(testFile);
+                CachingRangeReader reader = (CachingRangeReader) CachingProviderHelper.cachingDecoratorFor(opts)
+                        .orElseThrow()
+                        .apply(base)) {
+
+            ByteBuffer out = ByteBuffer.allocate(16);
+            reader.readRange(2000, 1, out);
+
+            assertThat(reader.getEstimatedCacheSizeBytes()).isEqualTo(1L);
         }
     }
 

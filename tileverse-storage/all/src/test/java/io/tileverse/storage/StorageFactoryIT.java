@@ -293,11 +293,27 @@ class StorageFactoryIT {
     }
 
     /**
-     * Single-arg overload aimed at public-bucket URLs (Overture Maps and similar). Sets {@code S3_ANONYMOUS=true} so
-     * the SDK does not consult the default credential chain, which would fail on a clean CI box.
+     * Single-arg overload aimed at public-bucket URLs. Sets {@code S3_ANONYMOUS=true} so the SDK does not consult the
+     * default credential chain, which would fail on a clean CI box.
      */
     static RangeReader testS3(String uri) throws IOException {
-        return testS3(URI.create(uri), null, null, true);
+        return testS3(uri, null);
+    }
+
+    /**
+     * Public-bucket overload for URL forms without a region (e.g. {@code s3://bucket/key} or the legacy global
+     * endpoint). The provider contract requires the region from configuration or the AWS environment in that case;
+     * supplying it here keeps the test independent of the local AWS setup.
+     */
+    static RangeReader testS3(String uri, String region) throws IOException {
+        URI s3URI = URI.create(uri);
+        testFindBestProvider(s3URI, S3StorageProvider.class);
+        StorageConfig config = new StorageConfig(s3URI);
+        config.setParameter(S3StorageProvider.S3_ANONYMOUS, true);
+        if (region != null) {
+            config.setParameter(S3StorageProvider.S3_REGION, region);
+        }
+        return testCreate(config);
     }
 
     static RangeReader testS3(final URI s3URI, String accessKey, String secretKey) throws IOException {

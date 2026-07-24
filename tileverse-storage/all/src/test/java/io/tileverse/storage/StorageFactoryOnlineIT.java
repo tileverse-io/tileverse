@@ -37,6 +37,16 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers(disabledWithoutDocker = true)
 class StorageFactoryOnlineIT {
 
+    /**
+     * Anonymous-read object in the AWS Open Data sentinel-cogs bucket, unchanged since 2020. Overture Maps buckets are
+     * unsuitable here: their release objects expire 60 days after publication (rule-id "release data 60 day
+     * retention"), which is how the previous URLs went dark.
+     */
+    private static final String S3_BUCKET = "sentinel-cogs";
+
+    private static final String S3_REGION = "us-west-2";
+    private static final String S3_KEY = "sentinel-s2-l2a-cogs/33/T/UL/2020/6/S2A_33TUL_20200604_0_L2A/B01.tif";
+
     @Test
     @DisplayName("HTTPS URL that doesn't match a cloud provider uses HttpRangeReader")
     void plainHttpsUrl() throws IOException {
@@ -87,43 +97,45 @@ class StorageFactoryOnlineIT {
     @Test
     @DisplayName("S3 https:// virtual hosted-style (legacy format) URL uses S3RangeReaderProvider")
     void s3HttpsUrlVirtualHostedStyle() throws IOException {
-        testS3("https://overturemaps-tiles-us-west-2-beta.s3.amazonaws.com/2025-08-20/base.pmtiles");
+        // the legacy global endpoint has no region in the URL; the provider requires it from configuration
+        testS3("https://" + S3_BUCKET + ".s3.amazonaws.com/" + S3_KEY, S3_REGION);
     }
 
     @Test
     @DisplayName("S3 https:// virtual hosted-style with region URL uses S3RangeReaderProvider")
     void s3HttpsUrlVirtualHostedWithRegion() throws IOException {
-        testS3("https://overturemaps-tiles-us-west-2-beta.s3.us-west-2.amazonaws.com/2025-08-20/base.pmtiles");
+        testS3("https://" + S3_BUCKET + ".s3." + S3_REGION + ".amazonaws.com/" + S3_KEY);
     }
 
     @Test
     @DisplayName("S3 https:// path-style URL with region uses S3RangeReaderProvider")
     void s3PathStyleUrlWithRegion() throws IOException {
-        testS3("https://s3.us-west-2.amazonaws.com/overturemaps-tiles-us-west-2-beta/2025-08-20/base.pmtiles");
+        testS3("https://s3." + S3_REGION + ".amazonaws.com/" + S3_BUCKET + "/" + S3_KEY);
     }
 
     @Test
     @DisplayName("S3 s3:// URL uses S3RangeReaderProvider")
     void s3Url() throws IOException {
-        testS3("s3://overturemaps-tiles-us-west-2-beta/2025-08-20/base.pmtiles");
+        // s3:// URIs have no region; the provider requires it from configuration or the AWS environment
+        testS3("s3://" + S3_BUCKET + "/" + S3_KEY, S3_REGION);
     }
 
     @Test
     @DisplayName("S3 https:// virtual hosted-style (legacy format) URL with forced HTTP provider uses HttpRangeReader")
     void s3LegacyVirtualHostedStyleUrlWithForcedHttpProvider() throws IOException {
-        testForceHttp("https://overturemaps-tiles-us-west-2-beta.s3.amazonaws.com/2025-08-20/base.pmtiles");
+        testForceHttp("https://" + S3_BUCKET + ".s3.amazonaws.com/" + S3_KEY);
     }
 
     @Test
     @DisplayName("S3 https:// virtual hosted-style URL with forced HTTP provider uses HttpRangeReader")
     void s3VirtualHostedStyleUrlWithForcedHttpProvider() throws IOException {
-        testForceHttp("https://overturemaps-tiles-us-west-2-beta.s3.us-west-2.amazonaws.com/2025-08-20/base.pmtiles");
+        testForceHttp("https://" + S3_BUCKET + ".s3." + S3_REGION + ".amazonaws.com/" + S3_KEY);
     }
 
     @Test
     @DisplayName("S3 https:// path-style URL with forced HTTP provider uses HttpRangeReader")
     void s3PathStyleUrlWithForcedHttpProvider() throws IOException {
-        testForceHttp("https://s3.us-west-2.amazonaws.com/overturemaps-tiles-us-west-2-beta/2025-08-20/base.pmtiles");
+        testForceHttp("https://s3." + S3_REGION + ".amazonaws.com/" + S3_BUCKET + "/" + S3_KEY);
     }
 
     /**

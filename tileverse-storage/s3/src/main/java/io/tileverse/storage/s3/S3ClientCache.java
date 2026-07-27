@@ -29,6 +29,7 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
 import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
@@ -171,8 +172,19 @@ final class S3ClientCache {
                 .pathStyleAccessEnabled(key.forcePathStyle())
                 .build();
 
-        S3ClientBuilder syncBuilder =
-                S3Client.builder().region(Region.of(key.region())).serviceConfiguration(syncConfig);
+        // Both builders use WHEN_REQUIRED for request and response checksums. Since SDK 2.30
+        // the default WHEN_SUPPORTED adds x-amz-checksum-mode: ENABLED to every GetObject and
+        // switches PutObject to aws-chunked streaming with a trailing checksum. Strict
+        // S3-compatible endpoints reject both (s3proxy answers 501 on the read header and 400
+        // on the streaming payload); lenient ones (LocalStack, older MinIO) don't always echo
+        // the checksum headers back. WHEN_REQUIRED keeps checksums whenever the operation
+        // requires them or the caller opts in via GetObjectRequest#checksumMode, while plain
+        // reads and writes stay compatible with emulators.
+        S3ClientBuilder syncBuilder = S3Client.builder()
+                .region(Region.of(key.region()))
+                .serviceConfiguration(syncConfig)
+                .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
+                .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED);
         // The async client uses the CRT-tuned builder so the underlying native runtime can
         // parallelize multipart uploads (via S3TransferManager) and split large GET requests
         // across connections (via AsyncResponseTransformer.toBlockingInputStream). The CRT
@@ -180,10 +192,7 @@ final class S3ClientCache {
         S3CrtAsyncClientBuilder asyncBuilder = S3AsyncClient.crtBuilder()
                 .region(Region.of(key.region()))
                 .forcePathStyle(key.forcePathStyle())
-                // S3-compatible emulators (LocalStack, older MinIO) don't always emit the
-                // checksum headers CRT computes by default. WHEN_REQUIRED keeps validation
-                // for callers that explicitly opt in via GetObjectRequest#checksumMode while
-                // tolerating emulators that don't echo a server-computed checksum.
+                .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
                 .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED);
         S3Presigner.Builder presignerBuilder =
                 S3Presigner.builder().region(Region.of(key.region())).serviceConfiguration(syncConfig);

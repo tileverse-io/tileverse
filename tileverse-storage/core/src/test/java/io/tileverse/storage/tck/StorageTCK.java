@@ -204,7 +204,7 @@ public abstract class StorageTCK {
      * chunked transfers.
      */
     @Test
-    void multiPartRoundTrip16MiB(@TempDir Path tmp) throws IOException {
+    protected void multiPartRoundTrip16MiB(@TempDir Path tmp) throws IOException {
         requireWrites();
         final int size = 16 * 1024 * 1024;
         byte[] data = generateDeterministicBytes(size);
@@ -385,7 +385,7 @@ public abstract class StorageTCK {
     }
 
     @Test
-    void deleteAllReportsPerKeyOutcome() {
+    protected void deleteAllReportsPerKeyOutcome() {
         requireWrites();
         storage.put("a.txt", new byte[1]);
         storage.put("b.txt", new byte[1]);
@@ -492,7 +492,7 @@ public abstract class StorageTCK {
     }
 
     @Test
-    void deleteAllLumpsAllIntoDeletedWhenIncapable() {
+    protected void deleteAllLumpsAllIntoDeletedWhenIncapable() {
         if (!storage.capabilities().writes()) {
             return;
         }

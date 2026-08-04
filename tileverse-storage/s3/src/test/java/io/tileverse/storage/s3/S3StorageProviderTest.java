@@ -34,15 +34,15 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.ResourceLock;
-import org.junit.jupiter.api.parallel.Resources;
+import org.junit.jupiter.api.util.ReadsSystemProperty;
+import org.junit.jupiter.api.util.SetSystemProperty;
 
 class S3StorageProviderTest {
 
     private S3StorageProvider provider = new S3StorageProvider();
 
     @Test
-    @ResourceLock(Resources.SYSTEM_PROPERTIES)
+    @ReadsSystemProperty
     void testFactoryLookup() {
         assertThat(StorageProvider.findProviders().anyMatch(S3StorageProvider.class::isInstance))
                 .isTrue();
@@ -50,32 +50,31 @@ class S3StorageProviderTest {
                 .isTrue();
         assertThat(StorageProvider.findProvider(S3StorageProvider.ID)).isPresent();
         assertThat(StorageProvider.getProvider(S3StorageProvider.ID, true)).isNotNull();
-
-        System.setProperty(S3StorageProvider.ENABLED_KEY, "false");
-        try {
-            assertThat(StorageProvider.findProviders().anyMatch(S3StorageProvider.class::isInstance))
-                    .isTrue();
-            assertThat(StorageProvider.getAvailableProviders().stream().anyMatch(S3StorageProvider.class::isInstance))
-                    .isFalse();
-            assertThat(StorageProvider.findProvider(S3StorageProvider.ID)).isPresent();
-            assertThatThrownBy(() -> StorageProvider.getProvider(S3StorageProvider.ID, true))
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining("The specified StorageProvider is not available: s3");
-        } finally {
-            System.clearProperty(S3StorageProvider.ENABLED_KEY);
-        }
     }
 
     @Test
-    @ResourceLock(Resources.SYSTEM_PROPERTIES)
+    @SetSystemProperty(key = S3StorageProvider.ENABLED_KEY, value = "false")
+    void testFactoryLookupWhenDisabled() {
+        assertThat(StorageProvider.findProviders().anyMatch(S3StorageProvider.class::isInstance))
+                .isTrue();
+        assertThat(StorageProvider.getAvailableProviders().stream().anyMatch(S3StorageProvider.class::isInstance))
+                .isFalse();
+        assertThat(StorageProvider.findProvider(S3StorageProvider.ID)).isPresent();
+        assertThatThrownBy(() -> StorageProvider.getProvider(S3StorageProvider.ID, true))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("The specified StorageProvider is not available: s3");
+    }
+
+    @Test
+    @ReadsSystemProperty
     void isAvailable() {
         assertThat(provider.isAvailable()).isTrue();
-        System.setProperty(S3StorageProvider.ENABLED_KEY, "false");
-        try {
-            assertThat(provider.isAvailable()).isFalse();
-        } finally {
-            System.clearProperty(S3StorageProvider.ENABLED_KEY);
-        }
+    }
+
+    @Test
+    @SetSystemProperty(key = S3StorageProvider.ENABLED_KEY, value = "false")
+    void isAvailableWhenDisabled() {
+        assertThat(provider.isAvailable()).isFalse();
     }
 
     @Test

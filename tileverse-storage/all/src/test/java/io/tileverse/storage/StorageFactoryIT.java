@@ -45,6 +45,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.util.SetSystemProperty;
 import org.testcontainers.azure.AzuriteContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MinIOContainer;
@@ -253,31 +254,29 @@ class StorageFactoryIT {
         assertThat(reader.size()).hasValue(FILE_SIZE);
     }
 
+    /**
+     * Forces {@code aws.region} for MinIO, or risk an error like the following in github actions (couldn't figure out
+     * where it may be getting the region from in my local dev env):
+     *
+     * <pre>
+     * Failed to create S3 client: Unable to load region from any of the providers in the chain
+     * software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain@62615be: [
+     *   software.amazon.awssdk.regions.providers.SystemSettingsRegionProvider@23365142: Unable to load region from system settings.
+     *    Region must be specified either via environment variable (AWS_REGION) or  system property (aws.region).,
+     *   software.amazon.awssdk.regions.providers.AwsProfileRegionProvider@3f2ef402:
+     *    No region provided in profile: default, software.amazon.awssdk.regions.providers.InstanceProfileRegionProvider@68229a6:
+     *    Unable to retrieve region information from EC2 Metadata service. Please make sure the application is running on EC2.]
+     * </pre>
+     */
     @Test
+    @SetSystemProperty(key = "aws.region", value = "us-east-1")
     void testS3MinIO() throws IOException {
         final URI minioURI = URI.create("%s/%s/%s".formatted(minio.getS3URL(), BUCKET_NAME, FILE_NAME));
         String accessKey = minio.getUserName();
         String secretKey = minio.getPassword();
 
-        /*
-         * Forcing a region for MinIO, or risk an error like the following in github actions (couldn't figure
-         * out where it may be getting the region from in my local dev env):
-         *
-         * Failed to create S3 client: Unable to load region from any of the providers in the chain
-         * software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain@62615be: [
-         *   software.amazon.awssdk.regions.providers.SystemSettingsRegionProvider@23365142: Unable to load region from system settings.
-         *    Region must be specified either via environment variable (AWS_REGION) or  system property (aws.region).,
-         *   software.amazon.awssdk.regions.providers.AwsProfileRegionProvider@3f2ef402:
-         *    No region provided in profile: default, software.amazon.awssdk.regions.providers.InstanceProfileRegionProvider@68229a6:
-         *    Unable to retrieve region information from EC2 Metadata service. Please make sure the application is running on EC2.]         *
-         */
-        System.setProperty("aws.region", "us-east-1");
-        try {
-            RangeReader reader = testS3(minioURI, accessKey, secretKey);
-            assertThat(reader.size()).hasValue(FILE_SIZE);
-        } finally {
-            System.clearProperty("aws.region");
-        }
+        RangeReader reader = testS3(minioURI, accessKey, secretKey);
+        assertThat(reader.size()).hasValue(FILE_SIZE);
     }
 
     static RangeReader testAzureBlob(String url, String accountKey) throws IOException {

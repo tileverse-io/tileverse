@@ -67,10 +67,6 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
                     tags "Decorator"
                 }
 
-                diskCachingRangeReader = component "DiskCachingRangeReader" "Disk-based caching decorator" "Java Class" {
-                    tags "Decorator"
-                }
-
                 blockAlignedRangeReader = component "BlockAlignedRangeReader" "Reads coalesced into fixed-size aligned blocks" "Java Class" {
                     tags "Decorator"
                 }
@@ -244,7 +240,6 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
         httpStorage -> abstractRangeReader "Provides RangeReader via"
 
         cachingRangeReader -> rangeReaderInterface "Implements (decorator)"
-        diskCachingRangeReader -> rangeReaderInterface "Implements (decorator)"
         blockAlignedRangeReader -> rangeReaderInterface "Implements (decorator)"
 
         httpStorage -> authenticationSystem "Uses for authentication"

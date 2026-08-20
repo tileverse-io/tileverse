@@ -102,20 +102,14 @@ try (RangeReader r = storage.openRangeReader("00/00.pmtiles");
 
 ## Performance Optimization
 
-### Multi-Level Caching
+### Memory Caching
 
-Combine memory and disk caching for optimal performance:
+Cache recently accessed ranges in memory:
 
 ```java
-import io.tileverse.storage.cache.DiskCachingRangeReader;
-
 try (Storage storage = StorageFactory.open(parent, props);
         RangeReader baseReader = storage.openRangeReader(leaf);
-        RangeReader diskCached = DiskCachingRangeReader.builder(baseReader)
-            .cacheDirectory(Path.of("/tmp/tile-cache"))
-            .maximumCacheSize(10_000_000_000L)  // 10 GB
-            .build();
-        RangeReader memoryCached = CachingRangeReader.builder(diskCached)
+        RangeReader memoryCached = CachingRangeReader.builder(baseReader)
             .maximumSize(1000)
             .build();
         PMTilesReader reader = new PMTilesReader(memoryCached)) {

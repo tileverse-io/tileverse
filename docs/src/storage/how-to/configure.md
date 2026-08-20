@@ -30,22 +30,6 @@ try (Storage storage = StorageFactory.open(bucket);
 }
 ```
 
-### Disk Cache (`DiskCachingRangeReader`)
-
-Best for: **Large datasets**, **Repeated runs**, **Offline capability**.
-
-```java
-try (Storage storage = StorageFactory.open(bucket);
-        RangeReader s3Reader = storage.openRangeReader(leaf);
-        RangeReader diskCachedReader = DiskCachingRangeReader.builder(s3Reader)
-            .cacheDirectory(Path.of("/mnt/fast-ssd/cache"))
-            // Hard limit on disk usage (e.g., 10GB)
-            .maxCacheSizeBytes(10L * 1024 * 1024 * 1024)
-            .build()) {
-    // ...
-}
-```
-
 ## Read Optimization
 
 ### Block Alignment
@@ -59,7 +43,7 @@ RangeReader alignedReader = BlockAlignedRangeReader.builder(reader)
     .build();
 ```
 
-**Impact:** If you request bytes `100-200`, the reader fetches `0-65536`. If you essentially request `200-300`, it's served from memory/disk cache immediately.
+**Impact:** If you request bytes `100-200`, the reader fetches `0-65536`. If you essentially request `200-300`, it's served from the memory cache immediately.
 
 ## Provider-Specific Tuning
 
@@ -144,7 +128,7 @@ For environments where code changes are difficult, you can configure defaults vi
 ## Stack Recommendations
 
 ### For Tile Servers
-A tile server needs low latency. Stack memory caching on top of disk caching.
+A tile server needs low latency. Keep hot tiles in a memory cache.
 
 ```java
 // 1. Base S3 Reader via Storage
@@ -153,14 +137,8 @@ URI leaf = URI.create("s3://bucket/tiles.pmtiles");
 try (Storage storage = StorageFactory.open(bucket);
         RangeReader base = storage.openRangeReader(leaf);
 
-        // 2. Disk Cache (Persistent L2)
-        RangeReader l2 = DiskCachingRangeReader.builder(base)
-            .cacheDirectory(cacheDir)
-            .maxCacheSizeBytes(50_000_000_000L) // 50GB
-            .build();
-
-        // 3. Memory Cache (Fast L1)
-        RangeReader reader = CachingRangeReader.builder(l2)
+        // 2. Memory Cache
+        RangeReader reader = CachingRangeReader.builder(base)
             .maximumSize(10_000) // Keep hot tiles in RAM
             .softValues()        // Let JVM reclaim memory if needed
             .build()) {
@@ -169,15 +147,11 @@ try (Storage storage = StorageFactory.open(bucket);
 ```
 
 ### For Data Pipelines (ETL)
-ETL jobs often read large chunks sequentially. Memory caching is less useful; focusing on throughput is key.
+ETL jobs often read large chunks sequentially. Memory caching is less useful; read large ranges directly from the base reader and focus on throughput.
 
 ```java
 try (Storage storage = StorageFactory.open(bucket);
-        RangeReader base = storage.openRangeReader(leaf);
-        RangeReader reader = DiskCachingRangeReader.builder(base)
-            .maxCacheSizeBytes(1_000_000_000L) // 1GB buffer
-            .deleteOnClose()                   // Clean up after job
-            .build()) {
-    // ...
+        RangeReader reader = storage.openRangeReader(leaf)) {
+    // issue large sequential readRange calls
 }
 ```

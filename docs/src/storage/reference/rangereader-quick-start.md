@@ -117,45 +117,6 @@ try (Storage storage = StorageFactory.open(bucket, props);
 
 > **Note**: For local files, caching provides little benefit since the OS already caches file data efficiently.
 
-### Disk Caching for Large Datasets
-
-```java
-import io.tileverse.storage.cache.DiskCachingRangeReader;
-
-URI bucket = URI.create("s3://bucket/");
-URI leaf = URI.create("s3://bucket/large-file.bin");
-try (Storage storage = StorageFactory.open(bucket);
-        RangeReader baseReader = storage.openRangeReader(leaf);
-        RangeReader cachedReader = DiskCachingRangeReader.builder(baseReader)
-            .maxCacheSizeBytes(1024 * 1024 * 1024)  // 1GB cache
-            .build()) {
-
-    // Reads are cached to disk for persistence across sessions
-    ByteBuffer data = cachedReader.readRange(100, 500);
-    data.flip();
-}
-```
-
-### Multi-Level Caching
-
-```java
-URI bucket = URI.create("s3://bucket/");
-URI leaf = URI.create("s3://bucket/data.bin");
-try (Storage storage = StorageFactory.open(bucket);
-        RangeReader baseReader = storage.openRangeReader(leaf);
-        RangeReader diskCached = DiskCachingRangeReader.builder(baseReader)
-            .maxCacheSizeBytes(10L * 1024 * 1024 * 1024)  // 10GB disk cache
-            .build();
-        RangeReader optimizedReader = CachingRangeReader.builder(diskCached)
-            .maximumSize(1000)  // 1000 entries in memory
-            .build()) {
-
-    // Highly optimized reads with multiple caching layers
-    ByteBuffer data = optimizedReader.readRange(offset, length);
-    data.flip(); // Prepare buffer for reading
-}
-```
-
 ## Working with ByteBuffers
 
 ### Reusing Buffers (Recommended)

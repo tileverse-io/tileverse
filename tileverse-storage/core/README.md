@@ -55,7 +55,6 @@ Each implementation focuses solely on reading from its specific data source with
 Following the Single Responsibility Principle, additional functionality is added through decorators:
 
 - **CachingRangeReader**: Caches recently accessed ranges in memory to reduce redundant reads
-- **DiskCachingRangeReader**: Provides persistent caching of ranges to disk, supporting larger datasets
 - **BlockAlignedRangeReader**: Aligns reads to block boundaries to reduce the number of requests
 
 This approach provides several benefits:
@@ -71,13 +70,8 @@ This approach provides several benefits:
 // Base reader for a specific source
 RangeReader baseReader = new S3RangeReader(s3Client, bucket, key);
 
-// Add disk caching for persistent storage (first-level cache)
-RangeReader diskCachedReader = new DiskCachingRangeReader(baseReader, 
-                                    Path.of("/cache/directory"), 
-                                    "s3-bucket-key-identifier");
-
 // Add block alignment to optimize read sizes (especially for cloud storage)
-RangeReader blockAlignedReader = new BlockAlignedRangeReader(diskCachedReader, 64 * 1024);
+RangeReader blockAlignedReader = new BlockAlignedRangeReader(baseReader, 64 * 1024);
 
 // Add in-memory caching as the outermost decorator
 // This ensures we cache the aligned blocks, avoiding redundant storage
@@ -87,14 +81,12 @@ RangeReader cachedReader = CachingRangeReader.builder(blockAlignedReader).build(
 The order of decorators is important for optimal performance:
 
 1. **Base Reader**: Provides the core functionality (reading from the source)
-2. **Disk Cache**: Provides persistent storage of ranges between sessions
-3. **Block Alignment**: Optimizes access patterns by expanding ranges to block boundaries
-4. **Memory Cache**: Should be the outermost decorator to efficiently cache aligned blocks
+2. **Block Alignment**: Optimizes access patterns by expanding ranges to block boundaries
+3. **Memory Cache**: Should be the outermost decorator to efficiently cache aligned blocks
 
 This layered approach offers several advantages:
 
 - Small, frequently accessed ranges stay in memory for fastest access
-- Larger, less-frequently accessed ranges can be stored on disk
 - Block alignment ensures efficient reading from the source when necessary
 - Each decorator maintains a single responsibility following SOLID principles
 
@@ -114,8 +106,7 @@ RangeReader fileReader = RangeReaderBuilder.create()
 RangeReader s3Reader = RangeReaderBuilder.create()
     .s3(URI.create("s3://bucket/path/to/file.pmtiles"))
     .withRegion(Region.US_WEST_2)
-    .withDiskCaching(Path.of("/var/cache/tileverse"), 10 * 1024 * 1024 * 1024L) // 10GB disk cache
-    .withCaching() // In-memory cache on top of disk cache
+    .withCaching() // In-memory cache
     .withBlockAlignment(16384) // Block alignment for optimized reads
     .build();
 
@@ -143,11 +134,7 @@ The builder encapsulates the creation logic and decorator wiring, making it easy
 
 ## Optimizations
 
-### Multi-Level Caching
-
-The caching system in Tileverse I/O supports a multi-level approach:
-
-#### In-Memory Caching (`CachingRangeReader`)
+### In-Memory Caching (`CachingRangeReader`)
 
 The `CachingRangeReader` decorator provides an in-memory cache of recently accessed ranges, which is valuable when:
 
@@ -161,22 +148,6 @@ The memory cache is implemented using Caffeine, a high-performance caching libra
 - Weak references to allow garbage collection when memory is constrained
 - Thread-safety for concurrent access
 
-#### Disk Caching (`DiskCachingRangeReader`)
-
-The `DiskCachingRangeReader` provides a persistent disk cache, inspired by DuckDB's cache_httpfs extension. This is particularly useful for:
-
-- Large datasets that exceed memory capacity
-- Persisting cached data between application runs
-- Reducing network/cloud access costs over time
-
-Key features of the disk cache include:
-
-- LRU (Least Recently Used) eviction policy
-- Configurable maximum cache size
-- Thread-safe access to cached content
-- Persistent storage of byte ranges with metadata
-- Automatic initialization from existing cache contents
-
 ### Block Alignment
 
 The `BlockAlignedRangeReader` decorator optimizes access patterns by:
@@ -189,114 +160,6 @@ This is especially beneficial for cloud storage, where:
 - Each request has overhead (latency, authentication)
 - Larger reads are more efficient than multiple small reads
 - Services may have minimum read sizes or charge per request
-
-### Using Different Block Sizes for Memory and Disk Caches
-
-When working with large datasets that benefit from hierarchical access patterns, it can be beneficial to use different block sizes for memory and disk caching. This allows you to:
-
-1. Use larger blocks (e.g., 1MB) for disk caching to reduce I/O operations and improve throughput
-2. Use smaller blocks (e.g., 64KB) for memory caching to optimize memory usage and improve random access performance
-
-The standard `RangeReaderBuilder` currently supports only a single block alignment size. However, you can create a custom decorator chain to achieve independent memory and disk block sizes:
-
-```java
-// Create a custom multi-level cache with different block sizes
-RangeReader baseReader = new S3RangeReader(s3Client, bucket, key);
-
-// Setup disk caching (innermost decorator)
-RangeReader diskCache = new DiskCachingRangeReader(
-        baseReader, 
-        Path.of("/cache/directory"), 
-        "source-identifier", 
-        1024 * 1024 * 1024L); // 1GB disk cache
-
-// Add 1MB block alignment for disk operations
-RangeReader largeBlocks = new BlockAlignedRangeReader(diskCache, 1024 * 1024); // 1MB blocks
-
-// Add memory caching of these large blocks
-RangeReader memoryCache = CachingRangeReader.builder(largeBlocks).build();
-
-// Add 64KB block alignment as the outermost layer for finer-grained client access
-RangeReader smallBlocks = new BlockAlignedRangeReader(memoryCache, 64 * 1024); // 64KB blocks
-```
-
-This creates the following decorator chain:
-```
-BlockAlignedRangeReader(64KB) → CachingRangeReader → BlockAlignedRangeReader(1MB) → DiskCachingRangeReader → RangeReader
-```
-
-With this setup:
-1. The inner 1MB block alignment optimizes disk I/O by reading and caching large chunks
-2. The memory cache stores these 1MB blocks for efficient reuse
-3. The outer 64KB block alignment lets the application access smaller portions without wasting memory
-
-#### How This Works
-
-When a client requests a small range (e.g., 10KB):
-1. The outer 64KB `BlockAlignedRangeReader` expands the request to a 64KB aligned block
-2. If not in the memory cache, the request goes to the 1MB `BlockAlignedRangeReader`
-3. The 1MB aligner expands the 64KB request to a 1MB aligned block
-4. This large block is either retrieved from the disk cache or read from the source
-5. The 1MB block is stored in memory cache for future requests
-6. The 64KB block is extracted from the 1MB block and returned
-7. The client gets the original 10KB requested data
-
-This approach balances memory efficiency with disk I/O performance and is particularly effective for cloud storage where reducing the number of requests is important.
-
-To make this pattern easier to use in your application, you could create a helper method:
-
-```java
-/**
- * Creates a RangeReader with different block sizes for memory and disk caching.
- * 
- * @param baseReader The base reader 
- * @param cachePath Path to disk cache directory
- * @param sourceId Source identifier for caching
- * @param diskBlockSize Block size for disk operations (e.g., 1MB)
- * @param memoryBlockSize Block size for memory operations (e.g., 64KB)
- * @return A configured RangeReader
- */
-public static RangeReader createDualBlockSizeReader(
-        RangeReader baseReader, 
-        Path cachePath, 
-        String sourceId, 
-        int diskBlockSize,
-        int memoryBlockSize) throws IOException {
-    
-    RangeReader diskCache = new DiskCachingRangeReader(baseReader, cachePath, sourceId);
-    RangeReader largeBlocks = new BlockAlignedRangeReader(diskCache, diskBlockSize);
-    RangeReader memoryCache = CachingRangeReader.builder(largeBlocks).build();
-    return new BlockAlignedRangeReader(memoryCache, memoryBlockSize);
-}
-```
-
-Then you could use it like this:
-
-```java
-RangeReader reader = createDualBlockSizeReader(
-    new S3RangeReader(s3Client, bucket, key),
-    Path.of("/cache/directory"),
-    "s3://" + bucket + "/" + key,
-    1024 * 1024,  // 1MB disk blocks
-    64 * 1024     // 64KB memory blocks
-);
-```
-
-The RangeReaderBuilder now directly supports configuring different block sizes for memory and disk operations:
-
-```java
-// Create a reader with different block sizes for memory and disk caching
-RangeReader optimizedReader = RangeReaderBuilder.create()
-    .s3(uri)
-    .withRegion(region)
-    .withDiskCaching(cachePath) // Add disk cache
-    .withDiskBlockAlignment(1024 * 1024) // 1MB blocks for disk I/O
-    .withMemoryCaching() // Add memory cache
-    .withMemoryBlockAlignment(64 * 1024) // 64KB blocks for memory access
-    .build();
-```
-
-This creates the same decorator chain as the manual construction, but with a more convenient API.
 
 ## Usage Patterns
 
@@ -321,35 +184,27 @@ try (RangeReader reader = RangeReaderBuilder.create()
         .s3(uri)
         .withCredentials(credentialsProvider)
         .withRegion(region)
-        .withDiskCaching(Path.of("/var/cache/tileverse/s3cache"))
         .withCaching()
         .withBlockAlignment(64 * 1024) // 64KB blocks
         .build()) {
     
-    // Optimized multi-level caching behavior:
+    // Caching behavior:
     
-    // First read: not in any cache, reads from S3 and stores in both disk and memory caches
+    // First read: not cached, reads from S3 and stores the aligned block in the memory cache
     ByteBuffer data1 = reader.readRange(1000, 100);  
     
-    // Second read: not in memory but fetched from disk cache (faster than S3)
-    // and stored in memory cache 
+    // Second read: different block, reads from S3 and caches it
     ByteBuffer data2 = reader.readRange(5000, 200);  
     
     // Third read: found in memory cache (fastest access)
     ByteBuffer data3 = reader.readRange(1050, 50);   
-    
-    // Application restart: memory cache is empty, but disk cache persists
-    // Subsequent reads will benefit from previously cached data
 }
 ```
 
 The builder automatically applies decorators in the correct order for optimal performance:
 1. Base reader (S3, HTTP, file, etc.)
-2. Disk cache (persistent storage)
-3. Block alignment (read optimization)
-4. Memory cache (fast access)
-
-This tiered approach gives you the benefits of both in-memory performance and persistent caching.
+2. Block alignment (read optimization)
+3. Memory cache (fast access)
 
 ## Future Enhancements
 

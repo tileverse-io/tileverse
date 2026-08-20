@@ -195,14 +195,6 @@ export JAVA_HOME=/path/to/java17
        .build();
    ```
 
-2. **Use disk caching for persistent storage**:
-   ```java
-   // For large datasets, use disk caching
-   var reader = DiskCachingRangeReader.builder(cloudReader)
-       .maxCacheSizeBytes(1024 * 1024 * 1024)  // 1GB cache
-       .build();
-   ```
-
 ### High Memory Usage
 
 **Problem**: Application uses too much memory.
@@ -221,13 +213,6 @@ export JAVA_HOME=/path/to/java17
    var reader = CachingRangeReader.builder(baseReader)
        .maximumSize(100)  // Limit entries
        .maxSizeBytes(64 * 1024 * 1024)  // 64MB limit
-       .build();
-   ```
-
-3. **Use disk caching instead**:
-   ```java
-   var reader = DiskCachingRangeReader.builder(baseReader)
-       .maxCacheSizeBytes(1024 * 1024 * 1024)  // 1GB on disk
        .build();
    ```
 
@@ -394,32 +379,6 @@ export JAVA_HOME=/path/to/java17
    }
    ```
 
-### Disk Cache Issues
-
-**Problem**: Disk cache not working or filling up disk.
-
-**Solutions**:
-
-1. **Check disk space**:
-   ```bash
-   df -h /tmp/rangereader-cache
-   ```
-
-2. **Configure cache location**:
-   ```java
-   var reader = DiskCachingRangeReader.builder(baseReader)
-       .cacheDirectory("/var/cache/rangereader")  // Custom location
-       .maxCacheSizeBytes(5L * 1024 * 1024 * 1024)  // 5GB limit
-       .build();
-   ```
-
-3. **Enable cleanup on close**:
-   ```java
-   var reader = DiskCachingRangeReader.builder(baseReader)
-       .deleteOnClose()  // Clean up when done
-       .build();
-   ```
-
 ## Debugging Tips
 
 ### Enable Debug Logging
@@ -517,5 +476,5 @@ If you're still experiencing issues:
 | `Access Denied (403)` | Authentication/authorization | Check credentials and permissions |
 | `NoSuchFileException` | File not found | Verify file/object exists |
 | `SocketTimeoutException` | Network timeout | Increase timeout or check connectivity |
-| `OutOfMemoryError` | Large cache or buffer usage | Reduce cache size or use disk caching |
+| `OutOfMemoryError` | Large cache or buffer usage | Reduce cache size or use soft values |
 | `UnsupportedClassVersionError` | Wrong Java version | Use Java 17 or higher |

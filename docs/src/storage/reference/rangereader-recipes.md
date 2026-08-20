@@ -82,7 +82,6 @@ public interface RangeReader extends Closeable {
 The library includes several performance optimization features:
 
 - **Memory Caching**: Fast access to recently used ranges
-- **Disk Caching**: Persistent caching for large datasets
 - **Block Alignment**: Optimized read patterns for cloud storage
 - **Concurrent Access**: Thread-safe implementations
 
@@ -141,8 +140,6 @@ For optimal performance, stack decorators in this order:
 Application
     ↓
 CachingRangeReader (memory cache - outermost)
-    ↓  
-DiskCachingRangeReader (persistent cache)
     ↓
 BaseReader (S3, Azure, HTTP, etc.)
     ↓

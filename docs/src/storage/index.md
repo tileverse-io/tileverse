@@ -165,7 +165,7 @@ try {
 
 ## Storage and RangeReader
 
-`Storage.openRangeReader(key)` returns a `RangeReader` for the named blob. The decorator stack you used before (`CachingRangeReader`, `BlockAlignedRangeReader`, `DiskCachingRangeReader`) still works:
+`Storage.openRangeReader(key)` returns a `RangeReader` for the named blob. The decorator stack you used before (`CachingRangeReader`, `BlockAlignedRangeReader`) still works:
 
 ```java
 import io.tileverse.storage.RangeReader;

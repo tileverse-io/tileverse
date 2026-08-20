@@ -59,48 +59,28 @@ class CacheStatsTest {
     }
 
     @Test
-    void testCacheStatsConsistency() throws IOException {
-        // Test both caching readers have consistent APIs
+    void testCacheStatsReflectCacheActivity() throws IOException {
         RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
 
         try (CachingRangeReader memoryCache = CachingRangeReader.builder(baseReader)
-                        .cacheManager(cacheManager)
-                        .build();
-                DiskCachingRangeReader diskCache = DiskCachingRangeReader.builder(baseReader)
-                        .cacheDirectory(tempDir.resolve("cache"))
-                        .build()) {
+                .cacheManager(cacheManager)
+                .build()) {
 
-            // Both should have consistent method names
             assertEquals(0, memoryCache.getCacheEntryCount());
-            assertEquals(0, diskCache.getCacheEntryCount());
-
             assertEquals(0, memoryCache.getEstimatedCacheSizeBytes());
-            assertEquals(0, diskCache.getEstimatedCacheSizeBytes());
 
             ByteBuffer buff = ByteBuffer.allocate(1024);
-            // Read some data to populate caches
+            // Read some data to populate the cache
             memoryCache.readRange(1000, 500, buff);
-            diskCache.readRange(1000, 500, buff);
 
-            // Both should report cache entries
             assertTrue(memoryCache.getCacheEntryCount() > 0);
-            assertTrue(diskCache.getCacheEntryCount() > 0);
-
             assertTrue(memoryCache.getEstimatedCacheSizeBytes() > 0);
-            assertTrue(diskCache.getEstimatedCacheSizeBytes() > 0);
 
-            // Both should provide CacheStats
             CacheStats memoryStats = memoryCache.getCacheStats();
-            CacheStats diskStats = diskCache.getCacheStats();
 
-            // Verify CacheStats structure
             assertThat(memoryStats.entryCount()).isGreaterThan(0);
             assertThat(memoryStats.loadCount()).isGreaterThan(0);
             assertThat(memoryStats.requestCount()).isGreaterThan(0);
-
-            assertThat(diskStats.entryCount()).isGreaterThan(0);
-            assertThat(diskStats.loadCount()).isGreaterThan(0);
-            assertThat(diskStats.requestCount()).isGreaterThan(0);
         }
     }
 

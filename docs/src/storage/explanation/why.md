@@ -38,7 +38,7 @@ The library exists because the intersection of constraints — Spring/no-DI, ran
 
 ### 1. `RangeReader` is first-class, not an afterthought
 
-Cloud-optimized formats (PMTiles, COG, GeoParquet, FlatGeobuf) read 4 KB headers, jump to a directory, then issue hundreds of small byte-range requests per query. None of the general-purpose abstractions above expose a thread-safe, decorator-friendly byte-range reader at the core type. `RangeReader` is composable with `CachingRangeReader` (in-memory), `BlockAlignedRangeReader` (cloud-pricing-friendly block alignment), and `DiskCachingRangeReader` (persistent across runs). The decorator stack delivers measurable cost reductions on real-world cloud workloads.
+Cloud-optimized formats (PMTiles, COG, GeoParquet, FlatGeobuf) read 4 KB headers, jump to a directory, then issue hundreds of small byte-range requests per query. None of the general-purpose abstractions above expose a thread-safe, decorator-friendly byte-range reader at the core type. `RangeReader` is composable with `CachingRangeReader` (in-memory) and `BlockAlignedRangeReader` (cloud-pricing-friendly block alignment). The decorator stack delivers measurable cost reductions on real-world cloud workloads.
 
 ### 2. Capabilities are an explicit, queryable record — not an exception roulette
 

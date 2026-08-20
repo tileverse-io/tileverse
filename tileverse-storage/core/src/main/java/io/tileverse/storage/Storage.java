@@ -133,7 +133,7 @@ public interface Storage extends Closeable {
      * closes the underlying SDK client and invalidates any open readers obtained from it.
      *
      * <p>The returned reader can be wrapped with the standard decorators ({@code CachingRangeReader},
-     * {@code BlockAlignedRangeReader}, {@code DiskCachingRangeReader}) just like a directly-constructed reader.
+     * {@code BlockAlignedRangeReader}) just like a directly-constructed reader.
      *
      * @param key key relative to {@link #baseUri()}
      * @return a thread-safe RangeReader bound to the blob

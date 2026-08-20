@@ -48,7 +48,6 @@ These classes implement the actual network/disk I/O:
 We use the Decorator pattern to add behaviors without modifying backends.
 
 *   **`CachingRangeReader`**: Intercepts `readRange`. Checks in-memory Caffeine cache. If miss, calls delegate, caches result, returns data.
-*   **`DiskCachingRangeReader`**: Similar to above, but persists to a local file store.
 *   **`BlockAlignedRangeReader`**: Expands arbitrary read requests (e.g., "bytes 100-150") to align with specific block boundaries (e.g., "bytes 0-4096"), optimizing cache hit rates.
 
 ## Runtime View
@@ -61,8 +60,8 @@ The runtime view describes the dynamic behavior of the library.
 ### HTTP Range Reading with Authentication
 ![HTTP Range Read](../../assets/images/storage/structurizr-HttpRangeRead.svg)
 
-### Multi-Level Caching Scenario
-![Multi-Level Caching](../../assets/images/storage/structurizr-MultiLevelCaching.svg)
+### Cache Miss Scenario
+![Cache Miss](../../assets/images/storage/structurizr-CacheMissScenario.svg)
 
 ## Service Provider Interface (SPI)
 

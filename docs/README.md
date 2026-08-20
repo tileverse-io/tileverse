@@ -103,7 +103,7 @@ Defined views:
 | `TileMatrixSetComponents` | `tileverse-tilematrixset` (TMS, TilePyramid, IO) |
 | `TileStoreComponents` | `tileverse-tilestore` (TileStore<T>, VectorTileStore, RasterTileStore, TileJSON) |
 
-Dynamic views (e.g. `BasicFileRead`, `MultiLevelCaching`, `S3Authentication`) come from `dynamic-views.dsl`.
+Dynamic views (e.g. `BasicFileRead`, `CacheMissScenario`, `S3Authentication`) come from `dynamic-views.dsl`.
 
 To add a new diagram: edit `workspace.dsl` (or `dynamic-views.dsl`), rerun `./build.sh`, then embed the resulting SVG from `src/assets/images/storage/structurizr-<ViewKey>.svg` on the relevant Markdown page.
 

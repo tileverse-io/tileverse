@@ -23,7 +23,6 @@ workspace "Tileverse Storage - Dynamic Views" "Runtime scenarios for the Tilever
                 
                 # Decorators
                 cachingRangeReader = component "CachingRangeReader" "In-memory caching decorator" "Java Class"
-                diskCachingRangeReader = component "DiskCachingRangeReader" "Disk-based caching decorator" "Java Class"
                 
                 # Authentication
                 authenticationSystem = component "Authentication System" "HTTP authentication implementations" "Java Package"
@@ -44,7 +43,6 @@ workspace "Tileverse Storage - Dynamic Views" "Runtime scenarios for the Tilever
         application -> fileRangeReader "Uses for file reading"
         application -> httpRangeReader "Uses for HTTP reading"
         application -> cachingRangeReader "Uses for cached reading"
-        application -> diskCachingRangeReader "Uses for disk cached reading"
         application -> s3RangeReader "Uses for S3 reading"
         
         # Core component relationships
@@ -57,19 +55,16 @@ workspace "Tileverse Storage - Dynamic Views" "Runtime scenarios for the Tilever
         
         # Decorator relationships
         cachingRangeReader -> rangeReaderInterface "Implements"
-        diskCachingRangeReader -> rangeReaderInterface "Implements"
-        
+
         # Decorator chaining relationships
-        cachingRangeReader -> diskCachingRangeReader "Delegates to"
-        diskCachingRangeReader -> fileRangeReader "Delegates to"
-        diskCachingRangeReader -> httpRangeReader "Delegates to"
+        cachingRangeReader -> fileRangeReader "Delegates to"
+        cachingRangeReader -> httpRangeReader "Delegates to"
         
         # External system relationships
         fileRangeReader -> localFileSystem "Reads from"
         httpRangeReader -> httpServer "Makes range requests to"
         s3RangeReader -> awsS3 "Makes range requests to"
         httpRangeReader -> authenticationSystem "Uses for authentication"
-        diskCachingRangeReader -> localFileSystem "Reads/writes cache files"
         
         # Internal relationships
         abstractRangeReader -> application "Returns data to"
@@ -109,19 +104,17 @@ workspace "Tileverse Storage - Dynamic Views" "Runtime scenarios for the Tilever
             autoLayout
         }
 
-        dynamic coreModule "MultiLevelCaching" {
-            title "Multi-Level Caching Scenario"
-            description "Shows the decorator pattern in action with memory and disk caching"
-            
+        dynamic coreModule "CacheMissScenario" {
+            title "Cache Miss Scenario"
+            description "Shows the decorator pattern in action when a read misses the in-memory cache"
+
             application -> cachingRangeReader "1. readRange(offset, length)"
-            cachingRangeReader -> diskCachingRangeReader "2. cache miss - delegate"
-            diskCachingRangeReader -> fileRangeReader "3. delegate to base reader"
-            fileRangeReader -> localFileSystem "4. file range request"
-            localFileSystem -> fileRangeReader "5. returns data"
-            fileRangeReader -> diskCachingRangeReader "6. returns data"
-            diskCachingRangeReader -> cachingRangeReader "7. returns data"
-            cachingRangeReader -> application "8. returns cached data"
-            
+            cachingRangeReader -> fileRangeReader "2. cache miss - delegate"
+            fileRangeReader -> localFileSystem "3. file range request"
+            localFileSystem -> fileRangeReader "4. returns data"
+            fileRangeReader -> cachingRangeReader "5. returns data"
+            cachingRangeReader -> application "6. returns cached data"
+
             autoLayout
         }
 
@@ -131,23 +124,6 @@ workspace "Tileverse Storage - Dynamic Views" "Runtime scenarios for the Tilever
             
             application -> cachingRangeReader "1. readRange(offset, length)"
             cachingRangeReader -> application "2. returns cached data immediately"
-            
-            autoLayout
-        }
-
-        dynamic coreModule "DiskCacheRecovery" {
-            title "Disk Cache Recovery After External Deletion"
-            description "Shows resilience when cache files are deleted externally"
-            
-            application -> diskCachingRangeReader "1. readRange(offset, length)"
-            diskCachingRangeReader -> localFileSystem "2. attempt to read cache file"
-            localFileSystem -> diskCachingRangeReader "3. NoSuchFileException"
-            diskCachingRangeReader -> httpRangeReader "4. re-load from delegate"
-            httpRangeReader -> httpServer "5. HTTP range request"
-            httpServer -> httpRangeReader "6. returns fresh data"
-            httpRangeReader -> diskCachingRangeReader "7. returns data"
-            diskCachingRangeReader -> localFileSystem "8. writes new cache file"
-            diskCachingRangeReader -> application "9. returns data"
             
             autoLayout
         }

@@ -23,7 +23,6 @@ import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
 import io.tileverse.storage.block.BlockAlignedRangeReader;
 import io.tileverse.storage.cache.CachingRangeReader;
-import io.tileverse.storage.cache.DiskCachingRangeReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -260,41 +259,6 @@ class RangeReaderBufferTest {
             // First read to populate cache
             int offset = 10;
             int length = 15;
-            ByteBuffer target1 = ByteBuffer.allocate(length);
-
-            int bytesRead1 = reader.readRange(offset, length, target1);
-            target1.flip();
-
-            // Verify first read
-            assertEquals(length, bytesRead1, "First read should return requested length");
-            byte[] expectedBytes =
-                    textContent.substring(offset, offset + length).getBytes(StandardCharsets.UTF_8);
-            verifyBuffer(target1, expectedBytes, bytesRead1);
-
-            // Second read of same range (from cache)
-            ByteBuffer target2 = ByteBuffer.allocate(length);
-            int bytesRead2 = reader.readRange(offset, length, target2);
-            target2.flip();
-
-            // Verify second read
-            assertEquals(length, bytesRead2, "Second read should return same length");
-            verifyBuffer(target2, expectedBytes, bytesRead2);
-        }
-    }
-
-    @Test
-    void testDiskCachingRangeReader_TargetBuffer() throws IOException {
-        Path cacheDir = tempDir.resolve("cache");
-        Files.createDirectories(cacheDir);
-
-        try (RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
-                DiskCachingRangeReader reader = DiskCachingRangeReader.builder(baseReader)
-                        .cacheDirectory(cacheDir)
-                        .build()) {
-
-            // First read to populate cache
-            int offset = 15;
-            int length = 20;
             ByteBuffer target1 = ByteBuffer.allocate(length);
 
             int bytesRead1 = reader.readRange(offset, length, target1);

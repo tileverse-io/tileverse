@@ -61,7 +61,7 @@
 
   <properties>
     <!-- CI-friendly version management -->
-    <revision>2.0-SNAPSHOT</revision>
+    <revision>2.1-SNAPSHOT</revision>
 
     <!-- Build properties -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

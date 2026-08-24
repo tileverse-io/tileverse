@@ -237,6 +237,12 @@ public abstract class AbstractRangeReaderIT {
             assertEquals(0, explicitEofBuffer.position(), "Position should be 0");
             assertEquals(0, explicitEofBuffer.limit(), "Limit should be 0");
 
+            // Test reading far beyond EOF
+            ByteBuffer beyondEofBuffer = ByteBuffer.allocate(100);
+            int beyondBytesRead = reader.readRange(TEST_FILE_SIZE + 1000, 100, beyondEofBuffer);
+            assertEquals(0, beyondBytesRead, "Reading beyond EOF should return 0 bytes read");
+            assertEquals(0, beyondEofBuffer.position(), "Position should be unchanged");
+
             // Test with zero length explicit buffer
             ByteBuffer explicitZeroBuffer = ByteBuffer.allocate(100);
             int zeroBytesRead = reader.readRange(1000, 0, explicitZeroBuffer);

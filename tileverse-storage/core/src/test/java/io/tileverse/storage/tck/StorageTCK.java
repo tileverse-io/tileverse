@@ -189,6 +189,22 @@ public abstract class StorageTCK {
         }
     }
 
+    @Test
+    void openRangeReaderFromListingEntrySeedsSize() throws IOException {
+        requireWrites();
+        byte[] data = "0123456789".getBytes(StandardCharsets.UTF_8);
+        storage.put("seeded.bin", data);
+        StorageEntry.File entry = storage.stat("seeded.bin").orElseThrow();
+        try (RangeReader rr = storage.openRangeReader(entry)) {
+            assertThat(rr.size()).hasValue((long) data.length);
+            ByteBuffer buf = rr.readRange(2, 4);
+            buf.flip();
+            byte[] out = new byte[buf.remaining()];
+            buf.get(out);
+            assertThat(new String(out, StandardCharsets.UTF_8)).isEqualTo("2345");
+        }
+    }
+
     /**
      * Round-trip a payload large enough to cross the multipart upload threshold (8 MiB for S3 / GCS, configurable for
      * Azure) and the CRT async client's default {@code minimumPartSize} (8 MiB), then read it back three ways:

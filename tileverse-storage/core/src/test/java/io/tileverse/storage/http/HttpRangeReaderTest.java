@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.OptionalLong;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -83,9 +84,20 @@ class HttpRangeReaderTest {
                         .withHeader("Content-Length", String.valueOf(TEST_DATA.length))
                         .withHeader("Accept-Ranges", "bytes")));
 
-        // GET request for entire file (without range header)
+        // Fallback range response for tests that read without stubbing their own range request. The reader
+        // always sends a Range header; this stub simulates a server honoring bytes=0-99, the range the
+        // no-HEAD tests below use.
+        int fallbackStart = 0;
+        int fallbackEnd = 99;
+        byte[] fallbackBytes = Arrays.copyOfRange(TEST_DATA, fallbackStart, fallbackEnd + 1);
         wm.stubFor(get(urlEqualTo(TEST_PATH))
-                .willReturn(aResponse().withStatus(200).withBody(TEST_DATA)));
+                .withHeader("Range", equalTo("bytes=" + fallbackStart + "-" + fallbackEnd))
+                .willReturn(aResponse()
+                        .withStatus(206)
+                        .withHeader(
+                                "Content-Range", "bytes " + fallbackStart + "-" + fallbackEnd + "/" + TEST_DATA.length)
+                        .withHeader("Content-Length", String.valueOf(fallbackBytes.length))
+                        .withBody(fallbackBytes)));
 
         // Individual range request stubs - we'll create these for each test as needed
 
@@ -99,6 +111,57 @@ class HttpRangeReaderTest {
 
         // Verify that HEAD request was made
         wm.verify(headRequestedFor(urlEqualTo(TEST_PATH)));
+    }
+
+    @Test
+    void readOnlyWorkloadIssuesNoHeadRequest() {
+        ByteBuffer target = ByteBuffer.allocate(100);
+        int read = rangeReader.readRange(0, 100, target);
+
+        assertEquals(100, read);
+        wm.verify(0, headRequestedFor(urlEqualTo(TEST_PATH)));
+    }
+
+    @Test
+    void sizeCapturedFromRangeResponseWithoutHead() {
+        rangeReader.readRange(0, 100, ByteBuffer.allocate(100));
+
+        assertEquals(OptionalLong.of(TEST_DATA.length), rangeReader.size());
+        wm.verify(0, headRequestedFor(urlEqualTo(TEST_PATH)));
+    }
+
+    @Test
+    void sizeBeforeAnyReadIssuesExactlyOneHead() {
+        assertEquals(OptionalLong.of(TEST_DATA.length), rangeReader.size());
+        assertEquals(OptionalLong.of(TEST_DATA.length), rangeReader.size());
+        wm.verify(1, headRequestedFor(urlEqualTo(TEST_PATH)));
+    }
+
+    @Test
+    void sizeFallsBackToHeadWhenRangeResponseLacksContentRange() throws IOException {
+        // Distinct path: none of the @BeforeEach TEST_PATH stubs can match it, which avoids the stub-precedence
+        // question that range stubs added for TEST_PATH by other tests must consider.
+        String path = "/no-content-range-on-range-response";
+        byte[] responseBytes = Arrays.copyOfRange(TEST_DATA, 0, 100);
+
+        // A real server violating the spec: 206 with a body but no Content-Range header.
+        wm.stubFor(get(urlEqualTo(path))
+                .withHeader("Range", equalTo("bytes=0-99"))
+                .willReturn(aResponse()
+                        .withStatus(206)
+                        .withHeader("Content-Length", String.valueOf(responseBytes.length))
+                        .withBody(responseBytes)));
+        wm.stubFor(head(urlEqualTo(path))
+                .willReturn(
+                        aResponse().withStatus(200).withHeader("Content-Length", String.valueOf(TEST_DATA.length))));
+
+        URI uri = URI.create("http://localhost:" + wm.getPort() + path);
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(uri)) {
+            reader.readRange(0, 100, ByteBuffer.allocate(100));
+
+            assertEquals(OptionalLong.of(TEST_DATA.length), reader.size());
+            wm.verify(1, headRequestedFor(urlEqualTo(path)));
+        }
     }
 
     @Test
@@ -221,9 +284,10 @@ class HttpRangeReaderTest {
         // Create range response - only including available data
         byte[] responseBytes = Arrays.copyOfRange(TEST_DATA, offset, TEST_DATA.length);
 
-        // Stub the range request
+        // Stub the range request: the client asks for the full range past EOF, and the server
+        // satisfies it with only the available bytes, like a real HTTP server would.
         wm.stubFor(get(urlEqualTo(TEST_PATH))
-                .withHeader("Range", equalTo("bytes=" + offset + "-" + end))
+                .withHeader("Range", equalTo("bytes=" + offset + "-" + (offset + length - 1)))
                 .willReturn(aResponse()
                         .withStatus(206)
                         .withHeader("Content-Range", "bytes " + offset + "-" + end + "/" + TEST_DATA.length)
@@ -245,8 +309,9 @@ class HttpRangeReaderTest {
             assertEquals((byte) ((offset + i) % 256), bytes[i], "Byte mismatch at index " + i);
         }
 
-        // Verify that range request was made with the original range
-        wm.verify(getRequestedFor(urlEqualTo(TEST_PATH)).withHeader("Range", equalTo("bytes=" + offset + "-" + end)));
+        // Verify that the client requested the full range as asked, without pre-truncating at EOF
+        wm.verify(getRequestedFor(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=" + offset + "-" + (offset + length - 1))));
     }
 
     @Test
@@ -266,6 +331,19 @@ class HttpRangeReaderTest {
     }
 
     @Test
+    void readPastEofReturnsZeroOn416() {
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", matching("bytes=200000-.*"))
+                .willReturn(aResponse().withStatus(416).withHeader("Content-Range", "bytes */" + TEST_DATA.length)));
+
+        ByteBuffer target = ByteBuffer.allocate(100);
+        int read = rangeReader.readRange(200_000, 100, target);
+
+        assertEquals(0, read);
+        assertEquals(0, target.position());
+    }
+
+    @Test
     void testReadWithNegativeOffset() {
         ByteBuffer buff = ByteBuffer.allocate(1);
         assertThatThrownBy(() -> rangeReader.readRange(-1, 10, buff)).isInstanceOf(IllegalArgumentException.class);
@@ -278,20 +356,24 @@ class HttpRangeReaderTest {
     }
 
     @Test
-    void testServerWithoutRangeSupport() {
-        // Create a stub for a server that doesn't support range requests
-        wm.stubFor(head(urlEqualTo("/no-range"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Length", String.valueOf(TEST_DATA.length))
-                        .withHeader("Accept-Ranges", "none")));
+    void rangeIgnoringServerFails() {
+        wm.stubFor(get(urlEqualTo("/ignores-range"))
+                .willReturn(aResponse().withStatus(200).withBody(TEST_DATA)));
+        RangeReader ignoring =
+                RangeReaderTestSupport.httpReader(URI.create(wm.getRuntimeInfo().getHttpBaseUrl() + "/ignores-range"));
 
-        URI noRangeUri = URI.create("http://localhost:" + wm.getPort() + "/no-range");
+        assertThatThrownBy(() -> ignoring.readRange(0, 100))
+                .isInstanceOf(io.tileverse.storage.StorageException.class)
+                .hasMessageContaining("Range");
+    }
 
-        // Should throw when readRange() is called (triggering range support initialization)
-        RangeReader reader = RangeReaderTestSupport.httpReader(noRangeUri);
-        assertThatThrownBy(() -> reader.readRange(0, 100, ByteBuffer.allocate(100)))
-                .isInstanceOf(io.tileverse.storage.StorageException.class);
+    @Test
+    void missingObjectThrowsNotFoundOnFirstRead() {
+        wm.stubFor(get(urlEqualTo("/missing")).willReturn(aResponse().withStatus(404)));
+        RangeReader missing =
+                RangeReaderTestSupport.httpReader(URI.create(wm.getRuntimeInfo().getHttpBaseUrl() + "/missing"));
+
+        assertThatThrownBy(() -> missing.readRange(0, 100)).isInstanceOf(io.tileverse.storage.NotFoundException.class);
     }
 
     @Test
@@ -309,12 +391,6 @@ class HttpRangeReaderTest {
                         .withHeader("Content-Length", String.valueOf(TEST_DATA.length))
                         .withBody(TEST_DATA)));
 
-        wm.stubFor(head(urlEqualTo("/ignore-range"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Length", String.valueOf(TEST_DATA.length))
-                        .withHeader("Accept-Ranges", "bytes")));
-
         URI ignoreRangeUri = URI.create("http://localhost:" + wm.getPort() + "/ignore-range");
 
         // Should throw StorageException when server doesn't support range requests (returns 200 instead of 206)
@@ -331,18 +407,11 @@ class HttpRangeReaderTest {
         int length = 100;
         int end = offset + length - 1;
 
-        // Create a stub for a server that returns an error for the actual range request
+        // Create a stub for a server that returns an error for the actual range request.
+        // 416 is excluded here: it is a past-EOF signal handled elsewhere, not a generic error.
         wm.stubFor(get(urlEqualTo("/error"))
                 .withHeader("Range", equalTo("bytes=" + offset + "-" + end))
-                .willReturn(aResponse()
-                        .withStatus(416) // Range Not Satisfiable
-                        .withBody("Range not satisfiable")));
-
-        wm.stubFor(head(urlEqualTo("/error"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Length", String.valueOf(TEST_DATA.length))
-                        .withHeader("Accept-Ranges", "bytes")));
+                .willReturn(aResponse().withStatus(500).withBody("Internal Server Error")));
 
         URI errorUri = URI.create("http://localhost:" + wm.getPort() + "/error");
 

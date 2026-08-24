@@ -308,9 +308,6 @@ final class GoogleCloudStorage implements Storage {
     @Override
     public RangeReader openRangeReader(String key) {
         requireOpen();
-        if (stat(key).isEmpty()) {
-            throw new NotFoundException("Blob not found: gs://" + location.bucket() + "/" + location.resolve(key));
-        }
         return new GoogleCloudStorageRangeReader(
                 handle.client(), location.bucket(), location.resolve(key), userProject);
     }

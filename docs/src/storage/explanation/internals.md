@@ -14,7 +14,7 @@ public interface RangeReader extends Closeable {
     int readRange(long offset, int length, ByteBuffer target) throws IOException;
     
     // Metadata
-    long size() throws IOException;
+    OptionalLong size();
     String getSourceIdentifier();
 }
 ```

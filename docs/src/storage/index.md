@@ -9,7 +9,7 @@ The `Storage` API is the recommended entrypoint when you need anything beyond by
 | URI scheme | Backend | Notes |
 | :--- | :--- | :--- |
 | `file:` | Local filesystem | Real directories, atomic rename |
-| `http:`, `https:` | HTTP / HTTPS | Read-only; HEAD + range GET |
+| `http:`, `https:` | HTTP / HTTPS | Read-only; range GET |
 | `s3:`, `s3a:` | AWS S3 | General-purpose buckets and S3 Express One Zone (Directory Buckets) |
 | `https://*.blob.core.windows.net`, `az:` | Azure Blob Storage | Flat keyspace + virtual directories. `az://<account>/<container>/<path>` is a short-form alias for the canonical `https://` URL (DuckDB / fsspec convention). |
 | `abfs:`, `abfss:`, `https://*.dfs.core.windows.net` | Azure Data Lake Storage Gen2 | Real directories + atomic rename when HNS is enabled |

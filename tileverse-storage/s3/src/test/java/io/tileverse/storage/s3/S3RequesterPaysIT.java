@@ -181,7 +181,7 @@ class S3RequesterPaysIT {
             reader.readRange(0, 4, buf);
         }
 
-        // openRangeReader does a stat() (HEAD) then constructs S3RangeReader (HEAD) and reads (GET).
+        // openRangeReader issues no request; the range read above is the only captured call (GET).
         assertThat(capturedRequests).isNotEmpty();
         assertThat(capturedRequests)
                 .allSatisfy(req -> assertThat(headerValue(req, REQUEST_PAYER_HEADER))

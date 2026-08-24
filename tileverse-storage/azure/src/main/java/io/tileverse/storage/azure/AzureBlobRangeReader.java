@@ -17,6 +17,7 @@ package io.tileverse.storage.azure;
 
 import static java.util.Objects.requireNonNull;
 
+import com.azure.core.http.HttpHeaderName;
 import com.azure.core.http.rest.Response;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.models.BlobRange;
@@ -24,13 +25,14 @@ import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.models.DownloadRetryOptions;
 import io.tileverse.storage.AbstractRangeReader;
-import io.tileverse.storage.NotFoundException;
+import io.tileverse.storage.ContentRange;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.StorageException;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.OptionalLong;
+import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -42,32 +44,18 @@ import lombok.extern.slf4j.Slf4j;
 class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
 
     private final BlobClient blobClient;
-    private long contentLength = -1;
+    private final AtomicReference<OptionalLong> contentLength = new AtomicReference<>();
 
     /**
      * Creates a new AzureBlobRangeReader for the specified blob.
      *
+     * <p>Construction performs no I/O. A missing blob is reported by the first {@link #readRange(long, int)} or
+     * {@link #size()} call instead of at construction time.
+     *
      * @param blobClient The Azure Blob client to read from
-     * @throws StorageException If a storage error occurs
      */
     AzureBlobRangeReader(BlobClient blobClient) {
         this.blobClient = requireNonNull(blobClient, "BlobClient cannot be null");
-
-        // Check if the blob exists and get its content length
-        try {
-            if (!blobClient.exists().booleanValue()) {
-                throw new NotFoundException("Blob does not exist: " + blobClient.getBlobUrl());
-            }
-
-            this.contentLength = blobClient.getProperties().getBlobSize();
-        } catch (BlobStorageException e) {
-            throw AzureExceptionMapper.map(e, blobClient.getBlobUrl());
-        } catch (StorageException e) {
-            throw e;
-        } catch (RuntimeException e) {
-            throw new StorageException(
-                    "failure to access %s: %s".formatted(blobClient.getBlobUrl(), e.getMessage()), e);
-        }
     }
 
     @Override
@@ -101,6 +89,12 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
                 throw new StorageException("Failed to download blob range, status code: " + response.getStatusCode());
             }
 
+            if (contentLength.get() == null) {
+                String contentRange = response.getHeaders().getValue(HttpHeaderName.CONTENT_RANGE);
+                ContentRange.totalOf(contentRange)
+                        .ifPresent(total -> contentLength.compareAndSet(null, OptionalLong.of(total)));
+            }
+
             // Copy the bytes directly into the target buffer
             byte[] data = outputStream.toByteArray();
             target.put(data);
@@ -117,16 +111,21 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
 
     @Override
     public OptionalLong size() {
-        if (contentLength < 0) {
-            try {
-                contentLength = blobClient.getProperties().getBlobSize();
-            } catch (BlobStorageException e) {
-                throw AzureExceptionMapper.map(e, blobClient.getBlobUrl());
-            } catch (Exception e) {
-                throw new StorageException("Failed to get blob size: " + e.getMessage(), e);
-            }
+        OptionalLong known = contentLength.get();
+        if (known == null) {
+            known = contentLength.updateAndGet(current -> current != null ? current : fetchSize());
         }
-        return OptionalLong.of(contentLength);
+        return known;
+    }
+
+    private OptionalLong fetchSize() {
+        try {
+            return OptionalLong.of(blobClient.getProperties().getBlobSize());
+        } catch (BlobStorageException e) {
+            throw AzureExceptionMapper.map(e, blobClient.getBlobUrl());
+        } catch (RuntimeException e) {
+            throw new StorageException("Failed to get blob size: " + e.getMessage(), e);
+        }
     }
 
     @Override

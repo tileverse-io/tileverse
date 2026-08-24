@@ -340,7 +340,7 @@ class RangeReaderSeekableByteChannelTest {
             assertThat(result)
                     .contains("RangeReaderSeekableByteChannel")
                     .contains("position=0")
-                    .contains("size=" + TEST_FILE_SIZE);
+                    .contains(testFile.toString());
         }
     }
 

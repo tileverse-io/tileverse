@@ -18,6 +18,8 @@ package io.tileverse.storage.rangereader.adapters;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.tileverse.storage.AbstractRangeReader;
+import io.tileverse.storage.RangeNotSatisfiableException;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
 import io.tileverse.storage.adapters.RangeReaderReadableByteChannel;
@@ -28,6 +30,8 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.OptionalLong;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -267,7 +271,7 @@ class RangeReaderReadableByteChannelTest {
             assertThat(result)
                     .contains("RangeReaderReadableByteChannel")
                     .contains("position=0")
-                    .contains("size=" + TEST_FILE_SIZE);
+                    .contains(testFile.toString());
         }
     }
 
@@ -331,6 +335,60 @@ class RangeReaderReadableByteChannelTest {
 
             assertThat(totalBytesRead).isEqualTo(1024 * 1024L);
             assertThat(readCount).isEqualTo(16); // 1MB / 64KB = 16 chunks
+        }
+    }
+
+    static class CountingReader extends AbstractRangeReader {
+        final AtomicInteger sizeCalls = new AtomicInteger();
+        final byte[] data = new byte[64];
+
+        @Override
+        protected int readRangeNoFlip(long offset, int length, ByteBuffer target) {
+            if (offset >= data.length) {
+                throw new RangeNotSatisfiableException("past EOF");
+            }
+            int available = (int) Math.min(length, data.length - offset);
+            target.put(data, (int) offset, available);
+            return available;
+        }
+
+        @Override
+        public OptionalLong size() {
+            sizeCalls.incrementAndGet();
+            return OptionalLong.of(data.length);
+        }
+
+        @Override
+        public String getSourceIdentifier() {
+            return "counting";
+        }
+
+        @Override
+        public void close() {
+            // nothing to release
+        }
+    }
+
+    @Test
+    void sequentialReadToEofNeverConsultsSize() throws IOException {
+        CountingReader reader = new CountingReader();
+        try (RangeReaderReadableByteChannel channel = RangeReaderReadableByteChannel.of(reader)) {
+            ByteBuffer buffer = ByteBuffer.allocate(50);
+            assertThat(channel.read(buffer)).isEqualTo(50);
+            buffer.clear();
+            assertThat(channel.read(buffer)).isEqualTo(14);
+            buffer.clear();
+            assertThat(channel.read(buffer)).isEqualTo(-1);
+            assertThat(reader.sizeCalls).hasValue(0);
+        }
+    }
+
+    @Test
+    void toStringDoesNotConsultSize() throws IOException {
+        CountingReader reader = new CountingReader();
+        try (RangeReaderReadableByteChannel channel = RangeReaderReadableByteChannel.of(reader)) {
+            assertThat(channel.toString()).contains("counting");
+            assertThat(reader.sizeCalls).hasValue(0);
         }
     }
 }

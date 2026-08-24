@@ -44,7 +44,6 @@ import com.azure.storage.blob.specialized.BlobInputStream;
 import io.tileverse.storage.CopyOptions;
 import io.tileverse.storage.DeleteResult;
 import io.tileverse.storage.ListOptions;
-import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.PreconditionFailedException;
 import io.tileverse.storage.PresignWriteOptions;
 import io.tileverse.storage.RangeReader;
@@ -273,9 +272,6 @@ final class AzureBlobStorage implements Storage {
     @Override
     public RangeReader openRangeReader(String key) {
         requireOpen();
-        if (stat(key).isEmpty()) {
-            throw new NotFoundException("Blob not found: " + location.resolve(key));
-        }
         return new AzureBlobRangeReader(blobClient(key));
     }
 

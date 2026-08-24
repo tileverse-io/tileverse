@@ -152,10 +152,14 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
      */
     @Override
     public OptionalLong size() {
+        checkNotClosed();
+        return OptionalLong.of(this.size);
+    }
+
+    private void checkNotClosed() {
         if (permanentlyClosed.get()) {
             throw new IllegalStateException("FileRangeReader is closed");
         }
-        return OptionalLong.of(this.size);
     }
 
     /**
@@ -218,9 +222,11 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
      * @param target the ByteBuffer to read data into (limit will be adjusted)
      * @return the actual number of bytes read, which may be less than actualLength if EOF is reached
      * @throws StorageException if an I/O error occurs during reading
+     * @throws IllegalStateException if this reader has been permanently closed via {@link #close()}
      */
     @Override
     protected int readRangeNoFlip(long offset, int actualLength, ByteBuffer target) {
+        checkNotClosed();
         final int initialPosition = target.position();
         final int initialLimit = target.limit();
         target.limit(initialPosition + actualLength);

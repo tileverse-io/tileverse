@@ -62,7 +62,7 @@ The Tileverse Range Reader provides a unified interface for reading byte ranges 
 public interface RangeReader extends Closeable {
     ByteBuffer readRange(long offset, int length) throws IOException;
     int readRange(long offset, int length, ByteBuffer target) throws IOException;
-    long size() throws IOException;
+    OptionalLong size();
     String getSourceIdentifier();
 }
 ```
@@ -104,7 +104,7 @@ tileData.flip();
 Process large files in chunks:
 
 ```java
-long fileSize = reader.size();
+long fileSize = reader.size().orElseThrow();
 int chunkSize = 1024 * 1024; // 1MB chunks
 
 for (long offset = 0; offset < fileSize; offset += chunkSize) {

@@ -22,6 +22,7 @@ import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.Storage.BlobGetOption;
+import com.google.cloud.storage.Storage.BlobSourceOption;
 import com.google.cloud.storage.StorageException;
 import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.NotFoundException;
@@ -33,6 +34,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -44,46 +46,37 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements RangeReader {
 
-    @SuppressWarnings("unused")
     private final Storage storage;
-
     private final String bucket;
     private final String objectName;
+    private final Optional<String> userProject;
 
-    private Blob blob;
+    private final AtomicReference<OptionalLong> contentLength = new AtomicReference<>();
 
     /**
      * Creates a new GoogleCloudStorageRangeReader for the specified GCS object.
      *
+     * <p>Construction performs no I/O. A missing object is reported by the first {@link #readRange(long, int)} or
+     * {@link #size()} call instead of at construction time.
+     *
      * @param storage The GCS Storage client to use
      * @param bucket The GCS bucket name
      * @param objectName The GCS object name
-     * @throws io.tileverse.storage.StorageException If a storage error occurs
+     * @param userProject the project to bill for a Requester Pays bucket, if any
      */
     GoogleCloudStorageRangeReader(Storage storage, String bucket, String objectName, Optional<String> userProject) {
         this.storage = requireNonNull(storage, "Storage client cannot be null");
         this.bucket = requireNonNull(bucket, "Bucket name cannot be null");
         this.objectName = requireNonNull(objectName, "Object name cannot be null");
-        BlobId blobId = BlobId.of(bucket, objectName);
-        List<BlobGetOption> getOpts = new ArrayList<>();
-        userProject.ifPresent(p -> getOpts.add(BlobGetOption.userProject(p)));
-        try {
-            this.blob = storage.get(blobId, getOpts.toArray(BlobGetOption[]::new));
-        } catch (StorageException e) {
-            throw SdkExceptionMapper.map(e, objectName);
-        }
-
-        if (blob == null || !blob.exists()) {
-            throw new NotFoundException("GCS object not found: gs://" + bucket + "/" + objectName);
-        }
+        this.userProject = requireNonNull(userProject, "userProject cannot be null");
     }
 
     @Override
     protected int readRangeNoFlip(final long offset, final int actualLength, ByteBuffer target) {
         try {
             final long start = System.nanoTime();
-            // Read the specified range from GCS using readChannelWithResponse
-            try (ReadChannel reader = blob.reader()) {
+            // Read the specified range from GCS, always against the current object generation
+            try (ReadChannel reader = storage.reader(BlobId.of(bucket, objectName), readOptions())) {
                 reader.seek(offset);
                 reader.limit(offset + actualLength);
                 int totalBytesRead = 0;
@@ -109,9 +102,32 @@ final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements
         }
     }
 
+    private BlobSourceOption[] readOptions() {
+        return userProject
+                .map(p -> new BlobSourceOption[] {BlobSourceOption.userProject(p)})
+                .orElseGet(() -> new BlobSourceOption[0]);
+    }
+
     @Override
     public OptionalLong size() {
-        if (blob == null || !blob.exists()) {
+        OptionalLong known = contentLength.get();
+        if (known == null) {
+            known = contentLength.updateAndGet(current -> current != null ? current : fetchSize());
+        }
+        return known;
+    }
+
+    private OptionalLong fetchSize() {
+        List<BlobGetOption> getOpts = new ArrayList<>();
+        getOpts.add(BlobGetOption.fields(Storage.BlobField.SIZE));
+        userProject.ifPresent(p -> getOpts.add(BlobGetOption.userProject(p)));
+        Blob blob;
+        try {
+            blob = storage.get(BlobId.of(bucket, objectName), getOpts.toArray(BlobGetOption[]::new));
+        } catch (StorageException e) {
+            throw SdkExceptionMapper.map(e, objectName);
+        }
+        if (blob == null) {
             throw new NotFoundException("GCS object not found: gs://" + bucket + "/" + objectName);
         }
         Long size = blob.getSize();

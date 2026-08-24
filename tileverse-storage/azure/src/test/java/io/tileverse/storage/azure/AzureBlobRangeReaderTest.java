@@ -15,19 +15,30 @@
  */
 package io.tileverse.storage.azure;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.azure.core.http.HttpHeaderName;
+import com.azure.core.http.HttpHeaders;
+import com.azure.core.http.HttpResponse;
 import com.azure.storage.blob.BlobClient;
+import com.azure.storage.blob.models.BlobDownloadResponse;
 import com.azure.storage.blob.models.BlobProperties;
+import com.azure.storage.blob.models.BlobStorageException;
+import io.tileverse.storage.NotFoundException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.OptionalLong;
@@ -69,9 +80,6 @@ class AzureBlobRangeReaderTest {
 
         // Setup mock behavior - use lenient() to avoid unnecessary stubbing errors
         lenient().when(blobClient.getBlobUrl()).thenReturn(BLOB_URL);
-        lenient().when(blobClient.exists()).thenReturn(true);
-        lenient().when(blobClient.getProperties()).thenReturn(blobProperties);
-        lenient().when(blobProperties.getBlobSize()).thenReturn((long) CONTENT_LENGTH);
 
         // The key insight here is to mock AzureBlobRangeReader methods directly instead
         // of trying to mock complex Azure SDK classes that are final and difficult to mock
@@ -113,11 +121,20 @@ class AzureBlobRangeReaderTest {
         });
     }
 
+    /** Stubs the properties response consumed by the real (non-overridden) {@code size()} path. */
+    private void stubProperties() {
+        when(blobClient.getProperties()).thenReturn(blobProperties);
+        when(blobProperties.getBlobSize()).thenReturn((long) CONTENT_LENGTH);
+    }
+
+    @Test
+    void testConstructorMakesNoRequests() {
+        new AzureBlobRangeReader(blobClient);
+        verifyNoInteractions(blobClient);
+    }
+
     @Test
     void testGetSize() {
-        // Reset the invocation count for getProperties after setup
-        clearInvocations(blobClient);
-
         // Since we're using a spied instance with overridden methods,
         // we just verify the size is as expected
         assertEquals(CONTENT_LENGTH, reader.size().getAsLong());
@@ -127,9 +144,59 @@ class AzureBlobRangeReaderTest {
     }
 
     @Test
-    void testConstructorVerifiesExists() {
-        // Verify the constructor checks if blob exists
-        verify(blobClient).exists();
+    void testSizeIsLazyAndMemoized() {
+        stubProperties();
+        AzureBlobRangeReader lazy = new AzureBlobRangeReader(blobClient);
+        verify(blobClient, never()).getProperties();
+
+        assertThat(lazy.size()).hasValue(CONTENT_LENGTH);
+        assertThat(lazy.size()).hasValue(CONTENT_LENGTH);
+        verify(blobClient, times(1)).getProperties();
+    }
+
+    @Test
+    void testSizeCapturedFromRangeResponseWithoutProperties() {
+        int length = 10;
+        byte[] slice = Arrays.copyOfRange(TEST_DATA, 0, length);
+
+        BlobDownloadResponse response = mock(BlobDownloadResponse.class);
+        when(response.getStatusCode()).thenReturn(206);
+        HttpHeaders headers =
+                new HttpHeaders().set(HttpHeaderName.CONTENT_RANGE, "bytes 0-" + (length - 1) + "/" + CONTENT_LENGTH);
+        when(response.getHeaders()).thenReturn(headers);
+        when(blobClient.downloadStreamWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any()))
+                .thenAnswer(invocation -> {
+                    OutputStream out = invocation.getArgument(0);
+                    out.write(slice);
+                    return response;
+                });
+
+        AzureBlobRangeReader lazy = new AzureBlobRangeReader(blobClient);
+        lazy.readRange(0, length);
+
+        assertThat(lazy.size()).hasValue(CONTENT_LENGTH);
+        verify(blobClient, never()).getProperties();
+    }
+
+    @Test
+    void testNotFoundThrownOnFirstReadNotAtConstruction() {
+        AzureBlobRangeReader missing = new AzureBlobRangeReader(blobClient);
+        BlobStorageException notFound = notFoundException();
+        when(blobClient.downloadStreamWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any()))
+                .thenThrow(notFound);
+
+        assertThatThrownBy(() -> missing.readRange(0, 10)).isInstanceOf(NotFoundException.class);
+    }
+
+    /**
+     * Builds a real {@link BlobStorageException} wired to a 404 response. This flows through
+     * {@link AzureExceptionMapper#map} the same way a live Azure 404 would: the mapper reads the status from
+     * {@code getResponse().getStatusCode()}, which a bare mock of {@code BlobStorageException} itself would leave null.
+     */
+    private static BlobStorageException notFoundException() {
+        HttpResponse response = mock(HttpResponse.class);
+        when(response.getStatusCode()).thenReturn(404);
+        return new BlobStorageException("BlobNotFound", response, null);
     }
 
     @Test
@@ -200,25 +267,5 @@ class AzureBlobRangeReaderTest {
 
         // Should return empty buffer
         assertEquals(0, buffer.remaining());
-    }
-
-    @Test
-    void testBlobDoesNotExist() {
-        // Reset the mock to change behavior
-        reset(blobClient);
-        when(blobClient.exists()).thenReturn(false);
-
-        assertThatThrownBy(() -> new AzureBlobRangeReader(blobClient))
-                .isInstanceOf(io.tileverse.storage.NotFoundException.class);
-    }
-
-    @Test
-    void testBlobExceptionDuringConstruction() {
-        // Reset the mock to change behavior
-        reset(blobClient);
-        when(blobClient.exists()).thenThrow(new RuntimeException("Failed to check blob existence"));
-
-        assertThatThrownBy(() -> new AzureBlobRangeReader(blobClient))
-                .isInstanceOf(io.tileverse.storage.StorageException.class);
     }
 }

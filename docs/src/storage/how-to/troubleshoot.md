@@ -419,7 +419,7 @@ public void monitorCache(RangeReader reader) {
 public void testConnectivity(URI uri) {
     try {
         var reader = createReader(uri);
-        long size = reader.size();
+        long size = reader.size().orElseThrow();
         System.out.println("Successfully connected to " + uri + ", size: " + size);
         reader.close();
     } catch (Exception e) {

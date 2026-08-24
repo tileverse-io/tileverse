@@ -16,12 +16,14 @@
 package io.tileverse.storage.s3;
 
 import io.tileverse.storage.AbstractRangeReader;
+import io.tileverse.storage.ContentRange;
 import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.StorageException;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 import java.util.OptionalLong;
+import java.util.concurrent.atomic.AtomicReference;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
@@ -81,38 +83,22 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
     private final S3Reference s3Location;
     private final boolean requesterPays;
 
-    private final OptionalLong contentLength;
+    private final AtomicReference<OptionalLong> contentLength = new AtomicReference<>();
 
     /**
      * Creates a new S3RangeReader for the specified S3 object.
      *
+     * <p>Construction performs no I/O. A missing object is reported by the first {@link #readRange(long, int)} or
+     * {@link #size()} call instead of at construction time.
+     *
      * @param s3Client The S3 client to use
      * @param s3Location The S3 reference (bucket + key)
      * @param requesterPays when {@code true}, every request adds {@code x-amz-request-payer: requester}
-     * @throws StorageException If a storage error occurs
      */
     S3RangeReader(S3Client s3Client, S3Reference s3Location, boolean requesterPays) {
         this.s3Client = Objects.requireNonNull(s3Client, "S3Client cannot be null");
         this.s3Location = Objects.requireNonNull(s3Location, "S3Location cannot be null");
         this.requesterPays = requesterPays;
-        // Eager HEAD: throw NotFoundException at construction time so callers don't get
-        // mid-stream failures, and cache the content length for subsequent size() calls.
-        try {
-            HeadObjectRequest.Builder headBuilder =
-                    HeadObjectRequest.builder().bucket(s3Location.bucket()).key(s3Location.key());
-            if (requesterPays) {
-                headBuilder.requestPayer(RequestPayer.REQUESTER);
-            }
-            HeadObjectResponse headResponse = s3Client.headObject(headBuilder.build());
-            Long size = headResponse.contentLength();
-            this.contentLength = size == null ? OptionalLong.empty() : OptionalLong.of(size);
-        } catch (NoSuchKeyException e) {
-            throw new NotFoundException("S3 object does not exist: s3://" + s3Location, e);
-        } catch (S3Exception e) {
-            throw S3ExceptionMapper.map(e, s3Location.key());
-        } catch (SdkException e) {
-            throw new StorageException("Failed to access S3 object " + s3Location + ": " + e.getMessage(), e);
-        }
     }
 
     @Override
@@ -127,15 +113,16 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
                 rangeBuilder.requestPayer(RequestPayer.REQUESTER);
             }
             ResponseBytes<GetObjectResponse> objectBytes = s3Client.getObjectAsBytes(rangeBuilder.build());
-            if (objectBytes.response().contentLength() != actualLength) {
-                throw new StorageException("Unexpected content length: got "
-                        + objectBytes.response().contentLength()
-                        + ", expected "
-                        + actualLength);
-            }
+            captureSizeFrom(objectBytes.response());
             byte[] data = objectBytes.asByteArray();
+            if (data.length > actualLength) {
+                throw new StorageException(
+                        "Server returned more data than requested: got " + data.length + ", requested " + actualLength);
+            }
             target.put(data);
             return data.length;
+        } catch (NoSuchKeyException e) {
+            throw new NotFoundException("S3 object does not exist: s3://" + s3Location, e);
         } catch (S3Exception e) {
             throw S3ExceptionMapper.map(e, s3Location.key());
         } catch (SdkException e) {
@@ -145,7 +132,43 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
 
     @Override
     public OptionalLong size() {
-        return contentLength;
+        OptionalLong known = contentLength.get();
+        if (known == null) {
+            known = contentLength.updateAndGet(current -> current != null ? current : fetchSize());
+        }
+        return known;
+    }
+
+    private OptionalLong fetchSize() {
+        try {
+            HeadObjectRequest.Builder headBuilder =
+                    HeadObjectRequest.builder().bucket(s3Location.bucket()).key(s3Location.key());
+            if (requesterPays) {
+                headBuilder.requestPayer(RequestPayer.REQUESTER);
+            }
+            HeadObjectResponse headResponse = s3Client.headObject(headBuilder.build());
+            Long size = headResponse.contentLength();
+            return size == null ? OptionalLong.empty() : OptionalLong.of(size);
+        } catch (NoSuchKeyException e) {
+            throw new NotFoundException("S3 object does not exist: s3://" + s3Location, e);
+        } catch (S3Exception e) {
+            throw S3ExceptionMapper.map(e, s3Location.key());
+        } catch (SdkException e) {
+            throw new StorageException("Failed to access S3 object " + s3Location + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Captures the total object size from a range response's {@code Content-Range} header, when not already known. Lets
+     * a read that happens before any {@link #size()} call populate the memoized value for free, without an extra HEAD
+     * request.
+     */
+    private void captureSizeFrom(GetObjectResponse response) {
+        if (contentLength.get() != null) {
+            return;
+        }
+        ContentRange.totalOf(response.contentRange())
+                .ifPresent(total -> contentLength.compareAndSet(null, OptionalLong.of(total)));
     }
 
     @Override

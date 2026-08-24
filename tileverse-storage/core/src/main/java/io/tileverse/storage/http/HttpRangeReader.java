@@ -19,6 +19,9 @@ import static java.util.Objects.requireNonNull;
 
 import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.AccessDeniedException;
+import io.tileverse.storage.ContentRange;
+import io.tileverse.storage.NotFoundException;
+import io.tileverse.storage.RangeNotSatisfiableException;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.StorageException;
 import io.tileverse.storage.TransientStorageException;
@@ -36,7 +39,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.time.Duration;
-import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -63,14 +65,10 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
     private final HttpClient httpClient;
     private final HttpAuthentication authentication;
 
-    /** @see #getHeadResponse() */
-    private final AtomicReference<HeadResponse> headResponse = new AtomicReference<>(null);
+    private record Metadata(OptionalLong contentLength, Optional<String> etag, Optional<String> lastModified) {}
 
-    private record HeadResponse(
-            boolean supportsByteRange,
-            OptionalLong contentLength,
-            Optional<String> etag,
-            Optional<String> lastModified) {}
+    /** Populated by the first HEAD (size() before any read) or the first range response. */
+    private final AtomicReference<Metadata> metadata = new AtomicReference<>(null);
 
     /**
      * Creates a new HttpRangeReader with a custom HTTP client and authentication.
@@ -83,12 +81,16 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
         this.uri = requireNonNull(uri);
         this.httpClient = requireNonNull(httpClient);
         this.authentication = requireNonNull(authentication);
-        // Content length and range support will be checked when size() is first called
+        // Content length will be checked when size() is first called
     }
 
     @Override
     public OptionalLong size() {
-        return getHeadResponse().contentLength();
+        Metadata known = metadata.get();
+        if (known == null) {
+            known = metadata.updateAndGet(this::fetchMetadata);
+        }
+        return known.contentLength();
     }
 
     @Override
@@ -105,8 +107,6 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
 
     @Override
     protected int readRangeNoFlip(final long offset, final int actualLength, ByteBuffer target) {
-        checkServerSupportsByteRanges();
-
         try {
             return getRange(offset, actualLength, target);
         } catch (IOException e) {
@@ -185,6 +185,7 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
             throw rethrow(timeout);
         }
         checkStatusCode(response);
+        captureMetadataFrom(response);
         checkContentLength(length, response);
         return response;
     }
@@ -200,18 +201,51 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
         });
     }
 
-    private void checkStatusCode(HttpResponse<?> response) {
+    private void checkStatusCode(HttpResponse<InputStream> response) {
         int statusCode = response.statusCode();
+        if (statusCode == 206) {
+            return;
+        }
+        closeBodyQuietly(response);
         switch (statusCode) {
-            case 206:
-                // all good
-                break;
+            case 200:
+                throw new StorageException("Server ignored the Range header (HTTP 200) for URI: " + uri
+                        + "; range requests are not supported by this server");
             case 401, 403:
                 throw new AccessDeniedException(
                         "Authentication failed for URI: " + uri + ", status code: " + statusCode);
+            case 404:
+                throw new NotFoundException("Resource not found: " + uri);
+            case 416:
+                throw new RangeNotSatisfiableException("Requested range not satisfiable for URI: " + uri);
             default:
                 throw new StorageException("Failed to get range from URI: " + uri + ", status code: " + statusCode);
         }
+    }
+
+    private static void closeBodyQuietly(HttpResponse<InputStream> response) {
+        try (InputStream body = response.body()) {
+            // drain nothing; closing releases the connection
+        } catch (IOException ignored) {
+            // the connection is being abandoned anyway
+        }
+    }
+
+    /**
+     * Captures size, ETag, and Last-Modified from the first range response, when not already known, sparing
+     * {@link #size()} a HEAD request. Only commits when the {@code Content-Range} total parses: a server that omits or
+     * malforms it on a 206 leaves the metadata unset, and a later {@link #size()} call then falls back to a HEAD
+     * instead of memoizing an unresolved size forever.
+     */
+    private void captureMetadataFrom(HttpResponse<InputStream> response) {
+        if (metadata.get() != null) {
+            return;
+        }
+        OptionalLong total = ContentRange.totalOf(
+                response.headers().firstValue("Content-Range").orElse(null));
+        Optional<String> etag = response.headers().firstValue("ETag");
+        Optional<String> lastModified = response.headers().firstValue("Last-Modified");
+        total.ifPresent(size -> metadata.compareAndSet(null, new Metadata(OptionalLong.of(size), etag, lastModified)));
     }
 
     private HttpRequest buildRangeRequest(final long offset, final int length) {
@@ -225,30 +259,7 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
         return requestBuilder.build();
     }
 
-    private void checkServerSupportsByteRanges() {
-        HeadResponse head = getHeadResponse();
-        if (!head.supportsByteRange()) {
-            throw new StorageException("Server explicitly does not support range requests (Accept-Ranges: none)");
-        }
-    }
-
-    /**
-     * Makes a HEAD request to the server and caches the response for reuse. This method is thread-safe and ensures the
-     * HEAD request is made only once.
-     *
-     * @return the cached HEAD response
-     * @throws StorageException If a storage error occurs during the HEAD request
-     */
-    private HeadResponse getHeadResponse() {
-
-        HeadResponse response = headResponse.get();
-        if (response == null) {
-            response = headResponse.updateAndGet(this::fetchHeadResponse);
-        }
-        return response;
-    }
-
-    private HeadResponse fetchHeadResponse(HeadResponse currValue) {
+    private Metadata fetchMetadata(Metadata currValue) {
         if (currValue != null) {
             // another thread already populated the cache while we were racing into updateAndGet, skip the redundant
             // HEAD and adopt their result.
@@ -265,10 +276,6 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
 
             check200StatusCode(response);
 
-            final boolean supportsByteRanges = supportsByteRanges(response);
-            if (!supportsByteRanges) {
-                log.warn("{} does not support byte ranges", uri);
-            }
             OptionalLong contentLength = contentLength(response);
             if (contentLength.isEmpty()) {
                 log.warn("Content-Length unknown for {}", uri);
@@ -277,7 +284,7 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
             }
             Optional<String> etag = etag(response);
             Optional<String> lastModified = lastModified(response);
-            return new HeadResponse(supportsByteRanges, contentLength, etag, lastModified);
+            return new Metadata(contentLength, etag, lastModified);
         } catch (HttpConnectTimeoutException timeout) {
             throw rethrow(timeout);
         } catch (IOException e) {
@@ -292,14 +299,11 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
         final int statusCode = response.statusCode();
         if (statusCode == 401 || statusCode == 403) {
             throw new AccessDeniedException("Authentication failed for URI: " + uri + ", status code: " + statusCode);
+        } else if (statusCode == 404) {
+            throw new NotFoundException("Resource not found: " + uri);
         } else if (statusCode != 200) {
             throw new StorageException("Failed to connect to URI: " + uri + ", status code: " + statusCode);
         }
-    }
-
-    private boolean supportsByteRanges(HttpResponse<Void> response) {
-        List<String> acceptRanges = response.headers().allValues("Accept-Ranges");
-        return acceptRanges.stream().anyMatch("bytes"::equalsIgnoreCase);
     }
 
     private OptionalLong contentLength(HttpResponse<Void> response) {

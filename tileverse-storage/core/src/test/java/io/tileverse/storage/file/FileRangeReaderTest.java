@@ -689,8 +689,8 @@ class FileRangeReaderTest {
 
         @Test
         void permanentCloseSkipsRetryOnRecoverableError() throws Exception {
-            // after close(), readRange raises the closed-state error eagerly via size() which throws
-            // IllegalStateException before reaching readRangeNoFlip.
+            // A permanent close must reject the read immediately, unlike an idle close, which is
+            // transient and triggers the recoverable-error retry with a fresh channel instead.
             try (FileRangeReader r = new FileRangeReader(testFile, Duration.ZERO)) {
 
                 r.readRange(0, 10);
@@ -740,7 +740,7 @@ class FileRangeReaderTest {
         void permanentClosePreventChannelReopen() {
             reader.readRange(0, 10);
             reader.close();
-            // After close, size() throws IllegalStateException eagerly from the readRange entry path.
+            // A permanent close must reject the read immediately, never silently reopening the channel.
             assertThatThrownBy(() -> reader.readRange(0, 10))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("closed");

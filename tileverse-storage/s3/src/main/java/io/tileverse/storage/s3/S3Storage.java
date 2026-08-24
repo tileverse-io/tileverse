@@ -18,7 +18,6 @@ package io.tileverse.storage.s3;
 import io.tileverse.storage.CopyOptions;
 import io.tileverse.storage.DeleteResult;
 import io.tileverse.storage.ListOptions;
-import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.PreconditionFailedException;
 import io.tileverse.storage.PresignWriteOptions;
 import io.tileverse.storage.RangeReader;
@@ -338,10 +337,8 @@ final class S3Storage implements Storage {
     public RangeReader openRangeReader(String key) {
         requireOpen();
         String fullKey = resolve(key);
-        if (stat(key).isEmpty()) {
-            throw new NotFoundException("Object not found: s3://" + ref.bucket() + "/" + fullKey);
-        }
         // Reuse our cached S3Client (which already has the right endpoint, region, credentials).
+        // Opening issues no request; a missing key is reported by the first read or size() call.
         return new S3RangeReader(handle.client(), new S3Reference(null, ref.bucket(), fullKey, null), requesterPays);
     }
 

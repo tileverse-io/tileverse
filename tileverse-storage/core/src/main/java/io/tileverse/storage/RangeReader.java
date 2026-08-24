@@ -95,6 +95,9 @@ public interface RangeReader extends Closeable, Supplier<SeekableByteChannel> {
      * read, and the caller must call {@code flip()} on the buffer to prepare it for reading. The caller is responsible
      * for ensuring that the target buffer has sufficient remaining capacity for the requested length.
      *
+     * <p>Implementations bound to a remote object defer existence checks: a missing object is reported as a
+     * {@link NotFoundException} from the first read or {@link #size()} call rather than at construction time.
+     *
      * @param offset The offset to read from
      * @param length The number of bytes to read
      * @param target The ByteBuffer to read into, starting at its current position

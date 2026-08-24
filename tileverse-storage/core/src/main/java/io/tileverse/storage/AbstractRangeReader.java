@@ -17,7 +17,6 @@ package io.tileverse.storage;
 
 import java.nio.ByteBuffer;
 import java.nio.ReadOnlyBufferException;
-import java.util.OptionalLong;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -63,8 +62,9 @@ public abstract class AbstractRangeReader implements RangeReader {
      *
      * <ul>
      *   <li>For zero-length reads, returns immediately with 0 bytes read
-     *   <li>For reads starting beyond EOF, returns 0 bytes read
-     *   <li>For reads extending beyond EOF, truncates to available data
+     *   <li>For reads starting at or beyond EOF, returns 0 bytes read (backends signal this case with
+     *       {@link RangeNotSatisfiableException}, translated here)
+     *   <li>For reads extending beyond EOF, the backend returns only the available bytes
      * </ul>
      *
      * <p><strong>Buffer Management (NIO Conventions):</strong> Following standard Java NIO conventions, this method
@@ -118,22 +118,13 @@ public abstract class AbstractRangeReader implements RangeReader {
                     "Target buffer has insufficient remaining capacity: " + remainingBefore + " < " + length);
         }
 
-        int actualLength = length;
-
-        final OptionalLong fileSize = size();
-        if (fileSize.isPresent()) {
-            long size = fileSize.getAsLong();
-            if (offset >= size) {
-                // Offset is beyond EOF, return 0 bytes read (position unchanged)
-                return 0;
-            }
-            if (offset + length > size) {
-                // Read extends beyond EOF, truncate it
-                actualLength = (int) (size - offset);
-            }
+        try {
+            return readRangeNoFlip(offset, length, target);
+        } catch (RangeNotSatisfiableException pastEof) {
+            // The backend answered 416: the offset is at or past EOF. Preserve the documented
+            // contract of returning 0 bytes read with the buffer position unchanged.
+            return 0;
         }
-
-        return readRangeNoFlip(offset, actualLength, target);
     }
 
     /**
@@ -152,6 +143,9 @@ public abstract class AbstractRangeReader implements RangeReader {
      *   <li>Do NOT modify the target buffer's limit
      *   <li>Return the actual number of bytes read (may be less than requested if EOF reached)
      *   <li>Must be thread-safe for concurrent access
+     *   <li>The requested range may start at or past EOF, or extend beyond it. Return 0 or a short count in that case,
+     *       or throw {@link RangeNotSatisfiableException} for a past-EOF offset; the calling {@code readRange}
+     *       translates it to 0 bytes read.
      * </ul>
      *
      * <p><strong>Parameter Guarantees:</strong> When this method is called by {@link #readRange(long, int,
@@ -162,8 +156,6 @@ public abstract class AbstractRangeReader implements RangeReader {
      *   <li>{@literal actualLength > 0} (zero-length reads are handled by the caller)
      *   <li>{@code target} is not null and not read-only
      *   <li>{@literal target.remaining() >= actualLength}
-     *   <li>{@literal offset < source.size()} (reads starting beyond EOF are handled by caller)
-     *   <li>{@code actualLength} may be less than originally requested if the read would extend beyond EOF
      * </ul>
      *
      * <p><strong>Buffer State Contract:</strong>
@@ -182,7 +174,7 @@ public abstract class AbstractRangeReader implements RangeReader {
      * <p>The calling {@code readRange} method will then reset the position and adjust the limit to prepare the buffer
      * for immediate consumption by the caller.
      *
-     * @param offset The byte offset to read from (guaranteed to be {@literal >= 0 and < source size})
+     * @param offset The byte offset to read from (guaranteed to be {@literal >= 0}; may be at or past EOF)
      * @param actualLength The number of bytes to read (guaranteed to be {@literal > 0} and within buffer capacity)
      * @param target The ByteBuffer to write into (guaranteed to be non-null, writable, and have sufficient capacity)
      * @return The number of bytes actually read and written to the target buffer

@@ -15,6 +15,7 @@
  */
 package io.tileverse.storage.gcs;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,6 +34,7 @@ import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.Storage.BlobGetOption;
+import com.google.cloud.storage.Storage.BlobSourceOption;
 import com.google.cloud.storage.StorageException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -75,20 +77,10 @@ class GoogleCloudStorageRangeReaderTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        BlobId blobId = BlobId.of(BUCKET, OBJECT_NAME);
-
         // Reset seek position
         currentSeekPosition = 0;
 
-        // Make mocks lenient for this test class to avoid unnecessary stubbing errors
-        lenient().when(storage.get(eq(blobId), any(BlobGetOption[].class))).thenReturn(blob);
-        lenient().when(blob.exists()).thenReturn(true);
-        lenient().when(blob.getSize()).thenReturn((long) CONTENT_LENGTH);
-
-        // Setup mock for blob.reader()
-        lenient().when(blob.reader()).thenReturn(readChannel);
-
-        // Setup mock for seek operation
+        // Kept lenient: not every test triggers a read.
         lenient()
                 .doAnswer(invocation -> {
                     currentSeekPosition = invocation.getArgument(0);
@@ -97,7 +89,7 @@ class GoogleCloudStorageRangeReaderTest {
                 .when(readChannel)
                 .seek(any(Long.class));
 
-        // Setup mock for ReadChannel behavior
+        // Kept lenient: not every test triggers a read.
         lenient().when(readChannel.read(any(ByteBuffer.class))).thenAnswer(invocation -> {
             ByteBuffer buffer = invocation.getArgument(0);
             int remaining = buffer.remaining();
@@ -116,18 +108,70 @@ class GoogleCloudStorageRangeReaderTest {
             return bytesToRead;
         });
 
-        // Create the reader
+        // Building the shared fixture here touches no mock: construction performs no I/O.
         reader = new GoogleCloudStorageRangeReader(storage, BUCKET, OBJECT_NAME, Optional.empty());
+    }
+
+    /** Stubs {@code storage.reader(...)} to serve reads through the shared {@link #readChannel} mock. */
+    private void stubReader() {
+        when(storage.reader(any(BlobId.class), any(BlobSourceOption[].class))).thenReturn(readChannel);
+    }
+
+    /** Stubs {@code storage.get(...)} to resolve {@code size()} to {@link #CONTENT_LENGTH}. */
+    private void stubSize() {
+        when(storage.get(any(BlobId.class), any(BlobGetOption[].class))).thenReturn(blob);
+        when(blob.getSize()).thenReturn((long) CONTENT_LENGTH);
+    }
+
+    @Test
+    void constructorMakesNoRequests() {
+        new GoogleCloudStorageRangeReader(storage, BUCKET, OBJECT_NAME, Optional.empty());
+        verifyNoInteractions(storage);
+    }
+
+    @Test
+    void notFoundThrownOnFirstReadNotAtConstruction() {
+        GoogleCloudStorageRangeReader missing =
+                new GoogleCloudStorageRangeReader(storage, BUCKET, "missing", Optional.empty());
+        StorageException notFound = new StorageException(404, "Not Found");
+        when(storage.reader(any(BlobId.class), any(BlobSourceOption[].class))).thenThrow(notFound);
+
+        assertThatThrownBy(() -> missing.readRange(0, 10)).isInstanceOf(io.tileverse.storage.NotFoundException.class);
+    }
+
+    @Test
+    void sizeIsLazyAndMemoized() {
+        when(storage.get(any(BlobId.class), any(BlobGetOption[].class))).thenReturn(blob);
+        when(blob.getSize()).thenReturn(12345L);
+
+        GoogleCloudStorageRangeReader lazy =
+                new GoogleCloudStorageRangeReader(storage, BUCKET, OBJECT_NAME, Optional.empty());
+        verifyNoInteractions(storage);
+
+        assertThat(lazy.size()).hasValue(12345L);
+        assertThat(lazy.size()).hasValue(12345L);
+        verify(storage, times(1)).get(any(BlobId.class), any(BlobGetOption[].class));
+    }
+
+    @Test
+    void sizeThrowsNotFoundForMissingObject() {
+        when(storage.get(any(BlobId.class), any(BlobGetOption[].class))).thenReturn(null);
+        GoogleCloudStorageRangeReader missing =
+                new GoogleCloudStorageRangeReader(storage, BUCKET, "missing", Optional.empty());
+
+        assertThatThrownBy(missing::size).isInstanceOf(io.tileverse.storage.NotFoundException.class);
     }
 
     @Test
     void testGetSize() {
+        stubSize();
         assertEquals(CONTENT_LENGTH, reader.size().getAsLong());
         verify(storage, times(1)).get(eq(BlobId.of(BUCKET, OBJECT_NAME)), any(BlobGetOption[].class));
     }
 
     @Test
     void testReadEntireFile() throws IOException {
+        stubReader();
         ByteBuffer buffer = reader.readRange(0, CONTENT_LENGTH);
         buffer.flip();
 
@@ -138,12 +182,13 @@ class GoogleCloudStorageRangeReaderTest {
 
         assertArrayEquals(TEST_DATA, bytes);
 
-        verify(blob).reader();
+        verify(storage).reader(eq(BlobId.of(BUCKET, OBJECT_NAME)), any(BlobSourceOption[].class));
         verify(readChannel).seek(0L);
     }
 
     @Test
     void testReadRange() throws IOException {
+        stubReader();
         int offset = 100;
         int length = 500;
 
@@ -158,12 +203,13 @@ class GoogleCloudStorageRangeReaderTest {
         byte[] expectedBytes = Arrays.copyOfRange(TEST_DATA, offset, offset + length);
         assertArrayEquals(expectedBytes, bytes);
 
-        verify(blob).reader();
+        verify(storage).reader(eq(BlobId.of(BUCKET, OBJECT_NAME)), any(BlobSourceOption[].class));
         verify(readChannel).seek((long) offset);
     }
 
     @Test
     void testReadRangeBeyondEnd() throws IOException {
+        stubReader();
         int offset = CONTENT_LENGTH - 200;
         int length = 500; // Beyond the end
         int actualLength = 200; // Should be truncated to end of file
@@ -180,7 +226,7 @@ class GoogleCloudStorageRangeReaderTest {
         byte[] expectedBytes = Arrays.copyOfRange(TEST_DATA, offset, CONTENT_LENGTH);
         assertArrayEquals(expectedBytes, bytes);
 
-        verify(blob).reader();
+        verify(storage).reader(eq(BlobId.of(BUCKET, OBJECT_NAME)), any(BlobSourceOption[].class));
         verify(readChannel).seek((long) offset);
     }
 
@@ -192,7 +238,7 @@ class GoogleCloudStorageRangeReaderTest {
         assertEquals(0, buffer.remaining());
 
         // Should not make any API calls for zero length
-        verify(blob, never()).reader();
+        verify(storage, never()).reader(any(BlobId.class), any(BlobSourceOption[].class));
     }
 
     @Test
@@ -205,50 +251,23 @@ class GoogleCloudStorageRangeReaderTest {
         assertThatThrownBy(() -> reader.readRange(0, -1)).isInstanceOf(IllegalArgumentException.class);
     }
 
-    @SuppressWarnings("resource")
-    @Test
-    void testObjectExistsReturnsFalse() {
-        // Override the default behavior for this specific test
-        when(blob.exists()).thenReturn(false);
-
-        assertThatThrownBy(
-                        () -> new GoogleCloudStorageRangeReader(storage, BUCKET, OBJECT_NAME, Optional.empty()).size())
-                .isInstanceOf(io.tileverse.storage.NotFoundException.class);
-    }
-
     @Test
     void testStorageExceptionDuringRead() {
-        // Override the default behavior for this specific test
-        when(blob.reader()).thenThrow(new StorageException(500, "Storage error"));
+        when(storage.reader(any(BlobId.class), any(BlobSourceOption[].class)))
+                .thenThrow(new StorageException(500, "Storage error"));
 
         assertThatThrownBy(() -> reader.readRange(0, 100)).isInstanceOf(io.tileverse.storage.StorageException.class);
     }
 
     @Test
     void testUnexpectedContentLength() throws IOException {
-        // This test is no longer applicable with the new streaming API
-        // The ReadChannel approach handles partial reads naturally
-        // So we can remove this test or adapt it for different error conditions
-
         // Test reading when channel returns -1 (EOF) immediately
-        when(blob.reader()).thenReturn(readChannel);
+        stubReader();
         when(readChannel.read(any(ByteBuffer.class))).thenReturn(-1);
 
         ByteBuffer buffer = reader.readRange(0, 100);
         buffer.flip();
         assertEquals(0, buffer.remaining(), "Should return empty buffer when EOF reached immediately");
-    }
-
-    @Test
-    void testGetSizeFromCachedValue() {
-        // First call should query the blob
-        assertEquals(CONTENT_LENGTH, reader.size().getAsLong());
-        verify(storage, times(1)).get(eq(BlobId.of(BUCKET, OBJECT_NAME)), any(BlobGetOption[].class));
-
-        // Second call should use cached value
-        assertEquals(CONTENT_LENGTH, reader.size().getAsLong());
-        verify(storage, times(1))
-                .get(eq(BlobId.of(BUCKET, OBJECT_NAME)), any(BlobGetOption[].class)); // Still only one call
     }
 
     @Test
@@ -258,6 +277,8 @@ class GoogleCloudStorageRangeReaderTest {
         assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(storage, null, OBJECT_NAME, Optional.empty()))
                 .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(storage, BUCKET, null, Optional.empty()))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new GoogleCloudStorageRangeReader(storage, BUCKET, OBJECT_NAME, null))
                 .isInstanceOf(NullPointerException.class);
     }
 

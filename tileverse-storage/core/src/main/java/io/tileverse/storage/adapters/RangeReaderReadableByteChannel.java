@@ -110,28 +110,12 @@ public class RangeReaderReadableByteChannel implements ReadableByteChannel {
         }
 
         final long currentPosition = position.get();
-        final OptionalLong sourceSize = rangeReader.size();
-
-        // Check if we're at or beyond the end of the source
-        if (sourceSize.isPresent() && currentPosition >= sourceSize.getAsLong()) {
+        final int bytesRead = rangeReader.readRange(currentPosition, dst.remaining(), dst);
+        if (bytesRead == 0) {
+            // A zero-byte result for a nonzero request means the position is at or past EOF.
             return -1;
         }
-
-        // Calculate how many bytes we can actually read
-        final int requestedBytes = dst.remaining();
-        final long availableBytes = sourceSize.isEmpty() ? requestedBytes : (sourceSize.getAsLong() - currentPosition);
-        final int bytesToRead = (int) Math.min(requestedBytes, availableBytes);
-
-        if (bytesToRead <= 0) {
-            return -1;
-        }
-
-        // Read from the RangeReader
-        final int bytesRead = rangeReader.readRange(currentPosition, bytesToRead, dst);
-
-        // Advance the position
         position.addAndGet(bytesRead);
-
         return bytesRead;
     }
 
@@ -233,16 +217,7 @@ public class RangeReaderReadableByteChannel implements ReadableByteChannel {
         if (!open.get()) {
             return "RangeReaderReadableByteChannel[closed]";
         }
-
-        try {
-            return "RangeReaderReadableByteChannel[source=%s, position=%d, size=%d]"
-                    .formatted(
-                            rangeReader.getSourceIdentifier(),
-                            position.get(),
-                            rangeReader.size().orElse(-1));
-        } catch (RuntimeException e) {
-            return "RangeReaderReadableByteChannel[source=%s, position=%d, size=unknown]"
-                    .formatted(rangeReader.getSourceIdentifier(), position.get());
-        }
+        return "RangeReaderReadableByteChannel[source=%s, position=%d]"
+                .formatted(rangeReader.getSourceIdentifier(), position.get());
     }
 }

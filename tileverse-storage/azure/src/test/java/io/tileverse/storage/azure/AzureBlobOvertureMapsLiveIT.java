@@ -177,10 +177,10 @@ class AzureBlobOvertureMapsLiveIT {
     }
 
     @Test
-    void openRangeReaderThrowsNotFoundForMissingKey() throws IOException {
-        try (Storage storage = StorageFactory.open(baseUri, anonymousProps())) {
-            assertThatThrownBy(() -> storage.openRangeReader("does/not/exist.parquet"))
-                    .isInstanceOf(NotFoundException.class);
+    void openRangeReaderThrowsNotFoundOnFirstReadForMissingKey() throws IOException {
+        try (Storage storage = StorageFactory.open(baseUri, anonymousProps());
+                RangeReader reader = storage.openRangeReader("does/not/exist.parquet")) {
+            assertThatThrownBy(() -> reader.readRange(0, 4)).isInstanceOf(NotFoundException.class);
         }
     }
 

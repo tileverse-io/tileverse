@@ -132,15 +132,36 @@ public interface Storage extends Closeable {
      * and must be closed; closing the reader releases per-blob state but leaves this Storage open. Closing the Storage
      * closes the underlying SDK client and invalidates any open readers obtained from it.
      *
+     * <p>For remote backends (S3, Azure, GCS, HTTP), opening performs no I/O: the key is not checked until the first
+     * read or {@link RangeReader#size() size} call on the returned reader, which throws {@link NotFoundException} if no
+     * object exists at the key. The local file backend throws it directly from this method instead, since a filesystem
+     * stat is effectively free. Callers that need fail-fast validation should call {@link #stat(String)} first.
+     *
      * <p>The returned reader can be wrapped with the standard decorators ({@code CachingRangeReader},
      * {@code BlockAlignedRangeReader}) just like a directly-constructed reader.
      *
      * @param key key relative to {@link #baseUri()}
      * @return a thread-safe RangeReader bound to the blob
-     * @throws NotFoundException if no object exists at the key
      * @throws StorageException on transport or authorization failures
      */
     RangeReader openRangeReader(String key);
+
+    /**
+     * Open a {@link RangeReader} for a listed blob, seeding the object size from the listing entry such that
+     * {@link RangeReader#size()} answers without any metadata request. Equivalent to {@link #openRangeReader(String)}
+     * for {@code entry.key()} otherwise; the reader's {@link RangeReader#getSourceIdentifier() source identifier} is
+     * identical.
+     *
+     * <p>The seeded size reflects the listing observation; if the object is replaced between listing and reading, reads
+     * return whatever the backend serves for the requested offsets.
+     *
+     * @param entry a file entry obtained from this storage's listing or stat operations
+     * @return a thread-safe RangeReader bound to the blob, answering size() from the entry
+     */
+    default RangeReader openRangeReader(StorageEntry.File entry) {
+        Objects.requireNonNull(entry, "entry");
+        return KnownSizeRangeReader.of(openRangeReader(entry.key()), entry.size());
+    }
 
     /**
      * Open a {@link RangeReader} from an absolute URI within this Storage's namespace. Equivalent to
@@ -154,8 +175,9 @@ public interface Storage extends Closeable {
      * <p>A query string on {@code uri} is preserved into the derived key (load-bearing for HTTP-backed Storages whose
      * URLs carry signatures, SAS tokens, or routing parameters). A fragment is dropped silently because RFC 3986
      * fragments are client-only and never reach the server. Backends whose key grammar cannot represent a query string
-     * (File, S3, Azure, GCS path-style) will throw a {@link NotFoundException} from {@link #openRangeReader(String)}
-     * when the resulting key has no matching object.
+     * (S3, Azure, GCS path-style) report a missing derived key as {@link NotFoundException} from the first read or
+     * {@link RangeReader#size() size} call on the returned reader, not from this method. The local file backend has the
+     * same key-grammar limitation but reports a missing derived key at open, directly from this method.
      *
      * <p><b>Path traversal:</b> {@code ..} and {@code .} segments are normalized before the namespace check; URIs whose
      * normalized path falls outside {@code baseUri()} are rejected. Percent-encoded traversal segments ({@code %2E%2E}
@@ -165,7 +187,6 @@ public interface Storage extends Closeable {
      * @return a thread-safe RangeReader bound to the blob
      * @throws IllegalArgumentException if {@code uri} is not within {@link #baseUri()}, equals {@code baseUri()}, or
      *     contains a percent-encoded path-traversal segment
-     * @throws NotFoundException if no object exists at the derived key
      * @throws StorageException on transport or authorization failures
      */
     default RangeReader openRangeReader(URI uri) {

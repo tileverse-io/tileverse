@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.tileverse.storage.rangereader.adapters;
+package io.tileverse.storage.adapters;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,7 +22,6 @@ import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.RangeNotSatisfiableException;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
-import io.tileverse.storage.adapters.RangeReaderReadableByteChannel;
 import io.tileverse.storage.it.TestUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;

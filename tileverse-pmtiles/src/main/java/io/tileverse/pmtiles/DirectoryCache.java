@@ -22,14 +22,16 @@ import com.github.benmanes.caffeine.cache.Scheduler;
 import io.tileverse.cache.Cache;
 import io.tileverse.cache.CacheManager;
 import io.tileverse.cache.CaffeineCache;
+import io.tileverse.io.ByteBufferPool;
+import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
 import io.tileverse.io.ByteRange;
+import io.tileverse.storage.RangeReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
-import java.nio.channels.SeekableByteChannel;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Objects;
-import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -53,13 +55,12 @@ class DirectoryCache {
 
     private final PMTilesHeader header;
     private final String pmtilesUniqueUri;
-    private final Supplier<SeekableByteChannel> channelSupplier;
+    private final RangeReader rangeReader;
 
-    public DirectoryCache(
-            String pmtilesUniqueUri, PMTilesHeader header, Supplier<SeekableByteChannel> channelSupplier) {
+    public DirectoryCache(String pmtilesUniqueUri, PMTilesHeader header, RangeReader rangeReader) {
         this.pmtilesUniqueUri = pmtilesUniqueUri;
         this.header = header;
-        this.channelSupplier = channelSupplier;
+        this.rangeReader = rangeReader;
     }
 
     public void setCacheManager(CacheManager cacheManager) {
@@ -109,9 +110,13 @@ class DirectoryCache {
     /** {@link #cache} loading function */
     PMTilesDirectory readDirectory(ByteRange directoryRange) {
         final byte compression = header.internalCompression();
-        try (SeekableByteChannel channel = channelSupplier.get();
-                InputStream in = decompressingInputStream(channel, directoryRange, compression)) {
-            return DirectoryUtil.deserializeDirectory(in);
+        try (PooledByteBuffer pooled = ByteBufferPool.heapBuffer(directoryRange.length())) {
+            ByteBuffer buffer = pooled.buffer();
+            rangeReader.readRange(directoryRange, buffer);
+            buffer.flip();
+            try (InputStream in = decompressingInputStream(buffer, compression)) {
+                return DirectoryUtil.deserializeDirectory(in);
+            }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

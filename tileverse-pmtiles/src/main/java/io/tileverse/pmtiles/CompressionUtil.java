@@ -15,21 +15,18 @@
  */
 package io.tileverse.pmtiles;
 
-import io.tileverse.io.ByteRange;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.channels.Channels;
-import java.nio.channels.SeekableByteChannel;
+import java.nio.ByteBuffer;
 import org.apache.commons.compress.compressors.CompressorException;
 import org.apache.commons.compress.compressors.brotli.BrotliCompressorInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
 import org.apache.commons.compress.compressors.zstandard.ZstdCompressorInputStream;
 import org.apache.commons.compress.compressors.zstandard.ZstdCompressorOutputStream;
-import org.apache.commons.io.input.BoundedInputStream;
 
 /** Utility class for compressing and decompressing data using various compression algorithms. */
 final class CompressionUtil {
@@ -61,23 +58,51 @@ final class CompressionUtil {
         return outputStream.toByteArray();
     }
 
-    public static InputStream decompressingInputStream(
-            SeekableByteChannel channel, ByteRange byteRange, byte compressionType) throws IOException {
-
-        final int size = byteRange.length();
-
-        SeekableByteChannel positionedChannel = channel.position(byteRange.offset());
-        BoundedInputStream boundedInputStream = boundedInputStream(positionedChannel, size);
-        return decompress(boundedInputStream, compressionType);
+    /**
+     * Returns a stream that decompresses the readable bytes of {@code data} with the given compression type. The buffer
+     * is consumed between its position and limit, advancing the position as the stream is read; the caller keeps
+     * ownership and must keep it valid while the stream is read. Heap and direct buffers stream without copying.
+     *
+     * @param data the compressed bytes, position to limit
+     * @param compressionType the compression type in use
+     * @return a stream over the decompressed bytes
+     * @throws IOException if the decompressor cannot be created
+     * @throws UnsupportedCompressionException if the compression type is not supported
+     */
+    public static InputStream decompressingInputStream(ByteBuffer data, byte compressionType) throws IOException {
+        return decompress(new ByteBufferInputStream(data), compressionType);
     }
 
-    private static BoundedInputStream boundedInputStream(SeekableByteChannel positionedChannel, final int maxCount)
-            throws IOException {
-        return BoundedInputStream.builder()
-                .setInputStream(Channels.newInputStream(positionedChannel))
-                .setMaxCount(maxCount)
-                .setPropagateClose(false) // we don't own the channel
-                .get();
+    private static final class ByteBufferInputStream extends InputStream {
+
+        private final ByteBuffer buffer;
+
+        ByteBufferInputStream(ByteBuffer buffer) {
+            this.buffer = buffer;
+        }
+
+        @Override
+        public int read() {
+            if (buffer.hasRemaining()) {
+                return buffer.get() & 0xff;
+            }
+            return -1;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) {
+            if (buffer.hasRemaining()) {
+                int toRead = Math.min(len, buffer.remaining());
+                buffer.get(b, off, toRead);
+                return toRead;
+            }
+            return -1;
+        }
+
+        @Override
+        public int available() {
+            return buffer.remaining();
+        }
     }
 
     static InputStream decompress(InputStream compressed, byte compressionType) throws IOException {

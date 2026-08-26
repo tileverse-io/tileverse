@@ -45,3 +45,15 @@ and Azure on a shared executor, HTTP as one `multipart/byteranges` request with 
 fallback). If you maintain a delegating RangeReader decorator, override readRanges to forward
 the batch to the delegate; a wrapper that does not forward it silently degrades batches to the
 sequential per-range default.
+
+## PMTiles
+
+`PMTilesReader.getTileIndices()` and `getTileIndicesByZoomLevel(int)` are removed. They
+accumulated every leaf directory of the archive into one in-memory list, an unbounded
+allocation on planet-scale files. Walk the directories through `getRootDirectory()`,
+`getDirectory(PMTilesEntry)`, and the bounded `getTileIndices(PMTilesEntry, Consumer)`
+instead.
+
+`PMTilesReader` now block-aligns its header, directory, and metadata reads internally from
+the parsed file layout. Compose `new PMTilesReader(CachingRangeReader.of(reader))` and drop
+any hand-rolled `BlockAlignedRangeReader` around the input; tile reads stay exact.

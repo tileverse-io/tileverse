@@ -190,10 +190,8 @@ class PMTilesVectorTileStoreTest {
 
         assertThat(andorraMatrixSet.tilePyramid().cornerOfOrigin()).isEqualTo(CornerOfOrigin.TOP_LEFT);
 
-        log.debug("Total available indices: {}", andorraReader.getTileIndices().count());
-
         for (int z = andorraMatrixSet.minZoomLevel(); z <= 14 /*andorraMatrixSet.maxZoomLevel()*/; z++) {
-            andorraReader.getTileIndicesByZoomLevel(z).forEach(index -> {
+            PMTilesTestData.tileIndicesAtZoom(andorraReader, z).forEach(index -> {
                 try {
                     Optional<ByteBuffer> tile = andorraReader.getTile(index);
                     Optional<VectorTile> vectorTile = decode(tile);
@@ -251,8 +249,7 @@ class PMTilesVectorTileStoreTest {
                     .isPresent();
             TileRange expectedRange = rangeOpt.orElseThrow();
 
-            List<TileIndex> archiveTiles =
-                    andorraReader.getTileIndicesByZoomLevel(z).toList();
+            List<TileIndex> archiveTiles = PMTilesTestData.tileIndicesAtZoom(andorraReader, z);
             assertThat(archiveTiles)
                     .as("archive tiles at zoom %d should fall inside %s", z, expectedRange)
                     .isNotEmpty()
@@ -273,8 +270,7 @@ class PMTilesVectorTileStoreTest {
 
         for (int z = matrixSet.minZoomLevel(); z <= matrixSet.maxZoomLevel(); z++) {
             TileMatrix matrix = matrixSet.getTileMatrix(z);
-            List<TileIndex> archiveTiles =
-                    andorraReader.getTileIndicesByZoomLevel(z).toList();
+            List<TileIndex> archiveTiles = PMTilesTestData.tileIndicesAtZoom(andorraReader, z);
 
             for (TileIndex tileIndex : archiveTiles) {
                 Tile tile = matrix.tile(tileIndex).orElseThrow();

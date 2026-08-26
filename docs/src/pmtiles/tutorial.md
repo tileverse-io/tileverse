@@ -102,20 +102,18 @@ try (Storage storage = StorageFactory.open(bucket, props);
 
 ## With Caching
 
-For better performance, especially with cloud storage, wrap the reader with caching before handing it to `PMTilesReader`:
+For better performance, especially with cloud storage, wrap the reader with caching before handing it to `PMTilesReader`.
+`PMTilesReader` block-aligns its header, directory, and metadata reads internally, using
+the byte layout parsed from the file; supplying a `CachingRangeReader` is enough, and
+tile reads stay exact.
 
 ```java
-import io.tileverse.storage.block.BlockAlignedRangeReader;
 import io.tileverse.storage.cache.CachingRangeReader;
 
 try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/"), props);
         RangeReader baseReader = storage.openRangeReader(URI.create("s3://my-bucket/world.pmtiles"));
-        // Cache exact ranges, then align hot regions on top of the cache
-        RangeReader cachedReader = CachingRangeReader.builder(baseReader).build();
-        RangeReader alignedReader = BlockAlignedRangeReader.builder(cachedReader)
-            .alignWholeFile()          // or alignRegion(offset, length) for just the header/index
-            .build();
-        PMTilesReader reader = new PMTilesReader(alignedReader)) {
+        RangeReader cachedReader = CachingRangeReader.of(baseReader);
+        PMTilesReader reader = new PMTilesReader(cachedReader)) {
     Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
 }
 ```

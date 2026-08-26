@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.tileverse.cache.CacheManager;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
+import io.tileverse.storage.block.BlockAlignedRangeReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
@@ -30,7 +31,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-class CachingRangeReaderBlockAlignmentTest {
+/**
+ * Pins the cache footprint (entry count, estimated size) produced by stacking {@link BlockAlignedRangeReader} above
+ * {@link CachingRangeReader}, reproducing the block-grain caching the cache itself used to provide directly.
+ */
+class BlockAlignedCachingFootprintTest {
 
     @TempDir
     private Path tempDir;
@@ -38,6 +43,7 @@ class CachingRangeReaderBlockAlignmentTest {
     private Path testFile;
     private ByteBuffer result = ByteBuffer.allocate(2000);
     private CacheManager cacheManager;
+    private CachingRangeReader cachingReader;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -56,16 +62,23 @@ class CachingRangeReaderBlockAlignmentTest {
         cacheManager.invalidateAll();
     }
 
+    /** Builds a cache over {@code base} and an aligner over that cache, keeping the cache reference in the field. */
+    private BlockAlignedRangeReader alignedOverCache(RangeReader base, int blockSize) {
+        this.cachingReader =
+                CachingRangeReader.builder(base).cacheManager(cacheManager).build();
+        return BlockAlignedRangeReader.builder(cachingReader)
+                .blockSize(blockSize)
+                .alignWholeFile()
+                .build();
+    }
+
     @Test
     void blockAlignment_cachesLargerBlockButReturnsOnlyRequestedBytes() throws IOException {
         try (RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
-                        .cacheManager(cacheManager)
-                        .blockSize(4096) // 4KB blocks
-                        .build()) {
+                BlockAlignedRangeReader reader = alignedOverCache(baseReader, 4096)) {
 
             // Request 1 byte at offset 2000 (within the middle of a 4KB block)
-            cachingReader.readRange(2000, 1, result);
+            reader.readRange(2000, 1, result);
             result.flip();
             // Should return exactly 1 byte
             assertThat(result.remaining()).isEqualTo(1);
@@ -83,25 +96,22 @@ class CachingRangeReaderBlockAlignmentTest {
     @Test
     void blockAlignment_reusesBlockForOverlappingRequests() throws IOException {
         try (RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
-                        .cacheManager(cacheManager)
-                        .blockSize(4096) // 4KB blocks
-                        .build()) {
+                BlockAlignedRangeReader reader = alignedOverCache(baseReader, 4096)) {
 
             // Request byte at offset 2000 (will cache block 0-4096)
-            cachingReader.readRange(2000, 1, result);
+            reader.readRange(2000, 1, result);
             result.flip();
             assertThat(result.remaining()).isEqualTo(1);
             assertThat(cachingReader.getCacheEntryCount()).isEqualTo(1);
 
             // Request bytes at offset 3000 (should use same cached block)
-            cachingReader.readRange(3000, 100, result.clear());
+            reader.readRange(3000, 100, result.clear());
             result.flip();
             assertThat(result.remaining()).isEqualTo(100);
             assertThat(cachingReader.getCacheEntryCount()).isEqualTo(1); // Still only 1 block cached
 
             // Request bytes at offset 5000 (should cache a new block 4096-8192)
-            cachingReader.readRange(5000, 50, result.clear());
+            reader.readRange(5000, 50, result.clear());
             result.flip();
             assertThat(result.remaining()).isEqualTo(50);
             assertThat(cachingReader.getCacheEntryCount()).isEqualTo(2); // Now 2 blocks cached
@@ -111,14 +121,11 @@ class CachingRangeReaderBlockAlignmentTest {
     @Test
     void blockAlignment_withSpanningRequest() throws IOException {
         try (RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
-                        .cacheManager(cacheManager)
-                        .blockSize(4096) // 4KB blocks
-                        .build()) {
+                BlockAlignedRangeReader reader = alignedOverCache(baseReader, 4096)) {
 
             // Request data spanning multiple blocks (3500 to 5500 = 2000 bytes)
             // This spans from block 0 (3500 is in 0-4096) to block 1 (5500 is in 4096-8192)
-            cachingReader.readRange(3500, 2000, result);
+            reader.readRange(3500, 2000, result);
             result.flip();
             // Should return exactly 2000 bytes
             assertThat(result.remaining()).isEqualTo(2000);
@@ -139,53 +146,48 @@ class CachingRangeReaderBlockAlignmentTest {
     @Test
     void noBlockAlignment_cachesExactlyWhatWasRequested() throws IOException {
         try (RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
+                CachingRangeReader reader = CachingRangeReader.builder(baseReader)
                         .cacheManager(cacheManager)
-                        .withoutBlockAlignment() // Explicitly disable
                         .build()) {
 
             // Request 1 byte at offset 2000
-            cachingReader.readRange(2000, 1, result);
+            reader.readRange(2000, 1, result);
             result.flip();
 
             // Should return exactly 1 byte
             assertThat(result.remaining()).isEqualTo(1);
 
             // Should have cached exactly 1 byte
-            assertThat(cachingReader.getCacheEntryCount()).isEqualTo(1);
-            assertThat(cachingReader.getEstimatedCacheSizeBytes()).isEqualTo(1);
+            assertThat(reader.getCacheEntryCount()).isEqualTo(1);
+            assertThat(reader.getEstimatedCacheSizeBytes()).isEqualTo(1);
         }
     }
 
     @Test
     void blockAlignment_builderMethods() throws IOException {
-        // Test different builder methods
+        // Default 64KB blocks
         try (RangeReader baseReader1 = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader reader1 = CachingRangeReader.builder(baseReader1)
-                        .cacheManager(cacheManager)
-                        .withBlockAlignment() // Uses default 64KB
-                        .build()) {
+                BlockAlignedRangeReader reader1 =
+                        alignedOverCache(baseReader1, BlockAlignedRangeReader.DEFAULT_BLOCK_SIZE)) {
 
             // Request 1 byte - should cache 64KB block (but limited by file size)
             reader1.readRange(1000, 1, result);
-            assertThat(reader1.getEstimatedCacheSizeBytes()).isEqualTo(65536); // Default 64KB block
+            assertThat(cachingReader.getEstimatedCacheSizeBytes()).isEqualTo(65536); // Default 64KB block
         }
 
+        // Custom 8KB blocks
         try (RangeReader baseReader2 = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader reader2 = CachingRangeReader.builder(baseReader2)
-                        .cacheManager(cacheManager)
-                        .blockSize(8192) // Custom 8KB blocks
-                        .build()) {
+                BlockAlignedRangeReader reader2 = alignedOverCache(baseReader2, 8192)) {
 
             // Request 1 byte - should cache 8KB block
             reader2.readRange(1000, 1, result);
-            assertThat(reader2.getEstimatedCacheSizeBytes()).isEqualTo(8192);
+            assertThat(cachingReader.getEstimatedCacheSizeBytes()).isEqualTo(8192);
         }
 
+        // No aligner
         try (RangeReader baseReader3 = RangeReaderTestSupport.fileReader(testFile);
                 CachingRangeReader reader3 = CachingRangeReader.builder(baseReader3)
                         .cacheManager(cacheManager)
-                        .withoutBlockAlignment() // Disable alignment
                         .build()) {
 
             // Request 1 byte - should cache exactly 1 byte
@@ -197,45 +199,42 @@ class CachingRangeReaderBlockAlignmentTest {
     @Test
     void blockAlignment_defaultBehaviorWithoutConfiguration() throws IOException {
         try (RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
+                CachingRangeReader reader = CachingRangeReader.builder(baseReader)
                         .cacheManager(cacheManager)
-                        .build()) { // No block alignment configuration
+                        .build()) {
 
             // Request 1 byte at offset 2000
-            cachingReader.readRange(2000, 1, result);
+            reader.readRange(2000, 1, result);
             result.flip();
             // Should return exactly 1 byte
             assertThat(result.remaining()).isEqualTo(1);
 
-            // Should have cached exactly 1 byte (default is no alignment)
-            assertThat(cachingReader.getCacheEntryCount()).isEqualTo(1);
-            assertThat(cachingReader.getEstimatedCacheSizeBytes()).isEqualTo(1);
+            // Should have cached exactly 1 byte
+            assertThat(reader.getCacheEntryCount()).isEqualTo(1);
+            assertThat(reader.getEstimatedCacheSizeBytes()).isEqualTo(1);
         }
     }
 
     @Test
     void blockAlignment_eofHandling_avoidsRedundantRequests() throws IOException {
         try (RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader cachingReader = CachingRangeReader.builder(baseReader)
-                        .cacheManager(cacheManager)
-                        .blockSize(16384) // 16KB blocks
-                        .build()) {
+                BlockAlignedRangeReader reader = alignedOverCache(baseReader, 16384)) {
 
             // Request data near the end of file (spanning across the final block boundary)
             // offset 98000 is in block 5 (81920-98303), request extends into final block 6 (98304-102399)
-            cachingReader.readRange(98000, 1000, result); // Should load 2 blocks
+            reader.readRange(98000, 1000, result); // Should load 2 blocks
             result.flip();
             assertThat(result.remaining()).isEqualTo(1000);
             assertThat(cachingReader.getCacheEntryCount()).isEqualTo(2); // Block 5 + final partial block 6
 
             // Request data from the same final block - should NOT make new delegate calls
-            cachingReader.readRange(99000, 1000, result.clear()); // Also spans the same 2 blocks
+            reader.readRange(99000, 1000, result.clear()); // Also spans the same 2 blocks
             result.flip();
             assertThat(result.remaining()).isEqualTo(1000);
             assertThat(cachingReader.getCacheEntryCount()).isEqualTo(2); // Same number of cache entries
 
             // Request data only from the final partial block
-            cachingReader.readRange(100000, 1000, result.clear()); // Only in final block
+            reader.readRange(100000, 1000, result.clear()); // Only in final block
             result.flip();
             assertThat(result.remaining()).isEqualTo(1000);
             assertThat(cachingReader.getCacheEntryCount()).isEqualTo(2); // Still same cache entries

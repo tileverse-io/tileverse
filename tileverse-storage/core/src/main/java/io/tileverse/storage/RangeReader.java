@@ -24,6 +24,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
+import java.util.List;
 import java.util.OptionalLong;
 import java.util.function.Supplier;
 
@@ -119,6 +120,42 @@ public interface RangeReader extends Closeable, Supplier<SeekableByteChannel> {
      */
     default int readRange(ByteRange range, ByteBuffer target) {
         return readRange(range.offset(), range.length(), target);
+    }
+
+    /**
+     * Reads several byte ranges in one call, each into its caller-provided buffer.
+     *
+     * <p>Entry {@code i} of the result is the number of bytes read for {@code requests.get(i)}, with the exact
+     * {@link #readRange(long, int, ByteBuffer)} semantics: 0 at or past EOF, a short count when the range straddles
+     * EOF, the target's position advanced by that count and the caller responsible for {@code flip()}. Zero-length
+     * requests read nothing. An empty list performs no I/O and returns an empty array.
+     *
+     * <p>Requests may overlap or repeat; each is satisfied independently and in full. Implementations MAY dedupe,
+     * merge, and reorder fetches internally and MUST document their worst-case amplification (bytes fetched vs bytes
+     * requested). The interface default implementation reads each range with {@link #readRange(ByteRange, ByteBuffer)}
+     * in request order and never fetches a byte that was not asked for; decorators and backends override this with
+     * batched strategies that document their own amplification.
+     *
+     * <p>Targets must be distinct buffers or non-overlapping views of one buffer; implementations MAY write them
+     * concurrently and in any order. Passing aliasing targets is undefined behavior.
+     *
+     * <p>Any storage failure aborts the whole call; the contents and positions of all targets are then unspecified. A
+     * malformed batch (null element, or a target whose remaining capacity no longer holds its range) throws
+     * {@link IllegalArgumentException} before any I/O. There is no partial-success reporting.
+     *
+     * @param requests the ranges to read and the buffers they land in
+     * @return the number of bytes read per request, in request order
+     * @throws StorageException if a storage error occurs
+     * @throws IllegalArgumentException if the batch is malformed
+     */
+    default int[] readRanges(List<RangeRequest> requests) {
+        RangeRequest.validate(requests);
+        int[] read = new int[requests.size()];
+        for (int i = 0; i < requests.size(); i++) {
+            RangeRequest request = requests.get(i);
+            read[i] = readRange(request.range(), request.target());
+        }
+        return read;
     }
 
     /**

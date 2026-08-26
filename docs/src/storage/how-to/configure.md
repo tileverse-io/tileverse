@@ -34,16 +34,20 @@ try (Storage storage = StorageFactory.open(bucket);
 
 ### Block Alignment
 
-Cloud storage APIs (S3, GCS) often perform better (and cost less) when reading aligned blocks rather than many tiny, fragmented ranges.
+Cloud storage APIs (S3, GCS) often perform better (and cost less) when reading aligned blocks rather than many tiny, fragmented ranges. Block alignment is a decorator you stack above a `CachingRangeReader`, declaring which byte regions should be aligned:
 
 ```java
-// Align reads to 64KB boundaries
-RangeReader alignedReader = BlockAlignedRangeReader.builder(reader)
-    .blockSize(64 * 1024) 
+// Aligner outermost, cache beneath it: aligned blocks are what gets cached
+CachingRangeReader cache = CachingRangeReader.builder(reader).build();
+RangeReader alignedReader = BlockAlignedRangeReader.builder(cache)
+    .blockSize(64 * 1024)
+    .alignRegion(0, headerAndIndexLength) // or alignWholeFile()
     .build();
 ```
 
-**Impact:** If you request bytes `100-200`, the reader fetches `0-65536`. If you essentially request `200-300`, it's served from the memory cache immediately.
+The aligner expands a request inside a declared region into whole blocks before the call reaches the cache, which then stores block-grain data for that region. Reads outside every declared region pass straight through to the cache, which stores them under their own exact keys.
+
+**Impact:** If you request bytes `100-200` inside a declared region, the reader fetches the whole `0-65536` block through the cache. A later request for `200-300` inside the same block is served from the memory cache immediately.
 
 ## Provider-Specific Tuning
 

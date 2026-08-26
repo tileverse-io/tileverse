@@ -30,10 +30,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Verifies that {@link CachingProviderHelper#cachingDecoratorFor(StorageConfig)} honors the value of
- * {@code storage.caching.blockaligned}, not merely its presence. Drives the real decorator entry point and asserts the
- * observable cache footprint of a 1-byte read. Lives in {@code io.tileverse.storage.cache} to read the package-private
- * {@link CachingRangeReader#getEstimatedCacheSizeBytes()}.
+ * Verifies that {@link CachingProviderHelper#cachingDecoratorFor(StorageConfig)} applies caching based on the
+ * {@code storage.caching.enabled} configuration. Lives in {@code io.tileverse.storage.cache} to read the
+ * package-private {@link CachingRangeReader#getEstimatedCacheSizeBytes()}.
  */
 class CachingProviderHelperTest {
 
@@ -41,29 +40,8 @@ class CachingProviderHelperTest {
     Path tempDir;
 
     @Test
-    void blockalignedFalseDisablesAlignment() throws IOException {
+    void enabledCachesExactRanges() throws IOException {
         Path testFile = writeRandomFile();
-
-        StorageConfig opts = new StorageConfig(testFile.toUri())
-                .setParameter(CachingProviderHelper.MEMORY_CACHE_ENABLED, true)
-                .setParameter(CachingProviderHelper.MEMORY_CACHE_BLOCK_ALIGNED, false);
-
-        try (RangeReader base = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader reader = (CachingRangeReader) CachingProviderHelper.cachingDecoratorFor(opts)
-                        .orElseThrow()
-                        .apply(base)) {
-
-            ByteBuffer out = ByteBuffer.allocate(16);
-            reader.readRange(2000, 1, out);
-
-            assertThat(reader.getEstimatedCacheSizeBytes()).isEqualTo(1L);
-        }
-    }
-
-    @Test
-    void blockalignedAbsentDoesNotAlign() throws IOException {
-        Path testFile = writeRandomFile();
-
         StorageConfig opts =
                 new StorageConfig(testFile.toUri()).setParameter(CachingProviderHelper.MEMORY_CACHE_ENABLED, true);
 
@@ -80,53 +58,17 @@ class CachingProviderHelperTest {
     }
 
     @Test
-    void blockalignedTrueAligns() throws IOException {
+    void disabledYieldsNoDecorator() throws IOException {
         Path testFile = writeRandomFile();
-
-        StorageConfig opts = new StorageConfig(testFile.toUri())
-                .setParameter(CachingProviderHelper.MEMORY_CACHE_ENABLED, true)
-                .setParameter(CachingProviderHelper.MEMORY_CACHE_BLOCK_ALIGNED, true);
-
-        try (RangeReader base = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader reader = (CachingRangeReader) CachingProviderHelper.cachingDecoratorFor(opts)
-                        .orElseThrow()
-                        .apply(base)) {
-
-            ByteBuffer out = ByteBuffer.allocate(16);
-            reader.readRange(2000, 1, out);
-
-            assertThat(reader.getEstimatedCacheSizeBytes()).isEqualTo(64L * 1024);
-        }
+        StorageConfig opts =
+                new StorageConfig(testFile.toUri()).setParameter(CachingProviderHelper.MEMORY_CACHE_ENABLED, false);
+        assertThat(CachingProviderHelper.cachingDecoratorFor(opts)).isEmpty();
     }
 
     @Test
-    void blockalignedDeclaredDefaultIsFalse() {
-        assertThat(CachingProviderHelper.MEMORY_CACHE_BLOCK_ALIGNED.defaultValue())
-                .contains(false);
-    }
-
-    /**
-     * {@code StorageProvider.createConfig()} pre-populates configs with the declared parameter defaults; the resulting
-     * config must not enable block alignment either.
-     */
-    @Test
-    void configWithDeclaredDefaultsDoesNotAlign() throws IOException {
-        Path testFile = writeRandomFile();
-
-        StorageConfig opts = StorageConfig.withDefaults(CachingProviderHelper.configParameters())
-                .baseUri(testFile.toUri())
-                .setParameter(CachingProviderHelper.MEMORY_CACHE_ENABLED, true);
-
-        try (RangeReader base = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader reader = (CachingRangeReader) CachingProviderHelper.cachingDecoratorFor(opts)
-                        .orElseThrow()
-                        .apply(base)) {
-
-            ByteBuffer out = ByteBuffer.allocate(16);
-            reader.readRange(2000, 1, out);
-
-            assertThat(reader.getEstimatedCacheSizeBytes()).isEqualTo(1L);
-        }
+    void onlyTheEnabledParameterIsDeclared() {
+        assertThat(CachingProviderHelper.configParameters())
+                .containsExactly(CachingProviderHelper.MEMORY_CACHE_ENABLED);
     }
 
     private Path writeRandomFile() throws IOException {

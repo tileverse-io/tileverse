@@ -26,6 +26,7 @@ import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageFactory;
 import io.tileverse.storage.azure.AzureBlobStorageProvider;
+import io.tileverse.storage.block.BlockAlignedRangeReader;
 import io.tileverse.storage.cache.CachingRangeReader;
 import io.tileverse.storage.s3.S3StorageProvider;
 import io.tileverse.tiling.pyramid.TileIndex;
@@ -107,8 +108,10 @@ class CloudStorageIntegrationTest {
         try (S3Client closeable = s3Client;
                 Storage storage = S3StorageProvider.open(bucketUri, s3Client);
                 RangeReader baseReader = storage.openRangeReader(s3Key);
-                RangeReader rangeReader =
-                        CachingRangeReader.builder(baseReader).blockSize(16384).build()) {
+                RangeReader rangeReader = BlockAlignedRangeReader.builder(CachingRangeReader.of(baseReader))
+                        .blockSize(16384)
+                        .alignWholeFile()
+                        .build()) {
 
             PMTilesReader pmTilesReader = new PMTilesReader(rangeReader);
             // Verify we can read the header
@@ -154,8 +157,10 @@ class CloudStorageIntegrationTest {
 
         try (Storage storage = AzureBlobStorageProvider.open(containerUri, blobServiceClient);
                 RangeReader baseReader = storage.openRangeReader(azureBlob);
-                RangeReader reader =
-                        CachingRangeReader.builder(baseReader).blockSize(32768).build()) {
+                RangeReader reader = BlockAlignedRangeReader.builder(CachingRangeReader.of(baseReader))
+                        .blockSize(32768)
+                        .alignWholeFile()
+                        .build()) {
 
             PMTilesReader pmTilesReader = new PMTilesReader(reader);
             // Verify we can read the header
@@ -193,7 +198,7 @@ class CloudStorageIntegrationTest {
         URI parent = URI.create(full.substring(0, full.lastIndexOf('/') + 1));
         try (io.tileverse.storage.Storage storage = StorageFactory.open(parent, props);
                 RangeReader baseReader = storage.openRangeReader(httpUri);
-                RangeReader rangeReader = CachingRangeReader.builder(baseReader).build()) {
+                RangeReader rangeReader = CachingRangeReader.of(baseReader)) {
 
             PMTilesReader pmTilesReader = new PMTilesReader(rangeReader);
             // Verify we can read the header

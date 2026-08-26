@@ -27,6 +27,7 @@ import com.google.cloud.storage.StorageException;
 import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.batch.CoalescingPolicy;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
@@ -42,9 +43,15 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>This class enables reading data stored in Google Cloud Storage buckets using the Google Cloud Storage client
  * library for Java.
+ *
+ * <p>Batched reads merge nearby ranges under the object-store coalescing policy and run up to 8 fetches concurrently on
+ * the shared batch executor; worst-case amplification is the requested bytes plus the merged gaps.
  */
 @Slf4j
 final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements RangeReader {
+
+    /** Fetch parallelism for batched reads on the shared batch executor. */
+    private static final int MAX_CONCURRENT_FETCHES = 8;
 
     private final Storage storage;
     private final String bucket;
@@ -106,6 +113,16 @@ final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements
         return userProject
                 .map(p -> new BlobSourceOption[] {BlobSourceOption.userProject(p)})
                 .orElseGet(() -> new BlobSourceOption[0]);
+    }
+
+    @Override
+    protected CoalescingPolicy coalescingPolicy() {
+        return CoalescingPolicy.objectStoreDefaults();
+    }
+
+    @Override
+    protected int maxConcurrentFetches() {
+        return MAX_CONCURRENT_FETCHES;
     }
 
     @Override

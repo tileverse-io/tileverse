@@ -38,6 +38,7 @@ import com.azure.storage.blob.models.BlobDownloadResponse;
 import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobStorageException;
 import io.tileverse.storage.NotFoundException;
+import io.tileverse.storage.batch.CoalescingPolicy;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -267,5 +268,12 @@ class AzureBlobRangeReaderTest {
 
         // Should return empty buffer
         assertEquals(0, buffer.remaining());
+    }
+
+    @Test
+    void batchedReadsUseTheObjectStorePolicyOnTheSharedExecutor() {
+        AzureBlobRangeReader plainReader = new AzureBlobRangeReader(mock(BlobClient.class));
+        assertThat(plainReader.coalescingPolicy()).isEqualTo(CoalescingPolicy.objectStoreDefaults());
+        assertThat(plainReader.maxConcurrentFetches()).isEqualTo(8);
     }
 }

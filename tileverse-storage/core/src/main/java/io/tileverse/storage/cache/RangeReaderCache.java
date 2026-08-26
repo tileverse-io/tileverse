@@ -66,6 +66,18 @@ class RangeReaderCache {
         return cache.get(range, this::loadRange);
     }
 
+    public ByteBuffer getIfPresent(ByteRange range) {
+        return cache.getIfPresent(range);
+    }
+
+    /**
+     * Stores {@code value} for {@code key} unless another thread already stored one, returning whichever value the
+     * cache holds afterwards.
+     */
+    public ByteBuffer getOrStore(ByteRange key, ByteBuffer value) {
+        return cache.get(key, k -> value);
+    }
+
     void onRemoval(ByteRange key, ByteBuffer value, RemovalCause cause) {
         if (log.isTraceEnabled()) {
             log.trace("Evicted {}, {}, cause: {}", value, key, cause);
@@ -83,25 +95,30 @@ class RangeReaderCache {
     }
 
     ByteBuffer loadRange(ByteRange key) {
-        // Allocate a buffer for the cache entry
         ByteBuffer blockData = ByteBuffer.allocate(key.length());
-
-        // Read data directly into the buffer
         int bytesRead = delegate.readRange(key, blockData);
+        return sanitize(blockData, bytesRead);
+    }
 
-        // Handle partial reads (e.g., EOF) by creating a buffer with only the actual
-        // data
-        if (bytesRead < key.length() && bytesRead > 0) {
+    /**
+     * Trims a freshly filled buffer down to the bytes actually read, flips it for reading, and returns it read-only.
+     * Relies on {@code filled}'s position being at {@code bytesRead}, exactly as left by a preceding read that advanced
+     * the position by that count.
+     *
+     * @param filled the buffer written to by the read, positioned at {@code bytesRead}
+     * @param bytesRead the number of bytes actually read, at most {@code filled.capacity()}
+     * @return a read-only, right-sized, flipped buffer holding exactly the bytes read
+     */
+    static ByteBuffer sanitize(ByteBuffer filled, int bytesRead) {
+        if (bytesRead < filled.capacity() && bytesRead > 0) {
             ByteBuffer actualData = ByteBuffer.allocate(bytesRead);
-            blockData.flip();
-            actualData.put(blockData);
-            actualData.flip(); // Flip to prepare for reading
+            filled.flip();
+            actualData.put(filled);
+            actualData.flip();
             return actualData.asReadOnlyBuffer();
         }
-
-        // Flip the buffer to prepare it for reading by cache consumers
-        blockData.flip();
-        return blockData.asReadOnlyBuffer();
+        filled.flip();
+        return filled.asReadOnlyBuffer();
     }
 
     public void invalidateAll() {

@@ -165,18 +165,20 @@ try {
 
 ## Storage and RangeReader
 
-`Storage.openRangeReader(key)` returns a `RangeReader` for the named blob. The decorator stack you used before (`CachingRangeReader`, `BlockAlignedRangeReader`) still works:
+`Storage.openRangeReader(key)` returns a `RangeReader` for the named blob. The decorator stack (`CachingRangeReader`, `BlockAlignedRangeReader`) still works, composed explicitly with the aligner above the cache:
 
 ```java
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.block.BlockAlignedRangeReader;
 import io.tileverse.storage.cache.CachingRangeReader;
 
 try (Storage storage = StorageFactory.open(URI.create("s3://bucket/data/"))) {
     RangeReader reader = storage.openRangeReader("file.pmtiles");
-    RangeReader cached = CachingRangeReader.builder(reader)
-            .withBlockAlignment()
+    RangeReader cached = CachingRangeReader.builder(reader).build();
+    RangeReader aligned = BlockAlignedRangeReader.builder(cached)
+            .alignWholeFile()
             .build();
-    // use `cached` exactly as before
+    // use `aligned` for block-grain caching, or `cached` directly for exact-range caching
 }
 ```
 

@@ -231,15 +231,19 @@ export JAVA_HOME=/path/to/java17
    }
    ```
 
-2. **Ensure consistent read patterns**:
+2. **Declare block-aligned regions for nearby reads**:
    ```java
-   // Good: Consistent block-aligned reads
+   // Good: reads inside a declared BlockAlignedRangeReader region collapse onto shared blocks
+   RangeReader aligned = BlockAlignedRangeReader.builder(reader)
+       .blockSize(4096)
+       .alignRegion(0, 10 * 1024)
+       .build();
    for (int i = 0; i < 10; i++) {
-       reader.readRange(i * 1024, 1024);  // Cache-friendly
+       aligned.readRange(i * 1024, 1024);  // cache-friendly: shares 4KB blocks
    }
-   
-   // Bad: Random, unaligned reads
-   reader.readRange(100, 500);   // Won't benefit from caching
+
+   // A plain CachingRangeReader only helps a request that repeats the exact same range
+   reader.readRange(100, 500);
    reader.readRange(1500, 300);
    ```
 

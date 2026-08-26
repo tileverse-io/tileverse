@@ -45,10 +45,22 @@ These classes implement the actual network/disk I/O:
 *   **`Azure` / `GCS`**: Similar wrappers for their respective SDKs, with matching refcounted client caches.
 
 ### Decorator Layer
-We use the Decorator pattern to add behaviors without modifying backends.
+We use the Decorator pattern to add behaviors without modifying backends. The two decorators
+stack as `BlockAlignedRangeReader` above `CachingRangeReader` above the backend:
 
-*   **`CachingRangeReader`**: Intercepts `readRange`. Checks in-memory Caffeine cache. If miss, calls delegate, caches result, returns data.
-*   **`BlockAlignedRangeReader`**: Expands arbitrary read requests (e.g., "bytes 100-150") to align with specific block boundaries (e.g., "bytes 0-4096"), optimizing cache hit rates.
+*   **`CachingRangeReader`**: Intercepts `readRange`/`readRanges`. Checks an in-memory Caffeine
+    cache for the exact `(offset, length)` requested. On a miss, calls the delegate, stores the
+    result under that exact key, and returns the data.
+*   **`BlockAlignedRangeReader`**: Expands a request that falls fully inside a declared byte
+    region (e.g., "bytes 100-150" inside a declared header region) to the blocks that cover it
+    (e.g., "bytes 0-4096"), fetched from its delegate in one batch call. Requests outside every
+    declared region pass through untouched. Stacked above `CachingRangeReader`, the cache then
+    stores the aligned blocks: block-grain caching inside declared regions, exact-grain caching
+    everywhere else.
+*   **Backends**: batched reads plan before fetching: nearby ranges merge into shared
+    fetches (about a 350 KB gap budget for object stores, 230 KB for HTTP, 32 MiB max per
+    fetch), which run in parallel per backend (CRT async client on S3, shared executor on
+    GCS/Azure and for HTTP request fan-out and fallback, `multipart/byteranges` on HTTP).
 
 ## Runtime View
 

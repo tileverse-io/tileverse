@@ -29,13 +29,16 @@ import io.tileverse.cache.CacheStats;
 import io.tileverse.cache.CaffeineCache;
 import io.tileverse.io.ByteRange;
 import io.tileverse.storage.AbstractRangeReader;
+import io.tileverse.storage.ByteArrayRangeReader;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
+import io.tileverse.storage.RangeRequest;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.Random;
@@ -275,16 +278,18 @@ class CachingRangeReaderTest {
     @Test
     void testSizeMethod() throws IOException {
         RangeReader delegate = RangeReaderTestSupport.fileReader(testFile);
-        try (CachingRangeReader reader = CachingRangeReader.builder(delegate).build()) {
+        try (CachingRangeReader reader = CachingRangeReader.of(delegate)) {
             assertEquals(FILE_SIZE, reader.size().getAsLong(), "Size should match file size");
         }
     }
 
     @Test
-    void testBuilderValidation() {
+    void ofBuildsACachingReaderOverTheDelegate() throws IOException {
         RangeReader delegate = RangeReaderTestSupport.fileReader(testFile);
-        CachingRangeReader.Builder builder = CachingRangeReader.builder(delegate);
-        assertThatThrownBy(() -> builder.blockSize(-1)).isInstanceOf(IllegalArgumentException.class);
+        try (CachingRangeReader reader = CachingRangeReader.of(delegate)) {
+            ByteBuffer data = reader.readRange(0, 100);
+            assertEquals(100, data.flip().remaining());
+        }
     }
 
     @Test
@@ -340,57 +345,74 @@ class CachingRangeReaderTest {
     }
 
     @Test
-    void testHeaderBufferConfiguration() throws IOException {
-        // Test with header buffer enabled
-        try (RangeReader delegate = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader reader = CachingRangeReader.builder(delegate)
-                        .cacheManager(cacheManager)
-                        .withHeaderBuffer()
-                        .build()) {
+    void readRangesForwardsOnlyMissesAsOneBatch() throws IOException {
+        ByteArrayRangeReader delegate = new ByteArrayRangeReader(TEST_DATA);
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
 
-            // Read from beginning of file - should come from header buffer
-            ByteBuffer data1 = reader.readRange(0, 1000);
-            assertEquals(1000, data1.flip().remaining());
+            // warm two of the five ranges
+            reader.readRange(0, 100);
+            reader.readRange(5000, 200);
+            delegate.clearRecordings();
 
-            // Read again from header range - should still work from header buffer
-            ByteBuffer data2 = reader.readRange(500, 500);
-            assertEquals(500, data2.flip().remaining());
+            List<RangeRequest> requests = List.of(
+                    RangeRequest.of(0, 100, ByteBuffer.allocate(100)),
+                    RangeRequest.of(1000, 50, ByteBuffer.allocate(50)),
+                    RangeRequest.of(5000, 200, ByteBuffer.allocate(200)),
+                    RangeRequest.of(2000, 25, ByteBuffer.allocate(25)),
+                    RangeRequest.of(1000, 50, ByteBuffer.allocate(50))); // duplicate of entry 1
 
-            // Cache should be empty since reads came from header buffer
-            assertEquals(0, reader.getCacheEntryCount(), "Cache should be empty with header buffer");
+            int[] read = reader.readRanges(requests);
+
+            assertThat(read).containsExactly(100, 50, 200, 25, 50);
+            // one batch reached the delegate, with the two distinct misses only
+            assertThat(delegate.batchReads())
+                    .containsExactly(List.of(new ByteRange(1000, 50), new ByteRange(2000, 25)));
+            for (RangeRequest request : requests) {
+                ByteBuffer expected = ByteBuffer.wrap(TEST_DATA)
+                        .position((int) request.range().offset())
+                        .limit((int) request.range().end());
+                assertThat(request.target().flip()).isEqualTo(expected);
+            }
+            // the four distinct ranges are cached; the duplicate request shares a key
+            assertThat(reader.getCacheEntryCount()).isEqualTo(4);
         }
+    }
 
-        // Test with explicit header size
-        try (RangeReader delegate = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader reader = CachingRangeReader.builder(delegate)
-                        .cacheManager(cacheManager)
-                        .headerSize(32 * 1024) // 32KB header
-                        .build()) {
+    @Test
+    void readRangesAllHitsSkipTheDelegate() throws IOException {
+        ByteArrayRangeReader delegate = new ByteArrayRangeReader(TEST_DATA);
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
+            reader.readRange(100, 40);
+            delegate.clearRecordings();
 
-            // Read within header range
-            ByteBuffer headerData = reader.readRange(0, 1000);
-            assertEquals(1000, headerData.flip().remaining());
+            int[] read = reader.readRanges(List.of(RangeRequest.of(100, 40, ByteBuffer.allocate(40))));
 
-            // Read beyond header range - should use cache
-            ByteBuffer cachedData = reader.readRange(50000, 1000);
-            assertEquals(1000, cachedData.flip().remaining());
-
-            // Cache should contain the beyond-header read
-            assertEquals(1, reader.getCacheEntryCount(), "Cache should contain beyond-header read");
+            assertThat(read).containsExactly(40);
+            assertThat(delegate.batchReads()).isEmpty();
+            assertThat(delegate.singleReads()).isEmpty();
         }
+    }
 
-        // Test with header buffer disabled (default)
-        try (RangeReader delegate = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader reader = CachingRangeReader.builder(delegate)
-                        .cacheManager(cacheManager)
-                        .build()) {
+    @Test
+    void readRangesTrimsShortReadsAtEof() throws IOException {
+        ByteArrayRangeReader delegate = new ByteArrayRangeReader(TEST_DATA);
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
 
-            // Read from beginning - should go to cache since no header buffer
-            ByteBuffer data = reader.readRange(0, 1000);
-            assertEquals(1000, data.flip().remaining());
+            ByteBuffer straddling = ByteBuffer.allocate(100);
+            ByteBuffer past = ByteBuffer.allocate(10);
+            int[] read = reader.readRanges(List.of(
+                    RangeRequest.of(FILE_SIZE - 30, 100, straddling), RangeRequest.of(FILE_SIZE + 1, 10, past)));
 
-            // Cache should contain the entry
-            assertEquals(1, reader.getCacheEntryCount(), "Cache should contain entry without header buffer");
+            assertThat(read).containsExactly(30, 0);
+            assertThat(straddling.position()).isEqualTo(30);
+            // a repeat straddling read is a cache hit
+            delegate.clearRecordings();
+            int[] again = reader.readRanges(List.of(RangeRequest.of(FILE_SIZE - 30, 100, ByteBuffer.allocate(100))));
+            assertThat(again).containsExactly(30);
+            assertThat(delegate.batchReads()).isEmpty();
         }
     }
 

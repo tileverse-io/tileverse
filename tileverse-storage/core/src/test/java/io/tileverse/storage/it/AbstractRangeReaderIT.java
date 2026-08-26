@@ -19,12 +19,20 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.block.BlockAlignedRangeReader;
 import io.tileverse.storage.cache.CachingRangeReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -65,7 +73,7 @@ public abstract class AbstractRangeReaderIT {
      * @throws IOException If an error occurs creating the reader
      */
     protected RangeReader createCachingReader() throws IOException {
-        return CachingRangeReader.builder(createBaseReader()).build();
+        return CachingRangeReader.of(createBaseReader());
     }
 
     /**
@@ -88,8 +96,7 @@ public abstract class AbstractRangeReaderIT {
      * @throws IOException If an error occurs creating the reader
      */
     protected RangeReader createBlockAlignedCachingReader() throws IOException {
-        CachingRangeReader cachingReader =
-                CachingRangeReader.builder(createBaseReader()).build();
+        CachingRangeReader cachingReader = CachingRangeReader.of(createBaseReader());
         return new BlockAlignedRangeReader(cachingReader, DEFAULT_BLOCK_SIZE);
     }
 
@@ -115,8 +122,7 @@ public abstract class AbstractRangeReaderIT {
      * @throws IOException If an error occurs creating the reader
      */
     protected RangeReader createCustomBlockSizeCachingReader(int blockSize) throws IOException {
-        CachingRangeReader cachingReader =
-                CachingRangeReader.builder(createBaseReader()).build();
+        CachingRangeReader cachingReader = CachingRangeReader.of(createBaseReader());
         return new BlockAlignedRangeReader(cachingReader, blockSize);
     }
 
@@ -467,6 +473,90 @@ public abstract class AbstractRangeReaderIT {
                             explicitData,
                             "Explicit buffer data should match base reader at offset " + offset);
                 }
+            }
+        }
+    }
+
+    @Test
+    public void testReadRangesMatchesSingleReads() throws IOException {
+        try (RangeReader reader = createBaseReader()) {
+            int[][] ranges = {{0, 127}, {1000, 500}, {TEST_FILE_SIZE - 50, 100}, {500, 200}, {1000, 500}};
+            List<RangeRequest> requests = new ArrayList<>();
+            for (int[] range : ranges) {
+                requests.add(RangeRequest.of(range[0], range[1], ByteBuffer.allocate(range[1])));
+            }
+
+            int[] read = reader.readRanges(requests);
+
+            for (int i = 0; i < ranges.length; i++) {
+                ByteBuffer expected =
+                        reader.readRange(ranges[i][0], ranges[i][1]).flip();
+                assertEquals(expected.remaining(), read[i], "bytes read for entry " + i);
+                ByteBuffer actual = requests.get(i).target().flip();
+                assertEquals(expected, actual, "content for entry " + i);
+            }
+        }
+    }
+
+    @Test
+    public void testReadRangesEofAndZeroLengthEntries() throws IOException {
+        try (RangeReader reader = createBaseReader()) {
+            List<RangeRequest> requests = List.of(
+                    RangeRequest.of(TEST_FILE_SIZE, 10, ByteBuffer.allocate(10)),
+                    RangeRequest.of(TEST_FILE_SIZE - 25, 100, ByteBuffer.allocate(100)),
+                    RangeRequest.of(1000, 0, ByteBuffer.allocate(10)),
+                    RangeRequest.of(0, 10, ByteBuffer.allocate(10)));
+
+            int[] read = reader.readRanges(requests);
+
+            assertEquals(0, read[0], "read at EOF returns 0");
+            assertEquals(25, read[1], "read straddling EOF returns the available bytes");
+            assertEquals(0, read[2], "zero-length read returns 0");
+            assertEquals(10, read[3]);
+        }
+    }
+
+    @Test
+    public void testReadRangesThroughDecoratedStacks() throws IOException {
+        try (RangeReader reader = createBlockAlignedCachingReader()) {
+            List<RangeRequest> requests = List.of(
+                    RangeRequest.of(DEFAULT_BLOCK_SIZE - 100, 200, ByteBuffer.allocate(200)),
+                    RangeRequest.of(DEFAULT_BLOCK_SIZE - 100, 200, ByteBuffer.allocate(200)),
+                    RangeRequest.of(10, 20, ByteBuffer.allocate(20)));
+
+            int[] read = reader.readRanges(requests);
+
+            assertEquals(200, read[0]);
+            assertEquals(200, read[1]);
+            assertEquals(20, read[2]);
+            assertEquals(
+                    requests.get(0).target().flip(), requests.get(1).target().flip());
+        }
+    }
+
+    @Test
+    public void testReadRangesConcurrently() throws Exception {
+        try (RangeReader reader = createBaseReader()) {
+            int threads = 8;
+            ExecutorService executor = Executors.newFixedThreadPool(threads);
+            try {
+                CountDownLatch start = new CountDownLatch(1);
+                List<Future<int[]>> futures = new ArrayList<>();
+                for (int t = 0; t < threads; t++) {
+                    final int base = 500 * t;
+                    futures.add(executor.submit(() -> {
+                        start.await();
+                        return reader.readRanges(List.of(
+                                RangeRequest.of(base, 250, ByteBuffer.allocate(250)),
+                                RangeRequest.of(base + 250, 250, ByteBuffer.allocate(250))));
+                    }));
+                }
+                start.countDown();
+                for (Future<int[]> future : futures) {
+                    assertArrayEquals(new int[] {250, 250}, future.get(30, TimeUnit.SECONDS));
+                }
+            } finally {
+                executor.shutdownNow();
             }
         }
     }

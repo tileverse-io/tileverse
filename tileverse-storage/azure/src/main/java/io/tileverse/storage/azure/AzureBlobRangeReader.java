@@ -28,6 +28,7 @@ import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.ContentRange;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.StorageException;
+import io.tileverse.storage.batch.CoalescingPolicy;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.time.Duration;
@@ -39,9 +40,15 @@ import lombok.extern.slf4j.Slf4j;
  * A RangeReader implementation that reads from an Azure Blob Storage container.
  *
  * <p>This class enables reading data stored in Azure Blob Storage using the Azure Storage Blob client library for Java.
+ *
+ * <p>Batched reads merge nearby ranges under the object-store coalescing policy and run up to 8 fetches concurrently on
+ * the shared batch executor; worst-case amplification is the requested bytes plus the merged gaps.
  */
 @Slf4j
 class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
+
+    /** Fetch parallelism for batched reads on the shared batch executor. */
+    private static final int MAX_CONCURRENT_FETCHES = 8;
 
     private final BlobClient blobClient;
     private final AtomicReference<OptionalLong> contentLength = new AtomicReference<>();
@@ -107,6 +114,16 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
         } catch (Exception e) {
             throw new StorageException("Failed to read range from blob: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    protected CoalescingPolicy coalescingPolicy() {
+        return CoalescingPolicy.objectStoreDefaults();
+    }
+
+    @Override
+    protected int maxConcurrentFetches() {
+        return MAX_CONCURRENT_FETCHES;
     }
 
     @Override

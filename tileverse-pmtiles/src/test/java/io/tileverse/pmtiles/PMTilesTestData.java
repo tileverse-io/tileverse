@@ -18,6 +18,7 @@ package io.tileverse.pmtiles;
 import static java.util.Objects.requireNonNull;
 
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageFactory;
 import java.io.IOException;
@@ -80,6 +81,11 @@ public class PMTilesTestData {
             @Override
             public int readRange(long offset, int length, ByteBuffer target) {
                 return delegate.readRange(offset, length, target);
+            }
+
+            @Override
+            public int[] readRanges(List<RangeRequest> requests) {
+                return delegate.readRanges(requests);
             }
 
             @Override

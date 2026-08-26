@@ -36,6 +36,7 @@ import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.Storage.BlobGetOption;
 import com.google.cloud.storage.Storage.BlobSourceOption;
 import com.google.cloud.storage.StorageException;
+import io.tileverse.storage.batch.CoalescingPolicy;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -287,5 +288,11 @@ class GoogleCloudStorageRangeReaderTest {
         clearInvocations(storage);
         reader.close();
         verifyNoInteractions(storage);
+    }
+
+    @Test
+    void batchedReadsUseTheObjectStorePolicyOnTheSharedExecutor() {
+        assertThat(reader.coalescingPolicy()).isEqualTo(CoalescingPolicy.objectStoreDefaults());
+        assertThat(reader.maxConcurrentFetches()).isEqualTo(8);
     }
 }

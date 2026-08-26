@@ -104,6 +104,7 @@ nav:
       - Authenticate: storage/how-to/authenticate.md
       - Troubleshoot: storage/how-to/troubleshoot.md
       - Migrate from 1.4.x: storage/how-to/migrate-from-1.4.md
+      - Migrate from 2.0: storage/how-to/migrate-from-2.0.md
     - Reference:
       - Range Reader API: storage/reference/rangereader.md
       - Range Reader recipes: storage/reference/rangereader-recipes.md

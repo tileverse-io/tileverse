@@ -17,14 +17,23 @@ package io.tileverse.storage.http;
 
 import static java.util.Objects.requireNonNull;
 
+import io.tileverse.io.ByteBufferPool;
+import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
+import io.tileverse.io.ByteRange;
 import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.AccessDeniedException;
 import io.tileverse.storage.ContentRange;
 import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.RangeNotSatisfiableException;
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.StorageException;
 import io.tileverse.storage.TransientStorageException;
+import io.tileverse.storage.batch.BatchExecutors;
+import io.tileverse.storage.batch.BatchPlanner;
+import io.tileverse.storage.batch.BatchRunner;
+import io.tileverse.storage.batch.CoalescingPolicy;
+import io.tileverse.storage.batch.PlannedFetch;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -39,9 +48,13 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -57,6 +70,10 @@ import lombok.extern.slf4j.Slf4j;
  * <p>It also supports various authentication methods through the HttpAuthentication interface.
  *
  * <p>Uses the modern Java 11+ {@linkplain HttpClient} API for better performance and features.
+ *
+ * <p><b>Batched Reads:</b> {@link #readRanges} reads a batch with as few round trips as the server allows: planned
+ * fetches travel as multi-range GETs, and each {@code multipart/byteranges} part is routed to its fetches by
+ * {@code Content-Range}.
  */
 @Slf4j
 final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
@@ -69,6 +86,25 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
 
     /** Populated by the first HEAD (size() before any read) or the first range response. */
     private final AtomicReference<Metadata> metadata = new AtomicReference<>(null);
+
+    /** Upper bound of range specs per multi-range GET; groups beyond it run as extra concurrent requests. */
+    private static final int MAX_RANGE_SPECS_PER_REQUEST = 100;
+
+    /** Fetch and group parallelism for batched reads. */
+    private static final int MAX_CONCURRENT_FETCHES = 8;
+
+    private static final String ETAG_HEADER = "ETag";
+
+    private static final String LAST_MODIFIED_HEADER = "Last-Modified";
+
+    private static final Pattern BOUNDARY_PARAMETER =
+            Pattern.compile("boundary=(?:\"([^\"]+)\"|([^;\\s]+))", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Set once a server answers a multi-range GET with 200 or an uncovering single range; from then on batches run one
+     * GET per fetch.
+     */
+    private volatile boolean multiRangeUnsupported;
 
     /**
      * Creates a new HttpRangeReader with a custom HTTP client and authentication.
@@ -114,6 +150,246 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new TransientStorageException("Request was interrupted for " + uri, e);
+        }
+    }
+
+    @Override
+    protected CoalescingPolicy coalescingPolicy() {
+        return CoalescingPolicy.httpDefaults();
+    }
+
+    @Override
+    protected int maxConcurrentFetches() {
+        return MAX_CONCURRENT_FETCHES;
+    }
+
+    /**
+     * Reads a batch with as few round trips as the server allows: planned fetches travel as multi-range GETs
+     * ({@code Range: bytes=a-b,c-d,...}, at most {@value #MAX_RANGE_SPECS_PER_REQUEST} ranges per request, extra groups
+     * running concurrently on the shared batch executor), and each {@code multipart/byteranges} part is routed to its
+     * fetches by {@code Content-Range} (parts may arrive reordered or coalesced). A single-range 206 covering the group
+     * is consumed by streaming with gap skips.
+     *
+     * <p>A 200, or a single-range 206 not covering the group, closes the body unread, restores the target positions,
+     * and re-runs the whole batch through the batched-read template (one GET per planned fetch); the reader remembers
+     * the refusal and skips multi-range GETs from then on. A 416 means nothing in that group is satisfiable and its
+     * entries report 0, exactly like the single-read 416 translation. Size, ETag, and Last-Modified are captured from
+     * the first multipart response like from single-range responses.
+     *
+     * <p>A policy with merging disabled ({@link CoalescingPolicy#maxGapBytes()} negative) routes the whole batch
+     * through the batched-read template instead, one GET per planned fetch: its direct fetches are unsorted and not
+     * deduplicated, which the multipart router cannot safely group into shared multi-range GETs.
+     *
+     * <p>Worst-case amplification: the requested bytes plus the gaps the HTTP policy merges, at most
+     * {@link CoalescingPolicy#maxFetchBytes()} per fetch.
+     *
+     * @param requests the ranges to read and the buffers they land in
+     * @return the number of bytes read per request, in request order
+     */
+    @Override
+    public int[] readRanges(List<RangeRequest> requests) {
+        if (multiRangeUnsupported) {
+            return super.readRanges(requests);
+        }
+        RangeRequest.validate(requests);
+        if (requests.isEmpty()) {
+            return new int[0];
+        }
+        List<PlannedFetch> fetches = BatchPlanner.plan(requests, coalescingPolicy());
+        if (fetches.isEmpty()) {
+            return new int[requests.size()];
+        }
+        if (fetches.size() == 1) {
+            return BatchRunner.run(requests, fetches, this::readRange, 1, BatchExecutors::shared);
+        }
+        if (coalescingPolicy().maxGapBytes() < 0) {
+            // merging disabled: the plan is unsorted, duplicate-preserving direct fetches, which the multipart
+            // router cannot safely group into shared multi-range GETs; the template reads them one GET at a time.
+            return super.readRanges(requests);
+        }
+        int[] initialPositions = targetPositions(requests);
+        int[] counts = new int[requests.size()];
+        List<List<PlannedFetch>> groups = partition(fetches, MAX_RANGE_SPECS_PER_REQUEST);
+        try {
+            BatchRunner.runConcurrently(
+                    groups.size(),
+                    group -> readGroup(groups.get(group), requests, counts),
+                    MAX_CONCURRENT_FETCHES,
+                    BatchExecutors::shared);
+            return counts;
+        } catch (MultiRangeRefused refused) {
+            multiRangeUnsupported = true;
+            log.debug("{} rejected a multi-range request; batches now run one GET per fetch", uri);
+            restorePositions(requests, initialPositions);
+            return super.readRanges(requests);
+        }
+    }
+
+    /** Sends one multi-range GET for a group of planned fetches and routes its response. */
+    private void readGroup(List<PlannedFetch> group, List<RangeRequest> requests, int[] counts) {
+        try {
+            HttpResponse<InputStream> response = sendMultiRangeRequest(group);
+            routeMultiRangeResponse(response, group, requests, counts);
+        } catch (IOException e) {
+            throw new TransientStorageException("Multi-range read failed for " + uri, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new TransientStorageException("Request was interrupted for " + uri, e);
+        }
+    }
+
+    private HttpResponse<InputStream> sendMultiRangeRequest(List<PlannedFetch> group)
+            throws IOException, InterruptedException {
+        StringBuilder rangeSpecs = new StringBuilder("bytes=");
+        for (int i = 0; i < group.size(); i++) {
+            ByteRange range = group.get(i).range();
+            if (i > 0) {
+                rangeSpecs.append(',');
+            }
+            rangeSpecs.append(range.offset()).append('-').append(range.end() - 1);
+        }
+        HttpRequest.Builder requestBuilder =
+                HttpRequest.newBuilder().GET().uri(uri).header("Range", rangeSpecs.toString());
+        requestBuilder = authentication.authenticate(httpClient, requestBuilder);
+        try {
+            return httpClient.send(requestBuilder.build(), BodyHandlers.ofInputStream());
+        } catch (HttpConnectTimeoutException timeout) {
+            throw rethrow(timeout);
+        }
+    }
+
+    private void routeMultiRangeResponse(
+            HttpResponse<InputStream> response, List<PlannedFetch> group, List<RangeRequest> requests, int[] counts)
+            throws IOException {
+        int statusCode = response.statusCode();
+        if (statusCode == 416) {
+            // nothing in this group is satisfiable; its entries stay 0
+            closeBodyQuietly(response);
+            return;
+        }
+        if (statusCode == 200) {
+            closeBodyQuietly(response);
+            throw new MultiRangeRefused();
+        }
+        if (statusCode != 206) {
+            closeBodyQuietly(response);
+            throw statusFailure(statusCode);
+        }
+        Optional<String> boundary =
+                multipartBoundary(response.headers().firstValue("Content-Type").orElse(""));
+        try (InputStream body = response.body()) {
+            if (boundary.isPresent()) {
+                routeParts(
+                        MultipartByteRangesParser.multipart(body, boundary.get()), response, group, requests, counts);
+                return;
+            }
+            ContentRange.Bytes single = ContentRange.bytesOf(
+                            response.headers().firstValue("Content-Range").orElse(null))
+                    .orElse(null);
+            if (single == null || !covers(single, group)) {
+                throw new MultiRangeRefused();
+            }
+            routeParts(MultipartByteRangesParser.singlePart(body, single), response, group, requests, counts);
+        }
+    }
+
+    /**
+     * Returns whether a single-range response can satisfy the whole group: it starts at or before the first fetch and
+     * reaches the last fetch's end, or the end of the object for a group straddling EOF.
+     */
+    private static boolean covers(ContentRange.Bytes single, List<PlannedFetch> group) {
+        long firstNeeded = group.get(0).range().offset();
+        long lastNeeded = group.get(group.size() - 1).range().end() - 1;
+        if (single.firstPos() > firstNeeded) {
+            return false;
+        }
+        if (single.lastPos() >= lastNeeded) {
+            return true;
+        }
+        return single.total().isPresent() && single.lastPos() == single.total().getAsLong() - 1;
+    }
+
+    private void routeParts(
+            MultipartByteRangesParser parser,
+            HttpResponse<InputStream> response,
+            List<PlannedFetch> group,
+            List<RangeRequest> requests,
+            int[] counts)
+            throws IOException {
+        ContentRange.Bytes part;
+        while ((part = parser.nextPart()) != null) {
+            capturePartMetadata(response, part);
+            routeOnePart(parser, part, group, requests, counts);
+        }
+    }
+
+    /** Scatters one part's bytes to every fetch it covers; the group is in ascending offset order. */
+    private void routeOnePart(
+            MultipartByteRangesParser parser,
+            ContentRange.Bytes part,
+            List<PlannedFetch> group,
+            List<RangeRequest> requests,
+            int[] counts)
+            throws IOException {
+        long consumed = 0;
+        for (PlannedFetch fetch : group) {
+            long offsetInPart = fetch.range().offset() - part.firstPos();
+            if (offsetInPart < 0 || offsetInPart >= part.length()) {
+                continue;
+            }
+            parser.skipBody(offsetInPart - consumed);
+            int available = (int) Math.min(fetch.range().length(), part.length() - offsetInPart);
+            try (PooledByteBuffer pooled = ByteBufferPool.heapBuffer(available)) {
+                ByteBuffer scratch = pooled.buffer();
+                int read = parser.readBody(scratch, available);
+                fetch.scatter(scratch, read, requests, counts);
+                consumed = offsetInPart + read;
+            }
+        }
+    }
+
+    /** Commits size, ETag, and Last-Modified from a part's Content-Range total plus the response headers, once. */
+    private void capturePartMetadata(HttpResponse<InputStream> response, ContentRange.Bytes part) {
+        if (metadata.get() != null || part.total().isEmpty()) {
+            return;
+        }
+        Optional<String> etag = response.headers().firstValue(ETAG_HEADER);
+        Optional<String> lastModified = response.headers().firstValue(LAST_MODIFIED_HEADER);
+        metadata.compareAndSet(null, new Metadata(OptionalLong.of(part.total().getAsLong()), etag, lastModified));
+    }
+
+    /** Extracts the boundary parameter of a {@code multipart/byteranges} Content-Type, quoted or bare. */
+    private static Optional<String> multipartBoundary(String contentType) {
+        String value = contentType.trim();
+        if (!value.regionMatches(true, 0, "multipart/byteranges", 0, "multipart/byteranges".length())) {
+            return Optional.empty();
+        }
+        Matcher boundary = BOUNDARY_PARAMETER.matcher(value);
+        if (!boundary.find()) {
+            return Optional.empty();
+        }
+        return Optional.of(boundary.group(1) != null ? boundary.group(1) : boundary.group(2));
+    }
+
+    private static List<List<PlannedFetch>> partition(List<PlannedFetch> fetches, int groupSize) {
+        List<List<PlannedFetch>> groups = new ArrayList<>();
+        for (int from = 0; from < fetches.size(); from += groupSize) {
+            groups.add(fetches.subList(from, Math.min(from + groupSize, fetches.size())));
+        }
+        return groups;
+    }
+
+    private static int[] targetPositions(List<RangeRequest> requests) {
+        int[] positions = new int[requests.size()];
+        for (int i = 0; i < positions.length; i++) {
+            positions[i] = requests.get(i).target().position();
+        }
+        return positions;
+    }
+
+    private static void restorePositions(List<RangeRequest> requests, int[] positions) {
+        for (int i = 0; i < positions.length; i++) {
+            requests.get(i).target().position(positions[i]);
         }
     }
 
@@ -207,19 +483,25 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
             return;
         }
         closeBodyQuietly(response);
+        if (statusCode == 200) {
+            throw new StorageException("Server ignored the Range header (HTTP 200) for URI: " + uri
+                    + "; range requests are not supported by this server");
+        }
+        if (statusCode == 416) {
+            throw new RangeNotSatisfiableException("Requested range not satisfiable for URI: " + uri);
+        }
+        throw statusFailure(statusCode);
+    }
+
+    private StorageException statusFailure(int statusCode) {
         switch (statusCode) {
-            case 200:
-                throw new StorageException("Server ignored the Range header (HTTP 200) for URI: " + uri
-                        + "; range requests are not supported by this server");
             case 401, 403:
-                throw new AccessDeniedException(
+                return new AccessDeniedException(
                         "Authentication failed for URI: " + uri + ", status code: " + statusCode);
             case 404:
-                throw new NotFoundException("Resource not found: " + uri);
-            case 416:
-                throw new RangeNotSatisfiableException("Requested range not satisfiable for URI: " + uri);
+                return new NotFoundException("Resource not found: " + uri);
             default:
-                throw new StorageException("Failed to get range from URI: " + uri + ", status code: " + statusCode);
+                return new StorageException("Failed to get range from URI: " + uri + ", status code: " + statusCode);
         }
     }
 
@@ -243,8 +525,8 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
         }
         OptionalLong total = ContentRange.totalOf(
                 response.headers().firstValue("Content-Range").orElse(null));
-        Optional<String> etag = response.headers().firstValue("ETag");
-        Optional<String> lastModified = response.headers().firstValue("Last-Modified");
+        Optional<String> etag = response.headers().firstValue(ETAG_HEADER);
+        Optional<String> lastModified = response.headers().firstValue(LAST_MODIFIED_HEADER);
         total.ifPresent(size -> metadata.compareAndSet(null, new Metadata(OptionalLong.of(size), etag, lastModified)));
     }
 
@@ -311,11 +593,11 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     private Optional<String> etag(HttpResponse<Void> response) {
-        return response.headers().firstValue("ETag");
+        return response.headers().firstValue(ETAG_HEADER);
     }
 
     private Optional<String> lastModified(HttpResponse<Void> response) {
-        return response.headers().firstValue("Last-Modified");
+        return response.headers().firstValue(LAST_MODIFIED_HEADER);
     }
 
     private TransientStorageException rethrow(HttpConnectTimeoutException timeout) {
@@ -328,5 +610,12 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
         TransientStorageException ex = new TransientStorageException(message);
         ex.addSuppressed(timeout);
         return ex;
+    }
+
+    /** Internal control-flow signal: this server cannot serve multi-range GETs; the caller falls back. */
+    private static final class MultiRangeRefused extends RuntimeException {
+        MultiRangeRefused() {
+            super(null, null, false, false);
+        }
     }
 }

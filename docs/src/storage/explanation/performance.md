@@ -41,15 +41,39 @@ We primarily measure:
 ### 3. Block Alignment
 *   **Problem**: Cloud providers charge per request. Reading 10 bytes here and 10 bytes there generates many requests.
 
-*   **Solution**: Use `BlockAlignedRangeReader`. It effectively "quantizes" reads.
-    *   *Scenario*: You read byte 10, then byte 20.
+*   **Solution**: Stack `BlockAlignedRangeReader` above a `CachingRangeReader` and declare the
+    byte regions that should be aligned (a header, an index, the whole file). Requests inside a
+    declared region "quantize" to whole blocks, cached by the layer beneath.
+    *   *Scenario*: You read byte 10, then byte 20, both inside a declared region.
     *   *Without Alignment*: 2 network requests.
-    *   *With Alignment (4KB)*: Request 1 fetches 0-4096. Request 2 is served from cache.
+    *   *With Alignment (4KB)*: Request 1 fetches block `0-4096` through the cache. Request 2 is served from the memory cache.
 
 ### 4. Read Coalescing
-*   **Concept**: If an application requests bytes `0-100` and `100-200` in rapid succession (or concurrently), the reader can merge these into a single `0-200` request.
+*   **Concept**: `RangeReader.readRanges(List<RangeRequest>)` reads several ranges in one call:
+    the cache forwards only its distinct misses as one delegate call, and the aligner quantizes
+    in-region entries to deduplicated blocks before forwarding them.
 
-*   **Implementation**: Currently handled via the `CachingRangeReader` and Block Alignment. Future versions may support explicit request coalescing for async patterns.
+*   **Implementation**: Each backend plans a batch before fetching. Nearby ranges merge into
+    one fetch when the gap between them costs less than a second round trip
+    (`maxGap = ttfb * bandwidth * (1/utilization - 1)`, the model behind Apache Arrow's
+    [`CacheOptions`](https://github.com/apache/arrow/blob/main/cpp/src/arrow/io/caching.h)
+    and [GDAL's multi-range merging](https://gdal.org/user/configoptions.html#GDAL_HTTP_MERGE_CONSECUTIVE_RANGES)):
+    about 350 KB for object stores, 230 KB for plain HTTP, with merged fetches capped at
+    32 MiB.
+    *   *S3*: planned fetches run in parallel on the CRT `S3AsyncClient`, one async
+        `GetObject` each.
+    *   *GCS / Azure*: up to 8 planned fetches run concurrently on a shared executor
+        (virtual threads on Java 21+, a bounded daemon pool on Java 17).
+    *   *HTTP*: one `Range: bytes=a-b,c-d,...` request per batch, parsed as a streaming
+        `multipart/byteranges` body; servers without multi-range support fall back to one
+        GET per fetch.
+    *   *Local files*: sequential exact reads; merging buys nothing at zero round-trip cost.
+*   **Tuning** (system properties): `io.tileverse.storage.batch.executor`
+    (`auto` | `virtual` | `pool`), `io.tileverse.storage.batch.pool.size`,
+    `io.tileverse.storage.batch.objectstore.maxgap`, `io.tileverse.storage.batch.http.maxgap`,
+    and `io.tileverse.storage.batch.maxfetch` (byte values).
+*   **Amplification**: a batch fetches the requested bytes plus the merged gaps, never more
+    than the max-fetch cap per fetch; requests outside any merge are read exactly.
 
 ## Cloud Considerations
 

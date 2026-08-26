@@ -305,8 +305,6 @@ public class HttpStorageProvider extends AbstractStorageProvider {
      * Creates a new HttpRangeReaderProvider with support for caching parameters
      *
      * @see AbstractStorageProvider#MEMORY_CACHE_ENABLED
-     * @see AbstractStorageProvider#MEMORY_CACHE_BLOCK_ALIGNED
-     * @see AbstractStorageProvider#MEMORY_CACHE_BLOCK_SIZE
      */
     public HttpStorageProvider() {
         super(true);

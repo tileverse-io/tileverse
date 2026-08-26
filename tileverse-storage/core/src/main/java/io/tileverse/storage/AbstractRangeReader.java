@@ -15,8 +15,14 @@
  */
 package io.tileverse.storage;
 
+import io.tileverse.storage.batch.BatchExecutors;
+import io.tileverse.storage.batch.BatchPlanner;
+import io.tileverse.storage.batch.BatchRunner;
+import io.tileverse.storage.batch.CoalescingPolicy;
+import io.tileverse.storage.batch.PlannedFetch;
 import java.nio.ByteBuffer;
 import java.nio.ReadOnlyBufferException;
+import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -29,6 +35,9 @@ import lombok.extern.slf4j.Slf4j;
  * <p>The template method pattern is used where {@link #readRange(long, int, ByteBuffer)} handles all the common
  * concerns (validation, EOF handling, buffer preparation) and delegates the actual reading to the abstract
  * {@code readRangeNoFlip} method.
+ *
+ * <p>Batched reads ({@link #readRanges(List)}) run through the same {@code readRange} template: subclasses tune them
+ * with {@link #coalescingPolicy()} and {@link #maxConcurrentFetches()} instead of reimplementing the batch loop.
  */
 @Slf4j
 public abstract class AbstractRangeReader implements RangeReader {
@@ -125,6 +134,54 @@ public abstract class AbstractRangeReader implements RangeReader {
             // contract of returning 0 bytes read with the buffer position unchanged.
             return 0;
         }
+    }
+
+    /**
+     * Reads a batch by planning fetches with {@link #coalescingPolicy()} and running them with up to
+     * {@link #maxConcurrentFetches()} concurrent fetches on the shared batch executor.
+     *
+     * <p>Every fetch goes through {@link #readRange(long, int, ByteBuffer)}: backend exception mapping, the translation
+     * of {@link RangeNotSatisfiableException} into 0 bytes read, and any response metadata captures apply to batched
+     * reads exactly as to single reads. With the default hooks ({@link CoalescingPolicy#NONE}, one fetch at a time) the
+     * behavior is the interface default: each range read exactly, in request order, nothing amplified.
+     *
+     * <p>Worst-case amplification: the requested bytes plus the gaps the policy merges, at most
+     * {@link CoalescingPolicy#maxFetchBytes()} per fetch.
+     *
+     * <p>An override that bypasses this template, and with it {@code readRange}, must translate
+     * {@link RangeNotSatisfiableException} into 0-byte results itself; the translation lives only in {@code readRange}.
+     *
+     * @param requests the ranges to read and the buffers they land in
+     * @return the number of bytes read per request, in request order
+     */
+    @Override
+    public int[] readRanges(List<RangeRequest> requests) {
+        RangeRequest.validate(requests);
+        if (requests.isEmpty()) {
+            return new int[0];
+        }
+        List<PlannedFetch> fetches = BatchPlanner.plan(requests, coalescingPolicy());
+        return BatchRunner.run(requests, fetches, this::readRange, maxConcurrentFetches(), BatchExecutors::shared);
+    }
+
+    /**
+     * The merge policy for batched reads. The default, {@link CoalescingPolicy#NONE}, reads every range exactly;
+     * backends where a round trip has a real cost override this with a network-derived policy.
+     *
+     * @return the policy handed to the batch planner
+     */
+    protected CoalescingPolicy coalescingPolicy() {
+        return CoalescingPolicy.NONE;
+    }
+
+    /**
+     * How many planned fetches may run at once for one batched read. The default of 1 keeps batches sequential on the
+     * calling thread; backends that profit from parallel fetches raise it.
+     *
+     * @return the fetch parallelism cap, at least 1
+     */
+    protected int maxConcurrentFetches() {
+        return 1;
     }
 
     /**

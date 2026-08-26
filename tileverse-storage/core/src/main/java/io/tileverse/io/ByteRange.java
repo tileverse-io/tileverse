@@ -40,13 +40,42 @@ public record ByteRange(
             throw new IllegalArgumentException("offset can't be < 0: " + offset);
         }
         if (length < 0) {
-            throw new IllegalArgumentException("length can't be < 0: " + offset);
+            throw new IllegalArgumentException("length can't be < 0: " + length);
         }
     }
 
     @Override
     public int compareTo(ByteRange o) {
         return Long.compare(offset, o.offset());
+    }
+
+    /**
+     * Returns the exclusive end offset of this range ({@code offset + length}).
+     *
+     * @return the first offset after this range
+     */
+    public long end() {
+        return offset + length;
+    }
+
+    /**
+     * Returns whether the given absolute position falls inside this range. A zero-length range contains no position.
+     *
+     * @param position the absolute position to test
+     * @return true if {@code offset <= position < end()}
+     */
+    public boolean contains(long position) {
+        return position >= offset && position < end();
+    }
+
+    /**
+     * Returns whether this range and {@code other} share at least one byte. Zero-length ranges overlap nothing.
+     *
+     * @param other the range to test against
+     * @return true if the two half-open intervals intersect
+     */
+    public boolean overlaps(ByteRange other) {
+        return length > 0 && other.length() > 0 && offset < other.end() && other.offset() < end();
     }
 
     /**

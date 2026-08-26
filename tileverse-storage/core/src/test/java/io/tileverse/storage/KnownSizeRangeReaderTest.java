@@ -17,9 +17,12 @@ package io.tileverse.storage;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.tileverse.io.ByteRange;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.OptionalLong;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -77,5 +80,19 @@ class KnownSizeRangeReaderTest {
 
         seeded.close();
         assertThat(delegate.closed).isTrue();
+    }
+
+    @Test
+    void readRangesForwardsTheBatchToTheDelegate() throws IOException {
+        byte[] data = new byte[1000];
+        new Random(7).nextBytes(data);
+        ByteArrayRangeReader recorder = new ByteArrayRangeReader(data);
+        try (RangeReader reader = KnownSizeRangeReader.of(recorder, data.length)) {
+            ByteBuffer first = ByteBuffer.allocate(10);
+            ByteBuffer second = ByteBuffer.allocate(20);
+            int[] read = reader.readRanges(List.of(RangeRequest.of(0, 10, first), RangeRequest.of(100, 20, second)));
+            assertThat(read).containsExactly(10, 20);
+            assertThat(recorder.batchReads()).containsExactly(List.of(new ByteRange(0, 10), new ByteRange(100, 20)));
+        }
     }
 }

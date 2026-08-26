@@ -15,6 +15,7 @@
  */
 package io.tileverse.storage;
 
+import java.util.Optional;
 import java.util.OptionalLong;
 import org.jspecify.annotations.Nullable;
 
@@ -48,6 +49,61 @@ public final class ContentRange {
             return OptionalLong.of(Long.parseLong(total));
         } catch (NumberFormatException notANumber) {
             return OptionalLong.empty();
+        }
+    }
+
+    /**
+     * A parsed satisfiable {@code Content-Range} value ({@code bytes first-last/total}).
+     *
+     * @param firstPos absolute offset of the first byte of the response or part
+     * @param lastPos absolute offset of the last byte, inclusive
+     * @param total the complete object size, empty when the server sent {@code *}
+     */
+    public record Bytes(long firstPos, long lastPos, OptionalLong total) {
+
+        /**
+         * Returns the number of bytes the range describes.
+         *
+         * @return {@code lastPos - firstPos + 1}
+         */
+        public long length() {
+            return lastPos - firstPos + 1;
+        }
+    }
+
+    /**
+     * Parses a satisfiable {@code Content-Range} header value ({@code "bytes 0-99/1234"} or {@code "bytes 0-99/*"}).
+     *
+     * @param contentRangeHeader the raw header value, may be null
+     * @return the parsed positions, or empty for null, unsatisfied ({@code "bytes *&#47;1234"}), or malformed input
+     */
+    public static Optional<Bytes> bytesOf(@Nullable String contentRangeHeader) {
+        if (contentRangeHeader == null) {
+            return Optional.empty();
+        }
+        String value = contentRangeHeader.trim();
+        if (!value.regionMatches(true, 0, "bytes", 0, 5)) {
+            return Optional.empty();
+        }
+        String spec = value.substring(5).trim();
+        int slash = spec.lastIndexOf('/');
+        if (slash < 0) {
+            return Optional.empty();
+        }
+        String rangePart = spec.substring(0, slash).trim();
+        int dash = rangePart.indexOf('-');
+        if (dash <= 0) {
+            return Optional.empty();
+        }
+        try {
+            long first = Long.parseLong(rangePart.substring(0, dash).trim());
+            long last = Long.parseLong(rangePart.substring(dash + 1).trim());
+            if (first < 0 || last < first) {
+                return Optional.empty();
+            }
+            return Optional.of(new Bytes(first, last, totalOf(contentRangeHeader)));
+        } catch (NumberFormatException notANumber) {
+            return Optional.empty();
         }
     }
 }

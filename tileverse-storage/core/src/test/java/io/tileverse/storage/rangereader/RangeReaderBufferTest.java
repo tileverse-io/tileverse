@@ -253,8 +253,7 @@ class RangeReaderBufferTest {
     @Test
     void testCachingRangeReader_TargetBuffer() throws IOException {
         try (RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
-                CachingRangeReader reader =
-                        CachingRangeReader.builder(baseReader).build()) {
+                CachingRangeReader reader = CachingRangeReader.of(baseReader)) {
 
             // First read to populate cache
             int offset = 10;
@@ -363,8 +362,7 @@ class RangeReaderBufferTest {
         // Create a multi-level nested reader setup
         RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
         BlockAlignedRangeReader blockReader = new BlockAlignedRangeReader(baseReader, 16);
-        CachingRangeReader cachingReader =
-                CachingRangeReader.builder(blockReader).build();
+        CachingRangeReader cachingReader = CachingRangeReader.of(blockReader);
 
         try (RangeReader reader = cachingReader) {
             // Test with nested readers

@@ -51,12 +51,12 @@ jobs:
         else
           VERSION="${GITHUB_REF#refs/tags/v}"
         fi
-        echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
+        echo "RELEASE_VERSION=$VERSION" >> "$GITHUB_ENV"
         echo "Release version: $VERSION"
-        
+
     - name: Build and test
       run: ./mvnw clean verify -Drevision=${{ env.RELEASE_VERSION }}
-      
+
     - name: Publish release
       if: ${{ !contains(github.event.head_commit.message, '[skip-publish]') }}
       run: ./mvnw deploy -DskipTests -Drevision=${{ env.RELEASE_VERSION }} -Dgpg.skip=false

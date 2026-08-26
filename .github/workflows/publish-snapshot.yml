@@ -1,11 +1,16 @@
 name: Publish Snapshot
 
 on:
-  workflow_run:
-    workflows: ["Pull Request Validation"]
+  # A merged pull request lands as a push to the base branch, which
+  # triggers this workflow and republishes the snapshot on every merge to
+  # main or a major.minor.x release series. push fires only for this
+  # repository's own branches, never for a fork pull request, keeping the
+  # publishing secrets away from untrusted code.
+  push:
     branches: [ main, '*.x' ]
-    types:
-      - completed
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
   workflow_dispatch:
 
 permissions:
@@ -13,7 +18,7 @@ permissions:
 
 jobs:
   publish-snapshot:
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip-publish]') }}
     runs-on: ubuntu-latest
 
     steps:
@@ -48,7 +53,6 @@ jobs:
       run: ./mvnw clean verify
       
     - name: Publish snapshot
-      if: ${{ !contains(github.event.head_commit.message, '[skip-publish]') }}
       run: ./mvnw deploy -DskipTests -Dgpg.skip=false
       env:
         GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

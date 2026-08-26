@@ -103,7 +103,7 @@ public record PMTilesHeader(
     private static final byte[] MAGIC = "PMTiles".getBytes(StandardCharsets.UTF_8);
     public static final byte VERSION_3 = 3;
     private static final byte VERSION = VERSION_3;
-    private static final int HEADER_SIZE = 127;
+    static final int HEADER_SIZE = 127;
 
     /**
      * Returns the PMTiles format version.

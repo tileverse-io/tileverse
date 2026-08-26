@@ -17,19 +17,24 @@ package io.tileverse.pmtiles;
 
 import static java.util.Objects.requireNonNull;
 
+import io.tileverse.io.ByteRange;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageFactory;
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.OptionalLong;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class PMTilesTestData {
 
@@ -132,5 +137,91 @@ public class PMTilesTestData {
                 "water_lines_labels",
                 "water_polygons",
                 "water_polygons_labels");
+    }
+
+    /**
+     * Delegating reader that records the shape of every read reaching the backend, for I/O-shape assertions.
+     * Thread-safe.
+     */
+    public static class RecordingRangeReader implements RangeReader {
+        private final RangeReader delegate;
+        private final List<ByteRange> reads = Collections.synchronizedList(new ArrayList<>());
+        private final AtomicInteger batchCalls = new AtomicInteger();
+
+        RecordingRangeReader(RangeReader delegate) {
+            this.delegate = requireNonNull(delegate);
+        }
+
+        @Override
+        public int readRange(long offset, int length, ByteBuffer target) {
+            reads.add(ByteRange.of(offset, length));
+            return delegate.readRange(offset, length, target);
+        }
+
+        @Override
+        public int[] readRanges(List<RangeRequest> requests) {
+            batchCalls.incrementAndGet();
+            requests.forEach(request -> reads.add(request.range()));
+            return delegate.readRanges(requests);
+        }
+
+        @Override
+        public OptionalLong size() {
+            return delegate.size();
+        }
+
+        @Override
+        public String getSourceIdentifier() {
+            return delegate.getSourceIdentifier();
+        }
+
+        @Override
+        public void close() throws IOException {
+            delegate.close();
+        }
+
+        /** Every backend read in arrival order; batched calls contribute one entry per request. */
+        public List<ByteRange> reads() {
+            return List.copyOf(reads);
+        }
+
+        /** How many readRanges batch calls reached the backend. */
+        public int batchCalls() {
+            return batchCalls.get();
+        }
+
+        public void clearRecordings() {
+            reads.clear();
+            batchCalls.set(0);
+        }
+    }
+
+    public static RecordingRangeReader recording(RangeReader delegate) {
+        return new RecordingRangeReader(delegate);
+    }
+
+    /**
+     * Collects every tile index at {@code zoom} by walking the root and leaf directories through the bounded per-entry
+     * API. Test-only replacement for the retired whole-archive traversal; fixtures are small enough to accumulate.
+     */
+    public static List<TileIndex> tileIndicesAtZoom(PMTilesReader reader, int zoom) {
+        List<TileIndex> indices = new ArrayList<>();
+        collectAtZoom(reader, reader.getRootDirectory(), zoom, indices);
+        return indices;
+    }
+
+    private static void collectAtZoom(
+            PMTilesReader reader, PMTilesDirectory directory, int zoom, List<TileIndex> into) {
+        for (PMTilesEntry entry : directory) {
+            if (entry.isLeaf()) {
+                collectAtZoom(reader, reader.getDirectory(entry), zoom, into);
+            } else {
+                reader.getTileIndices(entry, index -> {
+                    if (index.z() == zoom) {
+                        into.add(index);
+                    }
+                });
+            }
+        }
     }
 }

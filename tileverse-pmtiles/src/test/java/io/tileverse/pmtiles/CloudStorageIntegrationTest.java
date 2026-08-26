@@ -26,7 +26,6 @@ import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageFactory;
 import io.tileverse.storage.azure.AzureBlobStorageProvider;
-import io.tileverse.storage.block.BlockAlignedRangeReader;
 import io.tileverse.storage.cache.CachingRangeReader;
 import io.tileverse.storage.s3.S3StorageProvider;
 import io.tileverse.tiling.pyramid.TileIndex;
@@ -89,8 +88,7 @@ class CloudStorageIntegrationTest {
      * Test reading a PMTiles file from S3 using the RangeReaderBuilder.
      *
      * <p>This test demonstrates: - Creating an S3 RangeReader with the builder pattern - Configuring region and
-     * credentials - Adding performance optimizations (caching and block alignment) - Reading the PMTiles header and a
-     * tile
+     * credentials - Adding performance optimizations (caching) - Reading the PMTiles header and a tile
      */
     @Test
     void testReadPMTilesFromS3() throws IOException {
@@ -108,10 +106,7 @@ class CloudStorageIntegrationTest {
         try (S3Client closeable = s3Client;
                 Storage storage = S3StorageProvider.open(bucketUri, s3Client);
                 RangeReader baseReader = storage.openRangeReader(s3Key);
-                RangeReader rangeReader = BlockAlignedRangeReader.builder(CachingRangeReader.of(baseReader))
-                        .blockSize(16384)
-                        .alignWholeFile()
-                        .build()) {
+                RangeReader rangeReader = CachingRangeReader.of(baseReader)) {
 
             PMTilesReader pmTilesReader = new PMTilesReader(rangeReader);
             // Verify we can read the header
@@ -138,8 +133,8 @@ class CloudStorageIntegrationTest {
      * Test reading a PMTiles file from Azure Blob Storage using the RangeReaderBuilder.
      *
      * <p>This test demonstrates: - Creating an Azure Blob RangeReader with the builder pattern - Configuring connection
-     * string and container/blob path - Adding performance optimizations (caching and block alignment) - Reading the
-     * PMTiles header and metadata
+     * string and container/blob path - Adding performance optimizations (caching) - Reading the PMTiles header and
+     * metadata
      */
     @Test
     void testReadPMTilesFromAzure() throws IOException {
@@ -157,12 +152,9 @@ class CloudStorageIntegrationTest {
 
         try (Storage storage = AzureBlobStorageProvider.open(containerUri, blobServiceClient);
                 RangeReader baseReader = storage.openRangeReader(azureBlob);
-                RangeReader reader = BlockAlignedRangeReader.builder(CachingRangeReader.of(baseReader))
-                        .blockSize(32768)
-                        .alignWholeFile()
-                        .build()) {
+                RangeReader rangeReader = CachingRangeReader.of(baseReader)) {
 
-            PMTilesReader pmTilesReader = new PMTilesReader(reader);
+            PMTilesReader pmTilesReader = new PMTilesReader(rangeReader);
             // Verify we can read the header
             PMTilesHeader header = pmTilesReader.getHeader();
             assertNotNull(header);

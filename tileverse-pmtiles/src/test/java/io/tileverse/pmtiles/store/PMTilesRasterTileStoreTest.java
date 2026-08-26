@@ -112,7 +112,7 @@ class PMTilesRasterTileStoreTest {
         TileMatrixSet matrixSet = flowersStore.matrixSet();
         for (int z = matrixSet.minZoomLevel(); z <= 5; z++) {
             int zoom = z;
-            flowersReader.getTileIndicesByZoomLevel(zoom).forEach(index -> {
+            PMTilesTestData.tileIndicesAtZoom(flowersReader, zoom).forEach(index -> {
                 Tile tile = matrixSet.getTileMatrix(zoom).tile(index).orElseThrow();
                 Optional<TileData<RenderedImage>> data = flowersStore.loadTile(tile);
                 assertThat(data).as("archive tile %s should load", index).isPresent();

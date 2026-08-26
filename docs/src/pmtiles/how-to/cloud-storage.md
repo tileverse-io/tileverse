@@ -44,18 +44,18 @@ try (Storage storage = StorageFactory.open(bucket, props);
 
 ### With Caching
 
+`PMTilesReader` block-aligns its header, directory, and metadata reads internally, using
+the byte layout parsed from the file; supplying a `CachingRangeReader` is enough, and
+tile reads stay exact.
+
 ```java
-import io.tileverse.storage.block.BlockAlignedRangeReader;
 import io.tileverse.storage.cache.CachingRangeReader;
 
 try (Storage storage = StorageFactory.open(bucket, props);
         RangeReader baseReader = storage.openRangeReader(leaf);
-        RangeReader cachedReader = CachingRangeReader.builder(baseReader).build();
-        RangeReader alignedReader = BlockAlignedRangeReader.builder(cachedReader)
-            .alignWholeFile()
-            .build();
-        PMTilesReader reader = new PMTilesReader(alignedReader)) {
-    // Cached, block-aligned reads
+        RangeReader cachedReader = CachingRangeReader.of(baseReader);
+        PMTilesReader reader = new PMTilesReader(cachedReader)) {
+    // Cached reads; the reader aligns its own hot regions
     Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
 }
 ```
@@ -120,18 +120,12 @@ try (Storage storage = StorageFactory.open(parent, props);
 
 ### Block Alignment
 
-Stack `BlockAlignedRangeReader` above a `CachingRangeReader` and declare the byte regions to align, to minimize cloud storage requests:
-
-```java
-import io.tileverse.storage.block.BlockAlignedRangeReader;
-import io.tileverse.storage.cache.CachingRangeReader;
-
-RangeReader cached = CachingRangeReader.builder(baseReader).build();
-RangeReader alignedReader = BlockAlignedRangeReader.builder(cached)
-    .blockSize(65536)  // 64 KB blocks
-    .alignWholeFile()  // or alignRegion(offset, length) for just the hot region
-    .build();
-```
+`PMTilesReader` handles block alignment itself: it declares the header, root directory,
+metadata, and leaf-directory regions from the parsed file layout, and tile reads stay exact.
+There is nothing to compose for PMTiles beyond the cache. Stacking an explicit
+`BlockAlignedRangeReader` above a `CachingRangeReader` remains available for other formats
+and custom layouts; see the
+[RangeReader recipes](../../storage/reference/rangereader-recipes.md).
 
 ## Cost Optimization
 

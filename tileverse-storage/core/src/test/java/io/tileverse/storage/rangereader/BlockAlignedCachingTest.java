@@ -63,8 +63,8 @@ class BlockAlignedCachingTest {
         // Initialize the readers - this shows the decorator pattern in action
         fileReader = RangeReaderTestSupport.fileReader(testFile);
         countingReader = new CountingRangeReader(fileReader);
-        blockAlignedReader = new BlockAlignedRangeReader(countingReader, TEST_BLOCK_SIZE);
-        cachingReader = CachingRangeReader.builder(blockAlignedReader).build();
+        cachingReader = CachingRangeReader.of(countingReader);
+        blockAlignedReader = new BlockAlignedRangeReader(cachingReader, TEST_BLOCK_SIZE);
     }
 
     @AfterEach
@@ -77,7 +77,7 @@ class BlockAlignedCachingTest {
     @Test
     void testCachingOfBlockAlignedReads() {
         // Read a range that's not aligned to a block boundary
-        cachingReader.readRange(10, 10, buffer);
+        blockAlignedReader.readRange(10, 10, buffer);
         assertEquals(10, buffer.flip().remaining());
 
         byte[] bytes = new byte[buffer.remaining()];
@@ -91,7 +91,7 @@ class BlockAlignedCachingTest {
         assertTrue(initialCount == 1 || initialCount == 2, "Expected 1 or 2 reads, but got " + initialCount);
 
         // Read the same range again - it should come from cache
-        cachingReader.readRange(10, 10, buffer.clear());
+        blockAlignedReader.readRange(10, 10, buffer.clear());
         buffer.flip();
         assertEquals(10, buffer.remaining());
 
@@ -109,30 +109,32 @@ class BlockAlignedCachingTest {
         assertEquals(0, countingReader.getReadCount());
 
         // First read: should result in BlockAlignedRangeReader accessing the underlying file
-        cachingReader.readRange(0, 5, buffer.clear());
+        blockAlignedReader.readRange(0, 5, buffer.clear());
         int firstReadCount = countingReader.getReadCount();
         assertTrue(firstReadCount > 0, "Expected at least one read");
 
         // Same read again: should come from cache
-        cachingReader.readRange(0, 5, buffer.clear());
+        blockAlignedReader.readRange(0, 5, buffer.clear());
         assertEquals(firstReadCount, countingReader.getReadCount(), "Should not have read from file again");
 
-        // Different read: will hit the file again
-        cachingReader.readRange(10, 5, buffer.clear());
+        // Different read, offset 20: with the cache below the aligner, caching happens at block
+        // granularity (TEST_BLOCK_SIZE = 16). A genuine miss needs a block distinct from the
+        // first read's block 0 [0,16); block 1 is [16,32).
+        blockAlignedReader.readRange(20, 5, buffer.clear());
         int secondReadCount = countingReader.getReadCount();
         assertTrue(secondReadCount > firstReadCount, "Expected additional reads for new range");
 
         // Repeat the second read: should come from cache
-        cachingReader.readRange(10, 5, buffer.clear());
+        blockAlignedReader.readRange(20, 5, buffer.clear());
         assertEquals(secondReadCount, countingReader.getReadCount(), "Should not have read from file again");
 
-        // Another new read
-        cachingReader.readRange(20, 10, buffer.clear());
+        // Another new read, offset 35: block 2 is [32,48), again distinct from the blocks already cached
+        blockAlignedReader.readRange(35, 10, buffer.clear());
         int thirdReadCount = countingReader.getReadCount();
         assertTrue(thirdReadCount > secondReadCount, "Expected additional reads for new range");
 
         // Repeat third read: should come from cache
-        cachingReader.readRange(20, 10, buffer.clear());
+        blockAlignedReader.readRange(35, 10, buffer.clear());
         assertEquals(thirdReadCount, countingReader.getReadCount(), "Should not have read from file again");
     }
 

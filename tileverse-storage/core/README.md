@@ -54,8 +54,8 @@ Each implementation focuses solely on reading from its specific data source with
 
 Following the Single Responsibility Principle, additional functionality is added through decorators:
 
-- **CachingRangeReader**: Caches recently accessed ranges in memory to reduce redundant reads
-- **BlockAlignedRangeReader**: Aligns reads to block boundaries to reduce the number of requests
+- **CachingRangeReader**: Caches exactly the byte ranges it is asked for, in memory
+- **BlockAlignedRangeReader**: Expands reads inside declared byte regions to block boundaries, reducing the number of requests
 
 This approach provides several benefits:
 
@@ -67,70 +67,72 @@ This approach provides several benefits:
 ### Example of Decorator Composition
 
 ```java
-// Base reader for a specific source
-RangeReader baseReader = new S3RangeReader(s3Client, bucket, key);
+// Base reader for a specific source, obtained through Storage
+try (Storage storage = StorageFactory.open(URI.create("s3://bucket/"));
+        RangeReader baseReader = storage.openRangeReader("path/to/key")) {
 
-// Add block alignment to optimize read sizes (especially for cloud storage)
-RangeReader blockAlignedReader = new BlockAlignedRangeReader(baseReader, 64 * 1024);
+    // Add in-memory caching closest to the source: it stores exact ranges
+    RangeReader cachedReader = CachingRangeReader.builder(baseReader).build();
 
-// Add in-memory caching as the outermost decorator
-// This ensures we cache the aligned blocks, avoiding redundant storage
-RangeReader cachedReader = CachingRangeReader.builder(blockAlignedReader).build();
+    // Add block alignment as the outermost decorator, declaring which region to align
+    RangeReader reader = BlockAlignedRangeReader.builder(cachedReader)
+            .blockSize(64 * 1024)
+            .alignWholeFile()
+            .build();
+}
 ```
 
 The order of decorators is important for optimal performance:
 
 1. **Base Reader**: Provides the core functionality (reading from the source)
-2. **Block Alignment**: Optimizes access patterns by expanding ranges to block boundaries
-3. **Memory Cache**: Should be the outermost decorator to efficiently cache aligned blocks
+2. **Memory Cache**: Stores exactly the ranges it is asked for
+3. **Block Alignment**: The outermost decorator; expands requests inside declared regions to block boundaries before they reach the cache
 
 This layered approach offers several advantages:
 
 - Small, frequently accessed ranges stay in memory for fastest access
-- Block alignment ensures efficient reading from the source when necessary
+- Block alignment ensures efficient reading from the source for the regions you declare
 - Each decorator maintains a single responsibility following SOLID principles
 
-If we reversed the order (e.g., putting Block Alignment before caching), the cache would store many small, potentially overlapping ranges, which is less efficient.
+Placing the cache above the aligner instead defeats the purpose: each request is fetched and
+aligned again on every miss, and the cache stores each exact sub-range separately instead of
+sharing the underlying block.
 
-## Builder Pattern for Simplified Creation
+## Composing Readers for Different Sources
 
-The `RangeReaderBuilder` class provides a fluent API for creating and configuring readers:
+Every backend is opened through `Storage`, then decorated as needed:
 
 ```java
-// Create a file reader
-RangeReader fileReader = RangeReaderBuilder.create()
-    .file(Path.of("/path/to/file.pmtiles"))
-    .build();
+// File reader
+try (Storage storage = StorageFactory.open(Path.of("/path/to").toUri());
+        RangeReader fileReader = storage.openRangeReader(Path.of("/path/to/file.pmtiles").toUri())) {
+    // ...
+}
 
-// Create an S3 reader with optimizations
-RangeReader s3Reader = RangeReaderBuilder.create()
-    .s3(URI.create("s3://bucket/path/to/file.pmtiles"))
-    .withRegion(Region.US_WEST_2)
-    .withCaching() // In-memory cache
-    .withBlockAlignment(16384) // Block alignment for optimized reads
-    .build();
+// S3 reader with region and in-memory caching
+Properties props = new Properties();
+props.setProperty("storage.s3.region", "us-west-2");
+try (Storage storage = StorageFactory.open(URI.create("s3://bucket/"), props);
+        RangeReader s3Reader = storage.openRangeReader(URI.create("s3://bucket/path/to/file.pmtiles"));
+        RangeReader cachedReader = CachingRangeReader.builder(s3Reader).build()) {
+    // ...
+}
 
-// Create an Azure Blob reader with connection string
-RangeReader azureReader = RangeReaderBuilder.create()
-    .azure()
-    .withConnectionString(connectionString)
-    .withContainer("container")
-    .withBlob("path/to/blob.pmtiles")
-    .withCaching()
-    .build();
-
-// Create an Azure Blob reader with SAS token
-RangeReader azureSasReader = RangeReaderBuilder.create()
-    .azure()
-    .withAccountName("myaccount")
-    .withSasToken("sv=2020-08-04&ss=b&srt=co&sp=rwdlacitfx&se=2023-04-30T17:31:52Z&st=2022-04-30T09:31:52Z&spr=https&sig=XXX")
-    .withContainer("container")
-    .withBlob("path/to/blob.pmtiles")
-    .withCaching()
-    .build();
+// Azure Blob reader with a connection string
+Properties azureProps = new Properties();
+azureProps.setProperty("storage.azure.connection-string", connectionString);
+URI container = URI.create("https://account.blob.core.windows.net/container/");
+URI blob = URI.create("https://account.blob.core.windows.net/container/path/to/blob.pmtiles");
+try (Storage storage = StorageFactory.open(container, azureProps);
+        RangeReader azureReader = storage.openRangeReader(blob)) {
+    // ...
+}
 ```
 
-The builder encapsulates the creation logic and decorator wiring, making it easy to create optimized readers for different sources.
+`StorageFactory.open` resolves the backend from the URI scheme; `Properties` hold per-backend
+configuration (region, credentials, endpoints). Each decorator (`CachingRangeReader`,
+`BlockAlignedRangeReader`) has its own builder, composed explicitly around the `RangeReader`
+returned by `Storage.openRangeReader`.
 
 ## Optimizations
 
@@ -150,16 +152,20 @@ The memory cache is implemented using Caffeine, a high-performance caching libra
 
 ### Block Alignment
 
-The `BlockAlignedRangeReader` decorator optimizes access patterns by:
+The `BlockAlignedRangeReader` decorator optimizes access patterns inside byte regions you
+declare (a header, an index array, or the whole file):
 
-1. Aligning read requests to block boundaries (configurable size)
-2. Combining multiple small reads into fewer, larger block-sized reads
-3. Returning the exact requested bytes to the caller
+1. Reads fully inside a declared region expand to the blocks that cover them, fetched in a single batch call
+2. Reads outside every declared region pass through untouched
+3. Regions can be declared at construction or later at runtime, as a format reader discovers its own layout
 
 This is especially beneficial for cloud storage, where:
 - Each request has overhead (latency, authentication)
 - Larger reads are more efficient than multiple small reads
 - Services may have minimum read sizes or charge per request
+
+Stack it above a `CachingRangeReader`: the cache then stores the aligned blocks under stable
+keys, giving block-grain caching inside declared regions and exact-grain caching everywhere else.
 
 ## Usage Patterns
 
@@ -180,31 +186,31 @@ try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/"));
 
 ```java
 // Create an optimized reader for cloud storage
-try (RangeReader reader = RangeReaderBuilder.create()
-        .s3(uri)
-        .withCredentials(credentialsProvider)
-        .withRegion(region)
-        .withCaching()
-        .withBlockAlignment(64 * 1024) // 64KB blocks
-        .build()) {
-    
+try (Storage storage = StorageFactory.open(URI.create("s3://bucket/"));
+        RangeReader baseReader = storage.openRangeReader(URI.create("s3://bucket/path/to/file.pmtiles"));
+        RangeReader cachedReader = CachingRangeReader.builder(baseReader).build();
+        RangeReader reader = BlockAlignedRangeReader.builder(cachedReader)
+                .blockSize(64 * 1024) // 64KB blocks
+                .alignWholeFile()
+                .build()) {
+
     // Caching behavior:
-    
-    // First read: not cached, reads from S3 and stores the aligned block in the memory cache
-    ByteBuffer data1 = reader.readRange(1000, 100);  
-    
-    // Second read: different block, reads from S3 and caches it
-    ByteBuffer data2 = reader.readRange(5000, 200);  
-    
-    // Third read: found in memory cache (fastest access)
-    ByteBuffer data3 = reader.readRange(1050, 50);   
+
+    // First read: not cached, reads block [0, 65536) from S3 and stores it in the memory cache
+    ByteBuffer data1 = reader.readRange(1000, 100);
+
+    // Second read: a different 64KB block, reads from S3 and caches it
+    ByteBuffer data2 = reader.readRange(70_000, 200);
+
+    // Third read: falls inside the first block, found in memory cache (fastest access)
+    ByteBuffer data3 = reader.readRange(1050, 50);
 }
 ```
 
-The builder automatically applies decorators in the correct order for optimal performance:
+Compose the decorators in this order for optimal performance:
 1. Base reader (S3, HTTP, file, etc.)
-2. Block alignment (read optimization)
-3. Memory cache (fast access)
+2. Memory cache (stores exact ranges)
+3. Block alignment (outermost; expands into block-sized reads before they reach the cache)
 
 ## Future Enhancements
 

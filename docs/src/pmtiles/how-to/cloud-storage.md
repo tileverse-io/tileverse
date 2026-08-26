@@ -45,16 +45,17 @@ try (Storage storage = StorageFactory.open(bucket, props);
 ### With Caching
 
 ```java
+import io.tileverse.storage.block.BlockAlignedRangeReader;
 import io.tileverse.storage.cache.CachingRangeReader;
 
 try (Storage storage = StorageFactory.open(bucket, props);
         RangeReader baseReader = storage.openRangeReader(leaf);
-        RangeReader cachedReader = CachingRangeReader.builder(baseReader)
-            .maximumSize(1000)
-            .withBlockAlignment()
+        RangeReader cachedReader = CachingRangeReader.builder(baseReader).build();
+        RangeReader alignedReader = BlockAlignedRangeReader.builder(cachedReader)
+            .alignWholeFile()
             .build();
-        PMTilesReader reader = new PMTilesReader(cachedReader)) {
-    // Cached reads
+        PMTilesReader reader = new PMTilesReader(alignedReader)) {
+    // Cached, block-aligned reads
     Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
 }
 ```
@@ -119,13 +120,16 @@ try (Storage storage = StorageFactory.open(parent, props);
 
 ### Block Alignment
 
-Use block-aligned reads to minimize cloud storage requests:
+Stack `BlockAlignedRangeReader` above a `CachingRangeReader` and declare the byte regions to align, to minimize cloud storage requests:
 
 ```java
 import io.tileverse.storage.block.BlockAlignedRangeReader;
+import io.tileverse.storage.cache.CachingRangeReader;
 
-RangeReader alignedReader = BlockAlignedRangeReader.builder(baseReader)
+RangeReader cached = CachingRangeReader.builder(baseReader).build();
+RangeReader alignedReader = BlockAlignedRangeReader.builder(cached)
     .blockSize(65536)  // 64 KB blocks
+    .alignWholeFile()  // or alignRegion(offset, length) for just the hot region
     .build();
 ```
 

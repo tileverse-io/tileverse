@@ -17,6 +17,7 @@ package io.tileverse.storage;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.OptionalLong;
 
 /**
@@ -47,6 +48,11 @@ final class KnownSizeRangeReader implements RangeReader {
     @Override
     public int readRange(long offset, int length, ByteBuffer target) {
         return delegate.readRange(offset, length, target);
+    }
+
+    @Override
+    public int[] readRanges(List<RangeRequest> requests) {
+        return delegate.readRanges(requests);
     }
 
     @Override

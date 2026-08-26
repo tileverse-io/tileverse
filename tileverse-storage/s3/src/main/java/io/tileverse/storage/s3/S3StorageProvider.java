@@ -313,8 +313,6 @@ public class S3StorageProvider extends AbstractStorageProvider {
      * Creates a new S3RangeReaderProvider with support for caching parameters
      *
      * @see AbstractStorageProvider#MEMORY_CACHE_ENABLED
-     * @see AbstractStorageProvider#MEMORY_CACHE_BLOCK_ALIGNED
-     * @see AbstractStorageProvider#MEMORY_CACHE_BLOCK_SIZE
      */
     public S3StorageProvider() {
         super(true);

@@ -17,7 +17,6 @@ package io.tileverse.storage.spi;
 
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
-import io.tileverse.storage.cache.CachingRangeReader;
 import java.util.List;
 
 /**
@@ -31,23 +30,6 @@ public abstract class AbstractStorageProvider implements StorageProvider {
 
     /** Re-export of {@link CachingProviderHelper#MEMORY_CACHE_ENABLED} for parameter registration. */
     public static final StorageParameter<Boolean> MEMORY_CACHE_ENABLED = CachingProviderHelper.MEMORY_CACHE_ENABLED;
-
-    /**
-     * Re-export of {@link CachingProviderHelper#MEMORY_CACHE_BLOCK_ALIGNED}. When enabled, all read requests are
-     * aligned to the configured block boundaries before consulting the {@link CachingRangeReader} cache. Disabled by
-     * default; enable explicitly for storage backends that benefit from block-sized reads. Only meaningful when
-     * {@link #MEMORY_CACHE_ENABLED} is true.
-     */
-    public static final StorageParameter<Boolean> MEMORY_CACHE_BLOCK_ALIGNED =
-            CachingProviderHelper.MEMORY_CACHE_BLOCK_ALIGNED;
-
-    /**
-     * Re-export of {@link CachingProviderHelper#MEMORY_CACHE_BLOCK_SIZE}. Block size in bytes for block-aligned
-     * caching; recommended power of two. Only meaningful when both {@link #MEMORY_CACHE_ENABLED} and
-     * {@link #MEMORY_CACHE_BLOCK_ALIGNED} are true.
-     */
-    public static final StorageParameter<Integer> MEMORY_CACHE_BLOCK_SIZE =
-            CachingProviderHelper.MEMORY_CACHE_BLOCK_SIZE;
 
     private final List<StorageParameter<?>> params;
 

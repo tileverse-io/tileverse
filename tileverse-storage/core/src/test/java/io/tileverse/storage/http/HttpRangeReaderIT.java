@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
+import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.StorageException;
 import io.tileverse.storage.it.AbstractRangeReaderIT;
 import io.tileverse.storage.it.TestUtil;
@@ -27,6 +28,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,9 +52,12 @@ import org.testcontainers.utility.MountableFile;
 class HttpRangeReaderIT extends AbstractRangeReaderIT {
 
     private static final String TEST_FILE_NAME = "test.bin";
+    private static final String MULTI_RANGE_FILE = "multirange.bin";
+    private static final int MULTI_RANGE_FILE_SIZE = 4 * 1024 * 1024;
 
     private static URI testFileUri;
     private static Path testFilePath;
+    private static URI multiRangeUri;
     static GenericContainer<?> httpd;
 
     @BeforeAll
@@ -62,16 +67,22 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
         testFilePath = tempDir.resolve(TEST_FILE_NAME);
         TestUtil.createMockTestFile(testFilePath, TEST_FILE_SIZE);
 
+        Path multiRangePath = tempDir.resolve(MULTI_RANGE_FILE);
+        TestUtil.createMockTestFile(multiRangePath, MULTI_RANGE_FILE_SIZE);
+
         httpd = new GenericContainer<>(DockerImageName.parse("httpd:alpine"))
                 .withExposedPorts(80)
                 .withCopyToContainer(
                         MountableFile.forHostPath(testFilePath), "/usr/local/apache2/htdocs/" + TEST_FILE_NAME)
+                .withCopyToContainer(
+                        MountableFile.forHostPath(multiRangePath), "/usr/local/apache2/htdocs/" + MULTI_RANGE_FILE)
                 .waitingFor(Wait.forHttp("/").forPort(80));
         httpd.start();
 
         // Set up the URI for accessing the test file via HTTP
         String baseUrl = "http://%s:%d".formatted(httpd.getHost(), httpd.getFirstMappedPort());
         testFileUri = URI.create(baseUrl + "/" + TEST_FILE_NAME);
+        multiRangeUri = URI.create(baseUrl + "/" + MULTI_RANGE_FILE);
     }
 
     @AfterAll
@@ -170,6 +181,35 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
                         length,
                         buffer.remaining(),
                         "Range crossing " + chunkSize + " chunk boundary should return " + length + " bytes");
+            }
+        }
+    }
+
+    /**
+     * Ranges more than the HTTP gap budget apart travel as one multi-range GET; Apache answers with a real
+     * multipart/byteranges body (and omits the unsatisfiable part). Every entry must match its single read.
+     */
+    @Test
+    void multiRangeBatchMatchesSingleReadsAgainstApache() throws IOException {
+        try (RangeReader reader = RangeReaderTestSupport.httpReader(multiRangeUri)) {
+            List<RangeRequest> requests = List.of(
+                    RangeRequest.of(0, 64, ByteBuffer.allocate(64)),
+                    RangeRequest.of(1_000_000, 128, ByteBuffer.allocate(128)),
+                    RangeRequest.of(2_500_000, 256, ByteBuffer.allocate(256)),
+                    RangeRequest.of(MULTI_RANGE_FILE_SIZE - 32, 64, ByteBuffer.allocate(64)),
+                    RangeRequest.of(MULTI_RANGE_FILE_SIZE + 100, 16, ByteBuffer.allocate(16)));
+
+            int[] read = reader.readRanges(requests);
+
+            assertEquals(64, read[0]);
+            assertEquals(128, read[1]);
+            assertEquals(256, read[2]);
+            assertEquals(32, read[3], "range straddling EOF returns the available bytes");
+            assertEquals(0, read[4], "range past EOF returns 0");
+            for (int i = 0; i < requests.size(); i++) {
+                ByteBuffer expected = reader.readRange(requests.get(i).range()).flip();
+                assertEquals(expected.remaining(), read[i], "bytes for entry " + i);
+                assertEquals(expected, requests.get(i).target().flip(), "content for entry " + i);
             }
         }
     }

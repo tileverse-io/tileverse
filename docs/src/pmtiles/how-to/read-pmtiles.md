@@ -194,7 +194,7 @@ Optional<byte[]> encoded = reader.getTile(reader.getTileId(TileIndex.xyz(885, 41
 ## Performance Tips
 
 1. **Use caching** for cloud storage sources
-2. **Enable block alignment** for optimal read patterns
+2. **Declare block-aligned regions** (header, index) for optimal read patterns
 3. **Reuse readers** instead of creating new instances
 4. **Batch operations** when processing multiple tiles
 

@@ -337,9 +337,13 @@ final class S3Storage implements Storage {
     public RangeReader openRangeReader(String key) {
         requireOpen();
         String fullKey = resolve(key);
-        // Reuse our cached S3Client (which already has the right endpoint, region, credentials).
+        // Reuse our cached SDK clients (which already have the right endpoint, region, credentials).
         // Opening issues no request; a missing key is reported by the first read or size() call.
-        return new S3RangeReader(handle.client(), new S3Reference(null, ref.bucket(), fullKey, null), requesterPays);
+        return new S3RangeReader(
+                handle.client(),
+                handle.asyncClient().orElse(null),
+                new S3Reference(null, ref.bucket(), fullKey, null),
+                requesterPays);
     }
 
     @Override

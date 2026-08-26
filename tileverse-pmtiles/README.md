@@ -71,21 +71,25 @@ try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
 #### Reading PMTiles from Cloud Storage
 
 ```java
-import io.tileverse.storage.rangereader.s3.S3RangeReader;
-import io.tileverse.storage.rangereader.cache.CachingRangeReader;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
+import io.tileverse.storage.block.BlockAlignedRangeReader;
+import io.tileverse.storage.cache.CachingRangeReader;
+import java.util.Properties;
 
-// Create an S3 range reader with caching
-RangeReader s3Reader = S3RangeReader.builder()
-    .uri(URI.create("s3://my-bucket/tiles.pmtiles"))
-    .region(Region.US_WEST_2)
-    .build();
+// Open a Storage for the bucket, then get a RangeReader for the tileset key
+Properties props = new Properties();
+props.setProperty("storage.s3.region", "us-west-2");
 
-RangeReader cachedReader = CachingRangeReader.builder(s3Reader)
-    .maximumSize(1000)  // Cache up to 1000 ranges
-    .withBlockAlignment()  // Optimize for block-aligned reads
-    .build();
-
-try (PMTilesReader reader = new PMTilesReader(cachedReader)) {
+try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/"), props);
+        RangeReader s3Reader = storage.openRangeReader(URI.create("s3://my-bucket/tiles.pmtiles"));
+        // Cache exact ranges, then align hot regions on top of the cache
+        RangeReader cachedReader = CachingRangeReader.builder(s3Reader).build();
+        RangeReader alignedReader = BlockAlignedRangeReader.builder(cachedReader)
+            .alignWholeFile()
+            .build();
+        PMTilesReader reader = new PMTilesReader(alignedReader)) {
     // Access tiles efficiently from cloud storage
     Optional<byte[]> tile = reader.getTile(10, 885, 412);
 }

@@ -67,7 +67,7 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
                     tags "Decorator"
                 }
 
-                blockAlignedRangeReader = component "BlockAlignedRangeReader" "Reads coalesced into fixed-size aligned blocks" "Java Class" {
+                blockAlignedRangeReader = component "BlockAlignedRangeReader" "Region-scoped block alignment above the cache" "Java Class" {
                     tags "Decorator"
                 }
 

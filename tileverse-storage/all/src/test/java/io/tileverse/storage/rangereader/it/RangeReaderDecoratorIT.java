@@ -88,7 +88,7 @@ class RangeReaderDecoratorIT {
     @Test
     void testCachingReaderBasicFunctionality() throws IOException {
         RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile);
-        try (CachingRangeReader reader = CachingRangeReader.builder(baseReader).build()) {
+        try (CachingRangeReader reader = CachingRangeReader.of(baseReader)) {
             int offset = 1000;
             int length = 100;
             ByteBuffer first = reader.readRange(offset, length).flip();
@@ -111,8 +111,9 @@ class RangeReaderDecoratorIT {
     @Test
     void testBlockAlignedAndCachingReader() throws IOException {
         try (RangeReader baseReader = RangeReaderTestSupport.fileReader(testFile)) {
-            RangeReader reader = CachingRangeReader.builder(baseReader)
+            RangeReader reader = BlockAlignedRangeReader.builder(CachingRangeReader.of(baseReader))
                     .blockSize(CUSTOM_BLOCK_SIZE)
+                    .alignWholeFile()
                     .build();
             // Boundary-crossing read populates the cache for the underlying block(s).
             ByteBuffer initial = reader.readRange(CUSTOM_BLOCK_SIZE - 100, 200).flip();
@@ -124,10 +125,10 @@ class RangeReaderDecoratorIT {
 
     @Test
     void testRangeReaderBuilderWithDecorators() throws IOException {
-        try (RangeReader reader = CachingRangeReader.builder(
-                        BlockAlignedRangeReader.builder(RangeReaderTestSupport.fileReader(testFile))
-                                .blockSize(CUSTOM_BLOCK_SIZE)
-                                .build())
+        try (RangeReader reader = BlockAlignedRangeReader.builder(
+                        CachingRangeReader.of(RangeReaderTestSupport.fileReader(testFile)))
+                .blockSize(CUSTOM_BLOCK_SIZE)
+                .alignWholeFile()
                 .build()) {
             // First pass: cold reads at block boundaries.
             for (int block = 0; block < 3; block++) {
@@ -145,6 +146,7 @@ class RangeReaderDecoratorIT {
         int largeBlockSize = 32 * 1024; // 32KB
         try (RangeReader reader = BlockAlignedRangeReader.builder(RangeReaderTestSupport.fileReader(testFile))
                 .blockSize(largeBlockSize)
+                .alignWholeFile()
                 .build()) {
             int[] offsets = {0, 100, largeBlockSize - 1000, largeBlockSize, largeBlockSize + 100};
             int[] lengths = {100, 1000, 2000, largeBlockSize / 2, largeBlockSize};
@@ -162,10 +164,10 @@ class RangeReaderDecoratorIT {
 
     @Test
     void testRandomizedReads() throws IOException {
-        try (RangeReader reader = CachingRangeReader.builder(
-                        BlockAlignedRangeReader.builder(RangeReaderTestSupport.fileReader(testFile))
-                                .blockSize(DEFAULT_BLOCK_SIZE)
-                                .build())
+        try (RangeReader reader = BlockAlignedRangeReader.builder(
+                        CachingRangeReader.of(RangeReaderTestSupport.fileReader(testFile)))
+                .blockSize(DEFAULT_BLOCK_SIZE)
+                .alignWholeFile()
                 .build()) {
             Random random = new Random(42); // fixed seed for reproducibility
             for (int i = 0; i < 100; i++) {

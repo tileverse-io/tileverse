@@ -38,7 +38,7 @@ The library exists because the intersection of constraints — Spring/no-DI, ran
 
 ### 1. `RangeReader` is first-class, not an afterthought
 
-Cloud-optimized formats (PMTiles, COG, GeoParquet, FlatGeobuf) read 4 KB headers, jump to a directory, then issue hundreds of small byte-range requests per query. None of the general-purpose abstractions above expose a thread-safe, decorator-friendly byte-range reader at the core type. `RangeReader` is composable with `CachingRangeReader` (in-memory) and `BlockAlignedRangeReader` (cloud-pricing-friendly block alignment). The decorator stack delivers measurable cost reductions on real-world cloud workloads.
+Cloud-optimized formats (PMTiles, COG, GeoParquet, FlatGeobuf) read 4 KB headers, jump to a directory, then issue hundreds of small byte-range requests per query. None of the general-purpose abstractions above expose a thread-safe, decorator-friendly byte-range reader at the core type. `RangeReader` is composable with `CachingRangeReader` (exact-range, in-memory) and `BlockAlignedRangeReader` (region-scoped, cloud-pricing-friendly block alignment, stacked above the cache). The decorator stack delivers measurable cost reductions on real-world cloud workloads.
 
 ### 2. Capabilities are an explicit, queryable record — not an exception roulette
 
@@ -62,7 +62,7 @@ Most abstractions either pretend everything is a directory (Hadoop) or collapse 
 
 ### 5. Auto-caching is declarative configuration, not a backend concern
 
-Caching is wired in through `StorageFactory` at open time, driven by `storage.caching.*` parameters. Backends never reach for `CachingRangeReader` themselves; the decorator concern stays out of the implementation. `CachingStorage` is a `Storage` decorator that wraps every `openRangeReader` call with a caller-supplied `UnaryOperator<RangeReader>`, and the rest of the surface delegates straight through.
+Caching is wired in through `StorageFactory` at open time, driven by the `storage.caching.enabled` parameter. Backends never reach for `CachingRangeReader` themselves; the decorator concern stays out of the implementation. `CachingStorage` is a `Storage` decorator that wraps every `openRangeReader` call with a caller-supplied `UnaryOperator<RangeReader>`, and delegates the rest of `Storage`'s methods straight through.
 
 ### 6. Consumes the same cloud-SDK BOM as the rest of the ecosystem
 

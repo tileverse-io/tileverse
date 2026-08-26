@@ -60,8 +60,9 @@ The Tileverse Range Reader provides a unified interface for reading byte ranges 
 ```java
 // The core interface - same for all data sources
 public interface RangeReader extends Closeable {
-    ByteBuffer readRange(long offset, int length) throws IOException;
-    int readRange(long offset, int length, ByteBuffer target) throws IOException;
+    ByteBuffer readRange(long offset, int length);
+    int readRange(long offset, int length, ByteBuffer target);
+    int[] readRanges(List<RangeRequest> requests); // batch read, several ranges in one call
     OptionalLong size();
     String getSourceIdentifier();
 }
@@ -134,17 +135,23 @@ section2.flip();
 
 ### Decorator Stacking Order
 
-For optimal performance, stack decorators in this order:
+Stack decorators as `BlockAligned(regions) -> Caching -> backend`, the aligner outermost:
 
 ```java
 Application
-    ↓
-CachingRangeReader (memory cache - outermost)
-    ↓
-BaseReader (S3, Azure, HTTP, etc.)
-    ↓
-Data Source
+    -> BlockAlignedRangeReader (region-scoped block alignment, outermost)
+    -> CachingRangeReader (exact-range cache)
+    -> BaseReader (S3, Azure, HTTP, etc.)
+    -> Data Source
 ```
+
+The aligner expands a request inside a declared region into whole blocks before the call
+reaches the cache, which then stores block-grain data for that region; everywhere else the
+cache stores exact ranges.
+
+The inverted order (caching above the aligner) is legal but pointless: the cache would then
+store expanded blocks under per-request exact keys, and overlapping reads would never share a
+block.
 
 ### Read Pattern Guidelines
 

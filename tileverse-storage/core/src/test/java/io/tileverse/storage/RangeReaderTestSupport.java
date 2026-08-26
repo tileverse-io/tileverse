@@ -22,6 +22,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.OptionalLong;
 
 /**
@@ -112,6 +113,11 @@ public final class RangeReaderTestSupport {
         @Override
         public int readRange(long offset, int length, ByteBuffer target) {
             return delegate.readRange(offset, length, target);
+        }
+
+        @Override
+        public int[] readRanges(List<RangeRequest> requests) {
+            return delegate.readRanges(requests);
         }
 
         @Override

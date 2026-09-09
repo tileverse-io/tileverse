@@ -21,7 +21,7 @@
   <developers>
     <developer>
       <name>Gabriel Roldan</name>
-      <email>gabriel.roldan@gmail.com</email>
+      <email>groldan@multivers.io</email>
       <organization>Multiversio LLC</organization>
       <organizationUrl>https://multivers.io</organizationUrl>
     </developer>
@@ -79,10 +79,10 @@
     <palantirJavaFormat.version>2.90.0</palantirJavaFormat.version>
 
     <!-- Dependency versions -->
-    <cloud-dependencies-bom.version>1.0.3</cloud-dependencies-bom.version>
+    <cloud-dependencies-bom.version>1.0-SNAPSHOT</cloud-dependencies-bom.version>
     <caffeine.version>3.2.3</caffeine.version>
     <commons-compress.version>1.28.0</commons-compress.version>
-    <jackson.version>3.1.2</jackson.version>
+    <jackson.version>3.2.2</jackson.version>
     <jts.version>1.20.0</jts.version>
     <protobuf-java.version>4.33.2</protobuf-java.version>
     <slf4j-api.version>2.0.17</slf4j-api.version>

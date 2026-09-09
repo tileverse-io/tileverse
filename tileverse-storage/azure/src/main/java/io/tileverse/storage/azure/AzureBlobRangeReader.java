@@ -19,6 +19,7 @@ import static java.util.Objects.requireNonNull;
 
 import com.azure.core.http.HttpHeaderName;
 import com.azure.core.http.rest.Response;
+import com.azure.core.util.Context;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.models.BlobRange;
 import com.azure.storage.blob.models.BlobRequestConditions;
@@ -28,8 +29,9 @@ import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.ContentRange;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.StorageException;
+import io.tileverse.storage.adapters.ByteBufferOutputStream;
 import io.tileverse.storage.batch.CoalescingPolicy;
-import java.io.ByteArrayOutputStream;
+import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.OptionalLong;
@@ -43,6 +45,9 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>Batched reads merge nearby ranges under the object-store coalescing policy and run up to 8 fetches concurrently on
  * the shared batch executor; worst-case amplification is the requested bytes plus the merged gaps.
+ *
+ * <p>Range bodies stream straight into the caller's buffer, heap or direct, through the SDK's download stream; no read
+ * holds a full-size heap copy of the response.
  */
 @Slf4j
 class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
@@ -65,25 +70,21 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
         this.blobClient = requireNonNull(blobClient, "BlobClient cannot be null");
     }
 
+    /**
+     * Streams the range body straight into {@code target} through a {@link ByteBufferOutputStream} handed to the SDK's
+     * download, keeping the per-download retry options. A body longer than requested overflows the sink and is reported
+     * as a {@link StorageException}.
+     */
     @Override
     protected int readRangeNoFlip(long offset, int actualLength, ByteBuffer target) {
-
         try {
             final long start = System.nanoTime();
-            // Download the specified range
             BlobRange range = new BlobRange(offset, (long) actualLength);
             DownloadRetryOptions options = new DownloadRetryOptions().setMaxRetryRequests(3);
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream(actualLength);
+            ByteBufferOutputStream sink = new ByteBufferOutputStream(target, actualLength);
 
-            // API requires Duration and Context parameters
             Response<Void> response = blobClient.downloadStreamWithResponse(
-                    outputStream,
-                    range,
-                    options,
-                    new BlobRequestConditions(),
-                    false,
-                    Duration.ofSeconds(60), // Timeout
-                    com.azure.core.util.Context.NONE); // Context
+                    sink, range, options, new BlobRequestConditions(), false, Duration.ofSeconds(60), Context.NONE);
 
             if (log.isDebugEnabled()) {
                 long end = System.nanoTime();
@@ -91,7 +92,6 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
                 log.debug("range:[{} +{}], time: {}ms]", offset, actualLength, millis);
             }
 
-            // Verify the response is successful
             if (response.getStatusCode() < 200 || response.getStatusCode() >= 300) {
                 throw new StorageException("Failed to download blob range, status code: " + response.getStatusCode());
             }
@@ -101,19 +101,29 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
                 ContentRange.totalOf(contentRange)
                         .ifPresent(total -> contentLength.compareAndSet(null, OptionalLong.of(total)));
             }
-
-            // Copy the bytes directly into the target buffer
-            byte[] data = outputStream.toByteArray();
-            target.put(data);
-            // Return the number of bytes read
-            return data.length;
+            return sink.bytesWritten();
         } catch (BlobStorageException e) {
             throw AzureExceptionMapper.map(e, blobClient.getBlobUrl());
         } catch (StorageException e) {
             throw e;
         } catch (Exception e) {
+            if (isBufferOverflow(e)) {
+                throw new StorageException("Server returned more data than requested (" + actualLength + " bytes)", e);
+            }
             throw new StorageException("Failed to read range from blob: " + e.getMessage(), e);
         }
+    }
+
+    /** The download pipeline may throw the sink's overflow directly or wrapped in a reactive exception. */
+    private static boolean isBufferOverflow(Throwable failure) {
+        Throwable cause = failure;
+        while (cause != null) {
+            if (cause instanceof BufferOverflowException) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 
     @Override

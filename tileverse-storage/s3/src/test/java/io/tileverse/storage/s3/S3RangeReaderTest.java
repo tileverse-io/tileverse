@@ -15,14 +15,11 @@
  */
 package io.tileverse.storage.s3;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -30,33 +27,36 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import io.tileverse.storage.NotFoundException;
+import io.tileverse.storage.StorageException;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.OptionalLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import software.amazon.awssdk.awscore.exception.AwsServiceException;
-import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
-import software.amazon.awssdk.services.s3.model.S3Exception;
 
-// Use LENIENT strictness to avoid unnecessary stubbing errors in tests
+/**
+ * Unit tests for the single-range path of {@link S3RangeReader}: bodies stream through the SDK's
+ * {@link ResponseTransformer} straight into the caller's buffer.
+ */
 @ExtendWith(MockitoExtension.class)
 class S3RangeReaderTest {
 
     private static final String BUCKET = "test-bucket";
     private static final String KEY = "test.pmtiles";
     private static final int CONTENT_LENGTH = 10000;
+    /** Small enough that every read of interest arrives in many chunks. */
+    private static final int CHUNK_SIZE = 64;
+
     private static final byte[] TEST_DATA = createTestData(CONTENT_LENGTH);
 
     @Mock
@@ -65,12 +65,7 @@ class S3RangeReaderTest {
     @Mock
     private HeadObjectResponse headObjectResponse;
 
-    @Mock
-    private GetObjectResponse getObjectResponse;
-
-    @Mock
-    private ResponseBytes<GetObjectResponse> responseBytes;
-
+    private S3ObjectStub object;
     private S3RangeReader reader;
 
     /** Creates test data with a predictable pattern. */
@@ -84,48 +79,13 @@ class S3RangeReaderTest {
 
     @BeforeEach
     void setUp() {
-        // Setup mock behavior for GET request - explicitly use GetObjectRequest overload
-        lenient()
-                .when(s3Client.getObjectAsBytes((GetObjectRequest) any(GetObjectRequest.class)))
-                .thenReturn(responseBytes);
-        lenient().when(responseBytes.response()).thenReturn(getObjectResponse);
+        object = new S3ObjectStub(TEST_DATA, CHUNK_SIZE);
+        object.installSync(s3Client);
+        reader = newReader(KEY);
+    }
 
-        // Setup default response for full object
-        lenient().when(getObjectResponse.contentLength()).thenReturn((long) CONTENT_LENGTH);
-
-        // Setup mock data for response
-        lenient().when(responseBytes.asByteArray()).thenAnswer(invocation -> {
-            // Get the request to determine the range
-            GetObjectRequest capturedRequest = mock(GetObjectRequest.class);
-            if (mockingDetails(s3Client).getInvocations().size() > 0) {
-                capturedRequest = (GetObjectRequest) mockingDetails(s3Client).getInvocations().stream()
-                        .filter(i -> i.getMethod().getName().equals("getObjectAsBytes"))
-                        .findFirst()
-                        .get()
-                        .getArgument(0);
-            }
-
-            String rangeHeader = capturedRequest.range();
-            if (rangeHeader == null) {
-                return TEST_DATA;
-            }
-
-            // Parse the range header
-            String[] rangeParts = rangeHeader.replace("bytes=", "").split("-");
-            int start = Integer.parseInt(rangeParts[0]);
-            int end = Integer.parseInt(rangeParts[1]);
-            int length = end - start + 1;
-
-            // A real object store truncates a range that extends past the object's actual end
-            // instead of padding it. The mock matches that behavior.
-            int availableEnd = Math.min(start + length, TEST_DATA.length);
-            return Arrays.copyOfRange(TEST_DATA, start, availableEnd);
-        });
-
-        // Create the reader directly via the package-private constructor.
-        // The Builder is gone in 2.0; tests in this package construct readers via the
-        // package-private constructor (production paths use Storage.openRangeReader).
-        reader = new S3RangeReader(s3Client, new S3Reference(null, BUCKET, KEY, null), false);
+    private S3RangeReader newReader(String key) {
+        return new S3RangeReader(s3Client, new S3Reference(null, BUCKET, key, null), false);
     }
 
     /** Stubs the HEAD response used by {@code size()}. Called only by tests that exercise size(). */
@@ -135,34 +95,53 @@ class S3RangeReaderTest {
         lenient().when(headObjectResponse.lastModified()).thenReturn(Instant.EPOCH);
     }
 
+    /** Matches the GET for exactly the given range. */
+    private static GetObjectRequest requestForRange(long offset, int length) {
+        String range = "bytes=" + offset + "-" + (offset + length - 1);
+        return argThat(request -> range.equals(request.range()));
+    }
+
+    /** The range went out as one streamed GET and never through the byte-array entry point. */
+    @SuppressWarnings("unchecked")
+    private void verifyStreamedGet(long offset, int length) {
+        verify(s3Client).getObject(requestForRange(offset, length), any(ResponseTransformer.class));
+        verify(s3Client, never()).getObjectAsBytes(any(GetObjectRequest.class));
+    }
+
+    private static byte[] contents(ByteBuffer buffer, int from, int length) {
+        byte[] out = new byte[length];
+        buffer.get(from, out);
+        return out;
+    }
+
     @Test
     void testConstructorMakesNoRequests() {
-        new S3RangeReader(s3Client, new S3Reference(null, BUCKET, KEY, null), false);
+        newReader(KEY);
         verifyNoInteractions(s3Client);
     }
 
     @Test
     void testGetSize() {
         stubHeadObject();
-        assertEquals(CONTENT_LENGTH, reader.size().getAsLong());
+        assertThat(reader.size()).hasValue(CONTENT_LENGTH);
         verify(s3Client, times(1)).headObject(any(HeadObjectRequest.class));
     }
 
     @Test
     void testSizeIsLazyAndMemoized() {
         stubHeadObject();
-        S3RangeReader lazy = new S3RangeReader(s3Client, new S3Reference(null, BUCKET, KEY, null), false);
-        verify(s3Client, never()).headObject((HeadObjectRequest) any(HeadObjectRequest.class));
+        S3RangeReader lazy = newReader(KEY);
+        verify(s3Client, never()).headObject(any(HeadObjectRequest.class));
 
-        assertEquals(OptionalLong.of(CONTENT_LENGTH), lazy.size());
-        assertEquals(OptionalLong.of(CONTENT_LENGTH), lazy.size());
-        verify(s3Client, times(1)).headObject((HeadObjectRequest) any(HeadObjectRequest.class));
+        assertThat(lazy.size()).hasValue(CONTENT_LENGTH);
+        assertThat(lazy.size()).hasValue(CONTENT_LENGTH);
+        verify(s3Client, times(1)).headObject(any(HeadObjectRequest.class));
     }
 
     @Test
     void testSizeThrowsNotFoundForMissingKey() {
-        S3RangeReader missing = new S3RangeReader(s3Client, new S3Reference(null, BUCKET, "missing", null), false);
-        when(s3Client.headObject((HeadObjectRequest) any(HeadObjectRequest.class)))
+        S3RangeReader missing = newReader("missing");
+        when(s3Client.headObject(any(HeadObjectRequest.class)))
                 .thenThrow(NoSuchKeyException.builder().message("no such key").build());
 
         assertThatThrownBy(missing::size).isInstanceOf(NotFoundException.class);
@@ -170,25 +149,18 @@ class S3RangeReaderTest {
 
     @Test
     void testSizeCapturedFromRangeResponseWithoutHead() {
-        byte[] slice = Arrays.copyOfRange(TEST_DATA, 0, 10);
-        GetObjectResponse response = GetObjectResponse.builder()
-                .contentLength(10L)
-                .contentRange("bytes 0-9/" + CONTENT_LENGTH)
-                .build();
-        when(s3Client.getObjectAsBytes((GetObjectRequest) any(GetObjectRequest.class)))
-                .thenReturn(ResponseBytes.fromByteArray(response, slice));
-
-        S3RangeReader lazy = new S3RangeReader(s3Client, new S3Reference(null, BUCKET, KEY, null), false);
+        S3RangeReader lazy = newReader(KEY);
         lazy.readRange(0, 10);
 
-        assertEquals(OptionalLong.of(CONTENT_LENGTH), lazy.size());
-        verify(s3Client, never()).headObject((HeadObjectRequest) any(HeadObjectRequest.class));
+        assertThat(lazy.size()).hasValue(CONTENT_LENGTH);
+        verify(s3Client, never()).headObject(any(HeadObjectRequest.class));
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void testNotFoundThrownOnFirstReadNotAtConstruction() {
-        S3RangeReader missing = new S3RangeReader(s3Client, new S3Reference(null, BUCKET, "missing", null), false);
-        when(s3Client.getObjectAsBytes((GetObjectRequest) any(GetObjectRequest.class)))
+        S3RangeReader missing = newReader("missing");
+        when(s3Client.getObject(any(GetObjectRequest.class), any(ResponseTransformer.class)))
                 .thenThrow(NoSuchKeyException.builder().message("no such key").build());
 
         assertThatThrownBy(() -> missing.readRange(0, 10)).isInstanceOf(NotFoundException.class);
@@ -196,18 +168,11 @@ class S3RangeReaderTest {
 
     @Test
     void testReadEntireFile() {
-        ByteBuffer buffer = reader.readRange(0, CONTENT_LENGTH);
-        buffer.flip();
+        ByteBuffer buffer = reader.readRange(0, CONTENT_LENGTH).flip();
 
-        assertEquals(CONTENT_LENGTH, buffer.remaining());
-
-        byte[] bytes = new byte[buffer.remaining()];
-        buffer.get(bytes);
-
-        assertArrayEquals(TEST_DATA, bytes);
-
-        verify(s3Client).getObjectAsBytes((GetObjectRequest) argThat(request -> request instanceof GetObjectRequest
-                && ((GetObjectRequest) request).range().equals("bytes=0-" + (CONTENT_LENGTH - 1))));
+        assertThat(buffer.remaining()).isEqualTo(CONTENT_LENGTH);
+        assertThat(contents(buffer, 0, CONTENT_LENGTH)).containsExactly(TEST_DATA);
+        verifyStreamedGet(0, CONTENT_LENGTH);
     }
 
     @Test
@@ -215,52 +180,69 @@ class S3RangeReaderTest {
         int offset = 100;
         int length = 500;
 
-        ByteBuffer buffer = reader.readRange(offset, length);
-        buffer.flip();
+        ByteBuffer buffer = reader.readRange(offset, length).flip();
 
-        assertEquals(length, buffer.remaining());
-
-        byte[] bytes = new byte[buffer.remaining()];
-        buffer.get(bytes);
-
-        byte[] expectedBytes = Arrays.copyOfRange(TEST_DATA, offset, offset + length);
-        assertArrayEquals(expectedBytes, bytes);
-
-        verify(s3Client).getObjectAsBytes((GetObjectRequest) argThat(request -> request instanceof GetObjectRequest
-                && ((GetObjectRequest) request).range().equals("bytes=" + offset + "-" + (offset + length - 1))));
+        assertThat(buffer.remaining()).isEqualTo(length);
+        assertThat(contents(buffer, 0, length)).containsExactly(Arrays.copyOfRange(TEST_DATA, offset, offset + length));
+        verifyStreamedGet(offset, length);
     }
 
     @Test
     void testReadRangeBeyondEnd() {
         int offset = CONTENT_LENGTH - 200;
-        int length = 500; // Beyond the end
+        int length = 500;
 
-        ByteBuffer buffer = reader.readRange(offset, length);
-        buffer.flip();
+        ByteBuffer buffer = reader.readRange(offset, length).flip();
 
         // The server, not the client, truncates the response to the available data
-        assertEquals(200, buffer.remaining());
-
-        byte[] bytes = new byte[buffer.remaining()];
-        buffer.get(bytes);
-
-        byte[] expectedBytes = Arrays.copyOfRange(TEST_DATA, offset, CONTENT_LENGTH);
-        assertArrayEquals(expectedBytes, bytes);
-
+        assertThat(buffer.remaining()).isEqualTo(200);
+        assertThat(contents(buffer, 0, 200)).containsExactly(Arrays.copyOfRange(TEST_DATA, offset, CONTENT_LENGTH));
         // The client requests the full range as asked; it does not pre-truncate at EOF
-        verify(s3Client).getObjectAsBytes((GetObjectRequest) argThat(request -> request instanceof GetObjectRequest
-                && ((GetObjectRequest) request).range().equals("bytes=" + offset + "-" + (offset + length - 1))));
+        verifyStreamedGet(offset, length);
     }
 
     @Test
+    void bodyStreamsIntoADirectTargetAtItsPosition() {
+        ByteBuffer target = ByteBuffer.allocateDirect(700);
+        target.position(50);
+
+        int read = reader.readRange(100, 500, target);
+
+        assertThat(read).isEqualTo(500);
+        assertThat(target.position()).isEqualTo(550);
+        assertThat(target.limit()).isEqualTo(700);
+        assertThat(contents(target, 50, 500)).containsExactly(Arrays.copyOfRange(TEST_DATA, 100, 600));
+    }
+
+    @Test
+    void aDroppedBodyIsRetriedFromTheTargetStartPosition() {
+        object.failingBodyReads(1);
+        ByteBuffer target = ByteBuffer.allocate(400);
+        target.position(10);
+
+        int read = reader.readRange(0, 300, target);
+
+        assertThat(read).isEqualTo(300);
+        assertThat(object.attempts()).isEqualTo(2);
+        assertThat(target.position()).isEqualTo(310);
+        assertThat(contents(target, 10, 300)).containsExactly(Arrays.copyOfRange(TEST_DATA, 0, 300));
+    }
+
+    @Test
+    void aBodyDroppedOnEveryAttemptFailsTheRead() {
+        object.failingBodyReads(3);
+
+        assertThatThrownBy(() -> reader.readRange(0, 300)).isInstanceOf(StorageException.class);
+        assertThat(object.attempts()).isEqualTo(3);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void testReadZeroLength() {
-        ByteBuffer buffer = reader.readRange(100, 0);
-        buffer.flip();
+        ByteBuffer buffer = reader.readRange(100, 0).flip();
 
-        assertEquals(0, buffer.remaining());
-
-        // Should not make any API calls for zero length
-        verify(s3Client, never()).getObjectAsBytes((GetObjectRequest) any(GetObjectRequest.class));
+        assertThat(buffer.remaining()).isZero();
+        verify(s3Client, never()).getObject(any(GetObjectRequest.class), any(ResponseTransformer.class));
     }
 
     @Test
@@ -274,61 +256,52 @@ class S3RangeReaderTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void testS3ExceptionDuringRead() {
-        // Override the default behavior for this specific test
-        when(s3Client.getObjectAsBytes((GetObjectRequest) any(GetObjectRequest.class)))
+        when(s3Client.getObject(any(GetObjectRequest.class), any(ResponseTransformer.class)))
                 .thenThrow(SdkException.builder().message("S3 download error").build());
 
-        assertThatThrownBy(() -> reader.readRange(0, 100)).isInstanceOf(io.tileverse.storage.StorageException.class);
+        assertThatThrownBy(() -> reader.readRange(0, 100)).isInstanceOf(StorageException.class);
     }
 
     @Test
     void testS3ReturnsMoreThanRequested() {
         // A server that ignores the requested range and returns more data than asked for is a
-        // storage error, not an EOF condition.
-        byte[] tooMuch = Arrays.copyOfRange(TEST_DATA, 0, 150);
-        GetObjectResponse oversizedResponse =
-                GetObjectResponse.builder().contentLength((long) tooMuch.length).build();
-        when(s3Client.getObjectAsBytes((GetObjectRequest) any(GetObjectRequest.class)))
-                .thenReturn(ResponseBytes.fromByteArray(oversizedResponse, tooMuch));
+        // storage error, not an EOF condition; the connection is aborted instead of drained.
+        object.respondingWithExtraBytes(50);
 
-        assertThatThrownBy(() -> reader.readRange(0, 100)).isInstanceOf(io.tileverse.storage.StorageException.class);
+        // The SDK wraps the transformer's failure in its own SdkException before it reaches the
+        // reader; hasNoCause() only holds if the reader unwraps that SdkException and rethrows
+        // the original StorageException as-is instead of wrapping it a second time.
+        assertThatThrownBy(() -> reader.readRange(0, 100))
+                .isInstanceOf(StorageException.class)
+                .hasMessageContaining("more data than requested")
+                .hasNoCause();
+        assertThat(object.aborts()).isEqualTo(1);
     }
 
     @Test
     void testGetSourceIdentifier() {
-        assertEquals("s3://%s/%s".formatted(BUCKET, KEY), reader.getSourceIdentifier());
+        assertThat(reader.getSourceIdentifier()).isEqualTo("s3://%s/%s".formatted(BUCKET, KEY));
     }
 
     @Test
     void testReadStraddlingEofReturnsShortCount() {
-        // The server answers a range that runs past EOF with only the available bytes.
-        byte[] available = Arrays.copyOfRange(TEST_DATA, CONTENT_LENGTH - 10, CONTENT_LENGTH);
-        GetObjectResponse shortResponse = GetObjectResponse.builder()
-                .contentLength((long) available.length)
-                .build();
-        when(s3Client.getObjectAsBytes((GetObjectRequest) any(GetObjectRequest.class)))
-                .thenReturn(ResponseBytes.fromByteArray(shortResponse, available));
-
         ByteBuffer target = ByteBuffer.allocate(100);
+
         int read = reader.readRange(CONTENT_LENGTH - 10, 100, target);
 
-        assertEquals(10, read);
+        assertThat(read).isEqualTo(10);
+        assertThat(target.position()).isEqualTo(10);
     }
 
     @Test
     void testReadPastEofReturnsZero() {
-        AwsServiceException invalidRange = S3Exception.builder()
-                .statusCode(416)
-                .message("Requested Range Not Satisfiable")
-                .build();
-        when(s3Client.getObjectAsBytes((GetObjectRequest) any(GetObjectRequest.class)))
-                .thenThrow(invalidRange);
-
         ByteBuffer target = ByteBuffer.allocate(100);
+
         int read = reader.readRange(CONTENT_LENGTH + 5, 100, target);
 
-        assertEquals(0, read);
-        assertEquals(0, target.position());
+        assertThat(read).isZero();
+        assertThat(target.position()).isZero();
     }
 }

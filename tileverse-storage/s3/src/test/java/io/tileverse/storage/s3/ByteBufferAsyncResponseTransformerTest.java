@@ -159,6 +159,21 @@ class ByteBufferAsyncResponseTransformerTest {
     }
 
     @Test
+    void aDestinationRefusingTheWriteCancelsTheStreamAndFailsTheAttempt() {
+        ByteBuffer destination = ByteBuffer.allocate(32).asReadOnlyBuffer();
+        ByteBufferAsyncResponseTransformer transformer = new ByteBufferAsyncResponseTransformer(destination, 16);
+
+        CompletableFuture<Result> outcome = startAttempt(transformer);
+        emit(bytes(16), 0, 8);
+
+        assertThat(subscription.cancelled).isTrue();
+        assertThatThrownBy(outcome::join)
+                .isInstanceOf(CompletionException.class)
+                .hasCauseInstanceOf(StorageException.class)
+                .hasMessageContaining("refused the write");
+    }
+
+    @Test
     void chunksAfterTheCancellingOneAreIgnored() {
         ByteBuffer destination = ByteBuffer.allocate(32);
         ByteBufferAsyncResponseTransformer transformer = new ByteBufferAsyncResponseTransformer(destination, 16);

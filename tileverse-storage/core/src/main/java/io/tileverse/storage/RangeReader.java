@@ -96,6 +96,11 @@ public interface RangeReader extends Closeable, Supplier<SeekableByteChannel> {
      * read, and the caller must call {@code flip()} on the buffer to prepare it for reading. The caller is responsible
      * for ensuring that the target buffer has sufficient remaining capacity for the requested length.
      *
+     * <p>The target may be written from a thread other than the caller's: streaming backends land the body from their
+     * I/O thread, and batched reads borrow executor threads. A target confined to the calling thread, such as a view of
+     * a thread-confined memory segment, is not accepted; a write refused by the target fails the read with a
+     * {@link StorageException}.
+     *
      * <p>Implementations bound to a remote object defer existence checks: a missing object is reported as a
      * {@link NotFoundException} from the first read or {@link #size()} call rather than at construction time.
      *
@@ -137,7 +142,8 @@ public interface RangeReader extends Closeable, Supplier<SeekableByteChannel> {
      * batched strategies that document their own amplification.
      *
      * <p>Targets must be distinct buffers or non-overlapping views of one buffer; implementations MAY write them
-     * concurrently and in any order. Passing aliasing targets is undefined behavior.
+     * concurrently, in any order, and from threads other than the caller's. Passing aliasing targets is undefined
+     * behavior.
      *
      * <p>Any storage failure aborts the whole call; the contents and positions of all targets are then unspecified. A
      * malformed batch (null element, or a target whose remaining capacity no longer holds its range) throws

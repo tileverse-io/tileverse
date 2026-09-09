@@ -164,4 +164,18 @@ class ByteBufferResponseTransformerTest {
                 .hasMessageContaining("more data than requested");
         assertThat(aborted).isTrue();
     }
+
+    @Test
+    void aTargetRefusingTheWriteAbortsTheConnectionAndFailsTheRead() {
+        ByteBuffer target = ByteBuffer.allocate(32).asReadOnlyBuffer();
+        ByteBufferResponseTransformer transformer = new ByteBufferResponseTransformer(target, 16);
+        AtomicBoolean aborted = new AtomicBoolean();
+        AbortableInputStream body =
+                AbortableInputStream.create(new ByteArrayInputStream(bytes(16)), () -> aborted.set(true));
+
+        assertThatThrownBy(() -> transformer.transform(RESPONSE, body))
+                .isInstanceOf(StorageException.class)
+                .hasMessageContaining("refused the write");
+        assertThat(aborted).isTrue();
+    }
 }

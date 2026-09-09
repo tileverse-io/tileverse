@@ -30,10 +30,11 @@ import io.tileverse.storage.ContentRange;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.StorageException;
 import io.tileverse.storage.adapters.ByteBufferOutputStream;
+import io.tileverse.storage.adapters.ByteBufferSinkException;
 import io.tileverse.storage.batch.CoalescingPolicy;
-import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
@@ -72,8 +73,8 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
 
     /**
      * Streams the range body straight into {@code target} through a {@link ByteBufferOutputStream} handed to the SDK's
-     * download, keeping the per-download retry options. A body longer than requested overflows the sink and is reported
-     * as a {@link StorageException}.
+     * download, keeping the per-download retry options. A sink failure, a body longer than requested or a target
+     * refusing the write, is reported as a {@link StorageException} with the sink's message.
      */
     @Override
     protected int readRangeNoFlip(long offset, int actualLength, ByteBuffer target) {
@@ -107,23 +108,24 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
         } catch (StorageException e) {
             throw e;
         } catch (Exception e) {
-            if (isBufferOverflow(e)) {
-                throw new StorageException("Server returned more data than requested (" + actualLength + " bytes)", e);
+            Optional<ByteBufferSinkException> sinkFailure = sinkFailure(e);
+            if (sinkFailure.isPresent()) {
+                throw new StorageException(sinkFailure.get().getMessage(), e);
             }
             throw new StorageException("Failed to read range from blob: " + e.getMessage(), e);
         }
     }
 
-    /** The download pipeline may throw the sink's overflow directly or wrapped in a reactive exception. */
-    private static boolean isBufferOverflow(Throwable failure) {
+    /** The download pipeline delivers the sink's failure wrapped in an unchecked or reactive exception. */
+    private static Optional<ByteBufferSinkException> sinkFailure(Throwable failure) {
         Throwable cause = failure;
         while (cause != null) {
-            if (cause instanceof BufferOverflowException) {
-                return true;
+            if (cause instanceof ByteBufferSinkException sinkFailure) {
+                return Optional.of(sinkFailure);
             }
             cause = cause.getCause();
         }
-        return false;
+        return Optional.empty();
     }
 
     @Override

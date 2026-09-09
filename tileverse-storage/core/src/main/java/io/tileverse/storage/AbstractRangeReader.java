@@ -87,7 +87,8 @@ public abstract class AbstractRangeReader implements RangeReader {
      * </ul>
      *
      * <p><strong>Thread Safety:</strong> This method is thread-safe when the underlying {@link #readRangeNoFlip(long,
-     * int, ByteBuffer)} implementation is thread-safe.
+     * int, ByteBuffer)} implementation is thread-safe. The target may be written from a thread other than the caller's;
+     * see {@link RangeReader#readRange(long, int, ByteBuffer)}.
      *
      * @param offset The byte offset to read from (must be >= 0)
      * @param length The number of bytes to read (must be >= 0)

@@ -393,22 +393,25 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
         }
     }
 
+    /**
+     * Reads one range into {@code target} and consumes the body through its end before closing it. The JDK client
+     * cancels an HTTP/2 stream whose body is closed before its final frame arrived, and servers count those
+     * cancellations against their rapid-reset protection; the extra read after the requested bytes both observes the
+     * end of the stream and catches a server sending more than requested.
+     */
     private int getRange(final long offset, final int length, ByteBuffer target)
             throws IOException, InterruptedException {
 
         final long start = System.nanoTime();
         HttpResponse<InputStream> response = sendRangeRequest(offset, length);
 
-        int totalRead = 0;
+        int totalRead;
         try (InputStream in = response.body();
                 ReadableByteChannel channel = Channels.newChannel(in)) {
-            int read = 0;
-            while (totalRead < length) {
-                read = channel.read(target);
-                if (read == -1) {
-                    break;
-                }
-                totalRead += read;
+            totalRead = readAtMost(channel, length, target);
+            if (totalRead == length && channel.read(ByteBuffer.allocate(1)) != -1) {
+                throw new StorageException(
+                        "Server returned more data than requested (" + length + " bytes) for URI: " + uri);
             }
         }
 
@@ -416,6 +419,28 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
             long end = System.nanoTime();
             long millis = Duration.ofNanos(end - start).toMillis();
             log.debug("range:[{} +{}], time: {}ms]", offset, length, millis);
+        }
+        return totalRead;
+    }
+
+    /**
+     * Reads up to {@code length} bytes into {@code target} at its position, stopping early at end of stream. The
+     * temporary limit keeps a longer-than-requested body out of the target.
+     */
+    private static int readAtMost(ReadableByteChannel channel, int length, ByteBuffer target) throws IOException {
+        int oldLimit = target.limit();
+        target.limit(target.position() + length);
+        int totalRead = 0;
+        try {
+            while (totalRead < length) {
+                int read = channel.read(target);
+                if (read == -1) {
+                    break;
+                }
+                totalRead += read;
+            }
+        } finally {
+            target.limit(oldLimit);
         }
         return totalRead;
     }

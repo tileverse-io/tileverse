@@ -20,6 +20,7 @@ import static java.util.Objects.requireNonNull;
 import io.tileverse.storage.ContentRange;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
@@ -100,19 +101,30 @@ final class MultipartByteRangesParser {
                 return readPartHeaders();
             }
         }
-        finished = true;
+        finishAtEndOfStream();
         return null;
     }
 
-    private ContentRange.Bytes nextSinglePart() {
+    private ContentRange.Bytes nextSinglePart() throws IOException {
         ContentRange.Bytes part = preloadedPart;
         if (part == null) {
-            finished = true;
+            finishAtEndOfStream();
             return null;
         }
         preloadedPart = null;
         remainingInPart = part.length();
         return part;
+    }
+
+    /**
+     * Marks the parse finished and reads whatever follows the last part, an epilogue after the closing boundary or
+     * nothing at all, through the end of the stream. Closing a body before its end cancels an HTTP/2 stream, and
+     * servers count those cancellations against their rapid-reset protection; consuming the remainder keeps the
+     * connection healthy.
+     */
+    private void finishAtEndOfStream() throws IOException {
+        finished = true;
+        in.transferTo(OutputStream.nullOutputStream());
     }
 
     private ContentRange.Bytes readPartHeaders() throws IOException {

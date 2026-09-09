@@ -144,6 +144,32 @@ class MultipartByteRangesParserTest {
     }
 
     @Test
+    void closingBoundaryConsumesTheStreamToItsEnd() throws IOException {
+        EndTrackingInputStream in =
+                new EndTrackingInputStream(body(part(0, 4, 100, "AAAAA"), closing(), "epilogue\r\n"));
+        MultipartByteRangesParser parser = MultipartByteRangesParser.multipart(in, BOUNDARY);
+        parser.nextPart();
+        readAll(parser, 5);
+
+        assertThat(parser.nextPart()).isNull();
+
+        assertThat(in.endObserved()).as("stream read through to its end").isTrue();
+    }
+
+    @Test
+    void singlePartEndConsumesTheStreamToItsEnd() throws IOException {
+        EndTrackingInputStream in = new EndTrackingInputStream("HELLOWORLD".getBytes(StandardCharsets.ISO_8859_1));
+        ContentRange.Bytes range = ContentRange.bytesOf("bytes 20-29/100").orElseThrow();
+        MultipartByteRangesParser parser = MultipartByteRangesParser.singlePart(in, range);
+        parser.nextPart();
+        readAll(parser, 10);
+
+        assertThat(parser.nextPart()).isNull();
+
+        assertThat(in.endObserved()).as("stream read through to its end").isTrue();
+    }
+
+    @Test
     void readBodyStopsAtThePartEnd() throws IOException {
         InputStream in = new ByteArrayInputStream(body(part(0, 4, 100, "AAAAA"), part(50, 52, 100, "BBB"), closing()));
         MultipartByteRangesParser parser = MultipartByteRangesParser.multipart(in, BOUNDARY);

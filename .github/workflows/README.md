@@ -208,8 +208,8 @@ Never hardcode sensitive information in workflows. Use repository secrets for:
 Workflows pin action versions for security:
 
 ```yaml
-- uses: actions/checkout@v4  # Pinned to major version
-- uses: actions/setup-python@v5  # Pinned to major version
+- uses: actions/checkout@v7  # Pinned to major version
+- uses: actions/setup-python@v7  # Pinned to major version
 ```
 
 Review and update dependencies regularly.

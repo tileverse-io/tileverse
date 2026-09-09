@@ -31,8 +31,8 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
  * <p>Chunks land at absolute positions from the destination position captured at construction; the destination's
  * position and limit never move, and the caller advances the position from the completed {@link Result}. The SDK calls
  * {@link #prepare()} once per request attempt and subscribes a fresh chunk writer for each, which keeps a retried body
- * from landing after a partial attempt. A body longer than the requested count cancels the stream and fails the attempt
- * with a {@link StorageException}.
+ * from landing after a partial attempt. A body longer than the requested count, or a destination refusing a chunk,
+ * cancels the stream and fails the attempt with a {@link StorageException}.
  *
  * <p>The SDK may call {@code prepare}, {@code onResponse}, {@code onStream}, and {@code exceptionOccurred} from
  * different threads; the volatile fields publish {@code attempt} and {@code response} across that handoff. Within one
@@ -137,7 +137,14 @@ final class ByteBufferAsyncResponseTransformer
                         new StorageException("Server returned more data than requested (" + maxBytes + " bytes)"));
                 return;
             }
-            destination.put(start + written, chunk, chunk.position(), length);
+            try {
+                destination.put(start + written, chunk, chunk.position(), length);
+            } catch (RuntimeException refused) {
+                subscription.cancel();
+                outcome.completeExceptionally(
+                        new StorageException("Target buffer refused the write: " + refused, refused));
+                return;
+            }
             written += length;
         }
 

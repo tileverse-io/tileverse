@@ -17,8 +17,8 @@ package io.tileverse.storage.s3;
 
 import io.tileverse.storage.StorageException;
 import io.tileverse.storage.adapters.ByteBufferOutputStream;
+import io.tileverse.storage.adapters.ByteBufferSinkException;
 import java.io.IOException;
-import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import software.amazon.awssdk.core.exception.RetryableException;
 import software.amazon.awssdk.core.sync.ResponseTransformer;
@@ -31,8 +31,9 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
  * <p>The SDK invokes {@link #transform} once per request attempt; every attempt restarts at the buffer position
  * captured at construction, which keeps a retried body from landing after a partial first attempt. A failure while
  * reading the body is rethrown as a retryable SDK exception, exactly like the SDK's own byte-array transformer, which
- * keeps the retry behavior that reads had before streaming. A body longer than requested aborts the connection and
- * fails the read; the SDK drains a shorter body's remainder itself.
+ * keeps the retry behavior that reads had before streaming. A sink failure, a body longer than requested or a target
+ * refusing the write, aborts the connection and fails the read without a retry; the SDK drains a shorter body's
+ * remainder itself.
  *
  * <p>On success the target's position has advanced by {@link #bytesWritten()} and its limit is untouched. Transient
  * heap per read is the chunk buffer of {@link java.io.InputStream#transferTo}, never the response size.
@@ -76,14 +77,14 @@ final class ByteBufferResponseTransformer implements ResponseTransformer<GetObje
         ByteBufferOutputStream sink = new ByteBufferOutputStream(target, maxBytes);
         try {
             body.transferTo(sink);
+        } catch (ByteBufferSinkException sinkFailure) {
+            body.abort();
+            throw new StorageException(sinkFailure.getMessage(), sinkFailure);
         } catch (IOException dropped) {
             throw RetryableException.builder()
                     .message("Failed to read S3 response body")
                     .cause(dropped)
                     .build();
-        } catch (BufferOverflowException tooLong) {
-            body.abort();
-            throw new StorageException("Server returned more data than requested (" + maxBytes + " bytes)");
         }
         written = sink.bytesWritten();
         return response;

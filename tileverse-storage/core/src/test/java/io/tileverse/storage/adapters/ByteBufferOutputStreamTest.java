@@ -20,8 +20,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
+import java.nio.ReadOnlyBufferException;
 import org.junit.jupiter.api.Test;
 
 class ByteBufferOutputStreamTest {
@@ -41,7 +41,7 @@ class ByteBufferOutputStreamTest {
     }
 
     @Test
-    void writesLandAtTheCurrentPositionAndAdvanceIt() {
+    void writesLandAtTheCurrentPositionAndAdvanceIt() throws IOException {
         ByteBuffer target = ByteBuffer.allocate(16);
         target.position(4);
         ByteBufferOutputStream stream = new ByteBufferOutputStream(target, 8);
@@ -56,7 +56,7 @@ class ByteBufferOutputStreamTest {
     }
 
     @Test
-    void fillsADirectBuffer() {
+    void fillsADirectBuffer() throws IOException {
         ByteBuffer target = ByteBuffer.allocateDirect(12);
         target.position(2);
         ByteBufferOutputStream stream = new ByteBufferOutputStream(target, 8);
@@ -85,18 +85,20 @@ class ByteBufferOutputStreamTest {
     }
 
     @Test
-    void rejectsAWritePastTheAcceptedCountBeforeTouchingTheBuffer() {
+    void rejectsAWritePastTheAcceptedCountBeforeTouchingTheBuffer() throws IOException {
         ByteBuffer target = ByteBuffer.allocate(16);
         ByteBufferOutputStream stream = new ByteBufferOutputStream(target, 4);
         stream.write(new byte[] {1, 2, 3}, 0, 3);
 
-        assertThatThrownBy(() -> stream.write(new byte[] {4, 5}, 0, 2)).isInstanceOf(BufferOverflowException.class);
+        assertThatThrownBy(() -> stream.write(new byte[] {4, 5}, 0, 2))
+                .isInstanceOf(ByteBufferSinkException.class)
+                .hasMessageContaining("more data than requested");
 
         assertThat(target.position()).isEqualTo(3);
         assertThat(stream.bytesWritten()).isEqualTo(3);
         stream.write(4);
         assertThat(stream.bytesWritten()).isEqualTo(4);
-        assertThatThrownBy(() -> stream.write(5)).isInstanceOf(BufferOverflowException.class);
+        assertThatThrownBy(() -> stream.write(5)).isInstanceOf(ByteBufferSinkException.class);
     }
 
     @Test
@@ -104,8 +106,24 @@ class ByteBufferOutputStreamTest {
         ByteBuffer target = ByteBuffer.allocate(4);
         ByteBufferOutputStream stream = new ByteBufferOutputStream(target, 0);
 
-        assertThatThrownBy(() -> stream.write(1)).isInstanceOf(BufferOverflowException.class);
+        assertThatThrownBy(() -> stream.write(1)).isInstanceOf(ByteBufferSinkException.class);
         assertThat(target.position()).isZero();
+    }
+
+    @Test
+    void reportsATargetRefusingTheWriteAsASinkFailure() {
+        ByteBuffer target = ByteBuffer.allocate(16).asReadOnlyBuffer();
+        ByteBufferOutputStream stream = new ByteBufferOutputStream(target, 8);
+
+        assertThatThrownBy(() -> stream.write(new byte[] {1, 2, 3}, 0, 3))
+                .isInstanceOf(ByteBufferSinkException.class)
+                .hasMessageContaining("refused the write")
+                .hasCauseInstanceOf(ReadOnlyBufferException.class);
+        assertThatThrownBy(() -> stream.write(1))
+                .isInstanceOf(ByteBufferSinkException.class)
+                .hasCauseInstanceOf(ReadOnlyBufferException.class);
+
+        assertThat(stream.bytesWritten()).isZero();
     }
 
     @Test

@@ -28,6 +28,7 @@ import static org.mockito.Mockito.when;
 
 import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.StorageException;
+import io.tileverse.storage.adapters.ByteBufferSinkException;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.Arrays;
@@ -271,12 +272,12 @@ class S3RangeReaderTest {
         object.respondingWithExtraBytes(50);
 
         // The SDK wraps the transformer's failure in its own SdkException before it reaches the
-        // reader; hasNoCause() only holds if the reader unwraps that SdkException and rethrows
-        // the original StorageException as-is instead of wrapping it a second time.
+        // reader; the reader unwraps that SdkException and rethrows the original StorageException
+        // as-is, its cause still the sink's failure, instead of wrapping it a second time.
         assertThatThrownBy(() -> reader.readRange(0, 100))
                 .isInstanceOf(StorageException.class)
                 .hasMessageContaining("more data than requested")
-                .hasNoCause();
+                .hasCauseInstanceOf(ByteBufferSinkException.class);
         assertThat(object.aborts()).isEqualTo(1);
     }
 

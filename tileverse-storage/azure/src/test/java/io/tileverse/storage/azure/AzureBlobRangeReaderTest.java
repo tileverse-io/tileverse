@@ -42,6 +42,7 @@ import io.tileverse.storage.adapters.ByteBufferOutputStream;
 import io.tileverse.storage.batch.CoalescingPolicy;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import org.junit.jupiter.api.BeforeEach;
@@ -113,10 +114,15 @@ class AzureBlobRangeReaderTest {
                 });
     }
 
-    private static void writeInChunks(OutputStream sink, int from, int length) throws IOException {
+    /** Writes the body in chunks; a sink failure comes back wrapped as the SDK's stream subscriber wraps it. */
+    private static void writeInChunks(OutputStream sink, int from, int length) {
         byte[] body = Arrays.copyOfRange(TEST_DATA, from, from + length);
-        for (int written = 0; written < length; written += CHUNK_SIZE) {
-            sink.write(body, written, Math.min(CHUNK_SIZE, length - written));
+        try {
+            for (int written = 0; written < length; written += CHUNK_SIZE) {
+                sink.write(body, written, Math.min(CHUNK_SIZE, length - written));
+            }
+        } catch (IOException sinkFailure) {
+            throw new UncheckedIOException(sinkFailure);
         }
     }
 

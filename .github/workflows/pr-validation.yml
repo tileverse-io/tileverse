@@ -85,11 +85,12 @@ jobs:
 
     - name: Run unit tests (Unix)
       if: runner.os != 'Windows'
-      run: make test-unit
+      # JDK HttpClient frame logging records the HTTP/2 stream sequence when a WireMock-backed test stalls
+      run: make test-unit TEST_JVM_ARGS=-Djdk.httpclient.HttpClient.log=frames:all,errors
 
     - name: Run unit tests (Windows)
       if: runner.os == 'Windows'
-      run: ./mvnw.cmd test -ntp -T1C "-Dfmt.skip=true"
+      run: ./mvnw.cmd test -ntp -T1C "-Dfmt.skip=true" "-Dtest.jvm.args=-Djdk.httpclient.HttpClient.log=frames:all,errors"
 
     - name: Upload test results
       uses: actions/upload-artifact@v4

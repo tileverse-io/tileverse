@@ -15,6 +15,8 @@
  */
 package io.tileverse.storage.s3;
 
+import io.tileverse.io.ByteBufferPool;
+import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
 import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.ContentRange;
 import io.tileverse.storage.NotFoundException;
@@ -37,7 +39,6 @@ import org.jspecify.annotations.Nullable;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
-import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.async.AsyncResponseTransformer;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
@@ -89,11 +90,17 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
  * services (e.g., MinIO), it is critical to enable <b>path-style access</b> by setting {@code forcePathStyle(true)} to
  * ensure the request is correctly addressed to the bucket.
  *
- * <h2>Batched Reads</h2>
+ * <h2>Batched and Streaming Reads</h2>
  *
  * {@code readRanges} merges nearby ranges under the object-store coalescing policy and, when the CRT
  * {@link S3AsyncClient} is present, fetches the planned ranges in parallel with one async {@code getObject} each.
  * Without the async client the {@link AbstractRangeReader} template runs the same plan on the shared batch executor.
+ *
+ * <p>Range bodies stream straight into their destination, heap or direct, on every path: single reads through a
+ * {@link software.amazon.awssdk.core.sync.ResponseTransformer} that keeps the SDK's body-read retries, batched fetches
+ * through an {@link AsyncResponseTransformer} writing chunks as they arrive. No read holds a full-size heap copy of the
+ * response; transient heap per read is bounded by the SDK's chunk size, plus one pooled scratch buffer for a merged
+ * fetch that scatters to several requests.
  */
 final class S3RangeReader extends AbstractRangeReader implements RangeReader {
 
@@ -152,24 +159,26 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
         return request.build();
     }
 
+    /**
+     * Streams the range body straight into {@code target} through {@link ByteBufferResponseTransformer}, inside the
+     * SDK's retry loop. A body longer than requested is a {@link StorageException} raised by the transformer and
+     * rethrown here whether or not the SDK wrapped it.
+     */
     @Override
     protected int readRangeNoFlip(final long offset, final int actualLength, ByteBuffer target) {
         try {
-            ResponseBytes<GetObjectResponse> objectBytes =
-                    s3Client.getObjectAsBytes(buildGetRequest(offset, actualLength));
-            captureSizeFrom(objectBytes.response());
-            byte[] data = objectBytes.asByteArray();
-            if (data.length > actualLength) {
-                throw new StorageException(
-                        "Server returned more data than requested: got " + data.length + ", requested " + actualLength);
-            }
-            target.put(data);
-            return data.length;
+            ByteBufferResponseTransformer body = new ByteBufferResponseTransformer(target, actualLength);
+            GetObjectResponse response = s3Client.getObject(buildGetRequest(offset, actualLength), body);
+            captureSizeFrom(response);
+            return body.bytesWritten();
         } catch (NoSuchKeyException e) {
             throw new NotFoundException("S3 object does not exist: s3://" + s3Location, e);
         } catch (S3Exception e) {
             throw S3ExceptionMapper.map(e, s3Location.key());
         } catch (SdkException e) {
+            if (e.getCause() instanceof StorageException raisedWhileStreaming) {
+                throw raisedWhileStreaming;
+            }
             throw new StorageException("Failed to read range from S3: " + e.getMessage(), e);
         }
     }
@@ -222,27 +231,71 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     /**
-     * Issues one async GET for a fetch and scatters the result. A 416 leaves the fetch's entries at 0 and completes
-     * normally; every other failure completes the future exceptionally with the mapped storage exception.
+     * Issues one async GET for a fetch, streaming the body into its destination as chunks arrive: the caller's target
+     * for a direct fetch, pooled heap scratch scattered to its requests for a merged one. A 416 leaves the fetch's
+     * entries at 0 and completes normally; every other failure completes the future exceptionally with the mapped
+     * storage exception.
      */
     private CompletableFuture<Void> fetchAsync(PlannedFetch fetch, List<RangeRequest> requests, int[] counts) {
+        if (fetch.isDirect()) {
+            return fetchDirect(fetch, requests, counts);
+        }
+        return fetchAndScatter(fetch, requests, counts);
+    }
+
+    private CompletableFuture<Void> fetchDirect(PlannedFetch fetch, List<RangeRequest> requests, int[] counts) {
+        int requestIndex = fetch.slices().get(0).requestIndex();
+        ByteBuffer target = requests.get(requestIndex).target();
+        int start = target.position();
+        return streamFetch(fetch, target).handle((streamed, failure) -> {
+            if (failure != null) {
+                return failedFetch(failure);
+            }
+            captureSizeFrom(streamed.response());
+            target.position(start + streamed.bytesWritten());
+            counts[requestIndex] = streamed.bytesWritten();
+            return null;
+        });
+    }
+
+    private CompletableFuture<Void> fetchAndScatter(PlannedFetch fetch, List<RangeRequest> requests, int[] counts) {
+        PooledByteBuffer pooled = ByteBufferPool.heapBuffer(fetch.range().length());
+        ByteBuffer scratch = pooled.buffer();
+        CompletableFuture<ByteBufferAsyncResponseTransformer.Result> attempt;
+        try {
+            attempt = streamFetch(fetch, scratch);
+        } catch (RuntimeException synchronousFailure) {
+            pooled.close();
+            throw synchronousFailure;
+        }
+        return attempt.handle((streamed, failure) -> {
+            try (pooled) {
+                if (failure != null) {
+                    return failedFetch(failure);
+                }
+                captureSizeFrom(streamed.response());
+                fetch.scatter(scratch, streamed.bytesWritten(), requests, counts);
+                return null;
+            }
+        });
+    }
+
+    private CompletableFuture<ByteBufferAsyncResponseTransformer.Result> streamFetch(
+            PlannedFetch fetch, ByteBuffer destination) {
         GetObjectRequest request =
                 buildGetRequest(fetch.range().offset(), fetch.range().length());
-        return asyncClient
-                .getObject(request, AsyncResponseTransformer.toBytes())
-                .handle((fetched, failure) -> {
-                    if (failure == null) {
-                        captureSizeFrom(fetched.response());
-                        ByteBuffer data = fetched.asByteBuffer();
-                        fetch.scatter(data, data.remaining(), requests, counts);
-                        return null;
-                    }
-                    StorageException translated = unwrapBatchFailure(failure);
-                    if (translated instanceof RangeNotSatisfiableException) {
-                        return null;
-                    }
-                    throw translated;
-                });
+        ByteBufferAsyncResponseTransformer body = new ByteBufferAsyncResponseTransformer(
+                destination, fetch.range().length());
+        return asyncClient.getObject(request, body);
+    }
+
+    /** Completes a 416 fetch normally with its entries left at 0; rethrows every other failure mapped. */
+    private @Nullable Void failedFetch(Throwable failure) {
+        StorageException translated = unwrapBatchFailure(failure);
+        if (translated instanceof RangeNotSatisfiableException) {
+            return null;
+        }
+        throw translated;
     }
 
     /** Unwraps async completion wrappers and maps SDK failures onto the storage exception hierarchy. */

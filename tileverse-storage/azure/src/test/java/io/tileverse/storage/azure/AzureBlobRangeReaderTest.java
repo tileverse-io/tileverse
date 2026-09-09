@@ -17,14 +17,12 @@ package io.tileverse.storage.azure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -36,25 +34,34 @@ import com.azure.core.http.HttpResponse;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.models.BlobDownloadResponse;
 import com.azure.storage.blob.models.BlobProperties;
+import com.azure.storage.blob.models.BlobRange;
 import com.azure.storage.blob.models.BlobStorageException;
 import io.tileverse.storage.NotFoundException;
+import io.tileverse.storage.StorageException;
+import io.tileverse.storage.adapters.ByteBufferOutputStream;
 import io.tileverse.storage.batch.CoalescingPolicy;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.OptionalLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-/** Unit tests for {@link AzureBlobRangeReader}. */
+/**
+ * Unit tests for {@link AzureBlobRangeReader}: bodies stream through the SDK's download stream straight into the
+ * caller's buffer.
+ */
 @ExtendWith(MockitoExtension.class)
 class AzureBlobRangeReaderTest {
 
     private static final String BLOB_URL = "https://teststorage.blob.core.windows.net/testcontainer/test.pmtiles";
     private static final int CONTENT_LENGTH = 10000;
+    /** Small enough that every read of interest arrives in many chunks. */
+    private static final int CHUNK_SIZE = 64;
+
     private static final byte[] TEST_DATA = createTestData(CONTENT_LENGTH);
 
     @Mock
@@ -62,6 +69,9 @@ class AzureBlobRangeReaderTest {
 
     @Mock
     private BlobProperties blobProperties;
+
+    /** Bytes served past every requested range, like a server ignoring the range. */
+    private int extraBytes;
 
     private AzureBlobRangeReader reader;
 
@@ -76,56 +86,72 @@ class AzureBlobRangeReaderTest {
 
     @BeforeEach
     void setUp() {
-        // Mock direct blob methods instead of trying to mock the complex Azure API responses
-        // This approach avoids the class cast exceptions in the API
-
-        // Setup mock behavior - use lenient() to avoid unnecessary stubbing errors
         lenient().when(blobClient.getBlobUrl()).thenReturn(BLOB_URL);
-
-        // The key insight here is to mock AzureBlobRangeReader methods directly instead
-        // of trying to mock complex Azure SDK classes that are final and difficult to mock
-        reader = spy(new AzureBlobRangeReader(blobClient) {
-            @Override
-            public ByteBuffer readRange(long offset, int length) {
-                // Input validation - copied from the real implementation
-                if (offset < 0) {
-                    throw new IllegalArgumentException("Offset cannot be negative: " + offset);
-                }
-                if (length < 0) {
-                    throw new IllegalArgumentException("Length cannot be negative: " + length);
-                }
-
-                // Return empty buffer for zero length
-                if (length == 0) {
-                    return ByteBuffer.allocate(0);
-                }
-
-                // Return empty buffer for offset beyond EOF
-                if (offset >= CONTENT_LENGTH) {
-                    return ByteBuffer.allocate(0);
-                }
-
-                // Calculate actual length
-                int actualLength = (int) Math.min(length, CONTENT_LENGTH - offset);
-
-                // Copy the requested range
-                byte[] result = new byte[actualLength];
-                System.arraycopy(TEST_DATA, (int) offset, result, 0, actualLength);
-
-                return ByteBuffer.wrap(result).position(actualLength);
-            }
-
-            @Override
-            public OptionalLong size() {
-                return OptionalLong.of(CONTENT_LENGTH);
-            }
-        });
+        stubRangedDownloads();
+        reader = new AzureBlobRangeReader(blobClient);
     }
 
-    /** Stubs the properties response consumed by the real (non-overridden) {@code size()} path. */
+    /**
+     * Serves TEST_DATA as the SDK does: the requested range, truncated at the blob's end, is written to the caller's
+     * OutputStream in chunks and the response has the Content-Range header. A range starting past the end fails with a
+     * 416.
+     */
+    private void stubRangedDownloads() {
+        lenient()
+                .when(blobClient.downloadStreamWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any()))
+                .thenAnswer(invocation -> {
+                    OutputStream sink = invocation.getArgument(0);
+                    assertThat(sink).isInstanceOf(ByteBufferOutputStream.class);
+                    BlobRange range = invocation.getArgument(1);
+                    long offset = range.getOffset();
+                    if (offset >= CONTENT_LENGTH) {
+                        throw blobException(416, "InvalidRange");
+                    }
+                    int available = (int) Math.min(range.getCount(), CONTENT_LENGTH - offset);
+                    writeInChunks(sink, (int) offset, available + extraBytes);
+                    return downloadResponse(offset, available);
+                });
+    }
+
+    private static void writeInChunks(OutputStream sink, int from, int length) throws IOException {
+        byte[] body = Arrays.copyOfRange(TEST_DATA, from, from + length);
+        for (int written = 0; written < length; written += CHUNK_SIZE) {
+            sink.write(body, written, Math.min(CHUNK_SIZE, length - written));
+        }
+    }
+
+    private static BlobDownloadResponse downloadResponse(long offset, int length) {
+        BlobDownloadResponse response = mock(BlobDownloadResponse.class);
+        lenient().when(response.getStatusCode()).thenReturn(206);
+        HttpHeaders headers = new HttpHeaders()
+                .set(
+                        HttpHeaderName.CONTENT_RANGE,
+                        "bytes " + offset + "-" + (offset + length - 1) + "/" + CONTENT_LENGTH);
+        lenient().when(response.getHeaders()).thenReturn(headers);
+        return response;
+    }
+
+    /**
+     * Builds a real {@link BlobStorageException} wired to the given status. This flows through
+     * {@link AzureExceptionMapper#map} as a live Azure error would: the mapper reads the status from
+     * {@code getResponse().getStatusCode()}, which a bare mock of {@code BlobStorageException} itself would leave null.
+     */
+    private static BlobStorageException blobException(int status, String message) {
+        HttpResponse response = mock(HttpResponse.class);
+        lenient().when(response.getStatusCode()).thenReturn(status);
+        return new BlobStorageException(message, response, null);
+    }
+
+    /** Stubs the properties response consumed by {@code size()}. */
     private void stubProperties() {
         when(blobClient.getProperties()).thenReturn(blobProperties);
         when(blobProperties.getBlobSize()).thenReturn((long) CONTENT_LENGTH);
+    }
+
+    private static byte[] contents(ByteBuffer buffer, int from, int length) {
+        byte[] out = new byte[length];
+        buffer.get(from, out);
+        return out;
     }
 
     @Test
@@ -136,12 +162,10 @@ class AzureBlobRangeReaderTest {
 
     @Test
     void testGetSize() {
-        // Since we're using a spied instance with overridden methods,
-        // we just verify the size is as expected
-        assertEquals(CONTENT_LENGTH, reader.size().getAsLong());
+        stubProperties();
 
-        // Our overridden size() method should not call getProperties again
-        verify(blobClient, never()).getProperties();
+        assertThat(reader.size()).hasValue(CONTENT_LENGTH);
+        verify(blobClient, times(1)).getProperties();
     }
 
     @Test
@@ -157,59 +181,28 @@ class AzureBlobRangeReaderTest {
 
     @Test
     void testSizeCapturedFromRangeResponseWithoutProperties() {
-        int length = 10;
-        byte[] slice = Arrays.copyOfRange(TEST_DATA, 0, length);
+        reader.readRange(0, 10);
 
-        BlobDownloadResponse response = mock(BlobDownloadResponse.class);
-        when(response.getStatusCode()).thenReturn(206);
-        HttpHeaders headers =
-                new HttpHeaders().set(HttpHeaderName.CONTENT_RANGE, "bytes 0-" + (length - 1) + "/" + CONTENT_LENGTH);
-        when(response.getHeaders()).thenReturn(headers);
-        when(blobClient.downloadStreamWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any()))
-                .thenAnswer(invocation -> {
-                    OutputStream out = invocation.getArgument(0);
-                    out.write(slice);
-                    return response;
-                });
-
-        AzureBlobRangeReader lazy = new AzureBlobRangeReader(blobClient);
-        lazy.readRange(0, length);
-
-        assertThat(lazy.size()).hasValue(CONTENT_LENGTH);
+        assertThat(reader.size()).hasValue(CONTENT_LENGTH);
         verify(blobClient, never()).getProperties();
     }
 
     @Test
     void testNotFoundThrownOnFirstReadNotAtConstruction() {
         AzureBlobRangeReader missing = new AzureBlobRangeReader(blobClient);
-        BlobStorageException notFound = notFoundException();
-        when(blobClient.downloadStreamWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any()))
-                .thenThrow(notFound);
+        doThrow(blobException(404, "BlobNotFound"))
+                .when(blobClient)
+                .downloadStreamWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
 
         assertThatThrownBy(() -> missing.readRange(0, 10)).isInstanceOf(NotFoundException.class);
-    }
-
-    /**
-     * Builds a real {@link BlobStorageException} wired to a 404 response. This flows through
-     * {@link AzureExceptionMapper#map} the same way a live Azure 404 would: the mapper reads the status from
-     * {@code getResponse().getStatusCode()}, which a bare mock of {@code BlobStorageException} itself would leave null.
-     */
-    private static BlobStorageException notFoundException() {
-        HttpResponse response = mock(HttpResponse.class);
-        when(response.getStatusCode()).thenReturn(404);
-        return new BlobStorageException("BlobNotFound", response, null);
     }
 
     @Test
     void testReadEntireFile() {
         ByteBuffer buffer = reader.readRange(0, CONTENT_LENGTH).flip();
 
-        assertEquals(CONTENT_LENGTH, buffer.remaining());
-
-        byte[] bytes = new byte[buffer.remaining()];
-        buffer.get(bytes);
-
-        assertArrayEquals(TEST_DATA, bytes);
+        assertThat(buffer.remaining()).isEqualTo(CONTENT_LENGTH);
+        assertThat(contents(buffer, 0, CONTENT_LENGTH)).containsExactly(TEST_DATA);
     }
 
     @Test
@@ -219,37 +212,41 @@ class AzureBlobRangeReaderTest {
 
         ByteBuffer buffer = reader.readRange(offset, length).flip();
 
-        assertEquals(length, buffer.remaining());
-
-        byte[] bytes = new byte[buffer.remaining()];
-        buffer.get(bytes);
-
-        byte[] expectedBytes = Arrays.copyOfRange(TEST_DATA, offset, offset + length);
-        assertArrayEquals(expectedBytes, bytes);
+        assertThat(buffer.remaining()).isEqualTo(length);
+        assertThat(contents(buffer, 0, length)).containsExactly(Arrays.copyOfRange(TEST_DATA, offset, offset + length));
     }
 
     @Test
     void testReadRangeBeyondEnd() {
         int offset = CONTENT_LENGTH - 200;
-        int length = 500; // Beyond the end
+        int length = 500;
 
         ByteBuffer buffer = reader.readRange(offset, length).flip();
 
-        // Should only return up to the end of the file
-        assertEquals(200, buffer.remaining());
+        // The server, not the client, truncates the response to the available data
+        assertThat(buffer.remaining()).isEqualTo(200);
+        assertThat(contents(buffer, 0, 200)).containsExactly(Arrays.copyOfRange(TEST_DATA, offset, CONTENT_LENGTH));
+    }
 
-        byte[] bytes = new byte[buffer.remaining()];
-        buffer.get(bytes);
+    @Test
+    void bodyStreamsIntoADirectTargetAtItsPosition() {
+        ByteBuffer target = ByteBuffer.allocateDirect(700);
+        target.position(50);
 
-        byte[] expectedBytes = Arrays.copyOfRange(TEST_DATA, offset, CONTENT_LENGTH);
-        assertArrayEquals(expectedBytes, bytes);
+        int read = reader.readRange(100, 500, target);
+
+        assertThat(read).isEqualTo(500);
+        assertThat(target.position()).isEqualTo(550);
+        assertThat(target.limit()).isEqualTo(700);
+        assertThat(contents(target, 50, 500)).containsExactly(Arrays.copyOfRange(TEST_DATA, 100, 600));
     }
 
     @Test
     void testReadZeroLength() {
         ByteBuffer buffer = reader.readRange(100, 0).flip();
 
-        assertEquals(0, buffer.remaining());
+        assertThat(buffer.remaining()).isZero();
+        verify(blobClient, never()).downloadStreamWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
     }
 
     @Test
@@ -264,10 +261,33 @@ class AzureBlobRangeReaderTest {
 
     @Test
     void testReadOffsetBeyondEnd() {
-        ByteBuffer buffer = reader.readRange(CONTENT_LENGTH + 100, 10).flip();
+        ByteBuffer target = ByteBuffer.allocate(10);
 
-        // Should return empty buffer
-        assertEquals(0, buffer.remaining());
+        int read = reader.readRange(CONTENT_LENGTH + 100, 10, target);
+
+        assertThat(read).isZero();
+        assertThat(target.position()).isZero();
+    }
+
+    @Test
+    void moreDataThanRequestedIsAStorageError() {
+        extraBytes = 50;
+
+        assertThatThrownBy(() -> reader.readRange(0, 100))
+                .isInstanceOf(StorageException.class)
+                .hasMessageContaining("more data than requested");
+    }
+
+    @Test
+    void downloadFailuresMapToStorageException() {
+        doThrow(new IllegalStateException("socket closed"))
+                .when(blobClient)
+                .downloadStreamWithResponse(any(), any(), any(), any(), anyBoolean(), any(), any());
+
+        assertThatThrownBy(() -> reader.readRange(0, 100))
+                .isInstanceOf(StorageException.class)
+                .isNotInstanceOf(NotFoundException.class)
+                .hasMessageContaining("socket closed");
     }
 
     @Test

@@ -116,6 +116,8 @@
 
     <!-- JaCoCo argLine property (overridden by jacoco:prepare-agent when coverage profile is active) -->
     <argLine></argLine>
+    <!-- Extra options for the forked test JVMs, empty by default; CI passes -Dtest.jvm.args=... to turn on JDK HttpClient frame logging -->
+    <test.jvm.args></test.jvm.args>
   </properties>
 
   <dependencyManagement>
@@ -424,7 +426,7 @@
           <configuration>
             <skip>${surefire.skip}</skip>
             <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
-            <argLine>@{argLine} --enable-native-access=ALL-UNNAMED --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/jdk.internal.reflect=ALL-UNNAMED -Dnet.bytebuddy.experimental=true</argLine>
+            <argLine>@{argLine} --enable-native-access=ALL-UNNAMED --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/jdk.internal.reflect=ALL-UNNAMED -Dnet.bytebuddy.experimental=true ${test.jvm.args}</argLine>
             <systemPropertyVariables>
               <junit.jupiter.execution.parallel.enabled>true</junit.jupiter.execution.parallel.enabled>
               <junit.jupiter.execution.parallel.mode.default>concurrent</junit.jupiter.execution.parallel.mode.default>
@@ -443,7 +445,7 @@
           <configuration>
             <skip>${failsafe.skip}</skip>
             <!-- Use @{argLine} to allow jacoco to inject its agent, plus our JVM args -->
-            <argLine>@{argLine} --enable-native-access=ALL-UNNAMED --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/jdk.internal.reflect=ALL-UNNAMED -Dnet.bytebuddy.experimental=true</argLine>
+            <argLine>@{argLine} --enable-native-access=ALL-UNNAMED --add-opens=java.net.http/jdk.internal.net.http=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/jdk.internal.reflect=ALL-UNNAMED -Dnet.bytebuddy.experimental=true ${test.jvm.args}</argLine>
             <systemPropertyVariables>
               <junit.jupiter.execution.parallel.enabled>true</junit.jupiter.execution.parallel.enabled>
               <junit.jupiter.execution.parallel.mode.default>concurrent</junit.jupiter.execution.parallel.mode.default>

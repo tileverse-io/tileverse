@@ -2,6 +2,8 @@
 all: install test
 
 TAG=$(shell ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+# Extra options for the forked test JVMs, e.g. TEST_JVM_ARGS=-Djdk.httpclient.HttpClient.log=frames,errors
+TEST_JVM_ARGS ?=
 
 .PHONY: help
 help:
@@ -76,19 +78,19 @@ lint-java:
 
 .PHONY: test
 test:
-	./mvnw verify -ntp -T1C -Dfmt.skip
+	./mvnw verify -ntp -T1C -Dfmt.skip -Dtest.jvm.args="$(TEST_JVM_ARGS)"
 
 .PHONY: test-coverage
 test-coverage:
-	./mvnw verify -Dcoverage -ntp -T1C -Dfmt.skip
+	./mvnw verify -Dcoverage -ntp -T1C -Dfmt.skip -Dtest.jvm.args="$(TEST_JVM_ARGS)"
 
 .PHONY: test-unit
 test-unit:
-	./mvnw test -ntp -T1C -Dfmt.skip
+	./mvnw test -ntp -T1C -Dfmt.skip -Dtest.jvm.args="$(TEST_JVM_ARGS)"
 
 .PHONY: test-it
 test-it:
-	./mvnw verify -Dsurefire.skip=true -ntp -T1C -Dfmt.skip
+	./mvnw verify -Dsurefire.skip=true -ntp -T1C -Dfmt.skip -Dtest.jvm.args="$(TEST_JVM_ARGS)"
 
 .PHONY: verify
 verify: lint test

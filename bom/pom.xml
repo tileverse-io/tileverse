@@ -11,10 +11,6 @@
   <name>Tileverse :: BOM</name>
   <description>Bill of Materials for managing Tileverse module versions</description>
 
-  <properties>
-    <cloud-dependencies-bom.version>1.0.3</cloud-dependencies-bom.version>
-  </properties>
-
   <dependencyManagement>
     <dependencies>
       <dependency>
@@ -87,10 +83,16 @@
           <flattenMode>ossrh</flattenMode>
           <pomElements>
             <!--
-            Take the element from the interpolated POM (original POM with variables interpolated).
-            This avoids adding dependencies defined in the root pom (e.g. junit)
+            Take the entries declared in this pom, with placeholders resolved against the effective (inherited)
+            properties. Keeps the root pom's managed dependencies out of the BOM while letting
+            cloud-dependencies-bom.version be inherited from the root pom.
             -->
-            <dependencyManagement>interpolate</dependencyManagement>
+            <dependencyManagement>extended_interpolate</dependencyManagement>
+            <!--
+            Drop the compile and provided dependencies inherited from the root pom (slf4j-api, jspecify, lombok).
+            A BOM must not add dependencies to its consumers.
+            -->
+            <dependencies>remove</dependencies>
           </pomElements>
         </configuration>
         <executions>

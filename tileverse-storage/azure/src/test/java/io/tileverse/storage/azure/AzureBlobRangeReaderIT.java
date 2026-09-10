@@ -58,9 +58,7 @@ class AzureBlobRangeReaderIT extends AbstractRangeReaderIT {
 
     @Container
     @SuppressWarnings("resource")
-    static AzuriteContainer azurite = new AzuriteContainer("mcr.microsoft.com/azure-storage/azurite:3.35.0")
-            // .withEnv("AZURITE_BLOB_LOOSE", "true")
-            .withCommand("azurite-blob --skipApiVersionCheck --loose --blobHost 0.0.0.0 --debug")
+    static AzuriteContainer azurite = new AzuriteContainer("mcr.microsoft.com/azure-storage/azurite:3.37.0")
             .withExposedPorts(10000, 10001, 10002);
 
     @BeforeAll

@@ -36,9 +36,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.jspecify.annotations.Nullable;
-import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
-import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
 import software.amazon.awssdk.core.async.AsyncResponseTransformer;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
@@ -54,41 +51,25 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 /**
  * A {@link RangeReader} implementation that reads data from an AWS S3-compatible object storage service.
  *
- * <p>This class enables efficient reading of data from S3 objects by leveraging the
- * {@link software.amazon.awssdk.services.s3.S3Client} from the AWS SDK for Java v2. It is designed to handle both
- * standard AWS S3 and self-hosted S3-compatible services like MinIO.
+ * <p>This class reads S3 objects through the {@link S3Client} of the AWS SDK for Java v2 and serves both standard AWS
+ * S3 and self-hosted S3-compatible services like MinIO.
  *
- * <h2>Authentication and Configuration</h2>
+ * <h2>Construction and Configuration</h2>
  *
- * The {@link Builder} for this class provides a flexible and robust mechanism for resolving credentials and other
- * client settings. The builder determines which credentials provider to use based on a defined precedence:
- *
- * <ol>
- *   <li><b>Explicit Credentials:</b> If an explicit {@link AwsCredentialsProvider} is provided, or if an access key and
- *       secret key are set directly, these are used.
- *   <li><b>Default Credential Chain:</b> If {@code useDefaultCredentialsProvider} is enabled, the client first attempts
- *       to resolve credentials from the AWS default credential chain, which checks environment variables, system
- *       properties, and shared credentials files. If a {@code defaultCredentialsProfile} is also specified, the chain
- *       is configured to prioritize that profile.
- *   <li><b>Forced Profile:</b> If a {@code defaultCredentialsProfile} is set but {@code useDefaultCredentialsProvider}
- *       is disabled, the client bypasses the full default chain and uses only the {@link ProfileCredentialsProvider}
- *       for the specified profile.
- *   <li><b>Anonymous Access:</b> If no credentials are explicitly configured, the client uses
- *       {@link AnonymousCredentialsProvider} to make unsigned requests.
- * </ol>
- *
- * <h2>Profile-Based Configuration</h2>
- *
- * When a named profile (e.g., 'minio') is used, the builder also attempts to resolve the AWS region from the
- * corresponding section in the {@code ~/.aws/config} file. This allows for a cleaner separation of credentials and
- * configuration. For S3-compatible services like MinIO, the region is a required parameter for the SDK's signing
- * process, even though the service itself may not use it.
+ * Readers are opened by {@code S3Storage#openRangeReader(String)} and borrow the SDK clients of that storage; opening a
+ * reader issues no request. Credentials, region, endpoint and path-style addressing are therefore settled before a
+ * reader exists: {@link S3StorageProvider} resolves them from the {@code storage.s3.*} parameters and the base URI, and
+ * {@link S3ClientCache} builds one client set per distinct combination, shared by every storage that requests it. A
+ * caller that already holds a configured {@link S3Client} hands it to {@link S3StorageProvider#open(java.net.URI,
+ * S3Client)} instead.
  *
  * <h2>S3-Compatible Endpoints</h2>
  *
- * This builder supports custom S3-compatible endpoints via the {@code endpointOverride} method. For most self-hosted
- * services (e.g., MinIO), it is critical to enable <b>path-style access</b> by setting {@code forcePathStyle(true)} to
- * ensure the request is correctly addressed to the bucket.
+ * Readers over a custom endpoint (MinIO, Ceph, LocalStack, an on-premise gateway) come from an {@code S3Storage} whose
+ * SDK client was built with that endpoint; most self-hosted services also need <b>path-style access</b>. The endpoint
+ * is part of {@link #getSourceIdentifier()}: the same bucket and key on two endpoints are two different objects, and
+ * the identifier partitions the shared range cache. Readers over the default AWS endpoints identify as canonical
+ * {@code s3://bucket/key} URIs, which are unambiguous because bucket names are global.
  *
  * <h2>Batched and Streaming Reads</h2>
  *

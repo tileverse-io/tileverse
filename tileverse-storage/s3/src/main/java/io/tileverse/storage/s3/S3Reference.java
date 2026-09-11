@@ -51,7 +51,16 @@ record S3Reference(URI endpoint, String bucket, String key, String region) {
         if (isDefaultAwsEndpoint()) {
             return "s3://%s/%s".formatted(bucket, key);
         }
-        return "%s/%s/%s".formatted(endpoint, bucket, key);
+        return "%s/%s/%s".formatted(withoutTrailingSlash(endpoint), bucket, key);
+    }
+
+    /** Keeps {@code http://host:9000} and {@code http://host:9000/} rendering as the same source. */
+    private static String withoutTrailingSlash(URI endpoint) {
+        String rendered = endpoint.toString();
+        if (rendered.endsWith("/")) {
+            return rendered.substring(0, rendered.length() - 1);
+        }
+        return rendered;
     }
 
     S3Reference withEndpoint(URI endpoint) {

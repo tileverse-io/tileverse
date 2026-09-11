@@ -46,6 +46,13 @@ class S3ReferenceTest {
     }
 
     @Test
+    void testCustomEndpointRendersWithoutTrailingSlash() {
+        S3Reference reference = new S3Reference(URI.create("http://localhost:9000/"), "bucket", "file.pmtiles", null);
+
+        assertEquals("http://localhost:9000/bucket/file.pmtiles", reference.toString());
+    }
+
+    @Test
     void testWithersKeepOtherFields() {
         S3Reference base = new S3Reference(null, "bucket", "file.pmtiles", "us-east-1");
 

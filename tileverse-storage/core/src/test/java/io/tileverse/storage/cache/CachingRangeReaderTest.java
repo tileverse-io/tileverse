@@ -127,6 +127,34 @@ class CachingRangeReaderTest {
         }
     }
 
+    /**
+     * The cache is partitioned by the delegate's source identifier: delegates with different identifiers never see each
+     * other's bytes, and delegates with the same identifier share one partition. The second half is what turns an
+     * identifier collision (the same bucket and key on two endpoints) into one source serving the other's bytes.
+     */
+    @Test
+    void cachePartitionsFollowTheSourceIdentifier() throws IOException {
+        RangeReader first = new ConstantBytesRangeReader("id://first", (byte) 1);
+        RangeReader second = new ConstantBytesRangeReader("id://second", (byte) 2);
+        RangeReader sameIdentifierAsFirst = new ConstantBytesRangeReader("id://first", (byte) 3);
+
+        try (CachingRangeReader cachedFirst = cached(first);
+                CachingRangeReader cachedSecond = cached(second);
+                CachingRangeReader cachedSameIdentifier = cached(sameIdentifierAsFirst)) {
+            assertThat(cachedFirst.readRange(0, 4).get(0)).isEqualTo((byte) 1);
+            assertThat(cachedSecond.readRange(0, 4).get(0))
+                    .as("a different identifier reads its own partition")
+                    .isEqualTo((byte) 2);
+            assertThat(cachedSameIdentifier.readRange(0, 4).get(0))
+                    .as("an equal identifier shares the partition and is served the first source's bytes")
+                    .isEqualTo((byte) 1);
+        }
+    }
+
+    private CachingRangeReader cached(RangeReader delegate) {
+        return CachingRangeReader.builder(delegate).cacheManager(cacheManager).build();
+    }
+
     @Test
     void testCacheMaxSize() throws IOException {
         RangeReader delegate = RangeReaderTestSupport.fileReader(testFile);
@@ -459,6 +487,40 @@ class CachingRangeReaderTest {
 
         public int getReadCount() {
             return readCount.get();
+        }
+    }
+
+    /** Serves one constant byte value under a caller-chosen source identifier. */
+    private static final class ConstantBytesRangeReader extends AbstractRangeReader {
+        private final String identifier;
+        private final byte value;
+
+        ConstantBytesRangeReader(String identifier, byte value) {
+            this.identifier = identifier;
+            this.value = value;
+        }
+
+        @Override
+        protected int readRangeNoFlip(long offset, int actualLength, ByteBuffer target) {
+            for (int i = 0; i < actualLength; i++) {
+                target.put(value);
+            }
+            return actualLength;
+        }
+
+        @Override
+        public OptionalLong size() {
+            return OptionalLong.of(1000);
+        }
+
+        @Override
+        public String getSourceIdentifier() {
+            return identifier;
+        }
+
+        @Override
+        public void close() {
+            // nothing to release
         }
     }
 

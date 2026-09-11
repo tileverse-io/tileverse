@@ -53,7 +53,15 @@ final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements
     /** Fetch parallelism for batched reads on the shared batch executor. */
     private static final int MAX_CONCURRENT_FETCHES = 8;
 
+    /**
+     * Host of the public Google Cloud Storage API, what {@code StorageOptions.getHost()} reports (with a trailing
+     * slash) when no host override is configured. Google exposes its default host only through the protected
+     * {@code ServiceOptions.getDefaultHost()}.
+     */
+    static final String DEFAULT_HOST = "https://storage.googleapis.com";
+
     private final Storage storage;
+    private final String host;
     private final String bucket;
     private final String objectName;
     private final Optional<String> userProject;
@@ -67,12 +75,16 @@ final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements
      * {@link #size()} call instead of at construction time.
      *
      * @param storage The GCS Storage client to use
+     * @param host the host targeted by the client, part of the source identifier because the same bucket and object on
+     *     two hosts are two different objects
      * @param bucket The GCS bucket name
      * @param objectName The GCS object name
      * @param userProject the project to bill for a Requester Pays bucket, if any
      */
-    GoogleCloudStorageRangeReader(Storage storage, String bucket, String objectName, Optional<String> userProject) {
+    GoogleCloudStorageRangeReader(
+            Storage storage, String host, String bucket, String objectName, Optional<String> userProject) {
         this.storage = requireNonNull(storage, "Storage client cannot be null");
+        this.host = requireNonNull(host, "Host cannot be null");
         this.bucket = requireNonNull(bucket, "Bucket name cannot be null");
         this.objectName = requireNonNull(objectName, "Object name cannot be null");
         this.userProject = requireNonNull(userProject, "userProject cannot be null");
@@ -153,7 +165,19 @@ final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements
 
     @Override
     public String getSourceIdentifier() {
-        return "gs://" + bucket + "/" + objectName;
+        String normalizedHost = withoutTrailingSlash(host);
+        if (DEFAULT_HOST.equals(normalizedHost)) {
+            return "gs://" + bucket + "/" + objectName;
+        }
+        return normalizedHost + "/" + bucket + "/" + objectName;
+    }
+
+    /** Keeps {@code http://host:4443} and {@code http://host:4443/} rendering as the same source. */
+    private static String withoutTrailingSlash(String host) {
+        if (host.endsWith("/")) {
+            return host.substring(0, host.length() - 1);
+        }
+        return host;
     }
 
     @Override

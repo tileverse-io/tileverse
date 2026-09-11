@@ -175,12 +175,15 @@ public interface RangeReader extends Closeable, Supplier<SeekableByteChannel> {
     OptionalLong size();
 
     /**
-     * Returns a stable, human-readable identifier for the underlying source - typically the URI
-     * ({@code s3://bucket/key}, {@code https://...}, {@code /path/to/file}). Used in error messages, logging, and as a
-     * cache-key seed by {@link io.tileverse.storage.cache.CachingRangeReader}.
+     * Returns a stable identifier for the underlying source, typically its URI ({@code s3://bucket/key},
+     * {@code https://...}, {@code /path/to/file}). {@link io.tileverse.storage.cache.CachingRangeReader} partitions the
+     * shared range cache by this identifier; error messages and logs quote it.
      *
-     * <p>Two readers pointing at the same source must return equal identifiers; two readers pointing at different
-     * sources must not. The identifier is not required to round-trip back to a usable URI.
+     * <p>Because the identifier keys cached bytes, two readers whose bytes could differ must return different
+     * identifiers, and two readers over the same object must return equal ones. The identifier therefore includes every
+     * component that selects the object, such as a non-default service endpoint, and nothing that does not: readers
+     * built with different credentials over the same object are the same source. The identifier is not required to
+     * round-trip back to a usable URI.
      *
      * @return a stable identifier for the underlying source
      */

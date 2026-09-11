@@ -104,6 +104,7 @@ final class S3Storage implements Storage {
     private final URI baseUri;
     private final S3StorageBucketKey ref;
     private final S3ClientHandle handle;
+    private final @Nullable URI endpoint;
     private final StorageCapabilities capabilities;
     private final boolean isDirectoryBucket;
     private final boolean requesterPays;
@@ -117,9 +118,26 @@ final class S3Storage implements Storage {
         this.baseUri = baseUri;
         this.ref = ref;
         this.handle = handle;
+        this.endpoint = resolveEndpoint(handle.client());
         this.requesterPays = requesterPays;
         this.isDirectoryBucket = EXPRESS_BUCKET_PATTERN.matcher(ref.bucket()).matches();
         this.capabilities = buildCapabilities(this.isDirectoryBucket);
+    }
+
+    /**
+     * The endpoint override configured on the SDK client, or {@code null} for the default AWS endpoints. Every reader
+     * opened by this Storage includes it in its source identifier: the identifier partitions the shared range cache,
+     * and the same bucket and key on two endpoints are two different objects. The client is the only place that knows
+     * the effective endpoint on every construction path, borrowed clients included.
+     */
+    private static @Nullable URI resolveEndpoint(S3Client client) {
+        try {
+            return client.serviceClientConfiguration().endpointOverride().orElse(null);
+        } catch (UnsupportedOperationException e) {
+            // A hand-written S3Client implementation that keeps the interface's default method. Without an endpoint
+            // to tell sources apart, the readers identify as canonical s3:// URIs.
+            return null;
+        }
     }
 
     /**
@@ -342,7 +360,7 @@ final class S3Storage implements Storage {
         return new S3RangeReader(
                 handle.client(),
                 handle.asyncClient().orElse(null),
-                new S3Reference(null, ref.bucket(), fullKey, null),
+                new S3Reference(endpoint, ref.bucket(), fullKey, null),
                 requesterPays);
     }
 

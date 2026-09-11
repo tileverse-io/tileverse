@@ -16,7 +16,10 @@
 package io.tileverse.storage.gcs;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.google.cloud.NoCredentials;
+import com.google.cloud.storage.StorageOptions;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.tck.AbstractStorageTraversalTck;
 import java.net.URI;
@@ -30,6 +33,11 @@ class GoogleCloudStorageTraversalTest extends AbstractStorageTraversalTck {
     @Override
     protected Storage storage() {
         com.google.cloud.storage.Storage mockClient = mock(com.google.cloud.storage.Storage.class);
+        when(mockClient.getOptions())
+                .thenReturn(StorageOptions.newBuilder()
+                        .setProjectId("test-project")
+                        .setCredentials(NoCredentials.getInstance())
+                        .build());
         return GoogleCloudStorageProvider.open(URI.create("gs://test-bucket/prefix/"), mockClient);
     }
 }

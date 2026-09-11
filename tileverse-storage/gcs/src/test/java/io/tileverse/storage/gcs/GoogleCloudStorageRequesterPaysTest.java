@@ -23,6 +23,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.api.gax.paging.Page;
+import com.google.cloud.NoCredentials;
 import com.google.cloud.WriteChannel;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
@@ -36,6 +37,7 @@ import com.google.cloud.storage.Storage.BlobWriteOption;
 import com.google.cloud.storage.Storage.BucketGetOption;
 import com.google.cloud.storage.Storage.CopyRequest;
 import com.google.cloud.storage.Storage.SignUrlOption;
+import com.google.cloud.storage.StorageOptions;
 import io.tileverse.storage.CopyOptions;
 import io.tileverse.storage.WriteOptions;
 import java.net.URI;
@@ -92,6 +94,12 @@ class GoogleCloudStorageRequesterPaysTest {
     @BeforeEach
     void stubGenericResponses() throws Exception {
         // Lenient stubs — most tests exercise a subset of these.
+        lenient()
+                .when(client.getOptions())
+                .thenReturn(StorageOptions.newBuilder()
+                        .setProjectId("test-project")
+                        .setCredentials(NoCredentials.getInstance())
+                        .build());
         lenient()
                 .when(client.get(any(BlobId.class), any(BlobGetOption[].class)))
                 .thenReturn(blob);

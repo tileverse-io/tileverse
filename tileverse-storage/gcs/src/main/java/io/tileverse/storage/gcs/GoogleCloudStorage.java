@@ -89,6 +89,7 @@ final class GoogleCloudStorage implements Storage {
     private final URI baseUri;
     private final SdkStorageLocation location;
     private final GcsClientHandle handle;
+    private final String host;
     private final StorageCapabilities capabilities;
     private final boolean isHns;
     private final Optional<String> userProject;
@@ -103,6 +104,9 @@ final class GoogleCloudStorage implements Storage {
         this.baseUri = baseUri;
         this.location = location;
         this.handle = handle;
+        // The client is the only place that knows the effective host on every construction path, borrowed clients
+        // included; every reader includes it in its source identifier, which partitions the shared range cache.
+        this.host = handle.client().getOptions().getHost();
         this.userProject = userProject;
         this.isHns = detectHns(handle.client(), location.bucket(), userProject);
         this.capabilities = buildCapabilities(this.isHns);
@@ -309,7 +313,7 @@ final class GoogleCloudStorage implements Storage {
     public RangeReader openRangeReader(String key) {
         requireOpen();
         return new GoogleCloudStorageRangeReader(
-                handle.client(), location.bucket(), location.resolve(key), userProject);
+                handle.client(), host, location.bucket(), location.resolve(key), userProject);
     }
 
     /**

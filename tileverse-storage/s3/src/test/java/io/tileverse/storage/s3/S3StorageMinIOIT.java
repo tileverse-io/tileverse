@@ -29,6 +29,7 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
 import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * S3 TCK against a MinIO container. MinIO is generally stricter about S3 semantics than LocalStack, so it does enforce
@@ -51,7 +52,9 @@ class S3StorageMinIOIT extends StorageTCK {
 
     @BeforeAll
     static void startContainer() {
-        minio = new MinIOContainer("minio/minio:latest");
+        // MinIO removed its Docker Hub repository; quay.io serves the same images.
+        minio = new MinIOContainer(DockerImageName.parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
+                .asCompatibleSubstituteFor("minio/minio"));
         minio.start();
         cache = new S3ClientCache();
         System.setProperty("aws.accessKeyId", minio.getUserName());

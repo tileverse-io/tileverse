@@ -28,6 +28,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -53,7 +54,10 @@ class MinIORangeReaderIT extends AbstractRangeReaderIT {
     private static StaticCredentialsProvider credentialsProvider;
 
     @Container
-    static MinIOContainer minio = new MinIOContainer("minio/minio:latest");
+    // MinIO removed its Docker Hub repository; quay.io serves the same images.
+    static MinIOContainer minio =
+            new MinIOContainer(DockerImageName.parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
+                    .asCompatibleSubstituteFor("minio/minio"));
 
     @BeforeAll
     static void setupMinio() throws IOException {

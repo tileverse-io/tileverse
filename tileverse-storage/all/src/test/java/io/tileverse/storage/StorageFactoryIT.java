@@ -103,7 +103,10 @@ class StorageFactoryIT {
     static FakeGcsServerContainer gcsEmulator = new FakeGcsServerContainer();
 
     @Container
-    static MinIOContainer minio = new MinIOContainer("minio/minio:latest");
+    // MinIO removed its Docker Hub repository; quay.io serves the same images.
+    static MinIOContainer minio =
+            new MinIOContainer(DockerImageName.parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
+                    .asCompatibleSubstituteFor("minio/minio"));
 
     @Container
     @SuppressWarnings("resource")

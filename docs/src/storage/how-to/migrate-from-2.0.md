@@ -31,7 +31,11 @@ an absolute grid; every other read is passed through untouched.
 | `storage.caching.blocksize` config key | `BlockAlignedRangeReader.Builder.blockSize(int)` |
 
 The removed keys are ignored like any unknown parameter; `storage.caching.enabled` keeps
-working. `BlockAlignedRangeReader.getSourceIdentifier()` now returns the delegate identifier
+working but now defaults to `false`; pass `storage.caching.enabled=true` to keep the previous
+behavior. Caching raw byte ranges only pays off when the same ranges are requested again,
+which depends on the format: worth it for tile archives such as PMTiles, not for query-driven
+reads such as GeoParquet.
+`BlockAlignedRangeReader.getSourceIdentifier()` now returns the delegate identifier
 unchanged, and a `BlockAlignedRangeReader.builder(...)` with no declared region builds a
 pass-through reader; the constructors keep aligning the whole file.
 

@@ -18,6 +18,7 @@ package io.tileverse.storage;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.tileverse.storage.spi.CachingProviderHelper;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -44,6 +45,22 @@ class StorageFactoryTest {
             assertThat(s).isNotNull();
             assertThat(s.capabilities().writes()).isFalse();
             assertThat(s.capabilities().rangeReads()).isTrue();
+        }
+    }
+
+    @Test
+    void openWithoutTheCachingKeyReturnsAnUncachedStorage() throws IOException {
+        try (Storage s = StorageFactory.open(URI.create("http://example.com/"))) {
+            assertThat(s).isNotInstanceOf(CachingStorage.class);
+        }
+    }
+
+    @Test
+    void openWithCachingEnabledWrapsTheStorage() throws IOException {
+        StorageConfig config =
+                new StorageConfig("http://example.com/").setParameter(CachingProviderHelper.MEMORY_CACHE_ENABLED, true);
+        try (Storage s = StorageFactory.open(config)) {
+            assertThat(s).isInstanceOf(CachingStorage.class);
         }
     }
 

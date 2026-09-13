@@ -45,18 +45,13 @@ public final class CachingProviderHelper {
             .key("storage.caching.enabled")
             .title("Enable memory cache for raw byte data")
             .description("""
-                    Enables in-memory caching of byte ranges. When a range of data is requested, \
-                    it is fetched from the underlying storage and stored in a memory cache.
-                    Subsequent requests for the same or overlapping ranges can then be served \
-                    directly from the cache, significantly reducing latency and I/O operations \
-                    on the source. This is particularly effective for remote sources where
-                    network latency is a factor.
-
-                    This setting has no effect for local files.
+                    Enables in-memory caching of raw byte ranges. A cached range is served again \
+                    without touching the source, and concurrent requests for the same range share \
+                    one fetch. Off by default.
                     """)
             .type(Boolean.class)
             .group(GROUP_CACHING)
-            .defaultValue(true)
+            .defaultValue(false)
             .build();
 
     private static final List<StorageParameter<?>> PARAMS = List.of(MEMORY_CACHE_ENABLED);

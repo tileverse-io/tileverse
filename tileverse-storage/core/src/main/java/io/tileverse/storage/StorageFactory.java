@@ -77,7 +77,7 @@ public final class StorageFactory {
     /**
      * Layer {@code config} over the provider's {@link StorageProvider#getDefaultConfig() default values} so that
      * {@link StorageParameter#defaultValue() declared defaults} take effect for any key the caller did not set
-     * explicitly. This preserves the auto-caching behavior carried by the legacy single-URI factory path.
+     * explicitly.
      */
     private static StorageConfig withProviderDefaults(
             @NonNull StorageProvider provider, @NonNull StorageConfig config) {
@@ -92,8 +92,7 @@ public final class StorageFactory {
 
     /**
      * If the resolved config enables in-memory caching, wrap {@code storage} with a {@link CachingStorage} so each
-     * {@link Storage#openRangeReader(String)} call returns a cached/block-aligned reader, matching the behavior of the
-     * legacy provider-side auto-decoration.
+     * {@link Storage#openRangeReader(String)} call returns a caching reader.
      */
     private static Storage decorateForCaching(@NonNull Storage storage, @NonNull StorageConfig config) {
         return CachingProviderHelper.cachingDecoratorFor(config)

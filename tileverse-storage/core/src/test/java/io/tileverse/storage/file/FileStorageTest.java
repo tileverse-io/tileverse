@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.PreconditionFailedException;
+import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.WriteOptions;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -45,6 +46,18 @@ class FileStorageTest {
             s.put("file.bin", new byte[100]);
             try (Stream<Path> entries = Files.list(tmp)) {
                 assertThat(entries).noneMatch(p -> p.getFileName().toString().startsWith(".tmp-"));
+            }
+        }
+    }
+
+    @Test
+    void abortedOutputStreamLeavesNoStagedFile(@TempDir Path tmp) throws IOException {
+        try (FileStorage s = new FileStorage(tmp)) {
+            StorageOutputStream out = s.openOutputStream("file.bin", WriteOptions.defaults());
+            out.write(new byte[100]);
+            out.abort();
+            try (Stream<Path> entries = Files.list(tmp)) {
+                assertThat(entries).isEmpty();
             }
         }
     }

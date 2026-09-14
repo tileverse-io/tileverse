@@ -17,7 +17,6 @@ package io.tileverse.storage;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -408,20 +407,22 @@ public interface Storage extends Closeable {
     StorageEntry.File put(String key, Path source, WriteOptions options);
 
     /**
-     * Open an {@link OutputStream} for streaming write of the object at {@code key}. The object is not visible until
-     * {@code close()} returns successfully (atomic on object stores; on local FS an atomic rename-on-close idiom is
-     * used). Closing the stream without writing creates a zero-length object.
+     * Open a {@link StorageOutputStream} for streaming write of the object at {@code key}. The object is not visible
+     * until {@code close()} returns successfully (atomic on object stores; on local FS an atomic rename-on-close idiom
+     * is used). Closing the stream without writing creates a zero-length object.
      *
-     * <p>The caller MUST close the stream; the close call is what triggers the upload commit on cloud backends.
+     * <p>The caller MUST either close the stream, which commits the write, or {@link StorageOutputStream#abort() abort}
+     * it, which discards the bytes written so far and leaves the key untouched. A stream that is neither closed nor
+     * aborted leaks its staged bytes.
      *
      * @param key key relative to {@link #baseUri()}
      * @param options content type, user metadata, conditional-write headers, etc.
-     * @return an open OutputStream that the caller MUST close to commit the write
+     * @return an open stream that the caller MUST close to commit the write, or abort to discard it
      * @throws PreconditionFailedException if {@code options.ifNotExists()} is true and the key already exists at open
      *     time (some backends defer the check to close)
      * @throws StorageException on transport, authorization, or local I/O failures
      */
-    OutputStream openOutputStream(String key, WriteOptions options);
+    StorageOutputStream openOutputStream(String key, WriteOptions options);
 
     /**
      * Convenience overload: put with {@link WriteOptions#defaults()}.

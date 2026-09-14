@@ -29,15 +29,14 @@ import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageCapabilities;
 import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.StorageException;
+import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.StoragePattern;
 import io.tileverse.storage.UnsupportedCapabilityException;
 import io.tileverse.storage.WriteOptions;
 import java.io.File;
 import java.io.FilterInputStream;
-import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -356,45 +355,23 @@ final class FileStorage implements Storage {
     }
 
     @Override
-    public OutputStream openOutputStream(String key, WriteOptions options) {
+    public StorageOutputStream openOutputStream(String key, WriteOptions options) {
         requireOpen();
         Path target = resolve(key);
         if (options.ifNotExists() && Files.exists(target)) {
             throw new PreconditionFailedException("Key already exists: " + key);
         }
-        Path tmp;
-        OutputStream raw;
         try {
             Files.createDirectories(target.getParent());
-            tmp = createTempFile(target);
-            raw = Files.newOutputStream(tmp, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
+            Path spool = createTempFile(target);
+            return StorageOutputStream.spooling(spool, spooled -> moveOntoTarget(spooled, target));
         } catch (IOException e) {
             throw new StorageException("openOutputStream failed for key: " + key, e);
         }
-        final Path tmpFinal = tmp;
-        return new FilterOutputStream(raw) {
-            private boolean alreadyClosed;
+    }
 
-            @Override
-            public void write(byte[] b, int off, int len) throws IOException {
-                out.write(b, off, len);
-            }
-
-            @Override
-            public void close() throws IOException {
-                if (alreadyClosed) {
-                    return;
-                }
-                alreadyClosed = true;
-                try {
-                    super.close();
-                    Files.move(tmpFinal, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-                } catch (IOException e) {
-                    Files.deleteIfExists(tmpFinal);
-                    throw e;
-                }
-            }
-        };
+    private static void moveOntoTarget(Path spooled, Path target) throws IOException {
+        Files.move(spooled, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
     }
 
     @Override

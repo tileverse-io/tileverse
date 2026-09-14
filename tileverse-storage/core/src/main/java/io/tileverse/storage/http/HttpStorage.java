@@ -29,12 +29,12 @@ import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageCapabilities;
 import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.StorageException;
+import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.TransientStorageException;
 import io.tileverse.storage.UnsupportedCapabilityException;
 import io.tileverse.storage.WriteOptions;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -167,7 +167,7 @@ final class HttpStorage implements Storage {
     }
 
     @Override
-    public OutputStream openOutputStream(String key, WriteOptions options) {
+    public StorageOutputStream openOutputStream(String key, WriteOptions options) {
         throw new UnsupportedCapabilityException("writes");
     }
 

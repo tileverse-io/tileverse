@@ -31,6 +31,7 @@ import io.tileverse.storage.ReadOptions;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageCapabilities;
 import io.tileverse.storage.StorageEntry;
+import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.UnsupportedCapabilityException;
 import io.tileverse.storage.WriteOptions;
 import java.io.IOException;
@@ -345,6 +346,28 @@ public abstract class StorageTCK {
             // no writes
         }
         assertThat(storage.stat("empty.bin").orElseThrow().size()).isZero();
+    }
+
+    @Test
+    void abortedOutputStreamLeavesNoObject() throws IOException {
+        requireWrites();
+        StorageOutputStream out = storage.openOutputStream("aborted.bin", WriteOptions.defaults());
+        out.write("partial".getBytes(StandardCharsets.UTF_8));
+        out.abort();
+        out.close();
+        assertThat(storage.stat("aborted.bin")).isEmpty();
+    }
+
+    @Test
+    void abortAfterCloseKeepsTheCommittedObject() throws IOException {
+        requireWrites();
+        StorageOutputStream out = storage.openOutputStream("committed.bin", WriteOptions.defaults());
+        out.write("done".getBytes(StandardCharsets.UTF_8));
+        out.close();
+        out.abort();
+        try (ReadHandle r = storage.read("committed.bin")) {
+            assertThat(r.content().readAllBytes()).isEqualTo("done".getBytes(StandardCharsets.UTF_8));
+        }
     }
 
     // ---------------------------------------------------------- list / glob / delete / copy / move

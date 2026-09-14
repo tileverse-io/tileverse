@@ -16,7 +16,6 @@
 package io.tileverse.storage;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -98,7 +97,7 @@ final class CachingStorage implements Storage {
     }
 
     @Override
-    public OutputStream openOutputStream(String key, WriteOptions options) {
+    public StorageOutputStream openOutputStream(String key, WriteOptions options) {
         return delegate.openOutputStream(key, options);
     }
 

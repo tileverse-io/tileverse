@@ -43,14 +43,13 @@ import io.tileverse.storage.ReadOptions;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageCapabilities;
 import io.tileverse.storage.StorageEntry;
+import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.StoragePattern;
 import io.tileverse.storage.UnsupportedCapabilityException;
 import io.tileverse.storage.WriteOptions;
 import java.io.FilterInputStream;
-import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.channels.Channels;
@@ -489,7 +488,7 @@ final class GoogleCloudStorage implements Storage {
     }
 
     @Override
-    public OutputStream openOutputStream(String key, WriteOptions options) {
+    public StorageOutputStream openOutputStream(String key, WriteOptions options) {
         requireOpen();
         BlobInfo.Builder bib = BlobInfo.newBuilder(blobId(key));
         options.contentType().ifPresent(bib::setContentType);
@@ -502,31 +501,44 @@ final class GoogleCloudStorage implements Storage {
         }
         addUserProject(opts, BlobWriteOption::userProject);
         WriteChannel writer = handle.client().writer(bib.build(), opts.toArray(BlobWriteOption[]::new));
-        OutputStream sink = Channels.newOutputStream(writer);
-        return new FilterOutputStream(sink) {
-            private boolean alreadyClosed;
+        return new ResumableUploadOutputStream(key, writer);
+    }
 
-            @Override
-            public void write(byte[] b, int off, int len) throws IOException {
-                out.write(b, off, len);
-            }
+    /**
+     * Streams into a resumable upload session. Close completes the session, which is when the object appears. Abort
+     * abandons the session without completing it: the client offers no way to cancel a session, and the service
+     * discards an incomplete upload once the session expires, and no object ever appears at the key.
+     */
+    private static final class ResumableUploadOutputStream extends StorageOutputStream {
 
-            @Override
-            public void close() throws IOException {
-                if (alreadyClosed) {
-                    return;
-                }
-                alreadyClosed = true;
-                try {
-                    super.close();
-                } catch (StorageException e) {
-                    if (e.getCode() == 412) {
-                        throw new PreconditionFailedException("Key already exists: " + key, e);
-                    }
-                    throw SdkExceptionMapper.map(e, key);
-                }
+        private final String key;
+        private boolean closed;
+
+        ResumableUploadOutputStream(String key, WriteChannel writer) {
+            super(Channels.newOutputStream(writer));
+            this.key = key;
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (closed) {
+                return;
             }
-        };
+            closed = true;
+            try {
+                out.close();
+            } catch (StorageException e) {
+                if (e.getCode() == 412) {
+                    throw new PreconditionFailedException("Key already exists: " + key, e);
+                }
+                throw SdkExceptionMapper.map(e, key);
+            }
+        }
+
+        @Override
+        public void abort() {
+            closed = true;
+        }
     }
 
     @Override

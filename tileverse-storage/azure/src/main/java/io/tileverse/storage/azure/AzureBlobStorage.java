@@ -53,14 +53,13 @@ import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageCapabilities;
 import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.StorageException;
+import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.StoragePattern;
 import io.tileverse.storage.UnsupportedCapabilityException;
 import io.tileverse.storage.WriteOptions;
 import java.io.FilterInputStream;
-import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -394,44 +393,10 @@ final class AzureBlobStorage implements Storage {
     }
 
     @Override
-    public OutputStream openOutputStream(String key, WriteOptions options) {
+    public StorageOutputStream openOutputStream(String key, WriteOptions options) {
         requireOpen();
         Storage.requireSafeKey(key);
-        Path tmp;
-        OutputStream sink;
-        try {
-            tmp = Files.createTempFile("azure-storage-", ".part");
-            sink = Files.newOutputStream(tmp, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
-        } catch (IOException e) {
-            throw new StorageException("Could not create temp file for: " + key, e);
-        }
-        final Path tmpFinal = tmp;
-        return new FilterOutputStream(sink) {
-            private boolean alreadyClosed;
-
-            @Override
-            public void write(byte[] b, int off, int len) throws IOException {
-                out.write(b, off, len);
-            }
-
-            @Override
-            public void close() throws IOException {
-                if (alreadyClosed) {
-                    return;
-                }
-                alreadyClosed = true;
-                try {
-                    super.close();
-                    try {
-                        AzureBlobStorage.this.put(key, tmpFinal, options);
-                    } catch (StorageException e) {
-                        throw new IOException(e);
-                    }
-                } finally {
-                    Files.deleteIfExists(tmpFinal);
-                }
-            }
-        };
+        return StorageOutputStream.spoolingInTempDir("azure-storage-", spooled -> put(key, spooled, options));
     }
 
     private static void applyWriteOptions(BlobParallelUploadOptions opts, WriteOptions options) {

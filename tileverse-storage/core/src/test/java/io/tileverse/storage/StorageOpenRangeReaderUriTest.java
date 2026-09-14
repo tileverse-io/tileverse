@@ -276,7 +276,7 @@ class StorageOpenRangeReaderUriTest {
         }
 
         @Override
-        public java.io.OutputStream openOutputStream(String key, WriteOptions options) {
+        public StorageOutputStream openOutputStream(String key, WriteOptions options) {
             throw new UnsupportedOperationException();
         }
 

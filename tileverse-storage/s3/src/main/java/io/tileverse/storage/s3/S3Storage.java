@@ -60,7 +60,9 @@ import java.util.stream.StreamSupport;
 import org.jspecify.annotations.Nullable;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.async.AsyncResponseTransformer;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
@@ -149,14 +151,6 @@ final class S3Storage implements Storage {
         }
     }
 
-    private S3AsyncClient asyncClient() {
-        return handle.asyncClient()
-                .orElseThrow(
-                        () -> new UnsupportedCapabilityException(
-                                "streaming reads via read() require an async S3 client; "
-                                        + "construct this Storage via the SPI path or supply an S3ClientBundle with an async client"));
-    }
-
     private S3TransferManager transferManager() {
         return handle.transferManager()
                 .orElseThrow(() -> new UnsupportedCapabilityException("multipart upload requires an S3TransferManager; "
@@ -242,6 +236,7 @@ final class S3Storage implements Storage {
                     HeadObjectRequest.builder().bucket(ref.bucket()).key(fullKey);
             applyRequesterPays(requestBuilder::requestPayer);
             HeadObjectResponse resp = handle.client().headObject(requestBuilder.build());
+            handle.endpointEtags().observe(resp.eTag());
             return Optional.of(new StorageEntry.File(
                     key,
                     resp.contentLength(),
@@ -359,12 +354,36 @@ final class S3Storage implements Storage {
                 handle.client(),
                 handle.asyncClient().orElse(null),
                 new S3Reference(endpoint, ref.bucket(), fullKey, null),
-                requesterPays);
+                requesterPays,
+                handle.endpointEtags());
     }
 
+    /**
+     * Streams the object through the CRT async client, which can split a large read across connections. A client set
+     * without an async client, and an endpoint that omits the {@code ETag} header, stream through the sync client. See
+     * {@link EndpointEtags}.
+     */
     @Override
     public ReadHandle read(String key, ReadOptions options) {
         requireOpen();
+        GetObjectRequest request = getRequestFor(key, options);
+        Optional<S3AsyncClient> async = handle.asyncClient();
+        if (async.isEmpty() || handle.endpointEtags().omitted()) {
+            return readThroughSyncClient(key, request);
+        }
+        try {
+            return readInParallel(key, request, async.orElseThrow());
+        } catch (StorageException failure) {
+            if (!EndpointEtags.rejectedForMissingEtag(failure)) {
+                throw failure;
+            }
+            handle.endpointEtags().recordOmission();
+            return readThroughSyncClient(key, request);
+        }
+    }
+
+    /** Builds the GET behind a streaming read, honoring the version, range and conditional options. */
+    private GetObjectRequest getRequestFor(String key, ReadOptions options) {
         String fullKey = resolve(key);
         GetObjectRequest.Builder requestBuilder =
                 GetObjectRequest.builder().bucket(ref.bucket()).key(fullKey);
@@ -382,23 +401,18 @@ final class S3Storage implements Storage {
         options.ifMatchEtag().ifPresent(requestBuilder::ifMatch);
         options.ifModifiedSince().ifPresent(requestBuilder::ifModifiedSince);
         applyRequesterPays(requestBuilder::requestPayer);
+        return requestBuilder.build();
+    }
+
+    /**
+     * Streams through the CRT async client; the blocking transformer adapts the parallel download to an InputStream.
+     */
+    private ReadHandle readInParallel(String key, GetObjectRequest request, S3AsyncClient async) {
         try {
-            // Route through the CRT async client so a large GET (whole-object or large range)
-            // can be split across connections internally; the toBlockingInputStream() transformer
-            // hands the consumer a sync InputStream backed by CRT's parallel download.
-            ResponseInputStream<GetObjectResponse> raw = asyncClient()
-                    .getObject(requestBuilder.build(), AsyncResponseTransformer.toBlockingInputStream())
+            ResponseInputStream<GetObjectResponse> raw = async.getObject(
+                            request, AsyncResponseTransformer.toBlockingInputStream())
                     .join();
-            GetObjectResponse resp = raw.response();
-            StorageEntry.File metadata = new StorageEntry.File(
-                    key,
-                    resp.contentLength() == null ? 0L : resp.contentLength(),
-                    resp.lastModified() == null ? Instant.now() : resp.lastModified(),
-                    Optional.ofNullable(resp.eTag()),
-                    normalizeVersionId(resp.versionId()),
-                    Optional.ofNullable(resp.contentType()),
-                    resp.metadata() == null ? Map.of() : Map.copyOf(resp.metadata()));
-            return new ReadHandle(new StorageExceptionTranslatingInputStream(raw), metadata);
+            return readHandleFor(key, raw);
         } catch (CompletionException e) {
             Throwable cause = e.getCause();
             if (cause instanceof S3Exception s3e) {
@@ -411,6 +425,33 @@ final class S3Storage implements Storage {
         } catch (S3Exception e) {
             throw S3ExceptionMapper.map(e, key);
         }
+    }
+
+    /** Streams through the sync client, one connection and no ETag requirement. */
+    private ReadHandle readThroughSyncClient(String key, GetObjectRequest request) {
+        try {
+            ResponseInputStream<GetObjectResponse> raw =
+                    handle.client().getObject(request, ResponseTransformer.toInputStream());
+            return readHandleFor(key, raw);
+        } catch (S3Exception e) {
+            throw S3ExceptionMapper.map(e, key);
+        } catch (SdkException e) {
+            throw new StorageException("read failed for: " + key, e);
+        }
+    }
+
+    private ReadHandle readHandleFor(String key, ResponseInputStream<GetObjectResponse> raw) {
+        GetObjectResponse resp = raw.response();
+        handle.endpointEtags().observe(resp.eTag());
+        StorageEntry.File metadata = new StorageEntry.File(
+                key,
+                resp.contentLength() == null ? 0L : resp.contentLength(),
+                resp.lastModified() == null ? Instant.now() : resp.lastModified(),
+                Optional.ofNullable(resp.eTag()),
+                normalizeVersionId(resp.versionId()),
+                Optional.ofNullable(resp.contentType()),
+                resp.metadata() == null ? Map.of() : Map.copyOf(resp.metadata()));
+        return new ReadHandle(new StorageExceptionTranslatingInputStream(raw), metadata);
     }
 
     /**

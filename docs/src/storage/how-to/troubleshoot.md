@@ -358,6 +358,18 @@ export JAVA_HOME=/path/to/java17
    keytool -import -alias custom-cert -file cert.crt -keystore $JAVA_HOME/lib/security/cacerts
    ```
 
+### S3-Compatible Endpoints Without an ETag Header
+
+**Problem**: reads from an S3-compatible service fail with `Response missing required ETag header`, while the
+same bytes served over HTTP work. Typical of a gateway that exports an existing tree of files: an object placed
+directly in its backend is served without the header, while an object written through the S3 API has one.
+
+**Solution**: none needed. Only the AWS CRT client demands the header. Reads of such an endpoint run on the sync
+client instead, from the first rejection on, and an endpoint that sends the header keeps the CRT client.
+
+Those reads give up the CRT client's parallel transfer; batched reads still run their fetches concurrently on the
+shared executor.
+
 ## File System Issues
 
 ### File Access Permissions
@@ -481,4 +493,5 @@ If you're still experiencing issues:
 | `NoSuchFileException` | File not found | Verify file/object exists |
 | `SocketTimeoutException` | Network timeout | Increase timeout or check connectivity |
 | `OutOfMemoryError` | Large cache or buffer usage | Reduce cache size or use soft values |
+| `Response missing required ETag header` | S3-compatible endpoint serving a file it never received through the S3 API | Handled automatically; reads fall back to the sync client |
 | `UnsupportedClassVersionError` | Wrong Java version | Use Java 17 or higher |

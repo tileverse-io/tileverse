@@ -56,6 +56,7 @@ final class S3ObjectStub {
     private final AtomicInteger aborts = new AtomicInteger();
     private int extraBytes;
     private int bodyFailuresLeft;
+    private boolean withoutEtag;
 
     S3ObjectStub(byte[] data, int chunkSize) {
         this.data = data;
@@ -65,6 +66,12 @@ final class S3ObjectStub {
     /** Lengthens every body by {@code count} bytes past the requested range, like a server ignoring the range. */
     S3ObjectStub respondingWithExtraBytes(int count) {
         this.extraBytes = count;
+        return this;
+    }
+
+    /** Answers without an {@code ETag} header, like a gateway serving a file not written through its S3 API. */
+    S3ObjectStub respondingWithoutEtag() {
+        this.withoutEtag = true;
         return this;
     }
 
@@ -195,10 +202,13 @@ final class S3ObjectStub {
     }
 
     GetObjectResponse responseFor(long offset, int length) {
-        return GetObjectResponse.builder()
+        GetObjectResponse.Builder response = GetObjectResponse.builder()
                 .contentLength((long) length)
-                .contentRange("bytes " + offset + "-" + (offset + length - 1) + "/" + data.length)
-                .build();
+                .contentRange("bytes " + offset + "-" + (offset + length - 1) + "/" + data.length);
+        if (!withoutEtag) {
+            response.eTag("\"" + Integer.toHexString(data.length) + "\"");
+        }
+        return response.build();
     }
 
     static S3Exception rangeNotSatisfiable() {

@@ -29,6 +29,7 @@ import software.amazon.awssdk.transfer.s3.S3TransferManager;
 final class BorrowedS3Handle implements S3ClientHandle {
 
     private final S3ClientBundle bundle;
+    private final EndpointEtags endpointEtags = new EndpointEtags();
 
     BorrowedS3Handle(S3ClientBundle bundle) {
         this.bundle = Objects.requireNonNull(bundle, "bundle");
@@ -52,6 +53,11 @@ final class BorrowedS3Handle implements S3ClientHandle {
     @Override
     public Optional<S3Presigner> presigner() {
         return bundle.presigner();
+    }
+
+    @Override
+    public EndpointEtags endpointEtags() {
+        return endpointEtags;
     }
 
     @Override

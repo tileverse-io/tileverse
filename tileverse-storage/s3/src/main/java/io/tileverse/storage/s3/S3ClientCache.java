@@ -108,6 +108,10 @@ final class S3ClientCache {
             return entry.presigner;
         }
 
+        EndpointEtags endpointEtags() {
+            return entry.endpointEtags;
+        }
+
         @Override
         public void close() {
             if (closed.compareAndSet(false, true)) {
@@ -136,6 +140,7 @@ final class S3ClientCache {
         final S3TransferManager transferManager;
         final S3Presigner presigner;
         final AtomicInteger refCount = new AtomicInteger();
+        final EndpointEtags endpointEtags = new EndpointEtags();
 
         Entry(S3Client sync, S3AsyncClient async, S3TransferManager tm, S3Presigner ps) {
             this.syncClient = sync;

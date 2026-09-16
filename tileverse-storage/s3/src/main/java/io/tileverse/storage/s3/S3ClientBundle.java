@@ -55,8 +55,8 @@ public record S3ClientBundle(
     }
 
     /**
-     * Bundle carrying only the sync {@link S3Client}. The async client, transfer manager, and presigner are absent;
-     * {@code read}, multipart upload, and presigned URL operations on the resulting {@code Storage} throw
+     * Bundle with only the sync {@link S3Client}. Reads stream on it and batch on the shared executor; multipart upload
+     * and presigned URL operations on the resulting {@code Storage} throw
      * {@link io.tileverse.storage.UnsupportedCapabilityException}.
      *
      * @param sync the sync S3 client

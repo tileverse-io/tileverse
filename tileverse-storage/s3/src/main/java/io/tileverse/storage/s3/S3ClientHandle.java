@@ -45,6 +45,9 @@ interface S3ClientHandle extends AutoCloseable {
 
     Optional<S3Presigner> presigner();
 
+    /** Whether this endpoint answers reads without an ETag header, shared by the readers of these clients. */
+    EndpointEtags endpointEtags();
+
     @Override
     void close();
 }

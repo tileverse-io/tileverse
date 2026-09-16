@@ -54,6 +54,11 @@ final class LeasedS3Handle implements S3ClientHandle {
     }
 
     @Override
+    public EndpointEtags endpointEtags() {
+        return lease.endpointEtags();
+    }
+
+    @Override
     public void close() {
         lease.close();
     }

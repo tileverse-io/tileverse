@@ -42,12 +42,11 @@ See the [main README](../README.md#installation) for BOM usage.
 
 ```java
 import io.tileverse.pmtiles.PMTilesReader;
-import io.tileverse.storage.rangereader.file.FileRangeReader;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.file.FileStorageProvider;
 
 // Create a range reader for the local file
-RangeReader rangeReader = FileRangeReader.builder()
-    .path(Path.of("mymap.pmtiles"))
-    .build();
+RangeReader rangeReader = FileStorageProvider.openRangeReader(Path.of("mymap.pmtiles"));
 
 // Read PMTiles using the range reader
 try (PMTilesReader reader = new PMTilesReader(rangeReader)) {

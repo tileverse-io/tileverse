@@ -65,12 +65,11 @@ import java.util.stream.Stream;
  * tempfile in the same directory and atomically rename to the destination on completion. The target object is not
  * visible until the rename succeeds.
  *
- * <p><b>Interrupt hazard</b>: Java's {@code FileChannel} (used by the underlying {@code FileRangeReader} and by
- * streaming reads/writes here) is an {@link java.nio.channels.InterruptibleChannel}. If a reading or writing thread is
- * interrupted via {@link Thread#interrupt()}, the channel closes and a
- * {@link java.nio.channels.ClosedByInterruptException} is thrown. Subsequent operations on that channel throw
- * {@code ClosedChannelException}. This makes concurrent cancellation hostile to long-running file I/O. The
- * implementation mitigates by reopening channels on demand (matching the pattern in {@code FileRangeReader}).
+ * <p><b>Interrupts</b>: the streaming reads and writes of this Storage are not interruptible.
+ * {@link Files#newInputStream} and {@link Files#newOutputStream} mark their channel uninterruptible, and
+ * {@link Thread#interrupt()} on a thread blocked in one of them has no effect on the I/O. Only the range reader's own
+ * {@code FileChannel} is exposed to interrupts; {@code FileRangeReader} documents how a read on an interrupted thread
+ * fails and how the other readers of the file recover.
  */
 final class FileStorage implements Storage {
 
@@ -224,11 +223,10 @@ final class FileStorage implements Storage {
     public RangeReader openRangeReader(String key) {
         requireOpen();
         Path p = resolve(key);
-        if (!Files.exists(p)) {
-            throw new NotFoundException("File not found: " + key);
-        }
         try {
             return new FileRangeReader(p, idleTimeout);
+        } catch (NoSuchFileException e) {
+            throw new NotFoundException("File not found: " + key, e);
         } catch (IOException e) {
             throw new StorageException("openRangeReader failed for key: " + key, e);
         }

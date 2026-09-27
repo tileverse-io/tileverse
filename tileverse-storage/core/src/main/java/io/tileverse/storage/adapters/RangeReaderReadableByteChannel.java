@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p><strong>Usage Example:</strong>
  *
  * <pre>{@code
- * RangeReader reader = FileRangeReader.of(path);
+ * RangeReader reader = FileStorageProvider.openRangeReader(path);
  * try (ReadableByteChannel channel = RangeReaderReadableByteChannel.of(reader)) {
  *     // Use with any NIO-based API that expects ReadableByteChannel
  *     ByteBuffer buffer = ByteBuffer.allocate(1024);

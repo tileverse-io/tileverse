@@ -70,6 +70,23 @@ class FileStorageTest {
     }
 
     @Test
+    void openRangeReaderMissingThrowsNotFound(@TempDir Path tmp) {
+        try (FileStorage s = new FileStorage(tmp)) {
+            assertThatThrownBy(() -> s.openRangeReader("missing.bin"))
+                    .isInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("missing.bin");
+        }
+    }
+
+    @Test
+    void openRangeReaderRejectsADirectoryKey(@TempDir Path tmp) throws IOException {
+        Files.createDirectory(tmp.resolve("dir"));
+        try (FileStorage s = new FileStorage(tmp)) {
+            assertThatThrownBy(() -> s.openRangeReader("dir")).isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Test
     void putIfNotExistsRejectsExisting(@TempDir Path tmp) {
         try (FileStorage s = new FileStorage(tmp)) {
             s.put("k", new byte[1]);

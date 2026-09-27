@@ -387,6 +387,32 @@ shared executor.
 2. **Verify file exists**:
    ```java
    Path filePath = Path.of("/path/to/file");
+### Too Many Open Files
+
+**Problem**: `IOException: Too many open files` from a server that opens many local readers.
+
+A local reader holds a file descriptor only while its channel is open: from the first read until
+`storage.file.idle-timeout` (default 60 seconds) elapses with no read in progress. Descriptors pile
+up when many readers are read within the same minute, or when readers are opened and never closed.
+
+**Solutions**:
+
+1. **Close readers** when a request is done with them; a closed reader never reopens its channel.
+2. **Shorten the idle timeout** (`storage.file.idle-timeout=PT10S`) to release descriptors sooner.
+3. **Raise the descriptor limit** (`ulimit -n`) when the working set is legitimately large.
+
+### Stale NFS File Handles
+
+**Problem**: reads of a file on an NFS or SMB mount fail after the export was remounted or the file
+was replaced on the server; the OS reports `Stale file handle` (Linux) or `Stale NFS file handle`
+(macOS, BSD).
+
+**Solution**: none needed for range reads. The reader retires the stale channel, opens a fresh one by
+the file's real path and resumes after the bytes already read, three attempts per call. The idle close
+keeps a long-lived server from holding handles across remounts in the first place. A read that fails
+after the third attempt reports `Read failed after 3 attempts`, which points at a mount that stays
+stale.
+
    if (!Files.exists(filePath)) {
        throw new FileNotFoundException("File not found: " + filePath);
    }

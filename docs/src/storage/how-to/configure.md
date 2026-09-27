@@ -118,6 +118,28 @@ try (Storage storage = StorageFactory.open(parent, props);
 
 For full `HttpClient` customization (custom proxy, executor, SSL context, request timeout per call), build the `HttpClient` yourself and pass it through `HttpStorageProvider.open(URI, HttpClient[, HttpAuthentication])`. The returned `Storage` **borrows** the client; closing the `Storage` does NOT close it. The Properties path (`StorageFactory.open(uri, props)`) instead acquires a refcounted lease from `HttpClientCache`, which lets identical configs across multiple `Storage` instances share one underlying client.
 
+### Local files
+
+A `file:` `Storage` is rooted at an existing directory. Its readers open a file channel on the first read and close it after `storage.file.idle-timeout` (ISO-8601 duration, default `PT60S`; `PT0S` keeps the channel open; a value above zero must be at least 1 millisecond) with no read in progress, which keeps long-lived servers from holding stale NFS handles:
+
+```java
+Properties props = new Properties();
+props.setProperty("storage.file.idle-timeout", "PT30S");
+
+try (Storage storage = StorageFactory.open(URI.create("file:///data/tiles/"), props);
+        RangeReader reader = storage.openRangeReader("world.pmtiles")) {
+    // ...
+}
+```
+
+A single file with no use for a `Storage` opens directly, with the 60-second default or a timeout of your own:
+
+```java
+try (RangeReader reader = FileStorageProvider.openRangeReader(Path.of("/data/tiles/world.pmtiles"))) {
+    // ...
+}
+```
+
 ### Global Properties
 
 For environments where code changes are difficult, you can configure defaults via system properties:

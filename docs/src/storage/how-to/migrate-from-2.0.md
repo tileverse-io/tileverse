@@ -50,6 +50,21 @@ fallback). If you maintain a delegating RangeReader decorator, override readRang
 the batch to the delegate; a wrapper that does not forward it silently degrades batches to the
 sequential per-range default.
 
+## Local files
+
+- `getSourceIdentifier()` of a local reader is the file's real path, resolved once when the
+  reader is built, instead of the absolute path as spelled: a symlink, a case difference on a
+  case-insensitive volume, or `/tmp` against `/private/tmp` no longer yield several identifiers,
+  and cache keys derived from it shift once.
+- A read on a thread whose interrupt flag is set fails at once, without reading or touching the
+  channel, with a `StorageException` caused by an `InterruptedIOException`; the flag stays set,
+  and the read is never retried. It used to retry on fresh channels the interrupt kept closing.
+- `storage.file.idle-timeout` rejects a value above zero and below one millisecond when the
+  `Storage` is created; `PT0S` still disables the idle close.
+- `FileStorageProvider.openRangeReader(Path)` and `openRangeReader(Path, Duration)` open a
+  reader over one file without a `Storage`, with `NotFoundException` for a missing file and
+  `IllegalArgumentException` for a directory.
+
 ## PMTiles
 
 `PMTilesReader.getTileIndices()` and `getTileIndicesByZoomLevel(int)` are removed. They

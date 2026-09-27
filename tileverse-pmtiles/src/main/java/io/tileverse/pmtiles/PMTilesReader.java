@@ -68,7 +68,7 @@ import tools.jackson.databind.ObjectMapper;
  *
  * <pre>{@code
  * // Create a RangeReader for the desired source
- * RangeReader reader = new FileRangeReader(Path.of("/path/to/tiles.pmtiles"));
+ * RangeReader reader = FileStorageProvider.openRangeReader(Path.of("/path/to/tiles.pmtiles"));
  *
  * // Or open the parent Storage and request a key:
  * // Storage storage = StorageFactory.open(URI.create("s3://bucket/"));

@@ -182,8 +182,9 @@ public interface RangeReader extends Closeable, Supplier<SeekableByteChannel> {
      * <p>Because the identifier keys cached bytes, two readers whose bytes could differ must return different
      * identifiers, and two readers over the same object must return equal ones. The identifier therefore includes every
      * component that selects the object, such as a non-default service endpoint, and nothing that does not: readers
-     * built with different credentials over the same object are the same source. The identifier is not required to
-     * round-trip back to a usable URI.
+     * built with different credentials over the same object are the same source. A local file identifies as its real
+     * path, resolved once when the reader is built, whatever spelling of the path opened it. The identifier is not
+     * required to round-trip back to a usable URI.
      *
      * @return a stable identifier for the underlying source
      */

@@ -256,7 +256,9 @@ class RangeReaderReadableByteChannelTest {
                 RangeReaderReadableByteChannel channel = RangeReaderReadableByteChannel.of(reader)) {
 
             String identifier = channel.getSourceIdentifier();
-            assertThat(identifier).contains(testFile.toString());
+            // the identifier is the real path; a temp dir may be spelled with a short name (Windows) or reached through
+            // a symlink (macOS)
+            assertThat(identifier).isEqualTo(testFile.toRealPath().toString());
             assertThat(identifier).isEqualTo(reader.getSourceIdentifier());
         }
     }
@@ -270,7 +272,7 @@ class RangeReaderReadableByteChannelTest {
             assertThat(result)
                     .contains("RangeReaderReadableByteChannel")
                     .contains("position=0")
-                    .contains(testFile.toString());
+                    .contains(testFile.toRealPath().toString());
         }
     }
 

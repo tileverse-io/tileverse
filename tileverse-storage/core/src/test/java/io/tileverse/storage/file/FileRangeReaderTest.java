@@ -22,9 +22,15 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.abort;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import io.tileverse.storage.RangeRequest;
+import io.tileverse.storage.StorageException;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -35,18 +41,25 @@ import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
 /** Comprehensive tests for FileRangeReader. */
@@ -81,8 +94,16 @@ class FileRangeReaderTest {
 
     @Test
     void testFactory() throws IOException {
-        assertThat(new FileRangeReader(testFile)).isNotNull().hasFieldOrPropertyWithValue("path", testFile);
-        assertThat(new FileRangeReader(testFile)).isNotNull().hasFieldOrPropertyWithValue("path", testFile);
+        Path realPath = testFile.toRealPath();
+        assertThat(new FileRangeReader(testFile)).isNotNull().hasFieldOrPropertyWithValue("path", realPath);
+        assertThat(new FileRangeReader(testFile)).isNotNull().hasFieldOrPropertyWithValue("path", realPath);
+    }
+
+    @Test
+    void constructorRejectsADirectory() {
+        assertThatThrownBy(() -> new FileRangeReader(tempDir))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(tempDir.toString());
     }
 
     @Test
@@ -370,9 +391,14 @@ class FileRangeReaderTest {
                         startLatch.await();
 
                         // Read the region
-                        ByteBuffer buffer = sharedReader.readRange(regionStart, regionSize);
+                        ByteBuffer buffer =
+                                sharedReader.readRange(regionStart, regionSize).flip();
                         byte[] readData = new byte[buffer.remaining()];
                         buffer.get(readData);
+                        if (readData.length != regionSize) {
+                            log.debug("Thread {}: short read {} of {}", threadIndex, readData.length, regionSize);
+                            return false;
+                        }
 
                         // Verify each byte
                         for (int j = 0; j < readData.length; j++) {
@@ -449,9 +475,13 @@ class FileRangeReaderTest {
                         startLatch.await();
 
                         // Read the overlapping region
-                        ByteBuffer buffer = sharedReader.readRange(regionStart, regionSize);
+                        ByteBuffer buffer =
+                                sharedReader.readRange(regionStart, regionSize).flip();
                         byte[] readData = new byte[buffer.remaining()];
                         buffer.get(readData);
+                        if (readData.length != regionSize) {
+                            return false;
+                        }
 
                         // Verify each byte
                         for (int j = 0; j < readData.length; j++) {
@@ -517,6 +547,88 @@ class FileRangeReaderTest {
     @Test
     void of_withNullPath_throwsNullPointerException() {
         assertThatThrownBy(() -> new FileRangeReader(null)).isInstanceOf(NullPointerException.class);
+    }
+
+    /**
+     * The identifier is the file's real path, resolved once at construction, and every channel opens by it. The three
+     * aliases below are platform-bound, hence the assumptions.
+     */
+    @Nested
+    class IdentityTests {
+
+        @Test
+        void identifierIsTheRealPathBehindASymlink() throws IOException {
+            Path link = symlinkOrSkip(tempDir.resolve("link.txt"), testFile);
+
+            try (FileRangeReader throughLink = new FileRangeReader(link);
+                    FileRangeReader direct = new FileRangeReader(testFile)) {
+                assertThat(throughLink.getSourceIdentifier())
+                        .isEqualTo(testFile.toRealPath().toString())
+                        .isEqualTo(direct.getSourceIdentifier());
+            }
+        }
+
+        @Test
+        void identifierIgnoresTheSpellingOnACaseInsensitiveFilesystem() throws IOException {
+            Path upperCase = tempDir.resolve("TEST-FILE.TXT");
+            assumeTrue(isSameFileQuietly(testFile, upperCase), "case-insensitive filesystem only");
+
+            try (FileRangeReader spelledUpper = new FileRangeReader(upperCase);
+                    FileRangeReader spelledLower = new FileRangeReader(testFile)) {
+                assertThat(spelledUpper.getSourceIdentifier()).isEqualTo(spelledLower.getSourceIdentifier());
+            }
+        }
+
+        @Test
+        void identifierResolvesTmpToPrivateTmpOnMacos() throws IOException {
+            Path tmp = Path.of("/tmp");
+            assumeTrue(
+                    System.getProperty("os.name", "").contains("Mac") && Files.isSymbolicLink(tmp),
+                    "macOS /tmp symlink only");
+
+            Path file = Files.createTempFile(tmp, "tileverse-identity", ".txt");
+            try (FileRangeReader r = new FileRangeReader(file)) {
+                assertThat(r.getSourceIdentifier())
+                        .startsWith("/private/tmp/")
+                        .isEqualTo(file.toRealPath().toString());
+            } finally {
+                Files.deleteIfExists(file);
+            }
+        }
+
+        @Test
+        void channelOpensByTheRealPathResolvedAtConstruction() throws IOException {
+            Path original = tempDir.resolve("original.txt");
+            Path replacement = tempDir.resolve("replacement.txt");
+            Files.writeString(original, "original content");
+            Files.writeString(replacement, "replacement text");
+            Path link = symlinkOrSkip(tempDir.resolve("moving-link.txt"), original);
+
+            try (FileRangeReader r = new FileRangeReader(link, Duration.ZERO)) {
+                Files.delete(link);
+                Files.createSymbolicLink(link, replacement);
+
+                ByteBuffer read = r.readRange(0, "original content".length()).flip();
+                String content = StandardCharsets.UTF_8.decode(read).toString();
+                assertThat(content).isEqualTo("original content");
+            }
+        }
+
+        private Path symlinkOrSkip(Path link, Path target) {
+            try {
+                return Files.createSymbolicLink(link, target);
+            } catch (UnsupportedOperationException | IOException e) {
+                return abort("symbolic links are not available here: " + e);
+            }
+        }
+
+        private boolean isSameFileQuietly(Path a, Path b) {
+            try {
+                return Files.isSameFile(a, b);
+            } catch (IOException notFound) {
+                return false;
+            }
+        }
     }
 
     @Nested
@@ -747,29 +859,317 @@ class FileRangeReaderTest {
         }
 
         @Test
-        void isRecoverableError_staleFileHandle() {
-            assertThat(FileRangeReader.isRecoverableError(new IOException("Stale file handle")))
+        void isRecoverable_staleFileHandle() {
+            assertThat(FileRangeReader.isRecoverable(new IOException("Stale file handle")))
                     .isTrue();
-            assertThat(FileRangeReader.isRecoverableError(new IOException("stale file handle")))
+            assertThat(FileRangeReader.isRecoverable(new IOException("stale file handle")))
                     .isTrue();
-            assertThat(FileRangeReader.isRecoverableError(new IOException("NFS: Stale file handle (errno 116)")))
+            assertThat(FileRangeReader.isRecoverable(new IOException("NFS: Stale file handle (errno 116)")))
                     .isTrue();
-            assertThat(FileRangeReader.isRecoverableError(new ClosedChannelException()))
+            assertThat(FileRangeReader.isRecoverable(new ClosedChannelException()))
                     .isTrue();
-            assertThat(FileRangeReader.isRecoverableError(new IOException("Permission denied")))
+            assertThat(FileRangeReader.isRecoverable(new IOException("Permission denied")))
                     .isFalse();
-            assertThat(FileRangeReader.isRecoverableError(new IOException((String) null)))
+            assertThat(FileRangeReader.isRecoverable(new IOException((String) null)))
                     .isFalse();
+        }
+
+        @Test
+        void isRecoverable_matchesTheMacosAndBsdWording() {
+            assertThat(FileRangeReader.isRecoverable(new IOException("Stale NFS file handle")))
+                    .isTrue();
+        }
+
+        @Test
+        void isRecoverable_ignoresTheDefaultLocale() {
+            Locale saved = Locale.getDefault();
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+            try {
+                assertThat(FileRangeReader.isRecoverable(new IOException("STALE FILE HANDLE")))
+                        .isTrue();
+            } finally {
+                Locale.setDefault(saved);
+            }
+        }
+
+        @Test
+        void isRecoverable_neverRetriesAnInterruptedRead() {
+            assertThat(FileRangeReader.isRecoverable(new ClosedByInterruptException()))
+                    .isFalse();
+        }
+
+        @Test
+        void recoveryClosesOnlyTheFailedChannel() throws Exception {
+            AtomicInteger opens = new AtomicInteger();
+            AtomicInteger staleReads = new AtomicInteger();
+            CyclicBarrier bothHoldTheStaleChannel = new CyclicBarrier(2);
+            CountDownLatch firstReaderRecovered = new CountDownLatch(1);
+            List<FileChannel> realChannels = Collections.synchronizedList(new ArrayList<>());
+            FileRangeReader r = new FileRangeReader(testFile, Duration.ZERO) {
+                @Override
+                FileChannel openChannel(Path path) throws IOException {
+                    FileChannel real = super.openChannel(path);
+                    realChannels.add(real);
+                    if (opens.incrementAndGet() > 1) {
+                        return real;
+                    }
+                    return new ForwardingFileChannel(real) {
+                        @Override
+                        public int read(ByteBuffer dst, long position) throws IOException {
+                            int call = staleReads.incrementAndGet();
+                            awaitQuietly(bothHoldTheStaleChannel);
+                            if (call == 2) {
+                                // the second reader fails only after the first has recovered on a replacement
+                                awaitQuietly(firstReaderRecovered);
+                            }
+                            throw new IOException("Stale file handle");
+                        }
+                    };
+                }
+            };
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try (r) {
+                Callable<String> read = () -> {
+                    String content = readAsString(r, 0, textContent.length());
+                    firstReaderRecovered.countDown();
+                    return content;
+                };
+                Future<String> first = pool.submit(read);
+                Future<String> second = pool.submit(read);
+
+                assertThat(first.get(10, TimeUnit.SECONDS)).isEqualTo(textContent);
+                assertThat(second.get(10, TimeUnit.SECONDS)).isEqualTo(textContent);
+                assertThat(opens)
+                        .as("the replacement channel serves both recoveries")
+                        .hasValue(2);
+                assertThat(realChannels.get(1).isOpen())
+                        .as("the second recovery must not close the first one's replacement")
+                        .isTrue();
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+
+        @Test
+        void interruptedThreadFailsWithoutTouchingTheChannel() throws Exception {
+            AtomicInteger opens = new AtomicInteger();
+            FileRangeReader r = new FileRangeReader(testFile, Duration.ZERO) {
+                @Override
+                FileChannel openChannel(Path path) throws IOException {
+                    opens.incrementAndGet();
+                    return super.openChannel(path);
+                }
+            };
+            try (r) {
+                readAsString(r, 0, 10);
+                FileChannel before = r.channel();
+
+                Thread.currentThread().interrupt();
+                try {
+                    assertThatThrownBy(() -> r.readRange(0, 10))
+                            .isInstanceOf(StorageException.class)
+                            .hasCauseInstanceOf(InterruptedIOException.class);
+                    assertThat(Thread.currentThread().isInterrupted())
+                            .as("the interrupt flag stays set")
+                            .isTrue();
+                } finally {
+                    Thread.interrupted();
+                }
+                assertThat(opens).hasValue(1);
+                assertThat(r.channel()).isSameAs(before);
+                assertThat(before.isOpen()).isTrue();
+            }
+        }
+
+        @Test
+        void readSlowerThanTheIdleTimeoutCompletes() throws Exception {
+            Duration idleTimeout = Duration.ofMillis(100);
+            AtomicInteger opens = new AtomicInteger();
+            FileRangeReader r = new FileRangeReader(testFile, idleTimeout) {
+                @Override
+                FileChannel openChannel(Path path) throws IOException {
+                    opens.incrementAndGet();
+                    return new ForwardingFileChannel(super.openChannel(path)) {
+                        @Override
+                        public int read(ByteBuffer dst, long position) throws IOException {
+                            sleepQuietly(4 * idleTimeout.toMillis());
+                            return delegate.read(dst, position);
+                        }
+                    };
+                }
+            };
+            try (r) {
+                assertThat(readAsString(r, 0, textContent.length())).isEqualTo(textContent);
+                assertThat(opens).hasValue(1);
+
+                await().atMost(Duration.ofSeconds(2))
+                        .pollInterval(Duration.ofMillis(50))
+                        .untilAsserted(() -> assertThat(r.channel()).isNull());
+            }
+        }
+
+        @Test
+        void batchLongerThanTheIdleTimeoutKeepsOneChannel() throws Exception {
+            Duration idleTimeout = Duration.ofMillis(100);
+            AtomicInteger opens = new AtomicInteger();
+            FileRangeReader r = new FileRangeReader(testFile, idleTimeout) {
+                @Override
+                FileChannel openChannel(Path path) throws IOException {
+                    opens.incrementAndGet();
+                    return new ForwardingFileChannel(super.openChannel(path)) {
+                        @Override
+                        public int read(ByteBuffer dst, long position) throws IOException {
+                            sleepQuietly(idleTimeout.toMillis() + 50);
+                            return delegate.read(dst, position);
+                        }
+                    };
+                }
+            };
+            try (r) {
+                List<RangeRequest> requests = List.of(
+                        RangeRequest.of(0, 10, ByteBuffer.allocate(10)),
+                        RangeRequest.of(10, 10, ByteBuffer.allocate(10)),
+                        RangeRequest.of(20, 10, ByteBuffer.allocate(10)));
+
+                int[] read = r.readRanges(requests);
+
+                assertThat(read).containsExactly(10, 10, 10);
+                for (int i = 0; i < requests.size(); i++) {
+                    ByteBuffer target = requests.get(i).target().flip();
+                    String content = StandardCharsets.UTF_8.decode(target).toString();
+                    assertThat(content).isEqualTo(textContent.substring(10 * i, 10 * i + 10));
+                }
+                assertThat(opens).hasValue(1);
+            }
+        }
+
+        @Test
+        void retryResumesWhereTheFailedChunkStopped() throws Exception {
+            int partialChunk = 10;
+            AtomicInteger opens = new AtomicInteger();
+            List<Long> readPositions = Collections.synchronizedList(new ArrayList<>());
+            FileRangeReader r = new FileRangeReader(testFile, Duration.ZERO) {
+                @Override
+                FileChannel openChannel(Path path) throws IOException {
+                    FileChannel real = super.openChannel(path);
+                    if (opens.incrementAndGet() > 1) {
+                        return new ForwardingFileChannel(real) {
+                            @Override
+                            public int read(ByteBuffer dst, long position) throws IOException {
+                                readPositions.add(position);
+                                return delegate.read(dst, position);
+                            }
+                        };
+                    }
+                    return new ForwardingFileChannel(real) {
+                        private int calls;
+
+                        @Override
+                        public int read(ByteBuffer dst, long position) throws IOException {
+                            readPositions.add(position);
+                            if (++calls > 1) {
+                                throw new IOException("Stale file handle");
+                            }
+                            // land a partial chunk, then fail on the next one
+                            int limit = dst.limit();
+                            dst.limit(dst.position() + partialChunk);
+                            try {
+                                return delegate.read(dst, position);
+                            } finally {
+                                dst.limit(limit);
+                            }
+                        }
+                    };
+                }
+            };
+            try (r) {
+                assertThat(readAsString(r, 0, textContent.length())).isEqualTo(textContent);
+                assertThat(opens).hasValue(2);
+                assertThat(readPositions)
+                        .as("the retry resumes after the bytes already landed")
+                        .containsExactly(0L, (long) partialChunk, (long) partialChunk);
+            }
+        }
+
+        @Test
+        @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+        void zeroByteChunkOnAnOpenChannelFailsInsteadOfSpinning() throws Exception {
+            AtomicInteger opens = new AtomicInteger();
+            FileRangeReader r = new FileRangeReader(testFile, Duration.ZERO) {
+                @Override
+                FileChannel openChannel(Path path) throws IOException {
+                    opens.incrementAndGet();
+                    return new ForwardingFileChannel(super.openChannel(path)) {
+                        @Override
+                        public int read(ByteBuffer dst, long position) {
+                            return 0;
+                        }
+                    };
+                }
+            };
+            try (r) {
+                assertThatThrownBy(() -> r.readRange(0, 10))
+                        .isInstanceOf(StorageException.class)
+                        .hasMessageContaining("3 attempts");
+                assertThat(opens).hasValue(3);
+            }
+        }
+
+        @Test
+        void idleCloserDropsCancelledChecksAndRunsOnADaemonThread() throws Exception {
+            ScheduledThreadPoolExecutor closer = (ScheduledThreadPoolExecutor) FileRangeReader.IDLE_CLOSER;
+            assertThat(closer.getRemoveOnCancelPolicy()).isTrue();
+
+            Thread closerThread = closer.submit(Thread::currentThread).get(5, TimeUnit.SECONDS);
+            assertThat(closerThread.getName()).isEqualTo("FileRangeReader-idle-closer");
+            assertThat(closerThread.isDaemon()).isTrue();
+            assertThat(closerThread.getContextClassLoader()).isSameAs(ClassLoader.getSystemClassLoader());
+        }
+
+        private static void awaitQuietly(CyclicBarrier barrier) {
+            try {
+                barrier.await(10, TimeUnit.SECONDS);
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        private static void awaitQuietly(CountDownLatch latch) {
+            try {
+                latch.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+        }
+
+        @SuppressWarnings("java:S2925") // a forwarding channel whose read outlasts the idle timeout needs a real delay
+        private static void sleepQuietly(long millis) {
+            try {
+                Thread.sleep(millis);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
         }
 
         @Test
         void constructorIdleTimeoutValidation() {
             assertThatNoException().isThrownBy(() -> new FileRangeReader(testFile, Duration.ofSeconds(30)));
+            assertThatNoException().isThrownBy(() -> new FileRangeReader(testFile, Duration.ofMillis(1)));
             assertThatNoException().isThrownBy(() -> new FileRangeReader(testFile, Duration.ZERO));
             Duration negativeDuration = Duration.ofSeconds(-1);
             assertThatThrownBy(() -> new FileRangeReader(testFile, negativeDuration))
                     .isInstanceOf(IllegalArgumentException.class);
             assertThatThrownBy(() -> new FileRangeReader(testFile, null)).isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        void constructorRejectsASubMillisecondIdleTimeout() {
+            Duration halfAMillisecond = Duration.ofNanos(500_000);
+            assertThatThrownBy(() -> new FileRangeReader(testFile, halfAMillisecond))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("millisecond");
         }
 
         @Test
@@ -811,9 +1211,13 @@ class FileRangeReaderTest {
                     futures.add(executor.submit(() -> {
                         try {
                             startLatch.await();
-                            ByteBuffer buffer = r.readRange(regionStart, regionSize);
+                            ByteBuffer buffer =
+                                    r.readRange(regionStart, regionSize).flip();
                             byte[] readData = new byte[buffer.remaining()];
                             buffer.get(readData);
+                            if (readData.length != regionSize) {
+                                return false;
+                            }
                             for (int j = 0; j < readData.length; j++) {
                                 if (readData[j] != (byte) ((regionStart + j) % 256)) {
                                     return false;
@@ -849,7 +1253,7 @@ class FileRangeReaderTest {
          * inject failures.
          */
         private static class ForwardingFileChannel extends FileChannel {
-            private final FileChannel delegate;
+            final FileChannel delegate;
 
             ForwardingFileChannel(FileChannel delegate) {
                 this.delegate = delegate;

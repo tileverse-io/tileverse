@@ -123,7 +123,7 @@ class CachingRangeReaderTest {
         try (CachingRangeReader reader =
                 CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
             String sourceId = reader.getSourceIdentifier();
-            assertThat(sourceId).isEqualTo(testFile.toAbsolutePath().toString());
+            assertThat(sourceId).isEqualTo(testFile.toRealPath().toString());
         }
     }
 

@@ -39,7 +39,7 @@ This abstract class handles the boilerplate:
 ### Backend Layer
 These classes implement the actual network/disk I/O:
 
-*   **`FileRangeReader`**: Wraps `FileChannel`. Uses OS page cache.
+*   **`FileRangeReader`**: Wraps a `FileChannel` opened lazily by the file's real path and closed after the idle timeout with no read in progress. A stale NFS handle or a closed channel retires the channel and the read resumes on a fresh one after the bytes already landed, three attempts per call. Identifies the file by its real path. Uses the OS page cache.
 *   **`HttpRangeReader`**: Uses `java.net.http.HttpClient` to issue `GET` requests with `Range` headers. The `HttpClient` is refcounted at the `HttpStorage` level (via `HttpClientCache`) and shared across sibling readers; per-reader `close()` is a no-op, mirroring `S3` / `Azure` / `GCS`. The client shuts down only when the last `HttpStorage` holding a lease closes.
 *   **`S3RangeReader`**: Wraps AWS SDK v2. Maps exceptions to standard `IOException`. Uses an `S3Client` refcounted by `S3ClientCache` at the `S3Storage` level.
 *   **`Azure` / `GCS`**: Similar wrappers for their respective SDKs, with matching refcounted client caches.
@@ -53,7 +53,9 @@ stack as `BlockAlignedRangeReader` above `CachingRangeReader` above the backend:
     result under that exact key, and returns the data. The cache is shared across readers and
     partitioned by the delegate's `getSourceIdentifier()`, which is why S3 and GCS readers over a
     non-default endpoint include that endpoint in their identifier: the same bucket and key on two
-    endpoints must never share cached bytes.
+    endpoints must never share cached bytes. In the other direction, a local file identifies as its
+    real path, and one file reached through a symlink or another spelling of its path shares one
+    partition.
 *   **`BlockAlignedRangeReader`**: Expands a request that falls fully inside a declared byte
     region (e.g., "bytes 100-150" inside a declared header region) to the blocks that cover it
     (e.g., "bytes 0-4096"), fetched from its delegate in one batch call. Requests outside every

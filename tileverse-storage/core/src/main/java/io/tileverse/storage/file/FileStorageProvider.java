@@ -15,17 +15,23 @@
  */
 package io.tileverse.storage.file;
 
+import io.tileverse.storage.NotFoundException;
+import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageException;
 import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
+import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * {@link StorageProvider} implementation for the local filesystem. Selects on {@code file:} URIs (or filesystem paths
@@ -36,6 +42,8 @@ import java.util.List;
  * <p>The URI must point to an existing directory. URIs that resolve to a regular file are rejected (use the parent
  * directory and address the file via {@code openRangeReader(key)} or {@code openRangeReader(URI)}). URIs that resolve
  * to a non-existent path are rejected (the provider does not auto-create the directory).
+ *
+ * <p>A caller with a single file and no use for a Storage opens a reader over it with {@link #openRangeReader(Path)}.
  */
 public class FileStorageProvider extends AbstractStorageProvider {
 
@@ -53,7 +61,8 @@ public class FileStorageProvider extends AbstractStorageProvider {
     /**
      * Idle timeout after which a {@code FileRangeReader} closes its underlying {@code FileChannel} to release file
      * descriptors. The channel is reopened on demand. ISO-8601 duration format (e.g. {@code PT60S} for 60 seconds).
-     * Default {@code PT60S}.
+     * Default {@code PT60S}; {@code PT0S} disables the idle close, and a value above zero must be at least 1
+     * millisecond.
      *
      * <p><b>Key:</b> {@code storage.file.idle-timeout}
      */
@@ -62,7 +71,8 @@ public class FileStorageProvider extends AbstractStorageProvider {
             .title("File channel idle timeout")
             .description("""
                     Idle timeout after which a FileRangeReader closes its underlying FileChannel to release file descriptors. \
-                    The channel is reopened on demand on the next read. ISO-8601 duration format (e.g. PT60S for 60 seconds, PT0S to disable).
+                    The channel is reopened on demand on the next read. ISO-8601 duration format (e.g. PT60S for 60 seconds, PT0S to disable). \
+                    A value above zero must be at least 1 millisecond.
                     """)
             .type(Duration.class)
             .group(ID)
@@ -104,6 +114,43 @@ public class FileStorageProvider extends AbstractStorageProvider {
         return matches(config, "file", null);
     }
 
+    /**
+     * Opens a reader over one local file without a {@link Storage}, with the reader's own 60-second idle timeout. The
+     * {@code storage.file.idle-timeout} parameter reaches only readers obtained through a Storage; use
+     * {@link #openRangeReader(Path, Duration)} to choose the timeout here.
+     *
+     * @param file the file to read
+     * @return a reader over the file, identified by the file's real path
+     * @throws NotFoundException if the file does not exist
+     * @throws IllegalArgumentException if the path is a directory
+     * @throws StorageException on any other I/O failure while inspecting the file
+     */
+    public static RangeReader openRangeReader(Path file) {
+        return openRangeReader(file, FileRangeReader.DEFAULT_IDLE_TIMEOUT);
+    }
+
+    /**
+     * Opens a reader over one local file without a {@link Storage}.
+     *
+     * @param file the file to read
+     * @param idleTimeout how long the reader's channel may sit idle before it closes; {@link Duration#ZERO} keeps it
+     *     open, a value above zero must be at least 1 millisecond
+     * @return a reader over the file, identified by the file's real path
+     * @throws NotFoundException if the file does not exist
+     * @throws IllegalArgumentException if the path is a directory, or the timeout is negative or sub-millisecond
+     * @throws StorageException on any other I/O failure while inspecting the file
+     */
+    public static RangeReader openRangeReader(Path file, Duration idleTimeout) {
+        Objects.requireNonNull(file, "file cannot be null");
+        try {
+            return new FileRangeReader(file, idleTimeout);
+        } catch (NoSuchFileException e) {
+            throw new NotFoundException("File not found: " + file, e);
+        } catch (IOException e) {
+            throw new StorageException("Failed to open " + file, e);
+        }
+    }
+
     @Override
     public Storage createStorage(StorageConfig config) {
         URI uri = config.baseUri();
@@ -118,6 +165,21 @@ public class FileStorageProvider extends AbstractStorageProvider {
         }
         Duration idleTimeout = config.getParameter(FILE_IDLE_TIMEOUT)
                 .orElseGet(() -> FILE_IDLE_TIMEOUT.defaultValue().orElseThrow());
+        requireValidIdleTimeout(idleTimeout);
         return new FileStorage(root, idleTimeout);
+    }
+
+    /**
+     * Rejects the values the reader cannot honor, naming the parameter: a negative timeout, and one above zero but
+     * below the millisecond resolution of the idle check.
+     */
+    private static void requireValidIdleTimeout(Duration idleTimeout) {
+        if (idleTimeout.isNegative()) {
+            throw new IllegalArgumentException(FILE_IDLE_TIMEOUT.key() + " cannot be negative: " + idleTimeout);
+        }
+        if (!idleTimeout.isZero() && idleTimeout.toMillis() == 0) {
+            throw new IllegalArgumentException(
+                    FILE_IDLE_TIMEOUT.key() + " must be PT0S (disabled) or at least 1 millisecond: " + idleTimeout);
+        }
     }
 }

@@ -182,19 +182,20 @@ try (Storage storage = StorageFactory.open(URI.create("s3://bucket/data/"))) {
 }
 ```
 
-`RangeReader.close()` releases only that blob's per-reader state; the parent `Storage` remains open. Closing the `Storage` releases the SDK client (refcounted internally so multiple `Storage` instances against the same account share one client).
+`RangeReader.close()` releases only that blob's per-reader state; the parent `Storage` remains open. Closing the `Storage` releases the SDK client (refcounted internally so multiple `Storage` instances against the same account share one client). A local reader's per-reader state is one file channel, opened by the file's real path on the first read and closed after `storage.file.idle-timeout` with no read in progress; closing a `FileStorage` leaves the readers obtained from it usable.
 
 ## Resource lifecycle
 
 - `Storage` instances should be closed when no longer needed (try-with-resources).
 - The underlying SDK clients (`S3Client`, `BlobServiceClient`, GCS `Storage`) are reference-counted by the provider's internal cache - opening many `Storage` instances against the same account does not multiply client cost.
 - Streams returned by `list(...)` and `ReadHandle`s returned by `read(...)` must be closed by the caller.
+- Local readers hold a file descriptor only while a channel is open: from the first read until the idle timeout elapses with no read in progress. A closed reader never reopens one.
 
 ## Documented gotchas
 
 A handful of backend-specific quirks are documented in the JavaDoc of each provider. The most load-bearing:
 
-- **Local FS `FileChannel` is interruptible**: `Thread.interrupt()` during a read closes the channel. The implementation reopens on demand, but be aware if you build cancellation on top of interrupts.
+- **Local range reads are interruptible, and an interrupt closes the channel for every reader of the file**: a read that starts on a thread whose interrupt flag is already set fails at once, without touching the channel, with a `StorageException` caused by an `InterruptedIOException`, and the flag stays set. A read interrupted midway fails with `ClosedByInterruptException` as the cause and is never retried, while the other readers resume on a fresh channel. Streaming reads and writes through `FileStorage` are not interruptible at all: the JDK marks their channels uninterruptible.
 - **Azure sync SDK does not honor `Thread.interrupt`**: use `WriteOptions.timeout` / `ReadOptions.timeout` for hard time bounds.
 - **S3 Express ETags are random alphanumeric**, not MD5; presigned URLs cap at 5 minutes.
 - **S3 Express list results are not lexicographically ordered** (general S3 GP buckets are).

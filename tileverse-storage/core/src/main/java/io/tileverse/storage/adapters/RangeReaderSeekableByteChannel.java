@@ -39,7 +39,7 @@ import java.nio.channels.SeekableByteChannel;
  * <p><strong>Usage Example:</strong>
  *
  * <pre>{@code
- * RangeReader reader = FileRangeReader.of(path);
+ * RangeReader reader = FileStorageProvider.openRangeReader(path);
  * try (SeekableByteChannel channel = RangeReaderSeekableByteChannel.of(reader)) {
  *     // Use with any NIO-based API
  *     ByteBuffer buffer = ByteBuffer.allocate(1024);

@@ -1,17 +1,16 @@
 # Tileverse PMTiles
 
-A Java library for reading and writing PMTiles - a cloud-optimized format for map tiles.
+A Java library for reading PMTiles, a cloud-optimized format for map tiles.
 
 > **Note**: This is part of the [Tileverse](../) project. See the [main README](../README.md) for installation instructions and project overview.
 
 ## Overview
 
-Tileverse PMTiles is a Java implementation of the PMTiles format that provides efficient reading and writing capabilities for PMTiles archives. Built on top of [Tileverse Storage](../tileverse-storage/), it supports both local files and cloud storage sources (S3, Azure Blob Storage, Google Cloud Storage, HTTP).
+Tileverse PMTiles is a Java implementation of the PMTiles format for efficient, cloud-optimized reading of PMTiles archives. Built on top of [Tileverse Storage](../tileverse-storage/), it supports both local files and cloud storage sources (S3, Azure Blob Storage, Google Cloud Storage, HTTP).
 
 ## Features
 
 - **Read PMTiles v3 files** from local storage or cloud sources
-- **Write PMTiles v3 files** with efficient spatial indexing
 - **Cloud-optimized access** via HTTP range requests
 - **High-performance tile retrieval** using Hilbert curve spatial indexing
 - **Multi-source support** through tileverse-storage integration
@@ -44,6 +43,7 @@ See the [main README](../README.md#installation) for BOM usage.
 import io.tileverse.pmtiles.PMTilesReader;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.file.FileStorageProvider;
+import io.tileverse.tiling.pyramid.TileIndex;
 
 // Create a range reader for the local file
 RangeReader rangeReader = FileStorageProvider.openRangeReader(Path.of("mymap.pmtiles"));
@@ -59,10 +59,10 @@ try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
         header.maxLatE7() / 10000000.0);
     
     // Read a specific tile
-    Optional<byte[]> tileData = reader.getTile(10, 885, 412);
+    Optional<ByteBuffer> tileData = reader.getTile(TileIndex.zxy(10, 885, 412));
     
     if (tileData.isPresent()) {
-        System.out.printf("Tile data size: %d bytes%n", tileData.get().length);
+        System.out.printf("Tile data size: %d bytes%n", tileData.get().remaining());
     }
 }
 ```
@@ -74,6 +74,7 @@ import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageFactory;
 import io.tileverse.storage.cache.CachingRangeReader;
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.util.Properties;
 
 // Open a Storage for the bucket, then get a RangeReader for the tileset key
@@ -88,24 +89,26 @@ try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/"), props)
         RangeReader cachedReader = CachingRangeReader.of(s3Reader);
         PMTilesReader reader = new PMTilesReader(cachedReader)) {
     // Access tiles efficiently from cloud storage
-    Optional<byte[]> tile = reader.getTile(10, 885, 412);
+    Optional<ByteBuffer> tile = reader.getTile(TileIndex.xyz(885, 412, 10));
 }
 ```
 
 #### Reading PMTiles from HTTP Sources
 
 ```java
-import io.tileverse.storage.rangereader.http.HttpRangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
+import java.util.Properties;
 
 // Read from HTTP with authentication
-RangeReader httpReader = HttpRangeReader.builder()
-    .uri(URI.create("https://example.com/tiles.pmtiles"))
-    .bearerToken("your-api-token")
-    .build();
+Properties props = new Properties();
+props.setProperty("storage.http.bearer-token", "your-api-token");
 
-try (PMTilesReader reader = new PMTilesReader(httpReader)) {
+try (Storage storage = StorageFactory.open(URI.create("https://example.com/"), props);
+        RangeReader httpReader = storage.openRangeReader("tiles.pmtiles");
+        PMTilesReader reader = new PMTilesReader(httpReader)) {
     PMTilesHeader header = reader.getHeader();
-    System.out.printf("Tile format: %s%n", header.tileType());
+    System.out.printf("Tile format: %s%n", header.tileMimeType());
 }
 ```
 
@@ -113,8 +116,8 @@ try (PMTilesReader reader = new PMTilesReader(httpReader)) {
 
 For more detailed information, see the documentation:
 
-- [PMTiles Format Specification](docs/pmtiles_format_specification.md) - Technical details of the PMTiles format
-- [Cloud Storage Support](docs/cloud_storage_support.md) - Using PMTiles with S3, Azure, and HTTP
+- [PMTiles guide](https://tileverse.io/pmtiles/) - reading archives and the decoded tile stores
+- [Cloud storage](https://tileverse.io/pmtiles/how-to/cloud-storage/) - PMTiles on S3, Azure, GCS and HTTP
 
 ## Related Modules
 
@@ -129,7 +132,7 @@ This library works together with other Tileverse modules:
 Tileverse PMTiles is designed for high-performance access to PMTiles archives:
 
 - **Efficient spatial indexing** using Hilbert curves for fast tile lookup
-- **Multi-level caching** through tileverse-storage integration
+- **In-memory range caching** through tileverse-storage integration
 - **Block-aligned reads** to minimize cloud storage requests
 - **Memory-efficient streaming** for processing large tile sets
 - **Thread-safe concurrent access** for server applications

@@ -34,12 +34,14 @@ First, add the dependencies:
 
 ## Reading Tiles from a Local File
 
-`PMTilesReader.open(URI)` is a one-line entry point that opens the parent {@link Storage}, gets a `RangeReader` for the leaf, and bundles them so that closing the reader releases both. The same call works for any URI scheme (`file:`, `http(s):`, `s3:`, `gs:`, Azure URLs).
+`PMTilesReader.open(URI)` is a one-line entry point that opens the parent `Storage`, gets a `RangeReader` for the leaf, and bundles them so that closing the reader releases both. The same call works for any URI scheme (`file:`, `http(s):`, `s3:`, `gs:`, Azure URLs).
 
 ```java
 import io.tileverse.pmtiles.PMTilesReader;
 import io.tileverse.pmtiles.PMTilesHeader;
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.net.URI;
+import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -54,7 +56,7 @@ public class QuickStart {
             System.out.println("Max Zoom: " + header.maxZoom());
 
             // Get a specific tile (zoom=10, x=885, y=412)
-            Optional<ByteBuffer> tileData = reader.getTile(10, 885, 412);
+            Optional<ByteBuffer> tileData = reader.getTile(TileIndex.zxy(10, 885, 412));
 
             if (tileData.isPresent()) {
                 System.out.printf("Tile found! Size: %d bytes%n", tileData.get().remaining());
@@ -70,7 +72,7 @@ public class QuickStart {
 
 ```java
 try (PMTilesReader reader = PMTilesReader.open(URI.create("https://example.com/tiles.pmtiles"))) {
-    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
+    Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(10, 885, 412));
     // Process tile...
 }
 ```
@@ -83,6 +85,7 @@ For backends that need configuration (region, credentials, endpoint overrides), 
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageFactory;
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.net.URI;
 import java.util.Properties;
 
@@ -95,7 +98,7 @@ URI leaf = URI.create("s3://my-bucket/world.pmtiles");
 try (Storage storage = StorageFactory.open(bucket, props);
         RangeReader s3Reader = storage.openRangeReader(leaf);
         PMTilesReader reader = new PMTilesReader(s3Reader)) {
-    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
+    Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(10, 885, 412));
     // Process tile...
 }
 ```
@@ -109,18 +112,19 @@ tile reads stay exact.
 
 ```java
 import io.tileverse.storage.cache.CachingRangeReader;
+import io.tileverse.tiling.pyramid.TileIndex;
 
 try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/"), props);
         RangeReader baseReader = storage.openRangeReader(URI.create("s3://my-bucket/world.pmtiles"));
         RangeReader cachedReader = CachingRangeReader.of(baseReader);
         PMTilesReader reader = new PMTilesReader(cachedReader)) {
-    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
+    Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(10, 885, 412));
 }
 ```
 
 ## Decoded Vector and Raster Tiles
 
-`PMTilesReader.getTile(...)` returns the raw on-disk tile bytes. Most callers want a decoded model — the `PMTilesVectorTileStore` and `PMTilesRasterTileStore` wrappers handle the decoding step (and validate that the archive's tile type matches):
+`PMTilesReader.getTile(...)` returns the raw on-disk tile bytes. Most callers want a decoded model. The `PMTilesVectorTileStore` and `PMTilesRasterTileStore` wrappers handle the decoding step and validate that the archive's tile type matches:
 
 ```java
 import io.tileverse.pmtiles.PMTilesReader;
@@ -133,8 +137,7 @@ import java.util.Optional;
 try (PMTilesReader reader = PMTilesReader.open(URI.create("s3://my-bucket/imagery.pmtiles"))) {
     PMTilesRasterTileStore store = new PMTilesRasterTileStore(reader);
 
-    var tile = store.matrixSet().getTileMatrix(10).tile(TileIndex.xyz(885, 412, 10)).orElseThrow();
-    Optional<TileData<RenderedImage>> decoded = store.loadTile(tile);
+    Optional<TileData<RenderedImage>> decoded = store.findTile(TileIndex.xyz(885, 412, 10));
     decoded.ifPresent(td -> {
         RenderedImage img = td.data();   // ready for ImageIO.write, GridCoverage2D, etc.
     });
@@ -145,8 +148,8 @@ WebP decoding is bundled with `tileverse-pmtiles` (an `ImageIO` plugin pulled in
 
 ## Processing Multiple Tiles
 
-`PMTilesReader.open(URI)` is the simplest entry point — it opens the
-parent `Storage` and `RangeReader` for you, and closing the reader
+`PMTilesReader.open(URI)` is the simplest entry point. It opens the
+parent `Storage` and the `RangeReader` for you, and closing the reader
 releases both.
 
 ```java
@@ -158,7 +161,7 @@ int minY = 410, maxY = 420;
 try (PMTilesReader reader = PMTilesReader.open(URI.create("s3://my-bucket/world.pmtiles"))) {
     for (int x = minX; x <= maxX; x++) {
         for (int y = minY; y <= maxY; y++) {
-            Optional<ByteBuffer> tile = reader.getTile(zoom, x, y);
+            Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(zoom, x, y));
             if (tile.isPresent()) {
                 System.out.printf("Tile %d/%d/%d: %d bytes%n",
                     zoom, x, y, tile.get().remaining());

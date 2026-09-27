@@ -23,6 +23,7 @@ workspace "Tileverse Storage - Dynamic Views" "Runtime scenarios for the Tilever
                 
                 # Decorators
                 cachingRangeReader = component "CachingRangeReader" "In-memory caching decorator" "Java Class"
+                blockAlignedRangeReader = component "BlockAlignedRangeReader" "Region-scoped block alignment decorator" "Java Class"
                 
                 # Authentication
                 authenticationSystem = component "Authentication System" "HTTP authentication implementations" "Java Package"
@@ -43,6 +44,7 @@ workspace "Tileverse Storage - Dynamic Views" "Runtime scenarios for the Tilever
         application -> fileRangeReader "Uses for file reading"
         application -> httpRangeReader "Uses for HTTP reading"
         application -> cachingRangeReader "Uses for cached reading"
+        application -> blockAlignedRangeReader "Uses for block-aligned reading"
         application -> s3RangeReader "Uses for S3 reading"
         
         # Core component relationships
@@ -55,6 +57,8 @@ workspace "Tileverse Storage - Dynamic Views" "Runtime scenarios for the Tilever
         
         # Decorator relationships
         cachingRangeReader -> rangeReaderInterface "Implements"
+        blockAlignedRangeReader -> rangeReaderInterface "Implements"
+        blockAlignedRangeReader -> cachingRangeReader "Delegates to"
 
         # Decorator chaining relationships
         cachingRangeReader -> fileRangeReader "Delegates to"
@@ -125,6 +129,22 @@ workspace "Tileverse Storage - Dynamic Views" "Runtime scenarios for the Tilever
             application -> cachingRangeReader "1. readRange(offset, length)"
             cachingRangeReader -> application "2. returns cached data immediately"
             
+            autoLayout
+        }
+
+        dynamic coreModule "BlockAlignedRead" {
+            title "Block-Aligned Read Scenario"
+            description "A read inside a declared region expands to whole blocks, stored by the cache; the caller receives its exact slice"
+
+            application -> blockAlignedRangeReader "1. readRange(offset, length) inside a declared region"
+            blockAlignedRangeReader -> cachingRangeReader "2. readRanges(blocks covering the request)"
+            cachingRangeReader -> fileRangeReader "3. readRanges(blocks missing from the cache)"
+            fileRangeReader -> localFileSystem "4. file range requests"
+            localFileSystem -> fileRangeReader "5. returns block data"
+            fileRangeReader -> cachingRangeReader "6. returns block data"
+            cachingRangeReader -> blockAlignedRangeReader "7. stores the blocks and returns them"
+            blockAlignedRangeReader -> application "8. copies the requested slice out of the blocks"
+
             autoLayout
         }
 

@@ -21,7 +21,7 @@ A PMTiles archive contains three regions:
 
 Tiles are addressed with the standard XYZ scheme: zoom level, column (west to east), and row (top to bottom in PMTiles' XYZ-with-top-left convention). The `tileType` byte in the header tells you whether the bodies are MVT, PNG, JPEG, WebP, or AVIF; `PMTilesHeader.tileMimeType()` and `isRasterTileType()` give a convenient view of the same.
 
-PMTiles archives can hold either Mapbox Vector Tiles or raster tiles in any of those formats. `PMTilesReader.getTile(...)` returns raw bytes for either case; the high-level `PMTilesVectorTileStore` and `PMTilesRasterTileStore` wrappers decode on the fly to `VectorTile` and `RenderedImage` respectively. WebP decoding is bundled - no extra ImageIO plugin needed. See the [Tile Stores Reference](reference/tile-stores.md) for the API surface.
+PMTiles archives can hold either Mapbox Vector Tiles or raster tiles in any of those formats. `PMTilesReader.getTile(...)` returns raw bytes for either case; the high-level `PMTilesVectorTileStore` and `PMTilesRasterTileStore` wrappers decode on the fly to `VectorTile` and `RenderedImage` respectively. WebP decoding is bundled - no extra ImageIO plugin needed. See the [Tile Stores Reference](reference/tile-stores.md) for the API.
 
 ## Installation
 
@@ -34,11 +34,12 @@ PMTiles archives can hold either Mapbox Vector Tiles or raster tiles in any of t
 
 ## Usage
 
-The `PMTilesReader` accepts either a `RangeReader` or a `Supplier<SeekableByteChannel>`. The `RangeReader` can provide this via its `asByteChannel()` method.
+`PMTilesReader` wraps a `RangeReader`. `PMTilesReader.open(URI)` obtains one from the `Storage` of the URI and closes both together, and `new PMTilesReader(rangeReader)` takes a reader opened by the caller.
 
 ```java
 import io.tileverse.pmtiles.PMTilesHeader;
 import io.tileverse.pmtiles.PMTilesReader;
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.nio.file.Path;
 
 try (PMTilesReader reader = PMTilesReader.open(Path.of("data/map.pmtiles").toUri())) {
@@ -46,9 +47,8 @@ try (PMTilesReader reader = PMTilesReader.open(Path.of("data/map.pmtiles").toUri
     PMTilesHeader header = reader.getHeader();
     System.out.println("Min Zoom: " + header.minZoom());
 
-    // Fetch tile (z, x, y)
-    reader.getTile(0, 0, 0).ifPresent(buffer -> {
-        buffer.flip(); // Important: flip the buffer before reading
+    // Fetch tile (z, x, y); the buffer is ready to read, do not flip it
+    reader.getTile(TileIndex.zxy(0, 0, 0)).ifPresent(buffer -> {
         // Process tile bytes...
     });
 }
@@ -58,4 +58,4 @@ try (PMTilesReader reader = PMTilesReader.open(Path.of("data/map.pmtiles").toUri
 
 ![tileverse-pmtiles components](../assets/images/storage/structurizr-PMTilesComponents.svg)
 
-`PMTilesReader` is the low-level type: it reads the header, walks the directory using `HilbertCurve` for index lookup, and returns raw tile bytes (or streams them through a caller-supplied `IOFunction`). `PMTilesVectorTileStore` and `PMTilesRasterTileStore` are higher-level wrappers built on `PMTilesReader` that decode tiles to `VectorTile` and `RenderedImage` respectively. See the [Tile Stores Reference](reference/tile-stores.md) for the full API surface.
+`PMTilesReader` is the low-level type: it reads the header, walks the directory using `HilbertCurve` for index lookup, and returns raw tile bytes (or streams them through a caller-supplied `IOFunction`). `PMTilesVectorTileStore` and `PMTilesRasterTileStore` are higher-level wrappers built on `PMTilesReader` that decode tiles to `VectorTile` and `RenderedImage` respectively. See the [Tile Stores Reference](reference/tile-stores.md) for the full API.

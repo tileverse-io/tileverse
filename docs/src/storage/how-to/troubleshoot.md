@@ -190,10 +190,9 @@ export JAVA_HOME=/path/to/java17
 
 1. **Enable caching**:
    ```java
-   var reader = CachingRangeReader.builder(baseReader)
-       .maximumSize(1000)
-       .build();
+   RangeReader reader = CachingRangeReader.of(baseReader);
    ```
+   or set `storage.caching.enabled=true` on the configuration passed to `StorageFactory.open` to cache every reader opened by that `Storage`.
 
 ### High Memory Usage
 
@@ -201,20 +200,13 @@ export JAVA_HOME=/path/to/java17
 
 **Solutions**:
 
-1. **Use soft references in cache**:
-   ```java
-   var reader = CachingRangeReader.builder(baseReader)
-       .softValues()  // Allow GC to reclaim memory
-       .build();
-   ```
+1. **Know the cache budget**: the shared range cache is bounded to 20% of the maximum heap, weighed by cached bytes, and an entry expires 60 seconds after its last access. The cache stays empty until readers are wrapped in a `CachingRangeReader` or `storage.caching.enabled` is set.
 
-2. **Limit cache size**:
-   ```java
-   var reader = CachingRangeReader.builder(baseReader)
-       .maximumSize(100)  // Limit entries
-       .maxSizeBytes(64 * 1024 * 1024)  // 64MB limit
-       .build();
-   ```
+2. **Keep one `CacheManager`**: every `CacheManager.newInstance()` owns a cache with its own full budget. Readers built without an explicit manager share the default one.
+
+3. **Skip caching for streaming reads**: a job reading a file front to back gets nothing back from the cache and fills it with bytes read once. Use the reader returned by `Storage.openRangeReader` directly.
+
+4. **Align only what repeats**: `BlockAlignedRangeReader.alignWholeFile()` turns every read inside the file into whole cached blocks. Declare only the regions read repeatedly (a header, an index) and let tile or row payloads pass through as exact ranges.
 
 ### Cache Not Working
 
@@ -249,10 +241,8 @@ export JAVA_HOME=/path/to/java17
 
 3. **Use appropriate read patterns**:
    ```java
-   // Ensure consistent read patterns to improve cache hits
-   var reader = CachingRangeReader.builder(baseReader)
-       .maximumSize(1000)
-       .build();
+   // A repeated read must ask for the same (offset, length): the cache keys on the exact range
+   RangeReader reader = CachingRangeReader.of(baseReader);
    
    // Read in consistent chunks
    int chunkSize = 64 * 1024;  // 64KB chunks
@@ -260,6 +250,8 @@ export JAVA_HOME=/path/to/java17
        reader.readRange(i * chunkSize, chunkSize);  // Cache-friendly
    }
    ```
+
+4. **Mind the expiry**: an entry unused for 60 seconds is evicted. A hit rate measured across idle periods drops for that reason alone.
 
 ## Network Issues
 
@@ -387,6 +379,14 @@ shared executor.
 2. **Verify file exists**:
    ```java
    Path filePath = Path.of("/path/to/file");
+   if (!Files.exists(filePath)) {
+       throw new FileNotFoundException("File not found: " + filePath);
+   }
+   if (!Files.isReadable(filePath)) {
+       throw new IOException("File not readable: " + filePath);
+   }
+   ```
+
 ### Too Many Open Files
 
 **Problem**: `IOException: Too many open files` from a server that opens many local readers.
@@ -412,14 +412,6 @@ the file's real path and resumes after the bytes already read, three attempts pe
 keeps a long-lived server from holding handles across remounts in the first place. A read that fails
 after the third attempt reports `Read failed after 3 attempts`, which points at a mount that stays
 stale.
-
-   if (!Files.exists(filePath)) {
-       throw new FileNotFoundException("File not found: " + filePath);
-   }
-   if (!Files.isReadable(filePath)) {
-       throw new IOException("File not readable: " + filePath);
-   }
-   ```
 
 ## Debugging Tips
 
@@ -450,7 +442,7 @@ public void monitorCache(RangeReader reader) {
         System.out.println("  Hits: " + stats.hitCount());
         System.out.println("  Misses: " + stats.missCount());
         System.out.println("  Evictions: " + stats.evictionCount());
-        System.out.println("  Size: " + stats.estimatedSize());
+        System.out.println("  Entries: " + stats.entryCount());
     }
 }
 ```
@@ -518,6 +510,6 @@ If you're still experiencing issues:
 | `Access Denied (403)` | Authentication/authorization | Check credentials and permissions |
 | `NoSuchFileException` | File not found | Verify file/object exists |
 | `SocketTimeoutException` | Network timeout | Increase timeout or check connectivity |
-| `OutOfMemoryError` | Large cache or buffer usage | Reduce cache size or use soft values |
+| `OutOfMemoryError` | Several `CacheManager` instances, or caching a streaming workload | The shared cache holds at most 20% of the maximum heap per manager; keep one manager and skip caching for reads done once |
 | `Response missing required ETag header` | S3-compatible endpoint serving a file it never received through the S3 API | Handled automatically; reads fall back to the sync client |
 | `UnsupportedClassVersionError` | Wrong Java version | Use Java 17 or higher |

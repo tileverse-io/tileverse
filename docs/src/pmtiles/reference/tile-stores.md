@@ -2,7 +2,7 @@
 
 `PMTilesReader.getTile(...)` returns raw on-disk tile bytes. The `*TileStore` classes wrap a `PMTilesReader` and expose a uniform, format-agnostic API parameterized on the decoded payload type. They live in the `tileverse-tilestore` module and are pulled in transitively when you depend on `tileverse-pmtiles`; no separate dependency is needed.
 
-This page is the API surface reference. For task-oriented walkthroughs see [Reading PMTiles](../how-to/read-pmtiles.md).
+This page is the API reference. For task-oriented walkthroughs see [Reading PMTiles](../how-to/read-pmtiles.md).
 
 ## Component view
 
@@ -31,6 +31,7 @@ public interface TileStore<T> {
 
     TileMatrixSet matrixSet();
     Optional<TileData<T>> loadTile(Tile tile);
+    default Optional<TileData<T>> findTile(TileIndex tileIndex);
 
     default Stream<TileData<T>> findTiles(List<BoundingBox2D> extents, int zoomLevel);
     default Stream<TileData<T>> findTiles(List<BoundingBox2D> extents, double resolution, Strategy strategy);
@@ -41,6 +42,7 @@ public interface TileStore<T> {
 
 - `matrixSet()` returns the store's grid model. For PMTiles this is always `WebMercatorQuad`.
 - `loadTile(Tile)` is the single primitive every subclass implements. Default methods compose it.
+- `findTile(TileIndex)` resolves the index through the matrix set and loads that tile.
 - `findTiles` resolves a list of extents to the intersecting tile range and streams decoded payloads.
 - `Strategy` controls zoom selection when a target resolution falls between matrix levels. `SPEED` rounds to the coarser zoom (fewer reads), `QUALITY` rounds to the finer zoom (more detail).
 
@@ -50,7 +52,7 @@ public interface TileStore<T> {
 public record TileData<T>(Tile tile, T data) {}
 ```
 
-`Tile` carries spatial metadata (extent in CRS units, `TileIndex`, the parent `TileMatrix`). `data` is the decoded payload of type `T`. Useful when a consumer needs the extent to position the tile in a mosaic without re-deriving it.
+`Tile` holds spatial metadata (extent in CRS units, `TileIndex`, the parent `TileMatrix`). `data` is the decoded payload of type `T`. Useful when a consumer needs the extent to position the tile in a mosaic without re-deriving it.
 
 ## `VectorTileStore`
 
@@ -77,9 +79,9 @@ public abstract class RasterTileStore extends AbstractTileStore<RenderedImage> {
 ```
 
 - `mimeType()` returns the on-disk MIME type of the encoded tiles (`image/png`, `image/jpeg`, `image/webp`, `image/avif`). Useful for HTTP `Content-Type` headers when proxying raw bytes, or for selecting an `ImageWriter` when re-encoding.
-- The payload type is the `RenderedImage` interface (not the concrete `BufferedImage` that `ImageIO.read` produces), so the result flows directly into APIs like `GridCoverageFactory.create(String, RenderedImage, ReferencedEnvelope)` without intermediate copies.
+- The payload type is the `RenderedImage` interface (not the concrete `BufferedImage` that `ImageIO.read` produces). The result flows directly into APIs like `GridCoverageFactory.create(String, RenderedImage, ReferencedEnvelope)` without intermediate copies.
 
-`PMTilesRasterTileStore` implements this on top of a `PMTilesReader`. It decodes each tile by feeding the streaming `InputStream` returned by `PMTilesReader.getTile(long, IOFunction<InputStream, D>)` directly to `ImageIO.read`, so no intermediate `ByteBuffer` is allocated per tile.
+`PMTilesRasterTileStore` implements this on top of a `PMTilesReader`. It decodes each tile by feeding the streaming `InputStream` returned by `PMTilesReader.getTile(long, IOFunction<InputStream, D>)` directly to `ImageIO.read`. No intermediate `ByteBuffer` is allocated per tile.
 
 WebP decoding is enabled out of the box by a bundled `ImageIO` plugin (`com.github.usefulness:webp-imageio`) registered via the JDK `ServiceLoader`. PNG and JPEG decoders ship with the JDK. AVIF is not bundled; add a JDK ImageIO plugin for AVIF if you need it.
 

@@ -101,9 +101,7 @@ URI bucket = URI.create("s3://my-bucket/");
 URI leaf = URI.create("s3://my-bucket/large-file.bin");
 try (Storage storage = StorageFactory.open(bucket, props);
         RangeReader baseReader = storage.openRangeReader(leaf);
-        RangeReader cachedReader = CachingRangeReader.builder(baseReader)
-            .maximumSize(1000)  // Cache up to 1000 ranges
-            .build()) {
+        RangeReader cachedReader = CachingRangeReader.of(baseReader)) {
 
     // First read - network request to S3
     ByteBuffer data1 = cachedReader.readRange(0, 1024);
@@ -114,6 +112,8 @@ try (Storage storage = StorageFactory.open(bucket, props);
     data2.flip();
 }
 ```
+
+The cache is shared by every caching reader of the JVM, holds at most 20% of the maximum heap, and expires an entry 60 seconds after its last access. See [Configure for performance](../how-to/configure.md#memory-cache-cachingrangereader) for the details.
 
 > **Note**: For local files, caching provides little benefit since the OS already caches file data efficiently.
 

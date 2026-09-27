@@ -80,6 +80,9 @@ The runtime view describes the dynamic behavior of the library.
 ### Cache Miss Scenario
 ![Cache Miss](../../assets/images/storage/structurizr-CacheMissScenario.svg)
 
+### Block-Aligned Read inside a Declared Region
+![Block-Aligned Read](../../assets/images/storage/structurizr-BlockAlignedRead.svg)
+
 ## Service Provider Interface (SPI)
 
 To support dynamic loading (e.g., for configuration-driven applications), we expose a `StorageFactory`.

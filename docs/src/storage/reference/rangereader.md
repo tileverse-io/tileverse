@@ -54,10 +54,8 @@ URI bucket = URI.create("s3://bucket/");
 URI leaf = URI.create("s3://bucket/key");
 try (Storage storage = StorageFactory.open(bucket);
         RangeReader baseReader = storage.openRangeReader(leaf);
-        // 2. Wrap with performance optimizations
-        RangeReader reader = CachingRangeReader.builder(baseReader)
-            .maxSizeBytes(10L * 1024 * 1024) // 10 MB total weight
-            .build()) {
+        // 2. Wrap with the shared in-memory range cache
+        RangeReader reader = CachingRangeReader.of(baseReader)) {
 
     // 3. Read arbitrary byte ranges
     ByteBuffer header = reader.readRange(0, 127);

@@ -165,21 +165,26 @@ block.
 
 ### Memory Management
 
-Configure caching based on your available memory:
+The range cache has no per-reader size. Every `CachingRangeReader` built without an explicit
+`CacheManager` shares one in-memory cache, bounded to 20% of the maximum heap by cached bytes,
+with entries expiring 60 seconds after their last access. Entries are partitioned by the source
+identifier of the wrapped reader, and `clearCache()` (or closing the reader) drops one source's
+entries.
 
 ```java
-// For memory-constrained environments
-CachingRangeReader.builder(delegate)
-    .maximumSize(100)  // Limit number of cached ranges
-    .softValues()      // Allow GC to reclaim memory
-    .build()
+// Default: the shared cache
+RangeReader cached = CachingRangeReader.of(delegate);
 
-// For memory-rich environments  
-CachingRangeReader.builder(delegate)
-    .maxSizeBytes(512 * 1024 * 1024)  // 512MB cache
-    .expireAfterAccess(30, TimeUnit.MINUTES)
-    .build()
+// Isolated: a cache of its own, with the same 20% budget
+CacheManager isolated = CacheManager.newInstance();
+RangeReader tenant = CachingRangeReader.builder(delegate)
+    .cacheManager(isolated)
+    .build();
 ```
+
+Keep the number of cache managers small: each one is another full budget. A reader streaming a
+file once gains nothing from the cache. Use the reader returned by `Storage.openRangeReader`
+directly for that workload.
 
 ## Next Steps
 

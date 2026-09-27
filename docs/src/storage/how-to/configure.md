@@ -15,20 +15,21 @@ URI bucket = URI.create("s3://bucket/");
 URI leaf = URI.create("s3://bucket/key");
 try (Storage storage = StorageFactory.open(bucket);
         RangeReader s3Reader = storage.openRangeReader(leaf);
-        RangeReader cachedReader = CachingRangeReader.builder(s3Reader)
-            // Strategy 1: Max entries (good for header/directory blocks)
-            .maximumSize(1000)
-
-            // Strategy 2: Max memory (e.g., 128MB)
-            .maxSizeBytes(128L * 1024 * 1024)
-
-            // Strategy 3: Expiration
-            .expireAfterAccess(10, TimeUnit.MINUTES)
-
-            .build()) {
+        RangeReader cachedReader = CachingRangeReader.of(s3Reader)) {
     // ...
 }
 ```
+
+The cache stores exactly the `(offset, length)` ranges requested from it. One in-memory cache is shared by every `CachingRangeReader` of the JVM (one per `CacheManager`), partitioned by the source identifier of the wrapped reader, and sized as a whole rather than per reader:
+
+| Setting | Value |
+| :--- | :--- |
+| Capacity | 20% of the maximum heap, weighed by cached bytes; over capacity, Caffeine evicts by its frequency and recency policy |
+| Expiry | 60 seconds after the last access to an entry; a system scheduler removes expired entries promptly |
+
+`clearCache()` drops the entries of one reader's source, and closing the reader does the same. `getCacheStats()` reports hits, misses, evictions and the entry count. `CachingRangeReader.builder(reader).cacheManager(CacheManager.newInstance())` gives a reader a cache of its own with the same capacity: every extra manager adds another 20% of the heap to the budget.
+
+To cache every reader opened by a `Storage` without composing the decorator by hand, set `storage.caching.enabled=true` on the configuration passed to `StorageFactory.open`. It is off by default.
 
 ## Read Optimization
 
@@ -173,11 +174,8 @@ URI leaf = URI.create("s3://bucket/tiles.pmtiles");
 try (Storage storage = StorageFactory.open(bucket);
         RangeReader base = storage.openRangeReader(leaf);
 
-        // 2. Memory Cache
-        RangeReader reader = CachingRangeReader.builder(base)
-            .maximumSize(10_000) // Keep hot tiles in RAM
-            .softValues()        // Let JVM reclaim memory if needed
-            .build()) {
+        // 2. Memory Cache: hot tiles stay in the shared cache for 60 seconds after their last read
+        RangeReader reader = CachingRangeReader.of(base)) {
     // serve tiles from `reader`
 }
 ```

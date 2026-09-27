@@ -15,6 +15,7 @@
  */
 package io.tileverse.storage;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -70,7 +71,7 @@ class RangeReaderReadRangesTest {
         List<RangeRequest> requests = List.of(
                 RangeRequest.of(5000, 100, first), RangeRequest.of(0, 50, second), RangeRequest.of(1234, 200, third));
 
-        int[] read = reader.readRanges(requests);
+        int[] read = counts(reader.readRanges(requests));
 
         assertThat(read).containsExactly(100, 50, 200);
         assertBufferContent(first.flip(), 5000, 100);
@@ -83,8 +84,8 @@ class RangeReaderReadRangesTest {
         ByteBuffer a = ByteBuffer.allocate(100);
         ByteBuffer b = ByteBuffer.allocate(100);
         ByteBuffer c = ByteBuffer.allocate(60);
-        int[] read = reader.readRanges(
-                List.of(RangeRequest.of(1000, 100, a), RangeRequest.of(1000, 100, b), RangeRequest.of(1050, 60, c)));
+        int[] read = counts(reader.readRanges(
+                List.of(RangeRequest.of(1000, 100, a), RangeRequest.of(1000, 100, b), RangeRequest.of(1050, 60, c))));
         assertThat(read).containsExactly(100, 100, 60);
         assertBufferContent(a.flip(), 1000, 100);
         assertBufferContent(b.flip(), 1000, 100);
@@ -98,12 +99,12 @@ class RangeReaderReadRangesTest {
         ByteBuffer straddling = ByteBuffer.allocate(100);
         ByteBuffer exactEnd = ByteBuffer.allocate(10);
         ByteBuffer zeroLength = ByteBuffer.allocate(10);
-        int[] read = reader.readRanges(List.of(
+        int[] read = counts(reader.readRanges(List.of(
                 RangeRequest.of(SIZE, 10, atEof),
                 RangeRequest.of(SIZE + 5, 10, pastEof),
                 RangeRequest.of(SIZE - 40, 100, straddling),
                 RangeRequest.of(SIZE - 10, 10, exactEnd),
-                RangeRequest.of(100, 0, zeroLength)));
+                RangeRequest.of(100, 0, zeroLength))));
         assertThat(read).containsExactly(0, 0, 40, 10, 0);
         assertThat(straddling.position()).isEqualTo(40);
         assertThat(zeroLength.position()).isZero();
@@ -111,14 +112,27 @@ class RangeReaderReadRangesTest {
 
     @Test
     void emptyBatchDoesNoIO() {
-        assertThat(reader.readRanges(List.of())).isEmpty();
+        assertThat(reader.readRanges(List.of()).requests()).isZero();
+    }
+
+    @Test
+    void defaultImplementationReportsOneFetchPerNonEmptyRange() {
+        BatchReadResult result = reader.readRanges(List.of(
+                RangeRequest.of(0, 100, ByteBuffer.allocate(100)),
+                RangeRequest.of(100, 0, ByteBuffer.allocate(10)),
+                RangeRequest.of(SIZE - 40, 100, ByteBuffer.allocate(100))));
+
+        assertThat(result.bytesRequested()).isEqualTo(200);
+        assertThat(result.fetches()).isEqualTo(2);
+        assertThat(result.bytesTransferred()).isEqualTo(140);
+        assertThat(result.bytesFromCache()).isZero();
     }
 
     @Test
     void targetPositionAdvancesFromCurrentPosition() {
         ByteBuffer target = ByteBuffer.allocate(120);
         target.position(20);
-        int[] read = reader.readRanges(List.of(RangeRequest.of(3000, 100, target)));
+        int[] read = counts(reader.readRanges(List.of(RangeRequest.of(3000, 100, target))));
         assertThat(read).containsExactly(100);
         assertThat(target.position()).isEqualTo(120);
         target.flip().position(20);

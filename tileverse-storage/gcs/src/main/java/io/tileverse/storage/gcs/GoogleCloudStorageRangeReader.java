@@ -27,6 +27,7 @@ import com.google.cloud.storage.StorageException;
 import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.batch.CoalescingPolicy;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -44,14 +45,12 @@ import lombok.extern.slf4j.Slf4j;
  * <p>This class enables reading data stored in Google Cloud Storage buckets using the Google Cloud Storage client
  * library for Java.
  *
- * <p>Batched reads merge nearby ranges under the object-store coalescing policy and run up to 8 fetches concurrently on
- * the shared batch executor; worst-case amplification is the requested bytes plus the merged gaps.
+ * <p>Batched reads merge nearby ranges and run fetches concurrently on the shared batch executor under the
+ * {@link BatchSettings} of the Storage the reader was opened from; worst-case amplification is the requested bytes plus
+ * the merged gaps.
  */
 @Slf4j
 final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements RangeReader {
-
-    /** Fetch parallelism for batched reads on the shared batch executor. */
-    private static final int MAX_CONCURRENT_FETCHES = 8;
 
     /**
      * Host of the public Google Cloud Storage API, what {@code StorageOptions.getHost()} reports (with a trailing
@@ -65,6 +64,7 @@ final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements
     private final String bucket;
     private final String objectName;
     private final Optional<String> userProject;
+    private final BatchSettings batchSettings;
 
     private final AtomicReference<OptionalLong> contentLength = new AtomicReference<>();
 
@@ -83,11 +83,36 @@ final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements
      */
     GoogleCloudStorageRangeReader(
             Storage storage, String host, String bucket, String objectName, Optional<String> userProject) {
+        this(storage, host, bucket, objectName, userProject, BatchSettings.objectStoreDefaults());
+    }
+
+    /**
+     * Creates a reader with the batch settings of the Storage it belongs to.
+     *
+     * @param storage The GCS Storage client to use
+     * @param host the host targeted by the client
+     * @param bucket The GCS bucket name
+     * @param objectName The GCS object name
+     * @param userProject the project to bill for a Requester Pays bucket, if any
+     * @param batchSettings the merge policy and in-flight bound for batched reads
+     */
+    GoogleCloudStorageRangeReader(
+            Storage storage,
+            String host,
+            String bucket,
+            String objectName,
+            Optional<String> userProject,
+            BatchSettings batchSettings) {
         this.storage = requireNonNull(storage, "Storage client cannot be null");
         this.host = requireNonNull(host, "Host cannot be null");
         this.bucket = requireNonNull(bucket, "Bucket name cannot be null");
         this.objectName = requireNonNull(objectName, "Object name cannot be null");
         this.userProject = requireNonNull(userProject, "userProject cannot be null");
+        this.batchSettings = requireNonNull(batchSettings, "BatchSettings cannot be null");
+    }
+
+    BatchSettings batchSettings() {
+        return batchSettings;
     }
 
     @Override
@@ -129,12 +154,12 @@ final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements
 
     @Override
     protected CoalescingPolicy coalescingPolicy() {
-        return CoalescingPolicy.objectStoreDefaults();
+        return batchSettings.coalescingPolicy();
     }
 
     @Override
     protected int maxConcurrentFetches() {
-        return MAX_CONCURRENT_FETCHES;
+        return batchSettings.concurrencyCap();
     }
 
     @Override

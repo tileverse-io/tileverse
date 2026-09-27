@@ -16,6 +16,7 @@
 package io.tileverse.storage.file;
 
 import io.tileverse.storage.AbstractRangeReader;
+import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.StorageException;
@@ -279,7 +280,7 @@ class FileRangeReader extends AbstractRangeReader implements RangeReader {
 
     /** Keeps the channel open for the whole batch, however long its reads take. */
     @Override
-    public int[] readRanges(List<RangeRequest> requests) {
+    public BatchReadResult readRanges(List<RangeRequest> requests) {
         checkNotClosed();
         inFlight.incrementAndGet();
         try {

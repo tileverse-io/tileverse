@@ -20,6 +20,7 @@ import static io.tileverse.storage.StorageParameter.SUBGROUP_AUTHENTICATION;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
+import io.tileverse.storage.batch.BatchProviderHelper;
 import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
@@ -228,7 +229,7 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
 
     @Override
     protected List<StorageParameter<?>> buildParameters() {
-        return PARAMS;
+        return BatchProviderHelper.withBatchParameters(PARAMS);
     }
 
     @Override
@@ -277,7 +278,8 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
         SdkStorageLocation location = SdkStorageLocation.parse(uri);
         SdkStorageCache.Key key = keyFor(config);
         SdkStorageCache.Lease lease = clientCache.acquire(key);
-        return new GoogleCloudStorage(uri, location, lease, key.userProject());
+        return new GoogleCloudStorage(
+                uri, location, lease, key.userProject(), BatchProviderHelper.objectStoreSettings(config));
     }
 
     /**

@@ -140,16 +140,26 @@ try (RangeReader reader = FileStorageProvider.openRangeReader(Path.of("/data/til
 }
 ```
 
-### Global Properties
+### Batched reads
 
-For environments where code changes are difficult, you can configure defaults via system properties:
+The object-store and HTTP providers accept three parameters that tune how the readers of one `Storage` serve `readRanges`:
 
+| Parameter | Description | Default |
+| :--- | :--- | :--- |
+| `storage.batch.max-gap` | Largest gap, in bytes, between two ranges of a batch fetched along with them as one request; negative disables merging | derived from the backend's connection profile: about 350 KB for object stores, 230 KB for HTTP |
+| `storage.batch.max-fetch` | Upper bound, in bytes, on one merged fetch | 32 MiB |
+| `storage.batch.max-in-flight-fetches` | Fetches of one batch in flight at once; 0 removes the bound | 8 |
 
+The gap is a property of the deployment: measure it per latency and bandwidth profile with the `BatchReadResult` every `readRanges` call returns. Two stores on different endpoints can be tuned apart, since each `Storage` resolves the three values once when it is created.
+
+### System Properties
+
+The executor behind batched fetches is shared by the whole JVM and picked once, at first use:
 
 | Property | Description | Default |
 | :--- | :--- | :--- |
-| `storage.http.timeout-millis` | Global HTTP timeout | 5000 |
-| `storage.http.trust-all-certificates` | Disable SSL verification (Dev only) | false |
+| `io.tileverse.storage.batch.executor` | Executor for batched fetches: `auto`, `virtual` or `pool` | `auto` |
+| `io.tileverse.storage.batch.pool.size` | Size of the `pool` executor | the larger of 8 and the processor count |
 
 ## Stack Recommendations
 

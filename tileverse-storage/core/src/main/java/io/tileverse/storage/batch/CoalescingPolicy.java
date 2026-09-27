@@ -44,10 +44,6 @@ public record CoalescingPolicy(int maxGapBytes, int maxFetchBytes) {
     /** Default upper bound on a single merged fetch (32 MiB). */
     public static final int DEFAULT_MAX_FETCH_BYTES = 32 * 1024 * 1024;
 
-    static final String OBJECT_STORE_MAX_GAP_PROPERTY = "io.tileverse.storage.batch.objectstore.maxgap";
-    static final String HTTP_MAX_GAP_PROPERTY = "io.tileverse.storage.batch.http.maxgap";
-    static final String MAX_FETCH_PROPERTY = "io.tileverse.storage.batch.maxfetch";
-
     private static final long HUNDRED_MIB_PER_SECOND = 100L * 1024 * 1024;
     private static final double DEFAULT_UTILIZATION = 0.9;
 
@@ -93,33 +89,21 @@ public record CoalescingPolicy(int maxGapBytes, int maxFetchBytes) {
 
     /**
      * The policy for object stores (S3, GCS, Azure): 30 ms to first byte at 100 MiB/s and 90% utilization, about a 350
-     * KB gap budget. The {@code io.tileverse.storage.batch.objectstore.maxgap} and
-     * {@code io.tileverse.storage.batch.maxfetch} system properties override the computed values.
+     * KB gap budget. The {@code storage.batch.*} parameters of a Storage override it.
      *
-     * @return the object-store policy honoring the system-property overrides
+     * @return the object-store policy
      */
     public static CoalescingPolicy objectStoreDefaults() {
-        CoalescingPolicy computed =
-                fromNetworkMetrics(Duration.ofMillis(30), HUNDRED_MIB_PER_SECOND, DEFAULT_UTILIZATION);
-        return withOverrides(OBJECT_STORE_MAX_GAP_PROPERTY, computed);
+        return fromNetworkMetrics(Duration.ofMillis(30), HUNDRED_MIB_PER_SECOND, DEFAULT_UTILIZATION);
     }
 
     /**
      * The policy for plain HTTP servers: 20 ms to first byte at 100 MiB/s and 90% utilization, about a 230 KB gap
-     * budget. The {@code io.tileverse.storage.batch.http.maxgap} and {@code io.tileverse.storage.batch.maxfetch} system
-     * properties override the computed values.
+     * budget. The {@code storage.batch.*} parameters of a Storage override it.
      *
-     * @return the HTTP policy honoring the system-property overrides
+     * @return the HTTP policy
      */
     public static CoalescingPolicy httpDefaults() {
-        CoalescingPolicy computed =
-                fromNetworkMetrics(Duration.ofMillis(20), HUNDRED_MIB_PER_SECOND, DEFAULT_UTILIZATION);
-        return withOverrides(HTTP_MAX_GAP_PROPERTY, computed);
-    }
-
-    private static CoalescingPolicy withOverrides(String gapProperty, CoalescingPolicy computed) {
-        int maxGap = Integer.getInteger(gapProperty, computed.maxGapBytes());
-        int maxFetch = Integer.getInteger(MAX_FETCH_PROPERTY, computed.maxFetchBytes());
-        return new CoalescingPolicy(maxGap, maxFetch);
+        return fromNetworkMetrics(Duration.ofMillis(20), HUNDRED_MIB_PER_SECOND, DEFAULT_UTILIZATION);
     }
 }

@@ -15,6 +15,7 @@
  */
 package io.tileverse.storage;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tileverse.io.ByteRange;
@@ -90,9 +91,15 @@ class KnownSizeRangeReaderTest {
         try (RangeReader reader = KnownSizeRangeReader.of(recorder, data.length)) {
             ByteBuffer first = ByteBuffer.allocate(10);
             ByteBuffer second = ByteBuffer.allocate(20);
-            int[] read = reader.readRanges(List.of(RangeRequest.of(0, 10, first), RangeRequest.of(100, 20, second)));
-            assertThat(read).containsExactly(10, 20);
+            List<RangeRequest> requests = List.of(RangeRequest.of(0, 10, first), RangeRequest.of(100, 20, second));
+
+            BatchReadResult result = reader.readRanges(requests);
+
+            assertThat(counts(result)).containsExactly(10, 20);
             assertThat(recorder.batchReads()).containsExactly(List.of(new ByteRange(0, 10), new ByteRange(100, 20)));
+            assertThat(result)
+                    .as("the delegate's accounting passes through untouched")
+                    .isEqualTo(BatchReadResult.perRange(requests, new int[] {10, 20}));
         }
     }
 }

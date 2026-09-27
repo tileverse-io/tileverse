@@ -53,7 +53,7 @@ public class ByteArrayRangeReader extends AbstractRangeReader {
     }
 
     @Override
-    public int[] readRanges(List<RangeRequest> requests) {
+    public BatchReadResult readRanges(List<RangeRequest> requests) {
         RangeRequest.validate(requests);
         batchReads.add(requests.stream().map(RangeRequest::range).toList());
         int[] read = new int[requests.size()];
@@ -61,7 +61,7 @@ public class ByteArrayRangeReader extends AbstractRangeReader {
             RangeRequest request = requests.get(i);
             read[i] = readRange(request.range(), request.target());
         }
-        return read;
+        return BatchReadResult.perRange(requests, read);
     }
 
     @Override

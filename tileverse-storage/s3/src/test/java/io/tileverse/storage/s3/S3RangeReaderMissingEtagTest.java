@@ -15,6 +15,7 @@
  */
 package io.tileverse.storage.s3;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -128,7 +129,7 @@ class S3RangeReaderMissingEtagTest {
         asyncClientRejectsWith(SdkClientException.create(CRT_MESSAGE));
         List<RangeRequest> requests = farApartRanges();
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertContents(requests, counts);
         assertThat(endpointEtags.omitted()).isTrue();
@@ -142,7 +143,7 @@ class S3RangeReaderMissingEtagTest {
         endpointEtags.recordOmission();
         List<RangeRequest> requests = farApartRanges();
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertContents(requests, counts);
         verify(asyncClient, never()).getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class));
@@ -155,7 +156,7 @@ class S3RangeReaderMissingEtagTest {
 
         reader.readRange(0L, 64, ByteBuffer.allocate(64));
         List<RangeRequest> requests = farApartRanges();
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertContents(requests, counts);
         assertThat(endpointEtags.omitted()).isTrue();
@@ -172,7 +173,7 @@ class S3RangeReaderMissingEtagTest {
         second.position(20);
         List<RangeRequest> requests = List.of(RangeRequest.of(0, 300, first), RangeRequest.of(2_000_000, 300, second));
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertThat(counts).containsExactly(300, 300);
         assertThat(first.position()).isEqualTo(400);

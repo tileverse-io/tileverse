@@ -18,6 +18,7 @@ package io.tileverse.storage.azure;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
+import io.tileverse.storage.batch.BatchProviderHelper;
 import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
@@ -105,7 +106,7 @@ public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
     protected List<StorageParameter<?>> buildParameters() {
         // DataLake shares the Azure parameter set with the Blob backend (account-key, sas-token,
         // connection-string, retry tuning). Listing them here makes them discoverable through this provider too.
-        return List.of(
+        return BatchProviderHelper.withBatchParameters(List.of(
                 AzureBlobStorageProvider.AZURE_ACCOUNT_KEY,
                 AzureBlobStorageProvider.AZURE_SAS_TOKEN,
                 AzureBlobStorageProvider.AZURE_CONNECTION_STRING,
@@ -113,7 +114,7 @@ public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
                 AzureBlobStorageProvider.AZURE_MAX_RETRIES,
                 AzureBlobStorageProvider.AZURE_RETRY_DELAY,
                 AzureBlobStorageProvider.AZURE_MAX_RETRY_DELAY,
-                AzureBlobStorageProvider.AZURE_TRY_TIMEOUT);
+                AzureBlobStorageProvider.AZURE_TRY_TIMEOUT));
     }
 
     @Override
@@ -121,6 +122,6 @@ public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
         URI uri = config.baseUri();
         AzureBlobLocation location = AzureBlobLocation.parse(uri);
         AzureClientCache.Lease lease = clientCache.acquire(AzureBlobStorageProvider.keyFor(config, location));
-        return new AzureDataLakeStorage(uri, location, lease);
+        return new AzureDataLakeStorage(uri, location, lease, BatchProviderHelper.objectStoreSettings(config));
     }
 }

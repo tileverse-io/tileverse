@@ -21,6 +21,8 @@ import static java.util.function.Predicate.not;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
+import io.tileverse.storage.batch.BatchProviderHelper;
+import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
@@ -389,7 +391,7 @@ public class S3StorageProvider extends AbstractStorageProvider {
 
     @Override
     protected List<StorageParameter<?>> buildParameters() {
-        return PARAMS;
+        return BatchProviderHelper.withBatchParameters(PARAMS);
     }
 
     @Override
@@ -437,7 +439,8 @@ public class S3StorageProvider extends AbstractStorageProvider {
         S3StorageBucketKey ref = S3StorageBucketKey.parse(uri);
         S3ClientCache.Lease lease = clientCache.acquire(keyFor(config));
         boolean requesterPays = config.getParameter(S3_REQUESTER_PAYS).orElse(false);
-        return new S3Storage(uri, ref, lease, requesterPays);
+        BatchSettings batchSettings = BatchProviderHelper.objectStoreSettings(config);
+        return new S3Storage(uri, ref, lease, requesterPays, batchSettings);
     }
 
     /**

@@ -28,7 +28,7 @@ package-private internals selected based on the URI scheme.
 
 - **Exact-Range Caching**: Decorate any reader with `CachingRangeReader` to cache exactly the byte ranges it is asked for, in memory.
 - **Region-Scoped Block Alignment**: Stack `BlockAlignedRangeReader` above the cache and declare the byte regions (a header, an index, the whole file) that should be fetched and cached as whole blocks, aligning with cloud storage pricing models.
-- **Batch Reads**: `RangeReader.readRanges(List<RangeRequest>)` reads several ranges in one call; the cache forwards only its misses, and the aligner quantizes in-region entries to deduplicated blocks. Backends then merge nearby ranges into shared fetches and run them in parallel: S3 on the CRT async client, GCS and Azure on a shared executor, HTTP as one `multipart/byteranges` request with a per-fetch fallback. See [Performance Optimization](../explanation/performance.md) for the merge model and the `io.tileverse.storage.batch.*` tuning properties.
+- **Batch Reads**: `RangeReader.readRanges(List<RangeRequest>)` reads several ranges in one call; the cache forwards only its misses, and the aligner quantizes in-region entries to deduplicated blocks. Backends then merge nearby ranges into shared fetches and run them in parallel: S3 on the CRT async client, GCS and Azure on a shared executor, HTTP as one `multipart/byteranges` request with a per-fetch fallback. See [Performance Optimization](../explanation/performance.md) for the merge model and the `storage.batch.*` tuning parameters.
 
 ## Installation
 

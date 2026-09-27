@@ -20,8 +20,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.ResourceLock;
-import org.junit.jupiter.api.parallel.Resources;
 
 class CoalescingPolicyTest {
 
@@ -61,27 +59,10 @@ class CoalescingPolicyTest {
     }
 
     @Test
-    @ResourceLock(Resources.SYSTEM_PROPERTIES)
     void objectStoreAndHttpDefaultsDifferByLatency() {
         assertThat(CoalescingPolicy.objectStoreDefaults().maxGapBytes()).isBetween(340_000, 360_000);
         assertThat(CoalescingPolicy.httpDefaults().maxGapBytes()).isBetween(225_000, 240_000);
         assertThat(CoalescingPolicy.objectStoreDefaults().maxFetchBytes())
                 .isEqualTo(CoalescingPolicy.DEFAULT_MAX_FETCH_BYTES);
-    }
-
-    @Test
-    @ResourceLock(Resources.SYSTEM_PROPERTIES)
-    void systemPropertiesOverrideTheDefaults() {
-        System.setProperty("io.tileverse.storage.batch.objectstore.maxgap", "1024");
-        System.setProperty("io.tileverse.storage.batch.http.maxgap", "2048");
-        System.setProperty("io.tileverse.storage.batch.maxfetch", "4096");
-        try {
-            assertThat(CoalescingPolicy.objectStoreDefaults()).isEqualTo(new CoalescingPolicy(1024, 4096));
-            assertThat(CoalescingPolicy.httpDefaults()).isEqualTo(new CoalescingPolicy(2048, 4096));
-        } finally {
-            System.clearProperty("io.tileverse.storage.batch.objectstore.maxgap");
-            System.clearProperty("io.tileverse.storage.batch.http.maxgap");
-            System.clearProperty("io.tileverse.storage.batch.maxfetch");
-        }
     }
 }

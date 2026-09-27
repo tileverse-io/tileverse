@@ -62,7 +62,7 @@ The Tileverse Range Reader provides a unified interface for reading byte ranges 
 public interface RangeReader extends Closeable {
     ByteBuffer readRange(long offset, int length);
     int readRange(long offset, int length, ByteBuffer target);
-    int[] readRanges(List<RangeRequest> requests); // batch read, several ranges in one call
+    BatchReadResult readRanges(List<RangeRequest> requests); // batch read, several ranges in one call
     OptionalLong size();
     String getSourceIdentifier();
 }

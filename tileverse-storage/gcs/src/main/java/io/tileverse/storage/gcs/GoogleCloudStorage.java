@@ -47,6 +47,7 @@ import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.StoragePattern;
 import io.tileverse.storage.UnsupportedCapabilityException;
 import io.tileverse.storage.WriteOptions;
+import io.tileverse.storage.batch.BatchSettings;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,6 +64,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Spliterator;
@@ -92,17 +94,38 @@ final class GoogleCloudStorage implements Storage {
     private final StorageCapabilities capabilities;
     private final boolean isHns;
     private final Optional<String> userProject;
+    private final BatchSettings batchSettings;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     GoogleCloudStorage(
             URI baseUri, SdkStorageLocation location, SdkStorageCache.Lease lease, Optional<String> userProject) {
-        this(baseUri, location, new LeasedGcsHandle(lease), userProject);
+        this(baseUri, location, new LeasedGcsHandle(lease), userProject, BatchSettings.objectStoreDefaults());
+    }
+
+    GoogleCloudStorage(
+            URI baseUri,
+            SdkStorageLocation location,
+            SdkStorageCache.Lease lease,
+            Optional<String> userProject,
+            BatchSettings batchSettings) {
+        this(baseUri, location, new LeasedGcsHandle(lease), userProject, batchSettings);
     }
 
     GoogleCloudStorage(URI baseUri, SdkStorageLocation location, GcsClientHandle handle, Optional<String> userProject) {
+        this(baseUri, location, handle, userProject, BatchSettings.objectStoreDefaults());
+    }
+
+    /** @param batchSettings the merge policy and in-flight bound handed to every reader this Storage opens */
+    GoogleCloudStorage(
+            URI baseUri,
+            SdkStorageLocation location,
+            GcsClientHandle handle,
+            Optional<String> userProject,
+            BatchSettings batchSettings) {
         this.baseUri = baseUri;
         this.location = location;
         this.handle = handle;
+        this.batchSettings = Objects.requireNonNull(batchSettings, "batchSettings cannot be null");
         // The client is the only place that knows the effective host on every construction path, borrowed clients
         // included; every reader includes it in its source identifier, which partitions the shared range cache.
         this.host = handle.client().getOptions().getHost();
@@ -312,7 +335,7 @@ final class GoogleCloudStorage implements Storage {
     public RangeReader openRangeReader(String key) {
         requireOpen();
         return new GoogleCloudStorageRangeReader(
-                handle.client(), host, location.bucket(), location.resolve(key), userProject);
+                handle.client(), host, location.bucket(), location.resolve(key), userProject, batchSettings);
     }
 
     /**

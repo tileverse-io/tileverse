@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
+import io.tileverse.storage.batch.BatchProviderHelper;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.util.List;
@@ -46,7 +47,10 @@ class GoogleCloudStorageProviderTest {
                         GoogleCloudStorageProvider.GCS_QUOTA_PROJECT_ID,
                         GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS,
                         GoogleCloudStorageProvider.GCS_USER_PROJECT,
-                        GoogleCloudStorageProvider.GCS_ENDPOINT);
+                        GoogleCloudStorageProvider.GCS_ENDPOINT,
+                        BatchProviderHelper.BATCH_MAX_GAP,
+                        BatchProviderHelper.BATCH_MAX_FETCH,
+                        BatchProviderHelper.BATCH_MAX_IN_FLIGHT_FETCHES);
 
         StorageConfig defaults = provider.getDefaultConfig();
         assertThat(defaults.getParameter(GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS))

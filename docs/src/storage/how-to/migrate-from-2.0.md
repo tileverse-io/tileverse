@@ -50,6 +50,27 @@ fallback). If you maintain a delegating RangeReader decorator, override readRang
 the batch to the delegate; a wrapper that does not forward it silently degrades batches to the
 sequential per-range default.
 
+`readRanges` now returns a `BatchReadResult` instead of an `int[]`: `bytesRead(i)` holds what
+the array entry held, and `fetches()`, `bytesTransferred()` and `bytesFromCache()` report what
+the call cost. A decorator builds its own result and folds the delegate's numbers into it with
+`merge`. Once the call returns or throws, no implementation thread is still writing to any
+target, and a caller may reuse or release every target at that point.
+
+```java
+BatchReadResult result = reader.readRanges(requests);
+for (int i = 0; i < result.requests(); i++) {
+    int bytesRead = result.bytesRead(i); // what read[i] used to hold
+}
+```
+
+The merge gap, the fetch cap and the fetch parallelism are `StorageConfig` parameters of the
+object-store and HTTP providers, resolved once per `Storage`: `storage.batch.max-gap`,
+`storage.batch.max-fetch` and `storage.batch.max-in-flight-fetches`. The
+`io.tileverse.storage.batch.objectstore.maxgap`, `io.tileverse.storage.batch.http.maxgap` and
+`io.tileverse.storage.batch.maxfetch` system properties of the 2.1 milestones are gone; set
+the parameters instead. The S3 CRT path, which used to start every planned fetch at once, now
+honors the in-flight bound too.
+
 ## Local files
 
 - `getSourceIdentifier()` of a local reader is the file's real path, resolved once when the

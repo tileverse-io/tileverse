@@ -87,6 +87,20 @@ public final class RangeReaderTestSupport {
     }
 
     /**
+     * The bytes read per request of a batch result as an array, for assertions over whole batches.
+     *
+     * @param result a batch result
+     * @return one entry per request, in request order
+     */
+    public static int[] counts(BatchReadResult result) {
+        int[] counts = new int[result.requests()];
+        for (int i = 0; i < counts.length; i++) {
+            counts[i] = result.bytesRead(i);
+        }
+        return counts;
+    }
+
+    /**
      * Bundles a {@link RangeReader} and the owning {@link Storage} into a single closeable. Closing the returned reader
      * closes the delegate first and the Storage in a {@code finally} block so neither leaks if the other throws. Used
      * by per-backend integration tests that drive {@link io.tileverse.storage.it.AbstractRangeReaderIT
@@ -116,7 +130,7 @@ public final class RangeReaderTestSupport {
         }
 
         @Override
-        public int[] readRanges(List<RangeRequest> requests) {
+        public BatchReadResult readRanges(List<RangeRequest> requests) {
             return delegate.readRanges(requests);
         }
 

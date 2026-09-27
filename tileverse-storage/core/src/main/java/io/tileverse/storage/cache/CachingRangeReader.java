@@ -21,16 +21,19 @@ import io.tileverse.cache.CacheManager;
 import io.tileverse.cache.CacheStats;
 import io.tileverse.io.ByteRange;
 import io.tileverse.storage.AbstractRangeReader;
+import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeRequest;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
+import java.util.Set;
 
 /**
  * A decorator for {@link RangeReader} that caches exact byte ranges in memory using a shared, Caffeine-backed cache.
@@ -76,13 +79,16 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
      *
      * <p>Hits are served from the cache; the distinct misses are forwarded down as one {@code readRanges} call on the
      * delegate and stored before the results are copied out. Amplification: none, every forwarded range is exactly a
-     * requested range. Concurrency note: unlike single reads, the batch path has no cross-thread single-flight; two
-     * threads missing the same range concurrently both fetch it once and one store wins.
+     * requested range. The result counts the hits, and every repeat of a missed range within the batch, as bytes from
+     * cache, and takes the fetches and bytes transferred from the delegate call. Concurrency note: unlike single reads,
+     * the batch path has no cross-thread single-flight; two threads missing the same range concurrently both fetch it
+     * once and one store wins.
      */
     @Override
-    public int[] readRanges(List<RangeRequest> requests) {
+    public BatchReadResult readRanges(List<RangeRequest> requests) {
         RangeRequest.validate(requests);
         int[] read = new int[requests.size()];
+        long bytesFromCache = 0;
 
         Map<ByteRange, ByteBuffer> misses = new LinkedHashMap<>();
         List<Integer> pending = new ArrayList<>();
@@ -95,39 +101,47 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
             ByteBuffer cached = cache.getIfPresent(key);
             if (cached != null) {
                 read[i] = copyTo(cached, request.target());
+                bytesFromCache += read[i];
             } else {
                 misses.computeIfAbsent(key, k -> ByteBuffer.allocate(k.length()));
                 pending.add(i);
             }
         }
         if (misses.isEmpty()) {
-            return read;
+            return BatchReadResult.of(requests, read, 0, 0, bytesFromCache);
         }
 
-        Map<ByteRange, ByteBuffer> loaded = fetchAndStore(misses);
+        Loaded loaded = fetchAndStore(misses);
+        Set<ByteRange> servedByTheFetch = new HashSet<>();
         for (int i : pending) {
             RangeRequest request = requests.get(i);
-            read[i] = copyTo(loaded.get(request.range()), request.target());
+            read[i] = copyTo(loaded.values().get(request.range()), request.target());
+            if (!servedByTheFetch.add(request.range())) {
+                bytesFromCache += read[i];
+            }
         }
-        return read;
+        return BatchReadResult.of(requests, read, 0, 0, bytesFromCache).merge(loaded.cost());
     }
+
+    /** The values the cache holds for the fetched misses, and what fetching them cost. */
+    private record Loaded(Map<ByteRange, ByteBuffer> values, BatchReadResult cost) {}
 
     /**
      * Fetches the given misses from the delegate as one batch and stores each sanitized value, returning the value the
      * cache holds per range (another thread's store wins over ours).
      */
-    private Map<ByteRange, ByteBuffer> fetchAndStore(Map<ByteRange, ByteBuffer> misses) {
+    private Loaded fetchAndStore(Map<ByteRange, ByteBuffer> misses) {
         List<RangeRequest> missRequests = new ArrayList<>(misses.size());
         misses.forEach((key, buffer) -> missRequests.add(new RangeRequest(key, buffer)));
-        int[] missRead = delegate.readRanges(missRequests);
+        BatchReadResult fetched = delegate.readRanges(missRequests);
 
         Map<ByteRange, ByteBuffer> loaded = new HashMap<>();
         for (int j = 0; j < missRequests.size(); j++) {
             RangeRequest missRequest = missRequests.get(j);
-            ByteBuffer value = RangeReaderCache.sanitize(missRequest.target(), missRead[j]);
+            ByteBuffer value = RangeReaderCache.sanitize(missRequest.target(), fetched.bytesRead(j));
             loaded.put(missRequest.range(), cache.getOrStore(missRequest.range(), value));
         }
-        return loaded;
+        return new Loaded(loaded, fetched);
     }
 
     private static int copyTo(ByteBuffer cached, ByteBuffer target) {

@@ -17,6 +17,7 @@ package io.tileverse.storage.batch;
 
 import io.tileverse.io.ByteBufferPool;
 import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
+import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.RangeRequest;
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -36,34 +37,43 @@ import java.util.function.Supplier;
  * once one failed, fetches already in flight drain (blocking I/O is not cancellable), and the recorded failure is
  * rethrown to the caller unchanged. Results written by worker threads are visible to the caller when {@code run}
  * returns.
+ *
+ * <p>The result counts one fetch per planned fetch and, as bytes transferred, what every fetch actually read: the
+ * requested bytes plus the merged gaps, short of that only where a fetch ran into EOF.
  */
 public final class BatchRunner {
 
     private BatchRunner() {}
 
     /**
-     * Runs every fetch of a plan and returns the per-request byte counts.
+     * Runs every fetch of a plan and returns the per-request byte counts with the cost of the plan.
      *
      * @param requests the validated batch; targets are written at their current positions
      * @param fetches the plan from {@link BatchPlanner#plan}
      * @param reader reads one fetch, normally a {@code readRange} method reference
      * @param maxConcurrentFetches how many fetches may run at once, at least 1
      * @param executor supplies the executor for extra workers, resolved only when parallelism is used
-     * @return bytes read per request, zero for entries no fetch satisfies (zero-length or past EOF)
+     * @return bytes read per request, zero for entries no fetch satisfies (zero-length or past EOF), one fetch per
+     *     planned fetch and the bytes those fetches read as bytes transferred
      */
-    public static int[] run(
+    public static BatchReadResult run(
             List<RangeRequest> requests,
             List<PlannedFetch> fetches,
             FetchReader reader,
             int maxConcurrentFetches,
             Supplier<Executor> executor) {
         int[] counts = new int[requests.size()];
+        long[] transferredPerFetch = new long[fetches.size()];
         runConcurrently(
                 fetches.size(),
-                index -> runFetch(fetches.get(index), requests, reader, counts),
+                index -> transferredPerFetch[index] = runFetch(fetches.get(index), requests, reader, counts),
                 maxConcurrentFetches,
                 executor);
-        return counts;
+        long transferred = 0;
+        for (long perFetch : transferredPerFetch) {
+            transferred += perFetch;
+        }
+        return BatchReadResult.of(requests, counts, fetches.size(), transferred, 0);
     }
 
     /**
@@ -117,17 +127,20 @@ public final class BatchRunner {
         }
     }
 
-    private static void runFetch(PlannedFetch fetch, List<RangeRequest> requests, FetchReader reader, int[] counts) {
+    /** Runs one fetch, records its slices' counts and returns how many bytes the fetch read. */
+    private static int runFetch(PlannedFetch fetch, List<RangeRequest> requests, FetchReader reader, int[] counts) {
         if (fetch.isDirect()) {
             PlannedFetch.Slice only = fetch.slices().get(0);
-            counts[only.requestIndex()] =
+            int read =
                     reader.read(fetch.range(), requests.get(only.requestIndex()).target());
-            return;
+            counts[only.requestIndex()] = read;
+            return read;
         }
         try (PooledByteBuffer pooled = ByteBufferPool.heapBuffer(fetch.range().length())) {
             ByteBuffer scratch = pooled.buffer();
             int read = reader.read(fetch.range(), scratch);
             fetch.scatter(scratch, read, requests, counts);
+            return read;
         }
     }
 }

@@ -15,19 +15,25 @@
  */
 package io.tileverse.storage.batch;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tileverse.io.ByteRange;
+import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.StorageException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
@@ -96,7 +102,7 @@ class BatchRunnerTest {
         List<RangeRequest> batch = requests(new long[][] {{0, 100}, {50_000, 200}, {99_990, 50}});
         List<PlannedFetch> fetches = BatchPlanner.plan(batch, CoalescingPolicy.NONE);
 
-        int[] counts = BatchRunner.run(batch, fetches, reader, 1, FORBIDDEN_EXECUTOR);
+        int[] counts = counts(BatchRunner.run(batch, fetches, reader, 1, FORBIDDEN_EXECUTOR));
 
         assertContents(batch, counts);
         assertThat(fetchLog).containsExactly(ByteRange.of(0, 100), ByteRange.of(50_000, 200), ByteRange.of(99_990, 50));
@@ -107,7 +113,7 @@ class BatchRunnerTest {
         List<RangeRequest> batch = requests(new long[][] {{10, 100}});
         List<PlannedFetch> fetches = BatchPlanner.plan(batch, CoalescingPolicy.NONE);
 
-        int[] counts = BatchRunner.run(batch, fetches, reader, 8, FORBIDDEN_EXECUTOR);
+        int[] counts = counts(BatchRunner.run(batch, fetches, reader, 8, FORBIDDEN_EXECUTOR));
 
         assertContents(batch, counts);
     }
@@ -133,10 +139,40 @@ class BatchRunnerTest {
         List<PlannedFetch> fetches = BatchPlanner.plan(batch, new CoalescingPolicy(64, 1024));
         assertThat(fetches).hasSize(1);
 
-        int[] counts = BatchRunner.run(batch, fetches, reader, 1, FORBIDDEN_EXECUTOR);
+        int[] counts = counts(BatchRunner.run(batch, fetches, reader, 1, FORBIDDEN_EXECUTOR));
 
         assertContents(batch, counts);
         assertThat(fetchLog).containsExactly(ByteRange.of(0, 30));
+    }
+
+    @Test
+    void resultCountsTheFetchesAndTheBytesTheyReadGapsIncluded() {
+        List<RangeRequest> batch = requests(new long[][] {{0, 10}, {20, 10}, {5_000, 100}});
+        List<PlannedFetch> fetches = BatchPlanner.plan(batch, new CoalescingPolicy(64, 1024));
+        assertThat(fetches).hasSize(2);
+
+        BatchReadResult result = BatchRunner.run(batch, fetches, reader, 1, FORBIDDEN_EXECUTOR);
+
+        assertThat(result.bytesRequested()).isEqualTo(120);
+        assertThat(result.fetches()).isEqualTo(2);
+        assertThat(result.bytesTransferred())
+                .as("requested bytes plus the 10-byte gap")
+                .isEqualTo(130);
+        assertThat(result.bytesFromCache()).isZero();
+    }
+
+    @Test
+    void resultTransfersOnlyWhatAShortFetchRead() {
+        List<RangeRequest> batch = requests(new long[][] {{99_990, 10}, {100_010, 10}, {200_000, 10}});
+        List<PlannedFetch> fetches = BatchPlanner.plan(batch, new CoalescingPolicy(200, 4096));
+        assertThat(fetches).hasSize(2);
+
+        BatchReadResult result = BatchRunner.run(batch, fetches, reader, 1, FORBIDDEN_EXECUTOR);
+
+        assertThat(result.fetches()).isEqualTo(2);
+        assertThat(result.bytesTransferred())
+                .as("the merged fetch stops at EOF, the last one reads nothing")
+                .isEqualTo(10);
     }
 
     @Test
@@ -145,7 +181,7 @@ class BatchRunnerTest {
         List<PlannedFetch> fetches = BatchPlanner.plan(batch, new CoalescingPolicy(200, 4096));
         assertThat(fetches).hasSize(1);
 
-        int[] counts = BatchRunner.run(batch, fetches, reader, 1, FORBIDDEN_EXECUTOR);
+        int[] counts = counts(BatchRunner.run(batch, fetches, reader, 1, FORBIDDEN_EXECUTOR));
 
         assertThat(counts).containsExactly(10, 0, 0);
         assertContents(batch, counts);
@@ -161,7 +197,7 @@ class BatchRunnerTest {
         List<PlannedFetch> fetches = BatchPlanner.plan(batch, CoalescingPolicy.NONE);
         ExecutorService executor = Executors.newFixedThreadPool(4);
         try {
-            int[] counts = BatchRunner.run(batch, fetches, reader, 3, () -> executor);
+            int[] counts = counts(BatchRunner.run(batch, fetches, reader, 3, () -> executor));
 
             assertContents(batch, counts);
             assertThat(maxActive.get()).isLessThanOrEqualTo(3);
@@ -188,6 +224,65 @@ class BatchRunnerTest {
                     .isSameAs(boom);
         } finally {
             executor.shutdownNow();
+        }
+    }
+
+    /**
+     * The target contract of {@link io.tileverse.storage.RangeReader#readRanges}: once the call returns or throws, no
+     * thread is still writing a target. A failure is therefore reported only after the fetch still running on another
+     * worker has completed.
+     */
+    @Test
+    void aFailureIsThrownOnlyAfterTheFetchesInFlightCompleted() throws Exception {
+        List<RangeRequest> batch = requests(new long[][] {{0, 10}, {1_000, 10}, {2_000, 10}});
+        List<PlannedFetch> fetches = BatchPlanner.plan(batch, CoalescingPolicy.NONE);
+        CountDownLatch slowFetchStarted = new CountDownLatch(1);
+        CountDownLatch failureThrown = new CountDownLatch(1);
+        CountDownLatch releaseSlowFetch = new CountDownLatch(1);
+        AtomicBoolean slowFetchWriting = new AtomicBoolean();
+        FetchReader failingBesideASlowFetch = (range, target) -> {
+            if (range.offset() == 0) {
+                slowFetchWriting.set(true);
+                slowFetchStarted.countDown();
+                awaitQuietly(releaseSlowFetch);
+                int read = reader.read(range, target);
+                slowFetchWriting.set(false);
+                return read;
+            }
+            awaitQuietly(slowFetchStarted);
+            failureThrown.countDown();
+            throw new StorageException("fetch at " + range.offset() + " failed");
+        };
+        ExecutorService workers = Executors.newFixedThreadPool(2);
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> call =
+                    caller.submit(() -> BatchRunner.run(batch, fetches, failingBesideASlowFetch, 2, () -> workers));
+            assertThat(failureThrown.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(call.isDone())
+                    .as("the call waits for the fetch in flight")
+                    .isFalse();
+
+            releaseSlowFetch.countDown();
+
+            assertThatThrownBy(() -> call.get(5, TimeUnit.SECONDS)).hasCauseInstanceOf(StorageException.class);
+            assertThat(slowFetchWriting)
+                    .as("no fetch writes a target after the call threw")
+                    .isFalse();
+        } finally {
+            caller.shutdownNow();
+            workers.shutdownNow();
+        }
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            if (!latch.await(5, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("latch not released in time");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
         }
     }
 

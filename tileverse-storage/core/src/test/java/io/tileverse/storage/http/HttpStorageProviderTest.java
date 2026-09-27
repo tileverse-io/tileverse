@@ -26,6 +26,8 @@ import static io.tileverse.storage.http.HttpStorageProvider.HTTP_TRUST_ALL_SSL_C
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.batch.BatchProviderHelper;
+import io.tileverse.storage.batch.BatchSettings;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
@@ -59,6 +61,33 @@ class HttpStorageProviderTest {
                 .extracting("authentication")
                 .isEqualTo(HttpAuthentication.NONE);
         assertThat(storage.client()).isNotNull();
+    }
+
+    @Test
+    void batchParametersReachTheReader() {
+        Properties props = new Properties();
+        props.setProperty(BatchProviderHelper.BATCH_MAX_GAP.key(), "100");
+        props.setProperty(BatchProviderHelper.BATCH_MAX_FETCH.key(), "2048");
+        props.setProperty(BatchProviderHelper.BATCH_MAX_IN_FLIGHT_FETCHES.key(), "2");
+        HttpStorage storage = (HttpStorage) provider.createStorage(createConfig(props));
+
+        try (HttpRangeReader reader = (HttpRangeReader) storage.openRangeReader("data.bin")) {
+            assertThat(reader.batchSettings()).isEqualTo(new BatchSettings(100, 2048, 2));
+        }
+    }
+
+    @Test
+    void batchDefaultsReachTheReader() {
+        HttpStorage storage = (HttpStorage) provider.createStorage(createConfig(new Properties()));
+
+        try (HttpRangeReader reader = (HttpRangeReader) storage.openRangeReader("data.bin")) {
+            assertThat(reader.batchSettings()).isEqualTo(BatchSettings.httpDefaults());
+        }
+    }
+
+    @Test
+    void providerDeclaresTheBatchParameters() {
+        assertThat(provider.getParameters()).containsAll(BatchProviderHelper.configParameters());
     }
 
     @Test

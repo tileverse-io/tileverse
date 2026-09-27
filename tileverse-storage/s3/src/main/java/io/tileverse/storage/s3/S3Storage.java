@@ -31,6 +31,7 @@ import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.StoragePattern;
 import io.tileverse.storage.UnsupportedCapabilityException;
 import io.tileverse.storage.WriteOptions;
+import io.tileverse.storage.batch.BatchSettings;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -46,6 +47,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Spliterator;
@@ -108,18 +110,39 @@ final class S3Storage implements Storage {
     private final StorageCapabilities capabilities;
     private final boolean isDirectoryBucket;
     private final boolean requesterPays;
+    private final BatchSettings batchSettings;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     S3Storage(URI baseUri, S3StorageBucketKey ref, S3ClientCache.Lease lease, boolean requesterPays) {
-        this(baseUri, ref, new LeasedS3Handle(lease), requesterPays);
+        this(baseUri, ref, new LeasedS3Handle(lease), requesterPays, BatchSettings.objectStoreDefaults());
+    }
+
+    S3Storage(
+            URI baseUri,
+            S3StorageBucketKey ref,
+            S3ClientCache.Lease lease,
+            boolean requesterPays,
+            BatchSettings batchSettings) {
+        this(baseUri, ref, new LeasedS3Handle(lease), requesterPays, batchSettings);
     }
 
     S3Storage(URI baseUri, S3StorageBucketKey ref, S3ClientHandle handle, boolean requesterPays) {
+        this(baseUri, ref, handle, requesterPays, BatchSettings.objectStoreDefaults());
+    }
+
+    /** @param batchSettings the merge policy and in-flight bound handed to every reader this Storage opens */
+    S3Storage(
+            URI baseUri,
+            S3StorageBucketKey ref,
+            S3ClientHandle handle,
+            boolean requesterPays,
+            BatchSettings batchSettings) {
         this.baseUri = baseUri;
         this.ref = ref;
         this.handle = handle;
         this.endpoint = resolveEndpoint(handle.client());
         this.requesterPays = requesterPays;
+        this.batchSettings = Objects.requireNonNull(batchSettings, "batchSettings cannot be null");
         this.isDirectoryBucket = EXPRESS_BUCKET_PATTERN.matcher(ref.bucket()).matches();
         this.capabilities = buildCapabilities(this.isDirectoryBucket);
     }
@@ -355,7 +378,8 @@ final class S3Storage implements Storage {
                 handle.asyncClient().orElse(null),
                 new S3Reference(endpoint, ref.bucket(), fullKey, null),
                 requesterPays,
-                handle.endpointEtags());
+                handle.endpointEtags(),
+                batchSettings);
     }
 
     /**

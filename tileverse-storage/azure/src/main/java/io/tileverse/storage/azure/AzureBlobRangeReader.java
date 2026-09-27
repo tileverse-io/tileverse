@@ -31,6 +31,7 @@ import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.StorageException;
 import io.tileverse.storage.adapters.ByteBufferOutputStream;
 import io.tileverse.storage.adapters.ByteBufferSinkException;
+import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.batch.CoalescingPolicy;
 import java.nio.ByteBuffer;
 import java.time.Duration;
@@ -44,8 +45,9 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>This class enables reading data stored in Azure Blob Storage using the Azure Storage Blob client library for Java.
  *
- * <p>Batched reads merge nearby ranges under the object-store coalescing policy and run up to 8 fetches concurrently on
- * the shared batch executor; worst-case amplification is the requested bytes plus the merged gaps.
+ * <p>Batched reads merge nearby ranges and run fetches concurrently on the shared batch executor under the
+ * {@link BatchSettings} of the Storage the reader was opened from; worst-case amplification is the requested bytes plus
+ * the merged gaps.
  *
  * <p>Range bodies stream straight into the caller's buffer, heap or direct, through the SDK's download stream; no read
  * holds a full-size heap copy of the response.
@@ -53,14 +55,13 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
 
-    /** Fetch parallelism for batched reads on the shared batch executor. */
-    private static final int MAX_CONCURRENT_FETCHES = 8;
-
     private final BlobClient blobClient;
+    private final BatchSettings batchSettings;
     private final AtomicReference<OptionalLong> contentLength = new AtomicReference<>();
 
     /**
-     * Creates a new AzureBlobRangeReader for the specified blob.
+     * Creates a new AzureBlobRangeReader for the specified blob, batching under the
+     * {@link BatchSettings#objectStoreDefaults() object-store defaults}.
      *
      * <p>Construction performs no I/O. A missing blob is reported by the first {@link #readRange(long, int)} or
      * {@link #size()} call instead of at construction time.
@@ -68,7 +69,22 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
      * @param blobClient The Azure Blob client to read from
      */
     AzureBlobRangeReader(BlobClient blobClient) {
+        this(blobClient, BatchSettings.objectStoreDefaults());
+    }
+
+    /**
+     * Creates a new AzureBlobRangeReader with the batch settings of the Storage it belongs to.
+     *
+     * @param blobClient The Azure Blob client to read from
+     * @param batchSettings the merge policy and in-flight bound for batched reads
+     */
+    AzureBlobRangeReader(BlobClient blobClient, BatchSettings batchSettings) {
         this.blobClient = requireNonNull(blobClient, "BlobClient cannot be null");
+        this.batchSettings = requireNonNull(batchSettings, "BatchSettings cannot be null");
+    }
+
+    BatchSettings batchSettings() {
+        return batchSettings;
     }
 
     /**
@@ -130,12 +146,12 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
 
     @Override
     protected CoalescingPolicy coalescingPolicy() {
-        return CoalescingPolicy.objectStoreDefaults();
+        return batchSettings.coalescingPolicy();
     }
 
     @Override
     protected int maxConcurrentFetches() {
-        return MAX_CONCURRENT_FETCHES;
+        return batchSettings.concurrencyCap();
     }
 
     @Override

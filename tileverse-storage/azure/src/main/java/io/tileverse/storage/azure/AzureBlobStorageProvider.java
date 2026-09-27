@@ -24,6 +24,7 @@ import com.azure.storage.common.StorageSharedKeyCredential;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
+import io.tileverse.storage.batch.BatchProviderHelper;
 import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
@@ -307,7 +308,7 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
 
     @Override
     protected List<StorageParameter<?>> buildParameters() {
-        return PARAMS;
+        return BatchProviderHelper.withBatchParameters(PARAMS);
     }
 
     @Override
@@ -358,7 +359,7 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
         URI uri = config.baseUri();
         AzureBlobLocation location = locationFor(config);
         AzureClientCache.Lease lease = clientCache.acquire(keyFor(config, location));
-        return new AzureBlobStorage(uri, location, lease);
+        return new AzureBlobStorage(uri, location, lease, BatchProviderHelper.objectStoreSettings(config));
     }
 
     /**

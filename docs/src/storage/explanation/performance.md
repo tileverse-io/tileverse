@@ -60,20 +60,30 @@ We primarily measure:
     and [GDAL's multi-range merging](https://gdal.org/user/configoptions.html#GDAL_HTTP_MERGE_CONSECUTIVE_RANGES)):
     about 350 KB for object stores, 230 KB for plain HTTP, with merged fetches capped at
     32 MiB.
-    *   *S3*: planned fetches run in parallel on the CRT `S3AsyncClient`, one async
-        `GetObject` each.
-    *   *GCS / Azure*: up to 8 planned fetches run concurrently on a shared executor
-        (virtual threads on Java 21+, a bounded daemon pool on Java 17).
+    *   *S3*: planned fetches run on the CRT `S3AsyncClient`, one async `GetObject` each, at
+        most `storage.batch.max-in-flight-fetches` of them at once (default 8), each completion
+        admitting the next.
+    *   *GCS / Azure*: up to `storage.batch.max-in-flight-fetches` planned fetches run
+        concurrently on a shared executor (virtual threads on Java 21+, a bounded daemon pool on
+        Java 17).
     *   *HTTP*: one `Range: bytes=a-b,c-d,...` request per batch, parsed as a streaming
         `multipart/byteranges` body; servers without multi-range support fall back to one
         GET per fetch.
     *   *Local files*: sequential exact reads; merging buys nothing at zero round-trip cost.
-*   **Tuning** (system properties): `io.tileverse.storage.batch.executor`
-    (`auto` | `virtual` | `pool`), `io.tileverse.storage.batch.pool.size`,
-    `io.tileverse.storage.batch.objectstore.maxgap`, `io.tileverse.storage.batch.http.maxgap`,
-    and `io.tileverse.storage.batch.maxfetch` (byte values).
+*   **Tuning** (per `Storage`): `storage.batch.max-gap` (bytes; negative disables merging),
+    `storage.batch.max-fetch` (bytes) and `storage.batch.max-in-flight-fetches` (0 removes the
+    bound) are `StorageConfig` parameters of the object-store and HTTP providers, resolved once
+    when the `Storage` is created and handed to every reader it opens. The
+    `io.tileverse.storage.batch.executor` (`auto` | `virtual` | `pool`) and
+    `io.tileverse.storage.batch.pool.size` system properties pick the shared executor.
+*   **Memory**: a merged fetch borrows heap scratch for its whole extent, hence the peak scratch
+    of one batch is the in-flight bound times the max-fetch cap.
 *   **Amplification**: a batch fetches the requested bytes plus the merged gaps, never more
     than the max-fetch cap per fetch; requests outside any merge are read exactly.
+*   **Measuring**: `readRanges` returns a `BatchReadResult` with the bytes read per request and
+    what the call cost: backend requests issued, bytes transferred with the bridged gaps
+    included, and bytes served from a cache. Compare `bytesTransferred()` with
+    `bytesRequested()` to see what a gap setting buys on a real workload.
 
 ## Cloud Considerations
 

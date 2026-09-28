@@ -21,7 +21,9 @@ import static org.mockito.Mockito.lenient;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Deque;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.reactivestreams.Subscription;
@@ -43,7 +45,9 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
  * re-invokes the transformer on a retryable exception, like the SDK's retry loop. A request starting past the end fails
  * with a 416; a range running past the end is truncated as a real object store answers it. The async stub drives the
  * caller's {@link AsyncResponseTransformer} through {@code prepare}, {@code onResponse}, and {@code onStream} with a
- * publisher emitting the same chunks, each a view of the body array at its own offset.
+ * publisher emitting the same chunks, each a view of the body array at its own offset. In {@link #holdingAsyncResponses
+ * holding} mode the async stub keeps each response back until the test {@link #releaseOne releases} or {@link #failOne
+ * fails} it, which is how a test observes how many fetches a reader keeps in flight.
  */
 final class S3ObjectStub {
 
@@ -54,9 +58,17 @@ final class S3ObjectStub {
     private final int chunkSize;
     private final AtomicInteger attempts = new AtomicInteger();
     private final AtomicInteger aborts = new AtomicInteger();
+    private final AtomicInteger asyncInFlight = new AtomicInteger();
+    private final AtomicInteger asyncPeakInFlight = new AtomicInteger();
+    private final Deque<HeldResponse> held = new ArrayDeque<>();
     private int extraBytes;
     private int bodyFailuresLeft;
     private boolean withoutEtag;
+    private boolean holdingAsyncResponses;
+
+    /** An async request whose response the stub keeps back until the test releases or fails it. */
+    private record HeldResponse(
+            GetObjectRequest request, AsyncResponseTransformer<GetObjectResponse, Object> transformer) {}
 
     S3ObjectStub(byte[] data, int chunkSize) {
         this.data = data;
@@ -81,9 +93,52 @@ final class S3ObjectStub {
         return this;
     }
 
+    /** Keeps every async response back until {@link #releaseOne()} or {@link #failOne} lets it through. */
+    S3ObjectStub holdingAsyncResponses() {
+        this.holdingAsyncResponses = true;
+        return this;
+    }
+
     /** The number of transform attempts driven by the stub, retries included. */
     int attempts() {
         return attempts.get();
+    }
+
+    /** The largest number of async requests outstanding at once, from {@code getObject} to its future's completion. */
+    int asyncPeakInFlight() {
+        return asyncPeakInFlight.get();
+    }
+
+    /** How many async responses the stub is holding back right now. */
+    synchronized int heldResponses() {
+        return held.size();
+    }
+
+    /** Lets the oldest held response through, serving its body. */
+    void releaseOne() {
+        HeldResponse next = takeHeld();
+        serveHeld(next.request(), next.transformer());
+    }
+
+    /** Lets every held response through, in order. */
+    void releaseAll() {
+        while (heldResponses() > 0) {
+            releaseOne();
+        }
+    }
+
+    /** Fails the oldest held response with the given exception. */
+    void failOne(Throwable failure) {
+        HeldResponse next = takeHeld();
+        next.transformer().exceptionOccurred(failure);
+    }
+
+    private synchronized HeldResponse takeHeld() {
+        HeldResponse next = held.pollFirst();
+        if (next == null) {
+            throw new IllegalStateException("no async response is being held");
+        }
+        return next;
     }
 
     /** The number of bodies aborted by the caller instead of drained. */
@@ -139,16 +194,31 @@ final class S3ObjectStub {
     private CompletableFuture<Object> serveAsync(
             GetObjectRequest request, AsyncResponseTransformer<GetObjectResponse, Object> transformer) {
         attempts.incrementAndGet();
-        CompletableFuture<Object> outcome = transformer.prepare();
+        int outstanding = asyncInFlight.incrementAndGet();
+        asyncPeakInFlight.accumulateAndGet(outstanding, Math::max);
+        // The caller chains on the returned future; completing it after the decrement keeps the count exact
+        // whatever the caller does on completion.
+        CompletableFuture<Object> outcome =
+                transformer.prepare().whenComplete((ignored, failure) -> asyncInFlight.decrementAndGet());
+        if (holdingAsyncResponses) {
+            synchronized (this) {
+                held.addLast(new HeldResponse(request, transformer));
+            }
+            return outcome;
+        }
+        serveHeld(request, transformer);
+        return outcome;
+    }
+
+    private void serveHeld(GetObjectRequest request, AsyncResponseTransformer<GetObjectResponse, Object> transformer) {
         long[] bounds = requestedRange(request);
         if (bounds[0] >= data.length) {
             transformer.exceptionOccurred(rangeNotSatisfiable());
-            return outcome;
+            return;
         }
         byte[] body = bodyFor(bounds);
         transformer.onResponse(responseFor(bounds[0], body.length - extraBytes));
         transformer.onStream(chunkedPublisher(body));
-        return outcome;
     }
 
     /** Emits the body in chunks of the configured size, each a view of the body array at its own offset. */

@@ -15,6 +15,7 @@
  */
 package io.tileverse.storage.cache;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -29,6 +30,7 @@ import io.tileverse.cache.CacheStats;
 import io.tileverse.cache.CaffeineCache;
 import io.tileverse.io.ByteRange;
 import io.tileverse.storage.AbstractRangeReader;
+import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.ByteArrayRangeReader;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
@@ -390,12 +392,17 @@ class CachingRangeReaderTest {
                     RangeRequest.of(2000, 25, ByteBuffer.allocate(25)),
                     RangeRequest.of(1000, 50, ByteBuffer.allocate(50))); // duplicate of entry 1
 
-            int[] read = reader.readRanges(requests);
+            BatchReadResult result = reader.readRanges(requests);
 
-            assertThat(read).containsExactly(100, 50, 200, 25, 50);
+            assertThat(counts(result)).containsExactly(100, 50, 200, 25, 50);
             // one batch reached the delegate, with the two distinct misses only
             assertThat(delegate.batchReads())
                     .containsExactly(List.of(new ByteRange(1000, 50), new ByteRange(2000, 25)));
+            // the two hits and the repeated miss came from the cache; the delegate fetched the two distinct misses
+            assertThat(result.bytesRequested()).isEqualTo(425);
+            assertThat(result.bytesFromCache()).isEqualTo(350);
+            assertThat(result.fetches()).isEqualTo(2);
+            assertThat(result.bytesTransferred()).isEqualTo(75);
             for (RangeRequest request : requests) {
                 ByteBuffer expected = ByteBuffer.wrap(TEST_DATA)
                         .position((int) request.range().offset())
@@ -415,11 +422,14 @@ class CachingRangeReaderTest {
             reader.readRange(100, 40);
             delegate.clearRecordings();
 
-            int[] read = reader.readRanges(List.of(RangeRequest.of(100, 40, ByteBuffer.allocate(40))));
+            BatchReadResult result = reader.readRanges(List.of(RangeRequest.of(100, 40, ByteBuffer.allocate(40))));
 
-            assertThat(read).containsExactly(40);
+            assertThat(counts(result)).containsExactly(40);
             assertThat(delegate.batchReads()).isEmpty();
             assertThat(delegate.singleReads()).isEmpty();
+            assertThat(result.bytesFromCache()).isEqualTo(40);
+            assertThat(result.fetches()).isZero();
+            assertThat(result.bytesTransferred()).isZero();
         }
     }
 
@@ -431,14 +441,15 @@ class CachingRangeReaderTest {
 
             ByteBuffer straddling = ByteBuffer.allocate(100);
             ByteBuffer past = ByteBuffer.allocate(10);
-            int[] read = reader.readRanges(List.of(
-                    RangeRequest.of(FILE_SIZE - 30, 100, straddling), RangeRequest.of(FILE_SIZE + 1, 10, past)));
+            int[] read = counts(reader.readRanges(List.of(
+                    RangeRequest.of(FILE_SIZE - 30, 100, straddling), RangeRequest.of(FILE_SIZE + 1, 10, past))));
 
             assertThat(read).containsExactly(30, 0);
             assertThat(straddling.position()).isEqualTo(30);
             // a repeat straddling read is a cache hit
             delegate.clearRecordings();
-            int[] again = reader.readRanges(List.of(RangeRequest.of(FILE_SIZE - 30, 100, ByteBuffer.allocate(100))));
+            int[] again =
+                    counts(reader.readRanges(List.of(RangeRequest.of(FILE_SIZE - 30, 100, ByteBuffer.allocate(100)))));
             assertThat(again).containsExactly(30);
             assertThat(delegate.batchReads()).isEmpty();
         }

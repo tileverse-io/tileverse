@@ -14,20 +14,23 @@ If the bucket allows the SDK's default credential chain (IAM role, `~/.aws/crede
 
 ```java
 import io.tileverse.pmtiles.PMTilesReader;
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.net.URI;
+import java.nio.ByteBuffer;
 import java.util.Optional;
 
 try (PMTilesReader reader = PMTilesReader.open(URI.create("s3://my-bucket/world.pmtiles"))) {
-    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
+    Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(10, 885, 412));
 }
 ```
 
-When you need explicit configuration (region pinning, credentials, endpoint override), open the parent {@link Storage} with `Properties` and ask it for the reader:
+When you need explicit configuration (region pinning, credentials, endpoint override), open the parent `Storage` with `Properties` and ask it for the reader:
 
 ```java
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageFactory;
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.util.Properties;
 
 Properties props = new Properties();
@@ -38,7 +41,7 @@ URI leaf = URI.create("s3://my-bucket/world.pmtiles");
 try (Storage storage = StorageFactory.open(bucket, props);
         RangeReader s3Reader = storage.openRangeReader(leaf);
         PMTilesReader reader = new PMTilesReader(s3Reader)) {
-    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
+    Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(10, 885, 412));
 }
 ```
 
@@ -56,7 +59,7 @@ try (Storage storage = StorageFactory.open(bucket, props);
         RangeReader cachedReader = CachingRangeReader.of(baseReader);
         PMTilesReader reader = new PMTilesReader(cachedReader)) {
     // Cached reads; the reader aligns its own hot regions
-    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
+    Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(10, 885, 412));
 }
 ```
 
@@ -71,7 +74,7 @@ URI leaf = URI.create("https://account.blob.core.windows.net/tiles/world.pmtiles
 try (Storage storage = StorageFactory.open(container, azureProps);
         RangeReader azureReader = storage.openRangeReader(leaf);
         PMTilesReader reader = new PMTilesReader(azureReader)) {
-    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
+    Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(10, 885, 412));
 }
 ```
 
@@ -79,7 +82,7 @@ try (Storage storage = StorageFactory.open(container, azureProps);
 
 ```java
 try (PMTilesReader reader = PMTilesReader.open(URI.create("gs://my-bucket/world.pmtiles"))) {
-    Optional<ByteBuffer> tile = reader.getTile(10, 885, 412);
+    Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(10, 885, 412));
 }
 ```
 
@@ -88,8 +91,8 @@ try (PMTilesReader reader = PMTilesReader.open(URI.create("gs://my-bucket/world.
 For Spring-managed SDK clients, custom retry policies, or test fakes that the
 Properties-driven `StorageFactory` route can't express, each backend provider
 exposes a public static factory `XxxStorageProvider.open(URI, sdkClient)` that
-returns a `Storage`. The returned `Storage` borrows the supplied client (close
-is a no-op), so the caller retains lifetime control:
+returns a `Storage`. The returned `Storage` borrows the supplied client. Closing the
+`Storage` leaves the client open, and the caller keeps control of its lifetime:
 
 ```java
 @Bean Storage tiles(S3Client springS3) {
@@ -105,18 +108,18 @@ try (RangeReader r = storage.openRangeReader("00/00.pmtiles");
 
 ### Memory Caching
 
-Cache recently accessed ranges in memory:
+Cache the ranges read from the archive in memory: a warm cache serves the header and directory blocks without another request, and a tile read twice within 60 seconds comes back from memory.
 
 ```java
 try (Storage storage = StorageFactory.open(parent, props);
         RangeReader baseReader = storage.openRangeReader(leaf);
-        RangeReader memoryCached = CachingRangeReader.builder(baseReader)
-            .maximumSize(1000)
-            .build();
+        RangeReader memoryCached = CachingRangeReader.of(baseReader);
         PMTilesReader reader = new PMTilesReader(memoryCached)) {
     // Optimized access
 }
 ```
+
+The cache is shared by every caching reader of the JVM and bounded to 20% of the maximum heap. See [Configure for performance](../../storage/how-to/configure.md#memory-cache-cachingrangereader) for the details.
 
 ### Block Alignment
 

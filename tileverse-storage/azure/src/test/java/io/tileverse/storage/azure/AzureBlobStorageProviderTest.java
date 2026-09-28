@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
+import io.tileverse.storage.batch.BatchProviderHelper;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.util.List;
@@ -67,7 +68,10 @@ class AzureBlobStorageProviderTest {
                         AzureBlobStorageProvider.AZURE_MAX_RETRIES,
                         AzureBlobStorageProvider.AZURE_RETRY_DELAY,
                         AzureBlobStorageProvider.AZURE_MAX_RETRY_DELAY,
-                        AzureBlobStorageProvider.AZURE_TRY_TIMEOUT);
+                        AzureBlobStorageProvider.AZURE_TRY_TIMEOUT,
+                        BatchProviderHelper.BATCH_MAX_GAP,
+                        BatchProviderHelper.BATCH_MAX_FETCH,
+                        BatchProviderHelper.BATCH_MAX_IN_FLIGHT_FETCHES);
     }
 
     @Test

@@ -21,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.UnsupportedCapabilityException;
+import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.tck.StorageTCK;
 import java.io.IOException;
 import java.net.URI;
@@ -89,7 +90,11 @@ class HttpStorageIT extends StorageTCK {
     @Override
     protected Storage openStorage() throws IOException {
         URI base = URI.create("http://" + httpd.getHost() + ":" + httpd.getFirstMappedPort() + "/");
-        return new HttpStorage(base, new BorrowedHttpHandle(HttpClient.newHttpClient()), HttpAuthentication.NONE);
+        return new HttpStorage(
+                base,
+                new BorrowedHttpHandle(HttpClient.newHttpClient()),
+                HttpAuthentication.NONE,
+                BatchSettings.httpDefaults());
     }
 
     @Test

@@ -47,6 +47,7 @@ import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.StoragePattern;
 import io.tileverse.storage.UnsupportedCapabilityException;
 import io.tileverse.storage.WriteOptions;
+import io.tileverse.storage.batch.BatchSettings;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -61,6 +62,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Spliterator;
@@ -107,17 +109,30 @@ final class AzureDataLakeStorage implements Storage {
     private final AzureBlobLocation location;
     private final AzureClientHandle handle;
     private final DataLakeFileSystemClient fileSystem;
+    private final BatchSettings batchSettings;
 
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     AzureDataLakeStorage(URI baseUri, AzureBlobLocation location, AzureClientCache.Lease lease) {
-        this(baseUri, location, new LeasedAzureHandle(lease));
+        this(baseUri, location, new LeasedAzureHandle(lease), BatchSettings.objectStoreDefaults());
+    }
+
+    AzureDataLakeStorage(
+            URI baseUri, AzureBlobLocation location, AzureClientCache.Lease lease, BatchSettings batchSettings) {
+        this(baseUri, location, new LeasedAzureHandle(lease), batchSettings);
     }
 
     AzureDataLakeStorage(URI baseUri, AzureBlobLocation location, AzureClientHandle handle) {
+        this(baseUri, location, handle, BatchSettings.objectStoreDefaults());
+    }
+
+    /** @param batchSettings the merge policy and in-flight bound handed to every reader this Storage opens */
+    AzureDataLakeStorage(
+            URI baseUri, AzureBlobLocation location, AzureClientHandle handle, BatchSettings batchSettings) {
         this.baseUri = baseUri;
         this.location = location;
         this.handle = handle;
+        this.batchSettings = Objects.requireNonNull(batchSettings, "batchSettings cannot be null");
         this.fileSystem = handle.dataLakeServiceClient()
                 .orElseThrow(() -> new IllegalArgumentException(
                         "AzureDataLakeStorage requires a DataLakeServiceClient; supplied AzureClientHandle has none"))
@@ -258,7 +273,7 @@ final class AzureDataLakeStorage implements Storage {
         BlobContainerClient blobContainerClient = blobServiceClient.getBlobContainerClient(location.container());
         String blobName = location.resolve(key);
         BlobClient blobClient = blobContainerClient.getBlobClient(blobName);
-        return new AzureBlobRangeReader(blobClient);
+        return new AzureBlobRangeReader(blobClient, batchSettings);
     }
 
     @Override

@@ -241,6 +241,10 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
 
         cachingRangeReader -> rangeReaderInterface "Implements (decorator)"
         blockAlignedRangeReader -> rangeReaderInterface "Implements (decorator)"
+        blockAlignedRangeReader -> cachingRangeReader "Delegates to, one readRanges of whole blocks per call"
+        cachingRangeReader -> abstractRangeReader "Delegates cache misses to"
+        storageInterface -> rangeReaderInterface "openRangeReader returns"
+        storageFactory -> cachingRangeReader "Wraps every reader of a Storage in, when storage.caching.enabled"
 
         httpStorage -> authenticationSystem "Uses for authentication"
 
@@ -274,6 +278,7 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
         pmtilesReader -> pmtilesHeader "Returns"
         pmtilesReader -> hilbertCurve "Indexes tiles with"
         pmtilesReader -> rangeReaderInterface "Reads bytes through"
+        pmtilesReader -> blockAlignedRangeReader "Declares its header and directory regions on"
         pmtilesVectorStore -> pmtilesReader "Streams tile bytes from"
         pmtilesRasterStore -> pmtilesReader "Streams tile bytes from"
         pmtilesVectorStore -> vectorTileCodec "Decodes tiles with"

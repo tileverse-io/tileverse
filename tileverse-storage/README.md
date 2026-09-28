@@ -1,13 +1,13 @@
 # Tileverse Storage
 
-A modern Java library providing an I/O abstraction over object storage (local files, HTTP, S3, Azure Blob, Google Cloud Storage). Today it exposes byte-range reads (the `RangeReader` API); future phases will add directory listing, globbing, and streaming reads.
+A modern Java library providing an I/O abstraction over object storage (local files, HTTP, S3, Azure Blob, Google Cloud Storage): byte-range reads through the `RangeReader` API, and listing, reading, writing, deleting and copying objects through the `Storage` API.
 
 > **Note**: This is part of the [Tileverse](../) project. See the [main README](../README.md) for project overview, requirements, and contributing guidelines.
 
 ## Why Tileverse Storage?
 
 - **Universal access**: one API across files, HTTP, S3, Azure, GCS
-- **High performance**: multi-level caching, block alignment, cloud optimizations
+- **High performance**: in-memory range caching, block alignment, cloud optimizations
 - **Thread-safe**: designed for concurrent server environments
 - **Composable**: decorator pattern for flexible feature combinations
 - **Modular**: include only the providers you need
@@ -17,13 +17,13 @@ A modern Java library providing an I/O abstraction over object storage (local fi
 Single-file byte-range read (PMTiles, COG, etc.):
 
 ```java
-import io.tileverse.storage.rangereader.RangeReader;
-import io.tileverse.storage.rangereader.s3.S3RangeReader;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
+import io.tileverse.storage.cache.CachingRangeReader;
 
-try (RangeReader reader = S3RangeReader.builder()
-        .uri(URI.create("s3://my-bucket/data.bin"))
-        .withCaching()
-        .build()) {
+try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/"));
+        RangeReader reader = CachingRangeReader.of(storage.openRangeReader("data.bin"))) {
     ByteBuffer chunk = reader.readRange(1024, 512); // 512 bytes at offset 1024
 }
 ```
@@ -74,7 +74,7 @@ etc.).
 implementation 'io.tileverse.storage:tileverse-storage-all:2.0-SNAPSHOT'
 ```
 
-For modular installations (per-backend dependencies only), see the [Installation Guide](https://tileverse-io.github.io/tileverse-rangereader/user-guide/installation/).
+For modular installations (per-backend dependencies only), see the [Installation Guide](https://tileverse.io/storage/how-to/install/).
 
 ## Module layout
 

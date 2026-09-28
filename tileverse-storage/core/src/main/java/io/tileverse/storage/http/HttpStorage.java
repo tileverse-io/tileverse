@@ -33,6 +33,7 @@ import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.TransientStorageException;
 import io.tileverse.storage.UnsupportedCapabilityException;
 import io.tileverse.storage.WriteOptions;
+import io.tileverse.storage.batch.BatchSettings;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -45,6 +46,7 @@ import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
@@ -58,22 +60,28 @@ final class HttpStorage implements Storage {
     private final URI baseUri;
     private final HttpClientHandle clientHandle;
     private final HttpAuthentication authentication;
+    private final BatchSettings batchSettings;
     private final StorageCapabilities capabilities;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     /**
-     * Construct an {@code HttpStorage} that uses the {@link HttpClient} carried by {@code clientHandle} and applies
+     * Construct an {@code HttpStorage} that uses the {@link HttpClient} of {@code clientHandle} and applies
      * {@code authentication} to every request issued by {@link #stat}, {@link #read(String, ReadOptions)}, and the
-     * {@link HttpRangeReader} returned by {@link #openRangeReader}. {@link #close()} closes the handle (which either
-     * releases a cache lease or is a no-op for borrowed clients).
+     * {@link HttpRangeReader} returned by {@link #openRangeReader}, which batches under {@code batchSettings}.
+     * {@link #close()} closes the handle (which either releases a cache lease or is a no-op for borrowed clients).
      */
-    HttpStorage(URI baseUri, HttpClientHandle clientHandle, HttpAuthentication authentication) {
+    HttpStorage(
+            URI baseUri,
+            HttpClientHandle clientHandle,
+            HttpAuthentication authentication,
+            BatchSettings batchSettings) {
         if (baseUri == null) {
             throw new IllegalArgumentException("baseUri required");
         }
         this.baseUri = baseUri;
         this.clientHandle = clientHandle;
         this.authentication = authentication == null ? HttpAuthentication.NONE : authentication;
+        this.batchSettings = Objects.requireNonNull(batchSettings, "batchSettings cannot be null");
         this.capabilities = StorageCapabilities.builder()
                 .rangeReads(true)
                 .streamingReads(true)
@@ -135,7 +143,7 @@ final class HttpStorage implements Storage {
     @Override
     public RangeReader openRangeReader(String key) {
         requireOpen();
-        return new HttpRangeReader(resolve(key), client(), authentication);
+        return new HttpRangeReader(resolve(key), client(), authentication, batchSettings);
     }
 
     @Override

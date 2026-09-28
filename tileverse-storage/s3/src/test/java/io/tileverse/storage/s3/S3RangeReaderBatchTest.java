@@ -15,8 +15,10 @@
  */
 package io.tileverse.storage.s3;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -24,14 +26,23 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import io.tileverse.storage.AccessDeniedException;
+import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.StorageException;
+import io.tileverse.storage.batch.BatchSettings;
+import io.tileverse.storage.batch.CoalescingPolicy;
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -119,7 +130,7 @@ class S3RangeReaderBatchTest {
         object.installAsync(asyncClient);
         List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {1_000_000, 200}, {2_000_000, 300}});
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertContents(requests, counts);
         verify(asyncClient, times(3)).getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class));
@@ -133,10 +144,16 @@ class S3RangeReaderBatchTest {
         object.installAsync(asyncClient);
         List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {1_000, 100}});
 
-        int[] counts = reader.readRanges(requests);
+        BatchReadResult result = reader.readRanges(requests);
 
-        assertContents(requests, counts);
+        assertContents(requests, counts(result));
         verify(asyncClient, times(1)).getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class));
+        assertThat(result.fetches()).isEqualTo(1);
+        assertThat(result.bytesRequested()).isEqualTo(200);
+        assertThat(result.bytesTransferred())
+                .as("the merged GET bridges the 900-byte gap")
+                .isEqualTo(1_100);
+        assertThat(result.bytesFromCache()).isZero();
     }
 
     @Test
@@ -148,7 +165,7 @@ class S3RangeReaderBatchTest {
         heap.position(20);
         List<RangeRequest> requests = List.of(RangeRequest.of(0, 300, direct), RangeRequest.of(2_000_000, 400, heap));
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertThat(counts).containsExactly(300, 400);
         assertThat(direct.position()).isEqualTo(400);
@@ -167,7 +184,7 @@ class S3RangeReaderBatchTest {
         ByteBuffer second = ByteBuffer.allocateDirect(100);
         List<RangeRequest> requests = List.of(RangeRequest.of(0, 100, first), RangeRequest.of(1_000, 100, second));
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertThat(counts).containsExactly(100, 100);
         verify(asyncClient, times(1)).getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class));
@@ -183,10 +200,12 @@ class S3RangeReaderBatchTest {
         List<RangeRequest> requests =
                 batchOf(new long[][] {{OBJECT_SIZE + 1_000_000, 10}, {0, 100}, {OBJECT_SIZE - 50, 100}});
 
-        int[] counts = reader.readRanges(requests);
+        BatchReadResult result = reader.readRanges(requests);
 
-        assertThat(counts).containsExactly(0, 100, 50);
-        assertContents(requests, counts);
+        assertThat(counts(result)).containsExactly(0, 100, 50);
+        assertContents(requests, counts(result));
+        assertThat(result.fetches()).as("the past-EOF GET was issued too").isEqualTo(3);
+        assertThat(result.bytesTransferred()).isEqualTo(150);
     }
 
     @Test
@@ -236,6 +255,138 @@ class S3RangeReaderBatchTest {
         assertThat(sent.getAllValues()).allMatch(request -> request.requestPayer() == RequestPayer.REQUESTER);
     }
 
+    /**
+     * With the CRT client the reader keeps at most the configured number of fetches in flight: two of five fetches
+     * start at once, each completion admits the next, and the batch lands every byte.
+     */
+    @Test
+    void theInFlightBoundAdmitsTheNextFetchOnCompletion() throws Exception {
+        object.holdingAsyncResponses().installAsync(asyncClient);
+        S3RangeReader bounded = readerBoundedTo(2);
+        List<RangeRequest> requests = farApartRanges(5);
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<BatchReadResult> batch = caller.submit(() -> bounded.readRanges(requests));
+
+            await().atMost(Duration.ofSeconds(5))
+                    .untilAsserted(() -> assertThat(object.heldResponses()).isEqualTo(2));
+            assertThat(object.attempts())
+                    .as("fetches started before any completion")
+                    .isEqualTo(2);
+
+            object.releaseOne();
+            await().atMost(Duration.ofSeconds(5))
+                    .untilAsserted(() -> assertThat(object.attempts()).isEqualTo(3));
+            assertThat(object.heldResponses()).isEqualTo(2);
+            assertThat(batch.isDone()).isFalse();
+
+            object.releaseAll();
+            await().atMost(Duration.ofSeconds(5)).until(() -> object.attempts() == 5 && object.heldResponses() == 0);
+            object.releaseAll();
+            int[] counts = counts(batch.get(5, TimeUnit.SECONDS));
+
+            assertContents(requests, counts);
+            assertThat(object.attempts()).isEqualTo(5);
+            assertThat(object.asyncPeakInFlight()).isEqualTo(2);
+        } finally {
+            caller.shutdownNow();
+        }
+    }
+
+    /**
+     * A failed fetch stops the admission of new ones, and the call throws only after the fetches already in flight have
+     * completed: no thread writes a target after the call returns or throws.
+     */
+    @Test
+    void aFailureStopsAdmissionAndTheCallDrainsTheFetchesInFlight() {
+        object.holdingAsyncResponses().installAsync(asyncClient);
+        S3RangeReader bounded = readerBoundedTo(2);
+        List<RangeRequest> requests = farApartRanges(5);
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<BatchReadResult> batch = caller.submit(() -> bounded.readRanges(requests));
+            await().atMost(Duration.ofSeconds(5))
+                    .untilAsserted(() -> assertThat(object.heldResponses()).isEqualTo(2));
+
+            object.failOne(
+                    S3Exception.builder().statusCode(403).message("Forbidden").build());
+
+            // admission runs on the thread completing a response, and that thread is this one
+            assertThat(object.attempts())
+                    .as("no fetch admitted after the failure")
+                    .isEqualTo(2);
+            assertThat(batch.isDone())
+                    .as("the call waits for the fetch still in flight")
+                    .isFalse();
+
+            object.releaseOne();
+
+            assertThatThrownBy(() -> batch.get(5, TimeUnit.SECONDS)).hasCauseInstanceOf(AccessDeniedException.class);
+            assertThat(object.attempts()).isEqualTo(2);
+        } finally {
+            caller.shutdownNow();
+        }
+    }
+
+    @Test
+    void anUnboundedReaderLaunchesEveryFetchAtOnce() throws Exception {
+        object.holdingAsyncResponses().installAsync(asyncClient);
+        S3RangeReader unbounded = readerBoundedTo(0);
+        List<RangeRequest> requests = farApartRanges(5);
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<BatchReadResult> batch = caller.submit(() -> unbounded.readRanges(requests));
+            await().atMost(Duration.ofSeconds(5))
+                    .untilAsserted(() -> assertThat(object.heldResponses()).isEqualTo(5));
+
+            object.releaseAll();
+
+            assertContents(requests, counts(batch.get(5, TimeUnit.SECONDS)));
+            assertThat(object.asyncPeakInFlight()).isEqualTo(5);
+        } finally {
+            caller.shutdownNow();
+        }
+    }
+
+    /**
+     * A fetch may complete on the thread that launched it, inside the launch loop. Thousands of such completions must
+     * run the loop on, not nest it: with a bound of two, a plan of twenty thousand fetches would otherwise recurse
+     * twenty thousand levels deep.
+     */
+    @Test
+    @Timeout(value = 60, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void completionsArrivingInsideTheLaunchLoopDoNotNestIt() {
+        object.installAsync(asyncClient);
+        S3RangeReader bounded = readerBoundedTo(2);
+        int fetchCount = 20_000;
+        long[][] ranges = new long[fetchCount][];
+        for (int i = 0; i < fetchCount; i++) {
+            ranges[i] = new long[] {i, 1};
+        }
+        List<RangeRequest> requests = batchOf(ranges);
+
+        BatchReadResult result = bounded.readRanges(requests);
+
+        assertContents(requests, counts(result));
+        assertThat(result.fetches()).isEqualTo(fetchCount);
+        assertThat(object.asyncPeakInFlight()).isEqualTo(1);
+    }
+
+    private S3RangeReader readerBoundedTo(int maxInFlightFetches) {
+        BatchSettings noMerging = new BatchSettings(-1, CoalescingPolicy.DEFAULT_MAX_FETCH_BYTES, maxInFlightFetches);
+        return new S3RangeReader(
+                s3Client, asyncClient, new S3Reference(null, BUCKET, KEY, null), false, new EndpointEtags(), noMerging);
+    }
+
+    /** One fetch per range: the ranges sit farther apart than any gap a merging policy would bridge. */
+    private static List<RangeRequest> farApartRanges(int count) {
+        long[][] ranges = new long[count][];
+        for (int i = 0; i < count; i++) {
+            ranges[i] = new long[] {i * 700_000L, 100};
+        }
+        return batchOf(ranges);
+    }
+
     @Test
     @SuppressWarnings("unchecked")
     void withoutAsyncClientTheTemplateRunsOnTheSyncClient() {
@@ -243,14 +394,14 @@ class S3RangeReaderBatchTest {
         S3RangeReader syncOnly = new S3RangeReader(s3Client, new S3Reference(null, BUCKET, KEY, null), false);
 
         List<RangeRequest> farApart = batchOf(new long[][] {{0, 100}, {1_000_000, 200}});
-        int[] counts = syncOnly.readRanges(farApart);
+        int[] counts = counts(syncOnly.readRanges(farApart));
 
         assertContents(farApart, counts);
         verify(s3Client, times(2)).getObject(any(GetObjectRequest.class), any(ResponseTransformer.class));
         verify(asyncClient, never()).getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class));
 
         List<RangeRequest> nearby = batchOf(new long[][] {{0, 100}, {1_000, 100}});
-        int[] mergedCounts = syncOnly.readRanges(nearby);
+        int[] mergedCounts = counts(syncOnly.readRanges(nearby));
 
         assertContents(nearby, mergedCounts);
         verify(s3Client, times(3)).getObject(any(GetObjectRequest.class), any(ResponseTransformer.class));

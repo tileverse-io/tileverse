@@ -4,7 +4,7 @@ This guide covers advanced topics for reading PMTiles archives.
 
 ## Opening PMTiles Archives
 
-`PMTilesReader.open(URI)` is the one-line entry point: it opens the parent {@link Storage} for the URI's container, gets a `RangeReader` for the leaf, and bundles them so closing the reader releases both. The same call works for any URI scheme.
+`PMTilesReader.open(URI)` is the one-line entry point: it opens the parent `Storage` for the URI's container, gets a `RangeReader` for the leaf, and bundles them so closing the reader releases both. The same call works for any URI scheme.
 
 ```java
 import io.tileverse.pmtiles.PMTilesReader;
@@ -69,19 +69,22 @@ try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
 
 ## Reading Individual Tiles
 
-Tiles are retrieved using the standard Z/X/Y addressing:
+Tiles are addressed by a `TileIndex` built from the standard Z/X/Y coordinates. The returned buffer is positioned at the start of the tile bytes and ready to read. Do not flip it.
 
 ```java
-Optional<ByteBuffer> tileData = reader.getTile(zoom, x, y);
+import io.tileverse.tiling.pyramid.TileIndex;
+
+Optional<ByteBuffer> tileData = reader.getTile(TileIndex.zxy(zoom, x, y));
 
 if (tileData.isPresent()) {
     ByteBuffer tile = tileData.get();
-    tile.flip(); // Important: flip the buffer before reading
     // Process tile data...
 } else {
     // Tile doesn't exist in the archive
 }
 ```
+
+`getTile(long tileId)` takes the scalar PMTiles tile id instead, and `reader.getTileId(tileIndex)` converts between the two.
 
 ## Bulk Tile Operations
 
@@ -91,10 +94,10 @@ if (tileData.isPresent()) {
 int zoom = 10;
 for (int x = 880; x <= 890; x++) {
     for (int y = 410; y <= 420; y++) {
-                    Optional<ByteBuffer> tile = reader.getTile(zoom, x, y);
-                    if (tile.isPresent()) {
-                        tile.get().flip(); // Flip before processing
-                        processTile(zoom, x, y, tile.get());        }
+        Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(zoom, x, y));
+        if (tile.isPresent()) {
+            processTile(zoom, x, y, tile.get());
+        }
     }
 }
 ```
@@ -108,10 +111,8 @@ IntStream.range(880, 891)
     .parallel()
     .forEach(x -> {
         IntStream.range(410, 421).forEach(y -> {
-            reader.getTile(zoom, x, y).ifPresent(buffer -> {
-                buffer.flip();
-                processTile(zoom, x, y, buffer);
-            });
+            reader.getTile(TileIndex.zxy(zoom, x, y)).ifPresent(buffer ->
+                processTile(zoom, x, y, buffer));
         });
     });
 ```
@@ -125,9 +126,9 @@ IntStream.range(880, 891)
 | MVT (`tileType == TILETYPE_MVT`) | `PMTilesVectorTileStore` | `io.tileverse.vectortile.model.VectorTile` | `VectorTileCodec` |
 | Raster (`TILETYPE_PNG/JPEG/WEBP/AVIF`) | `PMTilesRasterTileStore` | `java.awt.image.RenderedImage` | `javax.imageio.ImageIO` |
 
-Both wrappers validate the archive's `tileType` at construction and throw `UnsupportedTileTypeException` if you point a vector store at a raster archive (or vice versa), so a misconfigured URI fails fast.
+Both wrappers validate the archive's `tileType` at construction and throw `UnsupportedTileTypeException` if you point a vector store at a raster archive (or vice versa). A misconfigured URI fails fast.
 
-For the full API surface (interfaces, base classes, the TileJSON v3 model) see the [Tile Stores Reference](../reference/tile-stores.md).
+For the full API (interfaces, base classes, the TileJSON v3 model) see the [Tile Stores Reference](../reference/tile-stores.md).
 
 ### Reading Vector Tiles
 
@@ -147,14 +148,14 @@ try (PMTilesReader reader = PMTilesReader.open(uri)) {
 
     data.ifPresent(td -> {
         VectorTile vt = td.data();
-        // walk layers / features…
+        // walk layers / features...
     });
 }
 ```
 
 ### Reading Raster Tiles
 
-`PMTilesRasterTileStore` decodes WebP/PNG/JPEG straight from the channel via `ImageIO.read`, so the encoded payload never sits in a separately allocated `ByteBuffer`. WebP support ships with `tileverse-pmtiles` (via a transitively pulled-in `ImageIO` plugin); PNG and JPEG decoders come with the JDK.
+`PMTilesRasterTileStore` decodes WebP/PNG/JPEG straight from the channel via `ImageIO.read`. The encoded payload never sits in a separately allocated `ByteBuffer`. WebP support ships with `tileverse-pmtiles` (via a transitively pulled-in `ImageIO` plugin); PNG and JPEG decoders come with the JDK.
 
 ```java
 import io.tileverse.pmtiles.PMTilesReader;
@@ -175,14 +176,14 @@ try (PMTilesReader reader = PMTilesReader.open(uri)) {
 
     data.ifPresent(td -> {
         RenderedImage img = td.data();
-        // hand to javax.imageio.ImageIO.write, paint into a BufferedImage, build a GridCoverage2D, …
+        // hand to javax.imageio.ImageIO.write, paint into a BufferedImage, build a GridCoverage2D, ...
     });
 }
 ```
 
-The store's payload type is the `RenderedImage` interface (not the concrete `BufferedImage` that `ImageIO.read` produces), so the result flows directly into APIs like `GridCoverageFactory.create(String, RenderedImage, ReferencedEnvelope)` without intermediate copies.
+The store's payload type is the `RenderedImage` interface (not the concrete `BufferedImage` that `ImageIO.read` produces). The result flows directly into APIs like `GridCoverageFactory.create(String, RenderedImage, ReferencedEnvelope)` without intermediate copies.
 
-If you need the raw encoded bytes (e.g. an HTTP proxy that serves WebP straight to clients), bypass the store and use the streaming `PMTilesReader` overload with your own mapper — no `ByteBuffer` allocation, no double-copy:
+If you need the raw encoded bytes (e.g. an HTTP proxy that serves WebP straight to clients), bypass the store and use the streaming `PMTilesReader` overload with your own mapper, without a `ByteBuffer` allocation or a second copy:
 
 ```java
 import io.tileverse.io.IOFunction;
@@ -194,7 +195,7 @@ Optional<byte[]> encoded = reader.getTile(reader.getTileId(TileIndex.xyz(885, 41
 ## Performance Tips
 
 1. **Use caching** for cloud storage sources
-2. **Declare block-aligned regions** (header, index) for optimal read patterns
+2. **Cache the reader** with `CachingRangeReader.of(...)`: it declares its own block-aligned regions for the header and directories, and tile reads stay exact
 3. **Reuse readers** instead of creating new instances
 4. **Batch operations** when processing multiple tiles
 
@@ -204,14 +205,14 @@ See [Cloud Storage](cloud-storage.md) for detailed performance optimization stra
 
 ```java
 try (PMTilesReader reader = new PMTilesReader(rangeReader)) {
-    Optional<ByteBuffer> tile = reader.getTile(zoom, x, y);
+    Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(zoom, x, y));
     // Process tile...
-} catch (UncheckedIOException e) {
-    // Handle I/O errors (network issues, file not found, etc.)
+} catch (InvalidHeaderException e) {
+    // Not a PMTiles archive, or a version this reader does not support
+    System.err.println("Invalid PMTiles header: " + e.getMessage());
+} catch (IOException e) {
+    // I/O errors (network issues, missing object) and UnsupportedTileTypeException
     System.err.println("Failed to read PMTiles: " + e.getMessage());
-} catch (Exception e) {
-    // Handle other errors (invalid format, etc.)
-    System.err.println("Error: " + e.getMessage());
 }
 ```
 

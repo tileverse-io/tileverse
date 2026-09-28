@@ -15,6 +15,7 @@
  */
 package io.tileverse.storage;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -125,7 +126,7 @@ class AbstractRangeReaderBatchTest {
     void defaultHooksReadEachRangeInRequestOrder() {
         List<RangeRequest> requests = batchOf(new long[][] {{500, 100}, {0, 100}, {500, 100}});
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertThat(reader.backendReads)
                 .containsExactly(ByteRange.of(500, 100), ByteRange.of(0, 100), ByteRange.of(500, 100));
@@ -136,17 +137,17 @@ class AbstractRangeReaderBatchTest {
     void pastEofEntriesTranslateToZeroThroughReadRange() {
         List<RangeRequest> requests = batchOf(new long[][] {{SOURCE_SIZE + 10, 10}, {SOURCE_SIZE - 25, 100}, {0, 10}});
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertThat(counts).containsExactly(0, 25, 10);
     }
 
     @Test
     void zeroLengthEntriesAndEmptyBatches() {
-        assertThat(reader.readRanges(List.of())).isEmpty();
+        assertThat(reader.readRanges(List.of()).requests()).isZero();
 
         List<RangeRequest> requests = batchOf(new long[][] {{100, 0}, {200, 10}});
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertThat(counts).containsExactly(0, 10);
         assertThat(reader.backendReads).containsExactly(ByteRange.of(200, 10));
@@ -166,10 +167,28 @@ class AbstractRangeReaderBatchTest {
         reader.policy = new CoalescingPolicy(64, 4096);
         List<RangeRequest> requests = batchOf(new long[][] {{100, 20}, {150, 20}});
 
-        int[] counts = reader.readRanges(requests);
+        BatchReadResult result = reader.readRanges(requests);
 
         assertThat(reader.backendReads).containsExactly(ByteRange.of(100, 70));
-        assertMatchesSingleReads(requests, counts);
+        assertMatchesSingleReads(requests, counts(result));
+        assertThat(result.bytesRequested()).isEqualTo(40);
+        assertThat(result.fetches()).isEqualTo(1);
+        assertThat(result.bytesTransferred())
+                .as("the merged fetch bridges the 30-byte gap")
+                .isEqualTo(70);
+        assertThat(result.bytesFromCache()).isZero();
+    }
+
+    @Test
+    void defaultHooksReportOneFetchPerRangeAndNothingAmplified() {
+        List<RangeRequest> requests = batchOf(new long[][] {{500, 100}, {0, 100}, {SOURCE_SIZE - 25, 100}, {10, 0}});
+
+        BatchReadResult result = reader.readRanges(requests);
+
+        assertThat(result.bytesRequested()).isEqualTo(300);
+        assertThat(result.fetches()).isEqualTo(3);
+        assertThat(result.bytesTransferred()).isEqualTo(225);
+        assertThat(result.bytesFromCache()).isZero();
     }
 
     @Test
@@ -182,7 +201,7 @@ class AbstractRangeReaderBatchTest {
         }
         List<RangeRequest> requests = batchOf(ranges);
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertThat(reader.maxActive.get()).isLessThanOrEqualTo(4);
         assertThat(reader.backendReads).hasSize(10);
@@ -196,7 +215,7 @@ class AbstractRangeReaderBatchTest {
             List<RangeRequest> requests = List.of(
                     RangeRequest.of(0, 4, ByteBuffer.allocate(4)), RangeRequest.of(4, 4, ByteBuffer.allocate(4)));
 
-            int[] counts = caching.readRanges(requests);
+            int[] counts = counts(caching.readRanges(requests));
 
             assertThat(counts).containsExactly(4, 4);
             // The pure cache forwards its misses as one delegate batch. The in-memory delegate

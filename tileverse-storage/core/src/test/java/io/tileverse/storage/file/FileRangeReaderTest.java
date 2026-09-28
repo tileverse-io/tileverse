@@ -15,6 +15,7 @@
  */
 package io.tileverse.storage.file;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.abort;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.StorageException;
 import java.io.IOException;
@@ -1031,9 +1033,15 @@ class FileRangeReaderTest {
                         RangeRequest.of(10, 10, ByteBuffer.allocate(10)),
                         RangeRequest.of(20, 10, ByteBuffer.allocate(10)));
 
-                int[] read = r.readRanges(requests);
+                BatchReadResult result = r.readRanges(requests);
+                int[] read = counts(result);
 
                 assertThat(read).containsExactly(10, 10, 10);
+                assertThat(result.fetches())
+                        .as("local reads merge nothing: one read per range")
+                        .isEqualTo(3);
+                assertThat(result.bytesTransferred()).isEqualTo(30);
+                assertThat(result.bytesRequested()).isEqualTo(30);
                 for (int i = 0; i < requests.size(); i++) {
                     ByteBuffer target = requests.get(i).target().flip();
                     String content = StandardCharsets.UTF_8.decode(target).toString();

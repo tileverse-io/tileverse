@@ -23,17 +23,22 @@ import static com.github.tomakehurst.wiremock.client.WireMock.headRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
+import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
 import io.tileverse.storage.RangeRequest;
+import io.tileverse.storage.batch.BatchSettings;
+import io.tileverse.storage.batch.CoalescingPolicy;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
+import java.net.http.HttpClient;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -43,21 +48,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
-import org.junit.jupiter.api.parallel.Execution;
-import org.junit.jupiter.api.parallel.ExecutionMode;
-import org.junit.jupiter.api.parallel.ResourceLock;
-import org.junit.jupiter.api.parallel.Resources;
 
 /**
  * Batched-read tests for {@link HttpRangeReader} against stubbed multi-range responses: multipart routing, part
  * reordering and coalescing, the 200 / uncovering-206 fallbacks, and 416 semantics.
- *
- * <p>Runs its methods on the same thread: {@link #negativeGapOverrideRoutesThroughPerFetchGets} mutates the
- * {@code io.tileverse.storage.batch.http.maxgap} system property that every other test here reads live through
- * {@link HttpRangeReader#coalescingPolicy()}, and {@code @ResourceLock} alone does not exclude sibling methods that
- * never declare a lock on it.
  */
-@Execution(ExecutionMode.SAME_THREAD)
 class HttpRangeReaderMultiRangeTest {
 
     private static final String TEST_PATH = "/multi-range.bin";
@@ -149,13 +144,17 @@ class HttpRangeReaderMultiRangeTest {
                 .willReturn(multipartResponse(multipartBody(new long[][] {{0, 100}, {600_000, 200}}))));
         List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {600_000, 200}});
 
-        int[] counts = reader.readRanges(requests);
+        BatchReadResult result = reader.readRanges(requests);
 
-        assertContents(requests, counts);
+        assertContents(requests, counts(result));
         wm.verify(1, getRequestedFor(urlEqualTo(TEST_PATH)));
         wm.verify(0, headRequestedFor(urlEqualTo(TEST_PATH)));
         assertThat(reader.size()).hasValue(FILE_SIZE);
         wm.verify(0, headRequestedFor(urlEqualTo(TEST_PATH)));
+        assertThat(result.fetches()).as("one multi-range GET").isEqualTo(1);
+        assertThat(result.bytesRequested()).isEqualTo(300);
+        assertThat(result.bytesTransferred()).as("the two parts' payload").isEqualTo(300);
+        assertThat(result.bytesFromCache()).isZero();
     }
 
     @Test
@@ -165,7 +164,7 @@ class HttpRangeReaderMultiRangeTest {
                 .willReturn(multipartResponse(multipartBody(new long[][] {{600_000, 200}, {0, 100}}))));
         List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {600_000, 200}});
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertContents(requests, counts);
     }
@@ -177,9 +176,13 @@ class HttpRangeReaderMultiRangeTest {
                 .willReturn(multipartResponse(multipartBody(new long[][] {{0, 300_100}}))));
         List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {300_000, 100}});
 
-        int[] counts = reader.readRanges(requests);
+        BatchReadResult result = reader.readRanges(requests);
 
-        assertContents(requests, counts);
+        assertContents(requests, counts(result));
+        assertThat(result.fetches()).isEqualTo(1);
+        assertThat(result.bytesTransferred())
+                .as("the server sent one part spanning both fetches and the gap between them")
+                .isEqualTo(300_100);
     }
 
     @Test
@@ -194,7 +197,7 @@ class HttpRangeReaderMultiRangeTest {
                         .withBody(span)));
         List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {600_000, 200}});
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertContents(requests, counts);
     }
@@ -210,12 +213,12 @@ class HttpRangeReaderMultiRangeTest {
                         .withBody(slice(0, 1000))));
         List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {600_000, 200}});
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertContents(requests, counts);
 
         List<RangeRequest> second = batchOf(new long[][] {{0, 100}, {600_000, 200}});
-        assertContents(second, reader.readRanges(second));
+        assertContents(second, counts(reader.readRanges(second)));
         wm.verify(1, getRequestedFor(urlEqualTo(TEST_PATH)).withHeader("Range", matching("bytes=.*,.*")));
     }
 
@@ -231,7 +234,7 @@ class HttpRangeReaderMultiRangeTest {
                         .withBody(slice(0, 100))));
         List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {600_000, 200}});
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertContents(requests, counts);
         wm.verify(1, getRequestedFor(urlEqualTo(TEST_PATH)).withHeader("Range", matching("bytes=.*,.*")));
@@ -244,11 +247,11 @@ class HttpRangeReaderMultiRangeTest {
                 .willReturn(aResponse().withStatus(416).withHeader("Content-Range", "bytes */" + FILE_SIZE)));
         List<RangeRequest> requests = batchOf(new long[][] {{2_000_000, 10}, {3_000_000, 10}});
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertThat(counts).containsExactly(0, 0);
 
-        int[] again = reader.readRanges(batchOf(new long[][] {{2_000_000, 10}, {3_000_000, 10}}));
+        int[] again = counts(reader.readRanges(batchOf(new long[][] {{2_000_000, 10}, {3_000_000, 10}})));
         assertThat(again).containsExactly(0, 0);
         wm.verify(2, getRequestedFor(urlEqualTo(TEST_PATH)).withHeader("Range", matching("bytes=.*,.*")));
     }
@@ -260,7 +263,7 @@ class HttpRangeReaderMultiRangeTest {
                 .willReturn(multipartResponse(multipartBody(new long[][] {{0, 100}}))));
         List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {1_500_000, 10}});
 
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         assertThat(counts[0]).isEqualTo(100);
         assertThat(counts[1]).isZero();
@@ -268,24 +271,23 @@ class HttpRangeReaderMultiRangeTest {
     }
 
     /**
-     * A negative gap override disables merging: the planner returns unsorted, duplicate-preserving direct fetches that
-     * the multipart router cannot safely group. The reader routes the whole batch through the template instead, never
+     * A negative gap disables merging: the planner returns unsorted, duplicate-preserving direct fetches that the
+     * multipart router cannot safely group. The reader routes the whole batch through the template instead, never
      * attempting a multi-range GET.
      */
     @Test
-    @ResourceLock(Resources.SYSTEM_PROPERTIES)
-    void negativeGapOverrideRoutesThroughPerFetchGets() {
+    void negativeGapRoutesThroughPerFetchGets() {
         stubSingleRangeGets();
-        System.setProperty("io.tileverse.storage.batch.http.maxgap", "-1");
-        try {
+        BatchSettings noMerging = new BatchSettings(-1, CoalescingPolicy.DEFAULT_MAX_FETCH_BYTES, 8);
+        URI uri = URI.create("http://localhost:" + wm.getPort() + TEST_PATH);
+        try (HttpRangeReader unmerged =
+                new HttpRangeReader(uri, HttpClient.newHttpClient(), HttpAuthentication.NONE, noMerging)) {
             List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {600_000, 200}});
 
-            int[] counts = reader.readRanges(requests);
+            int[] counts = counts(unmerged.readRanges(requests));
 
             assertContents(requests, counts);
             wm.verify(0, getRequestedFor(urlEqualTo(TEST_PATH)).withHeader("Range", matching("bytes=.*,.*")));
-        } finally {
-            System.clearProperty("io.tileverse.storage.batch.http.maxgap");
         }
     }
 
@@ -351,7 +353,7 @@ class HttpRangeReaderMultiRangeTest {
                         .withBody(constantTen)));
 
         List<RangeRequest> requests = batchOf(ranges);
-        int[] counts = reader.readRanges(requests);
+        int[] counts = counts(reader.readRanges(requests));
 
         for (int i = 0; i < fetchCount; i++) {
             assertThat(counts[i]).as("bytes for entry " + i).isEqualTo(10);

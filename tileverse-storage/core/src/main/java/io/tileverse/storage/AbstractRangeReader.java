@@ -153,13 +153,13 @@ public abstract class AbstractRangeReader implements RangeReader {
      * {@link RangeNotSatisfiableException} into 0-byte results itself; the translation lives only in {@code readRange}.
      *
      * @param requests the ranges to read and the buffers they land in
-     * @return the number of bytes read per request, in request order
+     * @return the bytes read per request, in request order, and what the call cost
      */
     @Override
-    public int[] readRanges(List<RangeRequest> requests) {
+    public BatchReadResult readRanges(List<RangeRequest> requests) {
         RangeRequest.validate(requests);
         if (requests.isEmpty()) {
-            return new int[0];
+            return BatchReadResult.EMPTY;
         }
         List<PlannedFetch> fetches = BatchPlanner.plan(requests, coalescingPolicy());
         return BatchRunner.run(requests, fetches, this::readRange, maxConcurrentFetches(), BatchExecutors::shared);

@@ -138,17 +138,19 @@ returned by `Storage.openRangeReader`.
 
 ### In-Memory Caching (`CachingRangeReader`)
 
-The `CachingRangeReader` decorator provides an in-memory cache of recently accessed ranges, which is valuable when:
+The `CachingRangeReader` decorator caches exactly the ranges requested from it, in memory, which is valuable when:
 
 - The same ranges are accessed multiple times in a short period
-- Adjacent ranges are accessed sequentially
 - Quick access is critical for performance
 
-The memory cache is implemented using Caffeine, a high-performance caching library with features like:
+Adjacent reads alone do not hit: a request must repeat the exact `(offset, length)`. Stack a `BlockAlignedRangeReader` above the cache for reads landing near each other inside a header or an index.
 
-- Automatic eviction based on size and access patterns
-- Weak references to allow garbage collection when memory is constrained
-- Thread-safety for concurrent access
+The cache is a Caffeine cache shared by every `CachingRangeReader` of the same `CacheManager` (the default manager unless `builder(reader).cacheManager(...)` names another), partitioned by the source identifier of the wrapped reader:
+
+- Bounded to 20% of the maximum heap, weighed by cached bytes; over capacity, Caffeine evicts by its frequency and recency policy
+- Entries expire 60 seconds after their last access, and a system scheduler removes expired entries promptly
+- `clearCache()` drops one source's entries; `getCacheStats()` reports hits, misses, evictions and the entry count
+- Thread-safe for concurrent access
 
 ### Block Alignment
 

@@ -22,8 +22,10 @@
  * {@link io.tileverse.storage.batch.BatchExecutors shared executor}. Backends reuse the planner with their own
  * execution strategies (parallel object-store fetches, HTTP multipart).
  *
- * <p>System properties: {@code io.tileverse.storage.batch.executor} ({@code auto}, {@code virtual}, {@code pool}),
- * {@code io.tileverse.storage.batch.pool.size}, {@code io.tileverse.storage.batch.objectstore.maxgap},
- * {@code io.tileverse.storage.batch.http.maxgap}, and {@code io.tileverse.storage.batch.maxfetch}.
+ * <p>Each Storage of the object-store and HTTP providers resolves its own
+ * {@link io.tileverse.storage.batch.BatchSettings} from the {@code storage.batch.*} parameters of
+ * {@link io.tileverse.storage.batch.BatchProviderHelper} and hands them to every reader it opens. The
+ * {@code io.tileverse.storage.batch.executor} ({@code auto}, {@code virtual}, {@code pool}) and
+ * {@code io.tileverse.storage.batch.pool.size} system properties pick the shared executor.
  */
 package io.tileverse.storage.batch;

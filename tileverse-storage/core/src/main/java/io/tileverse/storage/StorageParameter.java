@@ -49,6 +49,8 @@ public record StorageParameter<T>(
 
     /** Standard parameter group for caching-related configuration. */
     public static final String GROUP_CACHING = "caching";
+    /** Standard parameter group for the batched-read tuning shared by the object-store and HTTP providers. */
+    public static final String GROUP_BATCH = "batch";
     /** Standard parameter subgroup for authentication-related configuration. */
     public static final String SUBGROUP_AUTHENTICATION = "authentication";
 

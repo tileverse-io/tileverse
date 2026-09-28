@@ -20,6 +20,8 @@ import static io.tileverse.storage.StorageParameter.SUBGROUP_AUTHENTICATION;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
+import io.tileverse.storage.batch.BatchProviderHelper;
+import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
@@ -87,6 +89,11 @@ import java.util.Optional;
  * <ul>
  *   <li>{@link #HTTP_CONNECTION_TIMEOUT_MILLIS} - Connection timeout (default 5000ms)
  * </ul>
+ *
+ * <h2>Batched Reads</h2>
+ *
+ * <p>The {@code storage.batch.*} parameters of {@link BatchProviderHelper} tune how the readers of one Storage merge
+ * and parallelize the fetches of a batched read.
  *
  * <h2>SSL/TLS Configuration</h2>
  *
@@ -312,7 +319,7 @@ public class HttpStorageProvider extends AbstractStorageProvider {
 
     @Override
     protected List<StorageParameter<?>> buildParameters() {
-        return PARAMS;
+        return BatchProviderHelper.withBatchParameters(PARAMS);
     }
 
     @Override
@@ -364,14 +371,15 @@ public class HttpStorageProvider extends AbstractStorageProvider {
      * @return a borrowed-client {@code HttpStorage}
      */
     public static Storage open(URI baseUri, HttpClient client, HttpAuthentication authentication) {
-        return new HttpStorage(baseUri, new BorrowedHttpHandle(client), authentication);
+        return new HttpStorage(baseUri, new BorrowedHttpHandle(client), authentication, BatchSettings.httpDefaults());
     }
 
     @Override
     public Storage createStorage(StorageConfig config) {
         URI uri = config.baseUri();
         HttpClientCache.Lease lease = HttpClientCache.INSTANCE.acquire(cacheKeyFor(config));
-        return new HttpStorage(uri, new LeasedHttpHandle(lease), buildAuthentication(config));
+        BatchSettings batchSettings = BatchProviderHelper.httpSettings(config);
+        return new HttpStorage(uri, new LeasedHttpHandle(lease), buildAuthentication(config), batchSettings);
     }
 
     private static HttpClientCache.Key cacheKeyFor(StorageConfig config) {

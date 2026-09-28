@@ -15,10 +15,12 @@
  */
 package io.tileverse.storage.block;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tileverse.io.ByteRange;
+import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.ByteArrayRangeReader;
 import io.tileverse.storage.RangeRequest;
 import java.io.IOException;
@@ -150,11 +152,16 @@ class BlockAlignedRegionsTest {
             ByteBuffer b = ByteBuffer.allocate(200);
             ByteBuffer c = ByteBuffer.allocate(300);
             // a and b live in block [4096, 8192): deduped; c is outside the region: pass-through
-            int[] read = reader.readRanges(List.of(
+            BatchReadResult result = reader.readRanges(List.of(
                     RangeRequest.of(5000, 100, a), RangeRequest.of(6000, 200, b), RangeRequest.of(100_000, 300, c)));
-            assertThat(read).containsExactly(100, 200, 300);
+            assertThat(counts(result)).containsExactly(100, 200, 300);
             assertThat(recorder.batchReads())
                     .containsExactly(List.of(new ByteRange(4096, BLOCK), new ByteRange(100_000, 300)));
+            // the caller's requests on top, the delegate's block fetch and pass-through fetch below
+            assertThat(result.bytesRequested()).isEqualTo(600);
+            assertThat(result.fetches()).isEqualTo(2);
+            assertThat(result.bytesTransferred()).isEqualTo(BLOCK + 300);
+            assertThat(result.bytesFromCache()).isZero();
             assertContent(a.flip(), 5000, 100);
             assertContent(b.flip(), 6000, 200);
             assertContent(c.flip(), 100_000, 300);

@@ -15,6 +15,7 @@
  */
 package io.tileverse.storage.it;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -486,7 +487,7 @@ public abstract class AbstractRangeReaderIT {
                 requests.add(RangeRequest.of(range[0], range[1], ByteBuffer.allocate(range[1])));
             }
 
-            int[] read = reader.readRanges(requests);
+            int[] read = counts(reader.readRanges(requests));
 
             for (int i = 0; i < ranges.length; i++) {
                 ByteBuffer expected =
@@ -507,7 +508,7 @@ public abstract class AbstractRangeReaderIT {
                     RangeRequest.of(1000, 0, ByteBuffer.allocate(10)),
                     RangeRequest.of(0, 10, ByteBuffer.allocate(10)));
 
-            int[] read = reader.readRanges(requests);
+            int[] read = counts(reader.readRanges(requests));
 
             assertEquals(0, read[0], "read at EOF returns 0");
             assertEquals(25, read[1], "read straddling EOF returns the available bytes");
@@ -524,7 +525,7 @@ public abstract class AbstractRangeReaderIT {
                     RangeRequest.of(DEFAULT_BLOCK_SIZE - 100, 200, ByteBuffer.allocate(200)),
                     RangeRequest.of(10, 20, ByteBuffer.allocate(20)));
 
-            int[] read = reader.readRanges(requests);
+            int[] read = counts(reader.readRanges(requests));
 
             assertEquals(200, read[0]);
             assertEquals(200, read[1]);
@@ -546,9 +547,9 @@ public abstract class AbstractRangeReaderIT {
                     final int base = 500 * t;
                     futures.add(executor.submit(() -> {
                         start.await();
-                        return reader.readRanges(List.of(
+                        return counts(reader.readRanges(List.of(
                                 RangeRequest.of(base, 250, ByteBuffer.allocate(250)),
-                                RangeRequest.of(base + 250, 250, ByteBuffer.allocate(250))));
+                                RangeRequest.of(base + 250, 250, ByteBuffer.allocate(250)))));
                     }));
                 }
                 start.countDown();

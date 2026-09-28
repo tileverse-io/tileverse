@@ -67,6 +67,7 @@ and bundles them all so closing the reader releases everything.
 
 ```java
 import io.tileverse.pmtiles.PMTilesReader;
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
@@ -78,12 +79,10 @@ public class Example {
 
         try (PMTilesReader reader = PMTilesReader.open(leaf)) {
 
-            // Fetch a specific tile (z=0, x=0, y=0)
-            Optional<ByteBuffer> tile = reader.getTile(0, 0, 0);
-            tile.ifPresent(buffer -> {
-                buffer.flip(); // Important: flip the buffer before reading
-                System.out.println("Found tile: " + buffer.remaining() + " bytes");
-            });
+            // Fetch a specific tile (z=0, x=0, y=0); the buffer is ready to read
+            Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(0, 0, 0));
+            tile.ifPresent(buffer ->
+                System.out.println("Found tile: " + buffer.remaining() + " bytes"));
         }
     }
 }
@@ -110,10 +109,8 @@ URI leaf = URI.create("s3://my-bucket/maps/planet.pmtiles");
 try (Storage storage = StorageFactory.open(bucket, props);
         RangeReader s3Source = storage.openRangeReader(leaf);
 
-        // Wrap with in-memory caching for performance
-        RangeReader cachedSource = CachingRangeReader.builder(s3Source)
-            .maxSizeBytes(50_000_000) // 50 MB total weight
-            .build();
+        // Wrap with the shared in-memory range cache
+        RangeReader cachedSource = CachingRangeReader.of(s3Source);
         PMTilesReader reader = new PMTilesReader(cachedSource)) {
     // ...
 }

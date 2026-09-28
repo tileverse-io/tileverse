@@ -18,6 +18,7 @@ package io.tileverse.pmtiles;
 import static java.util.Objects.requireNonNull;
 
 import io.tileverse.io.ByteRange;
+import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.Storage;
@@ -89,7 +90,7 @@ public class PMTilesTestData {
             }
 
             @Override
-            public int[] readRanges(List<RangeRequest> requests) {
+            public BatchReadResult readRanges(List<RangeRequest> requests) {
                 return delegate.readRanges(requests);
             }
 
@@ -159,7 +160,7 @@ public class PMTilesTestData {
         }
 
         @Override
-        public int[] readRanges(List<RangeRequest> requests) {
+        public BatchReadResult readRanges(List<RangeRequest> requests) {
             batchCalls.incrementAndGet();
             requests.forEach(request -> reads.add(request.range()));
             return delegate.readRanges(requests);

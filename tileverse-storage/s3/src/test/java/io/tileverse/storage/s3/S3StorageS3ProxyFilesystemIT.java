@@ -15,6 +15,7 @@
  */
 package io.tileverse.storage.s3;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.tileverse.storage.RangeRequest;
@@ -169,7 +170,7 @@ class S3StorageS3ProxyFilesystemIT {
     void batchedReadsFallBackWhenTheEndpointOmitsTheEtag() {
         List<RangeRequest> requests = batch();
 
-        int[] counts = storage.openRangeReader(DIRECT_KEY).readRanges(requests);
+        int[] counts = counts(storage.openRangeReader(DIRECT_KEY).readRanges(requests));
 
         assertBatchMatchesTheObject(requests, counts);
         assertThat(lease.endpointEtags().omitted()).isTrue();
@@ -180,7 +181,7 @@ class S3StorageS3ProxyFilesystemIT {
         storage.openRangeReader(DIRECT_KEY).readRanges(batch());
         List<RangeRequest> requests = batch();
 
-        int[] counts = storage.openRangeReader(DIRECT_KEY).readRanges(requests);
+        int[] counts = counts(storage.openRangeReader(DIRECT_KEY).readRanges(requests));
 
         assertBatchMatchesTheObject(requests, counts);
     }
@@ -196,7 +197,7 @@ class S3StorageS3ProxyFilesystemIT {
     void objectsWithAnEtagLeaveTheEndpointUnmarked() throws IOException {
         List<RangeRequest> requests = batch();
 
-        int[] counts = storage.openRangeReader(API_KEY).readRanges(requests);
+        int[] counts = counts(storage.openRangeReader(API_KEY).readRanges(requests));
         try (ReadHandle handle = storage.read(API_KEY)) {
             assertThat(handle.content().readAllBytes()).containsExactly(objectBytes);
         }

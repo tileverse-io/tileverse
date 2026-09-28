@@ -57,6 +57,7 @@ import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.StoragePattern;
 import io.tileverse.storage.UnsupportedCapabilityException;
 import io.tileverse.storage.WriteOptions;
+import io.tileverse.storage.batch.BatchSettings;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -75,6 +76,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Spliterator;
@@ -95,17 +97,30 @@ final class AzureBlobStorage implements Storage {
     private final BlobContainerClient containerClient;
     private final StorageCapabilities capabilities;
 
+    private final BatchSettings batchSettings;
+
     private BlobBatchClient batchClient;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     AzureBlobStorage(URI baseUri, AzureBlobLocation location, AzureClientCache.Lease lease) {
-        this(baseUri, location, new LeasedAzureHandle(lease));
+        this(baseUri, location, new LeasedAzureHandle(lease), BatchSettings.objectStoreDefaults());
+    }
+
+    AzureBlobStorage(
+            URI baseUri, AzureBlobLocation location, AzureClientCache.Lease lease, BatchSettings batchSettings) {
+        this(baseUri, location, new LeasedAzureHandle(lease), batchSettings);
     }
 
     AzureBlobStorage(URI baseUri, AzureBlobLocation location, AzureClientHandle handle) {
+        this(baseUri, location, handle, BatchSettings.objectStoreDefaults());
+    }
+
+    /** @param batchSettings the merge policy and in-flight bound handed to every reader this Storage opens */
+    AzureBlobStorage(URI baseUri, AzureBlobLocation location, AzureClientHandle handle, BatchSettings batchSettings) {
         this.baseUri = baseUri;
         this.location = location;
         this.handle = handle;
+        this.batchSettings = Objects.requireNonNull(batchSettings, "batchSettings cannot be null");
         this.containerClient = handle.blobServiceClient().getBlobContainerClient(location.container());
         this.capabilities = StorageCapabilities.builder()
                 .rangeReads(true)
@@ -271,7 +286,7 @@ final class AzureBlobStorage implements Storage {
     @Override
     public RangeReader openRangeReader(String key) {
         requireOpen();
-        return new AzureBlobRangeReader(blobClient(key));
+        return new AzureBlobRangeReader(blobClient(key), batchSettings);
     }
 
     @Override

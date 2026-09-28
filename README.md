@@ -33,8 +33,8 @@ Unlike monolithic GIS frameworks, Tileverse modules are designed to be **composa
 
 | Module | Description | Key Capabilities |
 | :--- | :--- | :--- |
-| **[Storage](tileverse-storage/)** | Unified I/O | Abstract byte-range access across **S3**, **Azure**, **GCS**, **HTTP**, and local files. Includes intelligent multi-level caching and block alignment. Range-reader lives under `io.tileverse.storage.rangereader.*`. |
-| **[PMTiles](tileverse-pmtiles/)** | Archive Format | Read/write support for the **[PMTiles v3](https://github.com/protomaps/PMTiles)** specification. Leverages `RangeReader` for cloud-optimized random access. |
+| **[Storage](tileverse-storage/)** | Unified I/O | Abstract byte-range access across **S3**, **Azure**, **GCS**, **HTTP**, and local files. Includes an in-memory range cache and region-scoped block alignment as decorators. Range readers live under `io.tileverse.storage`. |
+| **[PMTiles](tileverse-pmtiles/)** | Archive Format | Read support for the **[PMTiles v3](https://github.com/protomaps/PMTiles)** specification. Leverages `RangeReader` for cloud-optimized random access. |
 | **[Vector Tiles](tileverse-vectortiles/)** | Data Encoding | High-performance encoding and decoding of **Mapbox Vector Tiles (MVT)** to/from JTS Geometries using Protocol Buffers. |
 | **[Tile Matrix Set](tileverse-tilematrixset/)** | Spatial Logic | Implementation of the **OGC Tile Matrix Set** standard. Handles coordinate transforms, bounding box logic, and tile pyramid definitions. |
 
@@ -88,30 +88,32 @@ dependencies {
 This example demonstrates how the modules compose to solve a real-world problem: reading a specific map tile from an S3 bucket without downloading the entire archive.
 
 ```java
-import io.tileverse.storage.rangereader.s3.S3RangeReader;
-import io.tileverse.storage.rangereader.cache.CachingRangeReader;
 import io.tileverse.pmtiles.PMTilesReader;
-import java.nio.ByteBuffer;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
+import io.tileverse.storage.cache.CachingRangeReader;
+import io.tileverse.tiling.pyramid.TileIndex;
 import java.net.URI;
+import java.nio.ByteBuffer;
+import java.util.Optional;
+import java.util.Properties;
 
-// 1. Configure the I/O layer (S3 + Memory Caching)
-var s3Source = S3RangeReader.builder()
-    .uri(URI.create("s3://my-bucket/maps/planet.pmtiles"))
-    .region(Region.US_EAST_1)
-    .build();
+// 1. Open the bucket, get a RangeReader for the archive, cache its reads
+Properties props = new Properties();
+props.setProperty("storage.s3.region", "us-east-1");
 
-var cachedSource = CachingRangeReader.builder(s3Source)
-    .capacity(50_000_000) // 50MB cache for headers/directories
-    .build();
+try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/"), props);
+        RangeReader s3Source = storage.openRangeReader("maps/planet.pmtiles");
+        RangeReader cachedSource = CachingRangeReader.of(s3Source);
 
-// 2. Initialize the Format Reader
-try (var reader = new PMTilesReader(cachedSource::asByteChannel)) {
-    
+        // 2. Initialize the Format Reader; it block-aligns its own header and directory reads
+        PMTilesReader reader = new PMTilesReader(cachedSource)) {
+
     // 3. Fetch a specific tile (z=0, x=0, y=0)
-    Optional<ByteBuffer> tile = reader.getTile(0, 0, 0);
-    
+    Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(0, 0, 0));
+
     tile.ifPresent(buffer -> {
-        buffer.flip();
         System.out.println("Found tile: " + buffer.remaining() + " bytes");
         // Pass 'buffer' to VectorTileCodec to decode...
     });
@@ -154,7 +156,7 @@ graph TD
 Complete documentation is available at **[tileverse.io](https://tileverse.io)**.
 
 - **[Developer Guide](https://tileverse.io/developer-guide/)**: Building, testing, and contributing.
-- **[Storage / Range Reader Guide](https://tileverse.io/rangereader/)**: Advanced caching and authentication.
+- **[Storage Guide](https://tileverse.io/storage/)**: Backends, caching, and authentication.
 - **[Javadoc](https://javadoc.io/doc/io.tileverse)**: API reference.
 
 ## Development

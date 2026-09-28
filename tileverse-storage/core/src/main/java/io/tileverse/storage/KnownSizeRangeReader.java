@@ -51,7 +51,7 @@ final class KnownSizeRangeReader implements RangeReader {
     }
 
     @Override
-    public int[] readRanges(List<RangeRequest> requests) {
+    public BatchReadResult readRanges(List<RangeRequest> requests) {
         return delegate.readRanges(requests);
     }
 

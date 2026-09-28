@@ -21,6 +21,7 @@ import io.tileverse.io.ByteBufferPool;
 import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
 import io.tileverse.io.ByteRange;
 import io.tileverse.storage.AbstractRangeReader;
+import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeRequest;
 import java.io.IOException;
@@ -222,7 +223,11 @@ public class BlockAlignedRangeReader extends AbstractRangeReader implements Rang
                 scratches.add(scratch);
                 blockRequests.add(new RangeRequest(block, scratch.buffer().clear()));
             }
-            int[] blockRead = delegate.readRanges(blockRequests);
+            BatchReadResult fetched = delegate.readRanges(blockRequests);
+            int[] blockRead = new int[blocks.size()];
+            for (int b = 0; b < blockRead.length; b++) {
+                blockRead[b] = fetched.bytesRead(b);
+            }
             return copyFromBlocks(offset, actualLength, target, blocks, blockRequests, blockRead);
         } finally {
             scratches.forEach(PooledByteBuffer::close);
@@ -234,10 +239,11 @@ public class BlockAlignedRangeReader extends AbstractRangeReader implements Rang
      *
      * <p>Results come back in request order. Each distinct block is fetched at most once per call; an aligned request
      * fetches at most {@code length + 2 * (blockSize - 1)} bytes. Requests outside the declared region union are
-     * forwarded to the delegate exactly as given.
+     * forwarded to the delegate exactly as given. The result describes the caller's requests and takes the fetches,
+     * bytes transferred and bytes from cache of the delegate call, which read whole blocks.
      */
     @Override
-    public int[] readRanges(List<RangeRequest> requests) {
+    public BatchReadResult readRanges(List<RangeRequest> requests) {
         RangeRequest.validate(requests);
         Region[] snapshot = this.regions;
         int[] read = new int[requests.size()];
@@ -249,9 +255,13 @@ public class BlockAlignedRangeReader extends AbstractRangeReader implements Rang
         try {
             partitionRequests(requests, snapshot, downstream, passThroughIndex, blockIndex, scratches);
             if (downstream.isEmpty()) {
-                return read;
+                return BatchReadResult.of(requests, read, 0, 0, 0);
             }
-            int[] downstreamRead = delegate.readRanges(downstream);
+            BatchReadResult fetched = delegate.readRanges(downstream);
+            int[] downstreamRead = new int[downstream.size()];
+            for (int d = 0; d < downstreamRead.length; d++) {
+                downstreamRead[d] = fetched.bytesRead(d);
+            }
             for (int i = 0; i < requests.size(); i++) {
                 RangeRequest request = requests.get(i);
                 ByteRange range = request.range();
@@ -264,7 +274,7 @@ public class BlockAlignedRangeReader extends AbstractRangeReader implements Rang
                     read[i] = copyOut(range, request.target(), blockIndex, downstream, downstreamRead);
                 }
             }
-            return read;
+            return BatchReadResult.of(requests, read, 0, 0, 0).merge(fetched);
         } finally {
             scratches.forEach(PooledByteBuffer::close);
         }

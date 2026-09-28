@@ -15,6 +15,7 @@
  */
 package io.tileverse.storage.http;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -199,7 +200,7 @@ class HttpRangeReaderIT extends AbstractRangeReaderIT {
                     RangeRequest.of(MULTI_RANGE_FILE_SIZE - 32, 64, ByteBuffer.allocate(64)),
                     RangeRequest.of(MULTI_RANGE_FILE_SIZE + 100, 16, ByteBuffer.allocate(16)));
 
-            int[] read = reader.readRanges(requests);
+            int[] read = counts(reader.readRanges(requests));
 
             assertEquals(64, read[0]);
             assertEquals(128, read[1]);

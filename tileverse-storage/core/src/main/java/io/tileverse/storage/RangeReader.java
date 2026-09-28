@@ -130,10 +130,12 @@ public interface RangeReader extends Closeable, Supplier<SeekableByteChannel> {
     /**
      * Reads several byte ranges in one call, each into its caller-provided buffer.
      *
-     * <p>Entry {@code i} of the result is the number of bytes read for {@code requests.get(i)}, with the exact
-     * {@link #readRange(long, int, ByteBuffer)} semantics: 0 at or past EOF, a short count when the range straddles
-     * EOF, the target's position advanced by that count and the caller responsible for {@code flip()}. Zero-length
-     * requests read nothing. An empty list performs no I/O and returns an empty array.
+     * <p>{@link BatchReadResult#bytesRead(int) bytesRead(i)} of the result is the number of bytes read for
+     * {@code requests.get(i)}, with the exact {@link #readRange(long, int, ByteBuffer)} semantics: 0 at or past EOF, a
+     * short count when the range straddles EOF, the target's position advanced by that count and the caller responsible
+     * for {@code flip()}. Zero-length requests read nothing. An empty list performs no I/O and returns a result of no
+     * requests. The result also reports what the call cost: backend requests issued, bytes transferred with the bridged
+     * gaps included, and bytes served from a cache.
      *
      * <p>Requests may overlap or repeat; each is satisfied independently and in full. Implementations MAY dedupe,
      * merge, and reorder fetches internally and MUST document their worst-case amplification (bytes fetched vs bytes
@@ -143,25 +145,26 @@ public interface RangeReader extends Closeable, Supplier<SeekableByteChannel> {
      *
      * <p>Targets must be distinct buffers or non-overlapping views of one buffer; implementations MAY write them
      * concurrently, in any order, and from threads other than the caller's. Passing aliasing targets is undefined
-     * behavior.
+     * behavior. Once the call returns or throws, no implementation thread is still writing to any target: the caller
+     * may reuse or release every target at that point, after a failure included.
      *
-     * <p>Any storage failure aborts the whole call; the contents and positions of all targets are then unspecified. A
-     * malformed batch (null element, or a target whose remaining capacity no longer holds its range) throws
-     * {@link IllegalArgumentException} before any I/O. There is no partial-success reporting.
+     * <p>Any storage failure aborts the whole call and reports no numbers; the contents and positions of all targets
+     * are then unspecified. A malformed batch (null element, or a target whose remaining capacity no longer holds its
+     * range) throws {@link IllegalArgumentException} before any I/O. There is no partial-success reporting.
      *
      * @param requests the ranges to read and the buffers they land in
-     * @return the number of bytes read per request, in request order
+     * @return the bytes read per request, in request order, and what the call cost
      * @throws StorageException if a storage error occurs
      * @throws IllegalArgumentException if the batch is malformed
      */
-    default int[] readRanges(List<RangeRequest> requests) {
+    default BatchReadResult readRanges(List<RangeRequest> requests) {
         RangeRequest.validate(requests);
         int[] read = new int[requests.size()];
         for (int i = 0; i < requests.size(); i++) {
             RangeRequest request = requests.get(i);
             read[i] = readRange(request.range(), request.target());
         }
-        return read;
+        return BatchReadResult.perRange(requests, read);
     }
 
     /**

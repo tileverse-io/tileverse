@@ -100,13 +100,13 @@ class S3StorageS3ProxyIT extends StorageTCK {
     }
 
     /**
-     * Override to skip on s3proxy: the AWS CRT client fails CreateMultipartUpload against s3proxy with "Upload Id not
-     * found in create-multipart-upload response". Multipart uploads are covered by S3StorageGarageIT and
+     * Override to skip on s3proxy: it answers {@code 501 NotImplemented} to the {@code x-amz-mp-object-size} header
+     * sent by the SDK with CompleteMultipartUpload. Multipart uploads are covered by S3StorageGarageIT and
      * S3StorageLocalStackIT.
      */
     @Override
     @Test
-    @Disabled("s3proxy CreateMultipartUpload response is not understood by the AWS CRT client")
+    @Disabled("s3proxy rejects the x-amz-mp-object-size header of CompleteMultipartUpload")
     @SuppressWarnings({"java:S2699", "java:S1186"})
     protected void multiPartRoundTrip16MiB(@TempDir Path tmp) {}
 

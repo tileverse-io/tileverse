@@ -76,7 +76,7 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
  * <h2>Batched and Streaming Reads</h2>
  *
  * {@code readRanges} merges nearby ranges under the {@link BatchSettings} of the Storage the reader was opened from
- * and, when the CRT {@link S3AsyncClient} is present, fetches the planned ranges in parallel with one async
+ * and, when an {@link S3AsyncClient} is present, fetches the planned ranges in parallel with one async
  * {@code getObject} each. Without the async client the {@link AbstractRangeReader} template runs the same plan on the
  * shared batch executor.
  *
@@ -118,7 +118,7 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
      * {@link #size()} call instead of at construction time.
      *
      * @param s3Client The S3 client to use for single reads and metadata
-     * @param asyncClient the CRT async client for parallel batched reads, or null to batch through the shared executor
+     * @param asyncClient the async client for parallel batched reads, or null to batch through the shared executor
      * @param s3Location The S3 reference (bucket + key)
      * @param requesterPays when {@code true}, every request adds {@code x-amz-request-payer: requester}
      */
@@ -132,10 +132,10 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
      * under the {@link BatchSettings#objectStoreDefaults() object-store defaults}.
      *
      * @param s3Client The S3 client to use for single reads and metadata
-     * @param asyncClient the CRT async client for parallel batched reads, or null to batch through the shared executor
+     * @param asyncClient the async client for parallel batched reads, or null to batch through the shared executor
      * @param s3Location The S3 reference (bucket + key)
      * @param requesterPays when {@code true}, every request adds {@code x-amz-request-payer: requester}
-     * @param endpointEtags the shared record of whether this endpoint answers reads without an ETag header
+     * @param endpointEtags the shared record of the async client rejecting a response for want of an ETag header
      */
     S3RangeReader(
             S3Client s3Client,
@@ -150,10 +150,10 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
      * Creates a reader with the batch settings of the Storage it belongs to.
      *
      * @param s3Client The S3 client to use for single reads and metadata
-     * @param asyncClient the CRT async client for parallel batched reads, or null to batch through the shared executor
+     * @param asyncClient the async client for parallel batched reads, or null to batch through the shared executor
      * @param s3Location The S3 reference (bucket + key)
      * @param requesterPays when {@code true}, every request adds {@code x-amz-request-payer: requester}
-     * @param endpointEtags the shared record of whether this endpoint answers reads without an ETag header
+     * @param endpointEtags the shared record of the async client rejecting a response for want of an ETag header
      * @param batchSettings the merge policy and in-flight bound for batched reads
      */
     S3RangeReader(
@@ -197,7 +197,7 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
         try {
             ByteBufferResponseTransformer body = new ByteBufferResponseTransformer(target, actualLength);
             GetObjectResponse response = s3Client.getObject(buildGetRequest(offset, actualLength), body);
-            captureFromSyncResponse(response);
+            captureSizeFrom(response);
             return body.bytesWritten();
         } catch (NoSuchKeyException e) {
             throw new NotFoundException("S3 object does not exist: s3://" + s3Location, e);
@@ -222,7 +222,7 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     /**
-     * Reads a batch with one CRT {@code getObject} per planned fetch when the async client is present, at most
+     * Reads a batch with one async {@code getObject} per planned fetch when the async client is present, at most
      * {@link #maxConcurrentFetches()} of them in flight at once with each completion admitting the next; without the
      * async client, the batched-read template runs the same plan on the shared executor through the sync client.
      *
@@ -232,9 +232,10 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
      * {@link CoalescingPolicy#maxFetchBytes()} per fetch. Peak heap scratch of one call is the in-flight bound times
      * that cap, since a merged fetch borrows scratch for its whole extent.
      *
-     * <p>An endpoint that omits the {@code ETag} header reads through the template path, from the first CRT rejection
-     * on. See {@link EndpointEtags}. The result counts one fetch per async GET issued and, as bytes transferred, the
-     * bytes those GETs streamed; the GETs rejected before the switch to the template path stay in the count.
+     * <p>A CRT-based async client rejects the responses of an endpoint omitting the {@code ETag} header. From its first
+     * rejection on, batches read through the template path. See {@link EndpointEtags}. The result counts one fetch per
+     * async GET issued and, as bytes transferred, the bytes streamed by those GETs; the GETs rejected before the switch
+     * to the template path stay in the count.
      *
      * @param requests the ranges to read and the buffers they land in
      * @return the bytes read per request, in request order, and what the call cost
@@ -517,7 +518,6 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
                 headBuilder.requestPayer(RequestPayer.REQUESTER);
             }
             HeadObjectResponse headResponse = s3Client.headObject(headBuilder.build());
-            endpointEtags.observe(headResponse.eTag());
             Long size = headResponse.contentLength();
             return size == null ? OptionalLong.empty() : OptionalLong.of(size);
         } catch (NoSuchKeyException e) {
@@ -527,15 +527,6 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
         } catch (SdkException e) {
             throw new StorageException("Failed to access S3 object " + s3Location + ": " + e.getMessage(), e);
         }
-    }
-
-    /**
-     * Takes the object size and the ETag observation from a sync response. Only the sync client sees a response without
-     * the header.
-     */
-    private void captureFromSyncResponse(GetObjectResponse response) {
-        endpointEtags.observe(response.eTag());
-        captureSizeFrom(response);
     }
 
     /**

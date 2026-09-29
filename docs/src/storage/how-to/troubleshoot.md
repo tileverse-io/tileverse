@@ -352,15 +352,27 @@ export JAVA_HOME=/path/to/java17
 
 ### S3-Compatible Endpoints Without an ETag Header
 
-**Problem**: reads from an S3-compatible service fail with `Response missing required ETag header`, while the
-same bytes served over HTTP work. Typical of a gateway that exports an existing tree of files: an object placed
-directly in its backend is served without the header, while an object written through the S3 API has one.
+**Problem**: a CRT-based `S3AsyncClient` rejects the responses of an S3-compatible service with
+`Response missing required ETag header`, while the same bytes served over HTTP work. Typical of a gateway exporting
+an existing tree of files: an object placed directly in its backend is served without the header, while an object
+written through the S3 API has one.
 
-**Solution**: none needed. Only the AWS CRT client demands the header. Reads of such an endpoint run on the sync
-client instead, from the first rejection on, and an endpoint that sends the header keeps the CRT client.
+**Solution**: none needed. Only the AWS CRT S3 client demands the header. A `Storage` opened from a URI or a
+`StorageConfig` uses no such client and reads the endpoint like any other. With a CRT-based client passed in an
+`S3ClientBundle`, batched reads of that endpoint run on the sync client instead, from the first rejection on, with
+their fetches still concurrent on the shared executor.
 
-Those reads give up the CRT client's parallel transfer; batched reads still run their fetches concurrently on the
-shared executor.
+### S3 Requests Waiting for a Connection
+
+**Problem**: batched S3 reads fail with `Connection Manager failed to acquire a connection within the defined
+timeout`. Every S3 `Storage` opened from a URI or a `StorageConfig` sends its async requests through one pool of 50
+connections per host, shared by the process. A request beyond those 50 waits 10 seconds for a connection and then
+fails. The SDK retries some of those failures, up to 3 times each; when many requests fail together, most of them
+get no retry.
+
+**Solution**: keep fewer requests outstanding against that host. Lower `storage.batch.max-in-flight-fetches`
+(default 8; 0 removes the bound) or the number of concurrent readers. A multipart upload to the same host sends up to
+50 parts at once and holds as many connections while it runs.
 
 ## File System Issues
 

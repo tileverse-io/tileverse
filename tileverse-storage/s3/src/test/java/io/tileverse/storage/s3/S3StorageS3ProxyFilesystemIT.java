@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -35,11 +36,18 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.images.builder.Transferable;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
+import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3AsyncClient;
 
 /**
  * Reads objects from an s3proxy on a filesystem backend, where a file placed directly in the backend directory is
  * served without an {@code ETag} header. Objects written through the S3 API do have one, which
- * {@link S3StorageS3ProxyIT} covers on the transient backend.
+ * {@link S3StorageS3ProxyIT} covers on the transient backend. The clients of {@link S3ClientCache} read both; a
+ * CRT-based async client passed by the caller rejects the first kind and falls back to the sync client.
  */
 @Testcontainers(disabledWithoutDocker = true)
 class S3StorageS3ProxyFilesystemIT {
@@ -167,34 +175,56 @@ class S3StorageS3ProxyFilesystemIT {
     }
 
     @Test
-    void batchedReadsFallBackWhenTheEndpointOmitsTheEtag() {
+    void batchedReadsNeedNoEtag() {
         List<RangeRequest> requests = batch();
 
         int[] counts = counts(storage.openRangeReader(DIRECT_KEY).readRanges(requests));
 
         assertBatchMatchesTheObject(requests, counts);
-        assertThat(lease.endpointEtags().omitted()).isTrue();
+        assertThat(lease.endpointEtags().omitted()).isFalse();
     }
 
     @Test
-    void batchedReadsKeepWorkingOnceTheEndpointIsKnownToOmitTheEtag() {
-        storage.openRangeReader(DIRECT_KEY).readRanges(batch());
-        List<RangeRequest> requests = batch();
+    void aCrtClientPassedByTheCallerFallsBackToTheSyncClient() {
+        try (S3AsyncClient crtClient = crtClient()) {
+            S3ClientBundle bundle =
+                    new S3ClientBundle(lease.client(), Optional.of(crtClient), Optional.empty(), Optional.empty());
+            BorrowedS3Handle borrowed = new BorrowedS3Handle(bundle);
+            URI baseUri = URI.create("s3://" + bucket + "/");
+            S3Storage withCrtClient = new S3Storage(baseUri, S3StorageBucketKey.parse(baseUri), borrowed, false);
+            List<RangeRequest> first = batch();
+            List<RangeRequest> second = batch();
 
-        int[] counts = counts(storage.openRangeReader(DIRECT_KEY).readRanges(requests));
+            int[] firstCounts = counts(withCrtClient.openRangeReader(DIRECT_KEY).readRanges(first));
+            int[] secondCounts =
+                    counts(withCrtClient.openRangeReader(DIRECT_KEY).readRanges(second));
 
-        assertBatchMatchesTheObject(requests, counts);
+            assertBatchMatchesTheObject(first, firstCounts);
+            assertBatchMatchesTheObject(second, secondCounts);
+            assertThat(borrowed.endpointEtags().omitted()).isTrue();
+        }
+    }
+
+    private static S3AsyncClient crtClient() {
+        return S3AsyncClient.crtBuilder()
+                .endpointOverride(endpoint())
+                .region(Region.US_EAST_1)
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(IDENTITY, CREDENTIAL)))
+                .forcePathStyle(true)
+                .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
+                .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED)
+                .build();
     }
 
     @Test
-    void streamingReadsFallBackWhenTheEndpointOmitsTheEtag() throws IOException {
+    void streamingReadsNeedNoEtag() throws IOException {
         try (ReadHandle handle = storage.read(DIRECT_KEY)) {
             assertThat(handle.content().readAllBytes()).containsExactly(objectBytes);
         }
     }
 
     @Test
-    void objectsWithAnEtagLeaveTheEndpointUnmarked() throws IOException {
+    void objectsWithAnEtagReadTheSameWay() throws IOException {
         List<RangeRequest> requests = batch();
 
         int[] counts = counts(storage.openRangeReader(API_KEY).readRanges(requests));

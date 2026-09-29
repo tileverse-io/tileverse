@@ -43,8 +43,9 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 
 /**
- * Batched reads against an endpoint that answers without an {@code ETag} header, which the CRT client rejects.
- * {@link S3StorageS3ProxyFilesystemIT} covers the same ground against a real endpoint.
+ * Batched reads against an endpoint answering without an {@code ETag} header. A CRT-based async client rejects such a
+ * response; any other async client reads it. {@link S3StorageS3ProxyFilesystemIT} covers the same ground against a real
+ * endpoint.
  */
 @ExtendWith(MockitoExtension.class)
 class S3RangeReaderMissingEtagTest {
@@ -138,7 +139,7 @@ class S3RangeReaderMissingEtagTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void anEndpointAlreadyKnownToOmitTheEtagIsNeverOfferedToTheAsyncClient() {
+    void anEndpointRejectedOnceIsNeverOfferedToTheAsyncClientAgain() {
         object.installSync(s3Client);
         endpointEtags.recordOmission();
         List<RangeRequest> requests = farApartRanges();
@@ -151,16 +152,18 @@ class S3RangeReaderMissingEtagTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void aSingleReadWithoutAnEtagKeepsTheNextBatchOffTheAsyncClient() {
+    void anAsyncClientAcceptingResponsesWithoutAnEtagKeepsTheBatches() {
         object.installSync(s3Client);
+        object.installAsync(asyncClient);
 
         reader.readRange(0L, 64, ByteBuffer.allocate(64));
         List<RangeRequest> requests = farApartRanges();
         int[] counts = counts(reader.readRanges(requests));
 
         assertContents(requests, counts);
-        assertThat(endpointEtags.omitted()).isTrue();
-        verify(asyncClient, never()).getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class));
+        assertThat(endpointEtags.omitted()).isFalse();
+        verify(asyncClient, times(3)).getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class));
+        verify(s3Client, times(1)).getObject(any(GetObjectRequest.class), any(ResponseTransformer.class));
     }
 
     @Test

@@ -44,7 +44,7 @@ pass-through reader; the constructors keep aligning the whole file.
 `RangeReader.readRanges(List<RangeRequest>)` reads several ranges in one call into
 caller-provided buffers. Both decorators propagate batches: the cache forwards only its misses
 (as one call), the aligner quantizes in-region entries to deduplicated blocks. Backends merge
-nearby ranges into shared fetches and run them in parallel (S3 on the CRT async client, GCS
+nearby ranges into shared fetches and run them in parallel (S3 on the async client, GCS
 and Azure on a shared executor, HTTP as one `multipart/byteranges` request with a per-fetch
 fallback). If you maintain a delegating RangeReader decorator, override readRanges to forward
 the batch to the delegate; a wrapper that does not forward it silently degrades batches to the
@@ -68,8 +68,17 @@ object-store and HTTP providers, resolved once per `Storage`: `storage.batch.max
 `storage.batch.max-fetch` and `storage.batch.max-in-flight-fetches`. The
 `io.tileverse.storage.batch.objectstore.maxgap`, `io.tileverse.storage.batch.http.maxgap` and
 `io.tileverse.storage.batch.maxfetch` system properties of the 2.1 milestones are gone; set
-the parameters instead. The S3 CRT path, which used to start every planned fetch at once, now
+the parameters instead. The S3 async path, which used to start every planned fetch at once, now
 honors the in-flight bound too.
+
+## S3 clients
+
+- Every S3 `Storage` opened from a URI or a `StorageConfig` runs its async requests on one CRT
+  HTTP client shared by the process. 2.0 built a CRT-based `S3AsyncClient` per endpoint and
+  credentials, each reserving a native buffer pool of at least 1 GiB.
+- `Storage.read` streams an object over one connection, through the sync client. 2.0 split a
+  large read across connections.
+- An S3-compatible endpoint answering without an `ETag` header reads like any other.
 
 ## Local files
 

@@ -31,12 +31,13 @@ import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
 import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
+import software.amazon.awssdk.http.async.SdkAsyncHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
+import software.amazon.awssdk.services.s3.S3AsyncClientBuilder;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Configuration;
-import software.amazon.awssdk.services.s3.S3CrtAsyncClientBuilder;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.transfer.s3.S3TransferManager;
 
@@ -45,6 +46,9 @@ import software.amazon.awssdk.transfer.s3.S3TransferManager;
  * {@link S3Presigner} instances, keyed by (region, endpoint, credentials profile, forcePathStyle). Multiple
  * {@link S3Storage} instances sharing the same key share one underlying client set; the SDK clients are closed when the
  * last lease is released.
+ *
+ * <p>Every async client runs on the HTTP client of {@link S3SharedHttpClient}, regardless of its key: native memory and
+ * event loop threads stay independent of the number of client sets.
  */
 @NullMarked
 final class S3ClientCache {
@@ -139,25 +143,42 @@ final class S3ClientCache {
         final S3AsyncClient asyncClient;
         final S3TransferManager transferManager;
         final S3Presigner presigner;
+        final S3SharedHttpClient.Lease httpClientLease;
         final AtomicInteger refCount = new AtomicInteger();
         final EndpointEtags endpointEtags = new EndpointEtags();
 
-        Entry(S3Client sync, S3AsyncClient async, S3TransferManager tm, S3Presigner ps) {
+        Entry(
+                S3Client sync,
+                S3AsyncClient async,
+                S3TransferManager tm,
+                S3Presigner ps,
+                S3SharedHttpClient.Lease httpClientLease) {
             this.syncClient = sync;
             this.asyncClient = async;
             this.transferManager = tm;
             this.presigner = ps;
+            this.httpClientLease = httpClientLease;
         }
 
         void closeAll() {
             transferManager.close();
             asyncClient.close();
+            httpClientLease.close();
             syncClient.close();
             presigner.close();
         }
     }
 
     private final Map<Key, Entry> entries = new ConcurrentHashMap<>();
+    private final S3SharedHttpClient sharedHttpClient;
+
+    S3ClientCache() {
+        this(S3SharedHttpClient.INSTANCE);
+    }
+
+    S3ClientCache(S3SharedHttpClient sharedHttpClient) {
+        this.sharedHttpClient = sharedHttpClient;
+    }
 
     int entryCount() {
         return entries.size();
@@ -172,7 +193,17 @@ final class S3ClientCache {
         return new Lease(key, entry);
     }
 
-    private static Entry build(Key key) {
+    private Entry build(Key key) {
+        S3SharedHttpClient.Lease httpClientLease = sharedHttpClient.acquire();
+        try {
+            return build(key, httpClientLease);
+        } catch (RuntimeException failure) {
+            httpClientLease.close();
+            throw failure;
+        }
+    }
+
+    private static Entry build(Key key, S3SharedHttpClient.Lease httpClientLease) {
         S3Configuration syncConfig = S3Configuration.builder()
                 .pathStyleAccessEnabled(key.forcePathStyle())
                 .build();
@@ -190,13 +221,14 @@ final class S3ClientCache {
                 .serviceConfiguration(syncConfig)
                 .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
                 .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED);
-        // The async client uses the CRT-tuned builder so the underlying native runtime can
-        // parallelize multipart uploads (via S3TransferManager) and split large GET requests
-        // across connections (via AsyncResponseTransformer.toBlockingInputStream). The CRT
-        // builder doesn't accept S3Configuration; pathStyle is set directly on the builder.
-        S3CrtAsyncClientBuilder asyncBuilder = S3AsyncClient.crtBuilder()
+        // Multipart stays on for the transfer manager: without it an upload is one PutObject,
+        // capped by S3 at 5 GiB.
+        SdkAsyncHttpClient sharedHttpClient = httpClientLease.client();
+        S3AsyncClientBuilder asyncBuilder = S3AsyncClient.builder()
+                .httpClient(sharedHttpClient)
+                .multipartEnabled(true)
                 .region(Region.of(key.region()))
-                .forcePathStyle(key.forcePathStyle())
+                .serviceConfiguration(syncConfig)
                 .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
                 .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED);
         S3Presigner.Builder presignerBuilder =
@@ -237,6 +269,6 @@ final class S3ClientCache {
         S3AsyncClient async = asyncBuilder.build();
         S3TransferManager tm = S3TransferManager.builder().s3Client(async).build();
         S3Presigner ps = presignerBuilder.build();
-        return new Entry(sync, async, tm, ps);
+        return new Entry(sync, async, tm, ps, httpClientLease);
     }
 }

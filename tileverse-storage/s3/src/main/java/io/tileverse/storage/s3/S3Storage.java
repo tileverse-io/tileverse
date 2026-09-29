@@ -61,11 +61,9 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import org.jspecify.annotations.Nullable;
 import software.amazon.awssdk.core.ResponseInputStream;
-import software.amazon.awssdk.core.async.AsyncResponseTransformer;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.core.sync.ResponseTransformer;
-import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
@@ -259,7 +257,6 @@ final class S3Storage implements Storage {
                     HeadObjectRequest.builder().bucket(ref.bucket()).key(fullKey);
             applyRequesterPays(requestBuilder::requestPayer);
             HeadObjectResponse resp = handle.client().headObject(requestBuilder.build());
-            handle.endpointEtags().observe(resp.eTag());
             return Optional.of(new StorageEntry.File(
                     key,
                     resp.contentLength(),
@@ -382,27 +379,19 @@ final class S3Storage implements Storage {
                 batchSettings);
     }
 
-    /**
-     * Streams the object through the CRT async client, which can split a large read across connections. A client set
-     * without an async client, and an endpoint that omits the {@code ETag} header, stream through the sync client. See
-     * {@link EndpointEtags}.
-     */
+    /** Streams the object through the sync client, over one connection. */
     @Override
     public ReadHandle read(String key, ReadOptions options) {
         requireOpen();
         GetObjectRequest request = getRequestFor(key, options);
-        Optional<S3AsyncClient> async = handle.asyncClient();
-        if (async.isEmpty() || handle.endpointEtags().omitted()) {
-            return readThroughSyncClient(key, request);
-        }
         try {
-            return readInParallel(key, request, async.orElseThrow());
-        } catch (StorageException failure) {
-            if (!EndpointEtags.rejectedForMissingEtag(failure)) {
-                throw failure;
-            }
-            handle.endpointEtags().recordOmission();
-            return readThroughSyncClient(key, request);
+            ResponseInputStream<GetObjectResponse> raw =
+                    handle.client().getObject(request, ResponseTransformer.toInputStream());
+            return readHandleFor(key, raw);
+        } catch (S3Exception e) {
+            throw S3ExceptionMapper.map(e, key);
+        } catch (SdkException e) {
+            throw new StorageException("read failed for: " + key, e);
         }
     }
 
@@ -428,45 +417,8 @@ final class S3Storage implements Storage {
         return requestBuilder.build();
     }
 
-    /**
-     * Streams through the CRT async client; the blocking transformer adapts the parallel download to an InputStream.
-     */
-    private ReadHandle readInParallel(String key, GetObjectRequest request, S3AsyncClient async) {
-        try {
-            ResponseInputStream<GetObjectResponse> raw = async.getObject(
-                            request, AsyncResponseTransformer.toBlockingInputStream())
-                    .join();
-            return readHandleFor(key, raw);
-        } catch (CompletionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof S3Exception s3e) {
-                throw S3ExceptionMapper.map(s3e, key);
-            }
-            if (cause instanceof IOException io) {
-                throw new StorageException("read failed for: " + key, io);
-            }
-            throw new StorageException("read failed for: " + key, cause);
-        } catch (S3Exception e) {
-            throw S3ExceptionMapper.map(e, key);
-        }
-    }
-
-    /** Streams through the sync client, one connection and no ETag requirement. */
-    private ReadHandle readThroughSyncClient(String key, GetObjectRequest request) {
-        try {
-            ResponseInputStream<GetObjectResponse> raw =
-                    handle.client().getObject(request, ResponseTransformer.toInputStream());
-            return readHandleFor(key, raw);
-        } catch (S3Exception e) {
-            throw S3ExceptionMapper.map(e, key);
-        } catch (SdkException e) {
-            throw new StorageException("read failed for: " + key, e);
-        }
-    }
-
     private ReadHandle readHandleFor(String key, ResponseInputStream<GetObjectResponse> raw) {
         GetObjectResponse resp = raw.response();
-        handle.endpointEtags().observe(resp.eTag());
         StorageEntry.File metadata = new StorageEntry.File(
                 key,
                 resp.contentLength() == null ? 0L : resp.contentLength(),

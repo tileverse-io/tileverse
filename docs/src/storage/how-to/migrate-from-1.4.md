@@ -260,7 +260,7 @@ try (RangeReader r = storage.openRangeReader("00/00.pmtiles")) { ... }
 | GCS | `GoogleCloudStorageProvider.open(URI, com.google.cloud.storage.Storage)` |
 
 S3 has two overloads because `S3Storage` uses up to four SDK objects (sync
-`S3Client`, CRT `S3AsyncClient`, `S3TransferManager`, `S3Presigner`) for the full
+`S3Client`, `S3AsyncClient`, `S3TransferManager`, `S3Presigner`) for the full
 feature surface. Pass a sync-only `S3Client` to get range reads and small writes;
 build an `S3ClientBundle.of(sync, async, tm, presigner)` for full feature parity
 with the SPI path. Operations that require an absent SDK object throw

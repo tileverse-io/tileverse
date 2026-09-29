@@ -199,15 +199,16 @@ try (Storage storage = S3StorageProvider.open(URI.create("s3://external-bucket/"
 }
 ```
 
-### Full feature set (`read`, multipart upload, presigned URLs)
+### Full feature set (parallel batched reads, multipart upload, presigned URLs)
 
-The 1-arg `S3StorageProvider.open(URI, S3Client)` overload is sync-only; capabilities that need the CRT async client,
-transfer manager, or presigner throw `UnsupportedCapabilityException`. For full feature parity, build the bundle:
+The 1-arg `S3StorageProvider.open(URI, S3Client)` overload is sync-only: batched range reads run on a shared
+executor, and multipart upload and presigned URLs throw `UnsupportedCapabilityException`. For the full feature set,
+build the bundle:
 
 ```java
 S3ClientBundle bundle = S3ClientBundle.of(syncClient, asyncClient, transferManager, presigner);
 try (Storage storage = S3StorageProvider.open(URI.create("s3://my-bucket/"), bundle)) {
-    // read / multipart / presignGet / presignPut all work
+    // batched reads on the async client, multipart, presignGet and presignPut all work
 }
 ```
 

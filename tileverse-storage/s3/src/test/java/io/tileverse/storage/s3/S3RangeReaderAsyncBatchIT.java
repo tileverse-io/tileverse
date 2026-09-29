@@ -56,26 +56,31 @@ import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 /**
- * The CRT batch path against a real S3-compatible endpoint: it keeps at most
- * {@code storage.batch.max-in-flight-fetches} requests outstanding, counted by a proxy around the CRT client from each
- * {@code getObject} call to the completion of its future, and it reports what a batch cost, the bridged gaps included.
+ * The async batch path against a real S3-compatible endpoint, on a client built as {@link S3ClientCache} builds it: it
+ * keeps at most {@code storage.batch.max-in-flight-fetches} requests outstanding, counted by a proxy around the client
+ * from each {@code getObject} call to the completion of its future, and it reports what a batch cost, the bridged gaps
+ * included.
  */
 @Testcontainers(disabledWithoutDocker = true)
-class S3RangeReaderCrtBatchIT {
+class S3RangeReaderAsyncBatchIT {
 
-    private static final String BUCKET = "crt-batch";
+    private static final String BUCKET = "async-batch";
     private static final String KEY = "object.bin";
     private static final int OBJECT_SIZE = 4 * 1024 * 1024;
     private static final int FETCH_COUNT = 12;
     private static final int FETCH_LENGTH = 4096;
     private static final long FETCH_STRIDE = 300_000L;
 
+    /** The connections pooled per host by the shared HTTP client, an SDK default. */
+    private static final int POOLED_CONNECTIONS = 50;
+
     @Container
     static GarageContainer garage = new GarageContainer();
 
     private static byte[] object;
     private static S3Client syncClient;
-    private static S3AsyncClient crtClient;
+    private static S3SharedHttpClient.Lease httpClient;
+    private static S3AsyncClient asyncClient;
 
     @BeforeAll
     static void uploadObject() {
@@ -90,7 +95,10 @@ class S3RangeReaderCrtBatchIT {
                 .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
                 .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED)
                 .build();
-        crtClient = S3AsyncClient.crtBuilder()
+        httpClient = S3SharedHttpClient.INSTANCE.acquire();
+        asyncClient = S3AsyncClient.builder()
+                .httpClient(httpClient.client())
+                .multipartEnabled(true)
                 .endpointOverride(endpoint)
                 .region(Region.of(GarageContainer.REGION))
                 .credentialsProvider(credentials)
@@ -106,8 +114,11 @@ class S3RangeReaderCrtBatchIT {
 
     @AfterAll
     static void closeClients() {
-        if (crtClient != null) {
-            crtClient.close();
+        if (asyncClient != null) {
+            asyncClient.close();
+        }
+        if (httpClient != null) {
+            httpClient.close();
         }
         if (syncClient != null) {
             syncClient.close();
@@ -115,9 +126,9 @@ class S3RangeReaderCrtBatchIT {
     }
 
     @Test
-    void theCrtPathKeepsAtMostTheBoundInFlight() throws IOException {
+    void theAsyncPathKeepsAtMostTheBoundInFlight() throws IOException {
         int bound = 3;
-        InFlightCounter counter = new InFlightCounter(crtClient);
+        InFlightCounter counter = new InFlightCounter(asyncClient);
         BatchSettings noMerging = new BatchSettings(-1, CoalescingPolicy.DEFAULT_MAX_FETCH_BYTES, bound);
 
         BatchReadResult result = readFarApartRanges(counter.client(), noMerging);
@@ -130,6 +141,54 @@ class S3RangeReaderCrtBatchIT {
     }
 
     @Test
+    void aBatchWiderThanTheConnectionPoolCompletes() throws IOException {
+        int fetchCount = 200;
+        int length = 1024;
+        long stride = OBJECT_SIZE / fetchCount;
+        InFlightCounter counter = new InFlightCounter(asyncClient);
+        BatchSettings unbounded = new BatchSettings(-1, CoalescingPolicy.DEFAULT_MAX_FETCH_BYTES, 0);
+        List<RangeRequest> requests = new ArrayList<>();
+        for (int i = 0; i < fetchCount; i++) {
+            requests.add(RangeRequest.of(i * stride, length, ByteBuffer.allocate(length)));
+        }
+
+        BatchReadResult result = read(counter.client(), unbounded, requests);
+
+        assertThat(counts(result)).containsOnly(length);
+        assertThat(result.fetches()).isEqualTo(fetchCount);
+        assertThat(counter.peak()).as("fetches outstanding at once").isGreaterThan(POOLED_CONNECTIONS);
+    }
+
+    @Test
+    void closingOneClientSetLeavesTheOthersReading() throws IOException {
+        S3ClientCache cache = new S3ClientCache();
+        S3ClientCache.Lease closing = cache.acquire(keyFor(URI.create(garage.getS3URL())));
+        S3ClientCache.Lease reading = cache.acquire(keyFor(URI.create(garage.getS3URL() + "/")));
+        URI baseUri = URI.create("s3://" + BUCKET + "/");
+        List<RangeRequest> requests = List.of(
+                RangeRequest.of(0, FETCH_LENGTH, ByteBuffer.allocate(FETCH_LENGTH)),
+                RangeRequest.of(2 * FETCH_STRIDE, FETCH_LENGTH, ByteBuffer.allocate(FETCH_LENGTH)));
+
+        assertThat(reading.asyncClient()).isNotSameAs(closing.asyncClient());
+        closing.close();
+        try (Storage storage = new S3Storage(baseUri, S3StorageBucketKey.parse(baseUri), reading, false);
+                RangeReader reader = storage.openRangeReader(KEY)) {
+            assertThat(counts(reader.readRanges(requests))).containsOnly(FETCH_LENGTH);
+        }
+    }
+
+    private static S3ClientCache.Key keyFor(URI endpoint) {
+        return S3ClientCache.key(
+                GarageContainer.REGION,
+                endpoint,
+                false,
+                garage.getAccessKeyId(),
+                garage.getSecretAccessKey(),
+                null,
+                true);
+    }
+
+    @Test
     void aMergedFetchTransfersTheRequestedBytesPlusTheBridgedGap() throws IOException {
         int gap = 50;
         BatchSettings merging = new BatchSettings(1024, CoalescingPolicy.DEFAULT_MAX_FETCH_BYTES, 8);
@@ -137,7 +196,7 @@ class S3RangeReaderCrtBatchIT {
                 RangeRequest.of(1000, 100, ByteBuffer.allocate(100)),
                 RangeRequest.of(1000 + 100 + gap, 100, ByteBuffer.allocate(100)));
 
-        BatchReadResult result = read(crtClient, merging, requests);
+        BatchReadResult result = read(asyncClient, merging, requests);
 
         assertThat(counts(result)).containsExactly(100, 100);
         assertThat(result.fetches()).isEqualTo(1);

@@ -60,9 +60,11 @@ We primarily measure:
     and [GDAL's multi-range merging](https://gdal.org/user/configoptions.html#GDAL_HTTP_MERGE_CONSECUTIVE_RANGES)):
     about 350 KB for object stores, 230 KB for plain HTTP, with merged fetches capped at
     32 MiB.
-    *   *S3*: planned fetches run on the CRT `S3AsyncClient`, one async `GetObject` each, at
+    *   *S3*: planned fetches run on the `S3AsyncClient`, one async `GetObject` each, at
         most `storage.batch.max-in-flight-fetches` of them at once (default 8), each completion
-        admitting the next.
+        admitting the next. Every S3 Storage of the process sends them through one shared CRT
+        HTTP client: connections are pooled per host, and native memory stays independent of
+        the number of endpoints.
     *   *GCS / Azure*: up to `storage.batch.max-in-flight-fetches` planned fetches run
         concurrently on a shared executor (virtual threads on Java 21+, a bounded daemon pool on
         Java 17).

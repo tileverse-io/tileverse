@@ -19,18 +19,18 @@ import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.it.AbstractRangeReaderIT;
+import io.tileverse.storage.it.GarageContainer;
 import io.tileverse.storage.it.TestUtil;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -38,13 +38,13 @@ import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 /**
- * Integration tests for S3RangeReader using MinIO.
+ * Integration tests for S3RangeReader using Garage.
  *
  * <p>These tests verify that the S3RangeReader can correctly read ranges of bytes from an S3-compatible storage using
- * MinIO. This demonstrates compatibility with S3-compatible storage systems beyond AWS S3.
+ * Garage. This demonstrates compatibility with S3-compatible storage systems beyond AWS S3.
  */
 @Testcontainers(disabledWithoutDocker = true)
-class MinIORangeReaderIT extends AbstractRangeReaderIT {
+class GarageRangeReaderIT extends AbstractRangeReaderIT {
 
     private static final String BUCKET_NAME = "test-bucket";
     private static final String KEY_NAME = "test.bin";
@@ -54,23 +54,22 @@ class MinIORangeReaderIT extends AbstractRangeReaderIT {
     private static StaticCredentialsProvider credentialsProvider;
 
     @Container
-    // MinIO removed its Docker Hub repository; quay.io serves the same images.
-    static MinIOContainer minio =
-            new MinIOContainer(DockerImageName.parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
-                    .asCompatibleSubstituteFor("minio/minio"));
+    static GarageContainer garage = new GarageContainer();
 
     @BeforeAll
-    static void setupMinio() throws IOException {
+    static void setupGarage() throws IOException {
         testFile = TestUtil.createTempTestFile(TEST_FILE_SIZE);
 
-        credentialsProvider =
-                StaticCredentialsProvider.create(AwsBasicCredentials.create(minio.getUserName(), minio.getPassword()));
+        credentialsProvider = StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(garage.getAccessKeyId(), garage.getSecretAccessKey()));
 
         s3Client = S3Client.builder()
-                .endpointOverride(URI.create(minio.getS3URL()))
-                .region(Region.US_EAST_1) // MinIO doesn't care about region, but it's required by the SDK
+                .endpointOverride(URI.create(garage.getS3URL()))
+                .region(Region.of(GarageContainer.REGION))
                 .credentialsProvider(credentialsProvider)
-                .forcePathStyle(true) // Important for S3 compatibility with MinIO
+                .forcePathStyle(true)
+                // Garage rejects the SDK's default signed aws-chunked upload with a trailing checksum.
+                .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
                 .build();
 
         s3Client.createBucket(CreateBucketRequest.builder().bucket(BUCKET_NAME).build());
@@ -81,7 +80,7 @@ class MinIORangeReaderIT extends AbstractRangeReaderIT {
     }
 
     @AfterAll
-    static void cleanupMinio() {
+    static void cleanupGarage() {
         if (s3Client != null) {
             s3Client.close();
         }

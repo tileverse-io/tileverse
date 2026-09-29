@@ -30,6 +30,7 @@ import io.aiven.testcontainers.fakegcsserver.FakeGcsServerContainer;
 import io.tileverse.storage.azure.AzureBlobStorageProvider;
 import io.tileverse.storage.gcs.GoogleCloudStorageProvider;
 import io.tileverse.storage.http.HttpStorageProvider;
+import io.tileverse.storage.it.GarageContainer;
 import io.tileverse.storage.it.TestUtil;
 import io.tileverse.storage.s3.S3StorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
@@ -48,14 +49,15 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.util.SetSystemProperty;
 import org.testcontainers.azure.AzuriteContainer;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.utility.MountableFile;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -103,10 +105,12 @@ class StorageFactoryIT {
     static FakeGcsServerContainer gcsEmulator = new FakeGcsServerContainer();
 
     @Container
-    // MinIO removed its Docker Hub repository; quay.io serves the same images.
-    static MinIOContainer minio =
-            new MinIOContainer(DockerImageName.parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
-                    .asCompatibleSubstituteFor("minio/minio"));
+    static GarageContainer garage = new GarageContainer();
+
+    @Container
+    @SuppressWarnings("resource")
+    static LocalStackContainer localstack =
+            new LocalStackContainer(DockerImageName.parse("localstack/localstack:3.2.0")).withServices("s3");
 
     @Container
     @SuppressWarnings("resource")
@@ -118,7 +122,8 @@ class StorageFactoryIT {
         fileURI = tempDir.resolve(FILE_NAME);
         TestUtil.createMockTestFile(fileURI, FILE_SIZE);
         setupHttpd();
-        setupMinIO();
+        setupGarage();
+        setupLocalStack();
         setupAzurite();
         setupGCS();
     }
@@ -142,22 +147,36 @@ class StorageFactoryIT {
         httpd.start();
     }
 
-    private static void setupMinIO() {
-        AwsBasicCredentials minioCredentials = AwsBasicCredentials.create(minio.getUserName(), minio.getPassword());
-        StaticCredentialsProvider credentialsProvider = StaticCredentialsProvider.create(minioCredentials);
-        S3Client minioClient = S3Client.builder()
-                .endpointOverride(URI.create(minio.getS3URL()))
-                // MinIO ignores region but the SDK requires one for signing.
-                .region(Region.US_EAST_1)
-                .credentialsProvider(credentialsProvider)
+    private static void setupGarage() {
+        AwsBasicCredentials credentials =
+                AwsBasicCredentials.create(garage.getAccessKeyId(), garage.getSecretAccessKey());
+        uploadTestFile(URI.create(garage.getS3URL()), Region.of(GarageContainer.REGION), credentials);
+    }
+
+    private static void setupLocalStack() {
+        AwsBasicCredentials credentials =
+                AwsBasicCredentials.create(localstack.getAccessKey(), localstack.getSecretKey());
+        uploadTestFile(localstack.getEndpoint(), Region.of(localstack.getRegion()), credentials);
+    }
+
+    private static void uploadTestFile(URI endpoint, Region region, AwsBasicCredentials credentials) {
+        try (S3Client client = S3Client.builder()
+                .endpointOverride(endpoint)
+                .region(region)
+                .credentialsProvider(StaticCredentialsProvider.create(credentials))
                 // path-style addressing is required for S3-compatible servers.
                 .forcePathStyle(true)
-                .build();
-        minioClient.createBucket(
-                CreateBucketRequest.builder().bucket(BUCKET_NAME).build());
-        minioClient.putObject(
-                PutObjectRequest.builder().bucket(BUCKET_NAME).key(FILE_NAME).build(), RequestBody.fromFile(fileURI));
-        minioClient.close();
+                // Garage rejects the SDK's default signed aws-chunked upload with a trailing checksum.
+                .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
+                .build()) {
+            client.createBucket(
+                    CreateBucketRequest.builder().bucket(BUCKET_NAME).build());
+            PutObjectRequest put = PutObjectRequest.builder()
+                    .bucket(BUCKET_NAME)
+                    .key(FILE_NAME)
+                    .build();
+            client.putObject(put, RequestBody.fromFile(fileURI));
+        }
     }
 
     static void setupGCS() throws Exception {
@@ -257,8 +276,8 @@ class StorageFactoryIT {
     }
 
     /**
-     * Forces {@code aws.region} for MinIO, or risk an error like the following in github actions (couldn't figure out
-     * where it may be getting the region from in my local dev env):
+     * Forces {@code aws.region} for LocalStack, or risk an error like the following in github actions (couldn't figure
+     * out where it may be getting the region from in my local dev env):
      *
      * <pre>
      * Failed to create S3 client: Unable to load region from any of the providers in the chain
@@ -272,12 +291,28 @@ class StorageFactoryIT {
      */
     @Test
     @SetSystemProperty(key = "aws.region", value = "us-east-1")
-    void testS3MinIO() throws IOException {
-        final URI minioURI = URI.create("%s/%s/%s".formatted(minio.getS3URL(), BUCKET_NAME, FILE_NAME));
-        String accessKey = minio.getUserName();
-        String secretKey = minio.getPassword();
+    void testS3LocalStack() throws IOException {
+        final URI localstackURI = URI.create("%s/%s/%s".formatted(localstack.getEndpoint(), BUCKET_NAME, FILE_NAME));
+        String accessKey = localstack.getAccessKey();
+        String secretKey = localstack.getSecretKey();
 
-        RangeReader reader = testS3(minioURI, accessKey, secretKey);
+        RangeReader reader = testS3(localstackURI, accessKey, secretKey);
+        assertThat(reader.size()).hasValue(FILE_SIZE);
+    }
+
+    /**
+     * Garage answers an anonymous HEAD request without the {@code x-amz-request-id} header, leaving nothing to tell it
+     * apart from a plain HTTP server. The S3 provider is forced instead of detected.
+     */
+    @Test
+    void testS3Garage() throws IOException {
+        URI garageURI = URI.create("%s/%s/%s".formatted(garage.getS3URL(), BUCKET_NAME, FILE_NAME));
+        StorageConfig config = new StorageConfig(garageURI).providerId(S3StorageProvider.ID);
+        config.setParameter(S3StorageProvider.S3_REGION, GarageContainer.REGION);
+        config.setParameter(S3StorageProvider.S3_AWS_ACCESS_KEY_ID, garage.getAccessKeyId());
+        config.setParameter(S3StorageProvider.S3_AWS_SECRET_ACCESS_KEY, garage.getSecretAccessKey());
+
+        RangeReader reader = testCreate(config);
         assertThat(reader.size()).hasValue(FILE_SIZE);
     }
 

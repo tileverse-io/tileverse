@@ -17,6 +17,7 @@ package io.tileverse.storage.s3;
 
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageEntry;
+import io.tileverse.storage.it.GarageContainer;
 import io.tileverse.storage.tck.StorageTCK;
 import java.io.IOException;
 import java.net.URI;
@@ -25,54 +26,67 @@ import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
-import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 /**
- * S3 TCK against a MinIO container. MinIO is generally stricter about S3 semantics than LocalStack, so it does enforce
- * {@code If-None-Match: *} and accepts zero-byte uploads.
+ * S3 TCK against a Garage container. Garage accepts zero-byte uploads, unlike LocalStack.
  *
- * <p>Mutates {@code aws.accessKeyId}/{@code aws.secretAccessKey} system properties in {@code @BeforeAll} so the SDK
- * default credentials chain finds the MinIO container's credentials. {@link ResourceLock} on
+ * <p>Mutates {@code aws.accessKeyId}/{@code aws.secretAccessKey} system properties in {@code @BeforeAll} for the SDK
+ * default credentials chain to find the Garage container's credentials. {@link ResourceLock} on
  * {@link Resources#SYSTEM_PROPERTIES} serializes execution against {@code S3StorageLocalStackIT} (which mutates the
  * same keys) and any other test that locks SYSTEM_PROPERTIES.
  */
 @Testcontainers(disabledWithoutDocker = true)
 @ResourceLock(Resources.SYSTEM_PROPERTIES)
-class S3StorageMinIOIT extends StorageTCK {
+class S3StorageGarageIT extends StorageTCK {
 
     @SuppressWarnings("resource")
-    private static MinIOContainer minio;
+    private static GarageContainer garage;
 
     private static S3ClientCache cache;
     private String bucket;
 
     @BeforeAll
     static void startContainer() {
-        // MinIO removed its Docker Hub repository; quay.io serves the same images.
-        minio = new MinIOContainer(DockerImageName.parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
-                .asCompatibleSubstituteFor("minio/minio"));
-        minio.start();
+        garage = new GarageContainer();
+        garage.start();
         cache = new S3ClientCache();
-        System.setProperty("aws.accessKeyId", minio.getUserName());
-        System.setProperty("aws.secretAccessKey", minio.getPassword());
+        System.setProperty("aws.accessKeyId", garage.getAccessKeyId());
+        System.setProperty("aws.secretAccessKey", garage.getSecretAccessKey());
     }
 
     @AfterAll
     static void stopContainer() {
-        if (minio != null) {
-            minio.stop();
+        if (garage != null) {
+            garage.stop();
         }
         System.clearProperty("aws.accessKeyId");
         System.clearProperty("aws.secretAccessKey");
     }
 
+    /**
+     * Override to skip on Garage: it does not enforce {@code If-None-Match: *} on PutObject (the put succeeds and
+     * overwrites the existing key). Verified via S3StorageS3ProxyIT.
+     */
+    @Override
+    @Test
+    @Disabled("Garage does not enforce If-None-Match: * on PutObject")
+    @SuppressWarnings({"java:S2699", "java:S1186"})
+    protected void putIfNotExistsRejectsExistingKey() {}
+
     private S3ClientCache.Key keyFor() {
         return S3ClientCache.key(
-                "us-east-1", URI.create(minio.getS3URL()), false, minio.getUserName(), null, null, true);
+                GarageContainer.REGION,
+                URI.create(garage.getS3URL()),
+                false,
+                garage.getAccessKeyId(),
+                null,
+                null,
+                true);
     }
 
     @Override

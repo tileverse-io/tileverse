@@ -61,11 +61,6 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.testcontainers</groupId>
-      <artifactId>testcontainers-minio</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>io.tileverse.storage</groupId>
       <artifactId>tileverse-storage-core</artifactId>
       <version>${project.version}</version>

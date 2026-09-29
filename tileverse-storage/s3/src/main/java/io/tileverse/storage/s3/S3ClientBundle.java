@@ -28,7 +28,8 @@ import software.amazon.awssdk.transfer.s3.S3TransferManager;
  *
  * <ul>
  *   <li>{@link S3Client} (sync) -- required; drives stat, list, range read, single-shot write, copy, delete.
- *   <li>{@link S3AsyncClient} (CRT-based) -- optional; required for {@code read} (parallel multi-part GET).
+ *   <li>{@link S3AsyncClient} -- optional; runs batched range reads in parallel. Without it they run on the shared
+ *       executor through the sync client.
  *   <li>{@link S3TransferManager} -- optional; required for multipart upload of larger payloads.
  *   <li>{@link S3Presigner} -- optional; required for {@code presignGet}/{@code presignPut}.
  * </ul>
@@ -71,7 +72,7 @@ public record S3ClientBundle(
      * via the SPI path.
      *
      * @param sync the sync S3 client
-     * @param async the CRT-based async S3 client
+     * @param async the async S3 client
      * @param transferManager the transfer manager
      * @param presigner the presigner
      * @return a new bundle with all four clients

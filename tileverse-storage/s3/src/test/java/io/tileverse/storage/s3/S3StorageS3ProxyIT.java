@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
@@ -64,7 +65,9 @@ class S3StorageS3ProxyIT extends StorageTCK {
                 .withEnv("S3PROXY_IDENTITY", IDENTITY)
                 .withEnv("S3PROXY_CREDENTIAL", CREDENTIAL)
                 .withEnv("S3PROXY_ENDPOINT", "http://0.0.0.0:80")
-                .withEnv("JCLOUDS_PROVIDER", "transient");
+                .withEnv("JCLOUDS_PROVIDER", "transient")
+                // Docker's port proxy accepts connections before s3proxy listens, then closes them unanswered.
+                .waitingFor(Wait.forLogMessage(".*Started .*ServerConnector.*\\n", 1));
         s3proxy.start();
         cache = new S3ClientCache();
     }
@@ -100,13 +103,13 @@ class S3StorageS3ProxyIT extends StorageTCK {
     }
 
     /**
-     * Override to skip on s3proxy: the AWS CRT client fails CreateMultipartUpload against s3proxy with "Upload Id not
-     * found in create-multipart-upload response". Multipart uploads are covered by S3StorageGarageIT and
+     * Override to skip on s3proxy: it answers {@code 501 NotImplemented} to the {@code x-amz-mp-object-size} header
+     * sent by the SDK with CompleteMultipartUpload. Multipart uploads are covered by S3StorageGarageIT and
      * S3StorageLocalStackIT.
      */
     @Override
     @Test
-    @Disabled("s3proxy CreateMultipartUpload response is not understood by the AWS CRT client")
+    @Disabled("s3proxy rejects the x-amz-mp-object-size header of CompleteMultipartUpload")
     @SuppressWarnings({"java:S2699", "java:S1186"})
     protected void multiPartRoundTrip16MiB(@TempDir Path tmp) {}
 

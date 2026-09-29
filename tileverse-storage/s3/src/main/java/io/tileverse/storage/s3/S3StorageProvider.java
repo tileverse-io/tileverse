@@ -326,9 +326,9 @@ public class S3StorageProvider extends AbstractStorageProvider {
      * Spring-managed clients, LocalStack/MinIO test fixtures, or custom credential-provider chains expressible only as
      * a built {@code S3Client}.
      *
-     * <p><b>Capability degradation</b>: with only a sync client, {@code read} (parallel multi-part GET via the CRT
-     * async client), multipart upload (via {@code S3TransferManager}), and presigned URL operations are unavailable and
-     * throw {@link io.tileverse.storage.UnsupportedCapabilityException}. For full feature parity, build the matching
+     * <p><b>Capability degradation</b>: with only a sync client, batched range reads run on the shared executor, and
+     * multipart upload (via {@code S3TransferManager}) and presigned URL operations are unavailable and throw
+     * {@link io.tileverse.storage.UnsupportedCapabilityException}. For full feature parity, build the matching
      * async/transfer/presigner objects and call {@link #open(java.net.URI, S3ClientBundle)} instead.
      *
      * <p>The returned {@code Storage} <b>borrows</b> the supplied client; closing the {@code Storage} does NOT close

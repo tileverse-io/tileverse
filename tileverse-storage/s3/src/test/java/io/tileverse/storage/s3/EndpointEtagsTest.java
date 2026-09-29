@@ -46,32 +46,10 @@ class EndpointEtagsTest {
     }
 
     @Test
-    void anEtagOnTheResponseRecordsNothing() {
-        EndpointEtags etags = new EndpointEtags();
-
-        etags.observe("\"d41d8cd98f00b204e9800998ecf8427e\"");
-
-        assertThat(etags.omitted()).isFalse();
-    }
-
-    @Test
-    void aResponseWithoutAnEtagRecordsTheOmission() {
-        EndpointEtags absent = new EndpointEtags();
-        EndpointEtags blank = new EndpointEtags();
-
-        absent.observe(null);
-        blank.observe("  ");
-
-        assertThat(absent.omitted()).isTrue();
-        assertThat(blank.omitted()).isTrue();
-    }
-
-    @Test
-    void aRecordedOmissionSurvivesALaterResponseWithAnEtag() {
+    void aRejectionMarksTheEndpoint() {
         EndpointEtags etags = new EndpointEtags();
 
         etags.recordOmission();
-        etags.observe("\"d41d8cd98f00b204e9800998ecf8427e\"");
 
         assertThat(etags.omitted()).isTrue();
     }

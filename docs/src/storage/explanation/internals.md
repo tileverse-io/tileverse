@@ -64,7 +64,7 @@ stack as `BlockAlignedRangeReader` above `CachingRangeReader` above the backend:
     everywhere else.
 *   **Backends**: batched reads plan before fetching: nearby ranges merge into shared
     fetches (about a 350 KB gap budget for object stores, 230 KB for HTTP, 32 MiB max per
-    fetch), which run in parallel per backend (CRT async client on S3, shared executor on
+    fetch), which run in parallel per backend (async client on S3, shared executor on
     GCS/Azure and for HTTP request fan-out and fallback, `multipart/byteranges` on HTTP).
 
 ## Runtime View

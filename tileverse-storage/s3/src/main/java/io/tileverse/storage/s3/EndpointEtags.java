@@ -21,9 +21,10 @@ import org.jspecify.annotations.Nullable;
 import software.amazon.awssdk.core.exception.SdkException;
 
 /**
- * Whether the endpoint behind one set of SDK clients answers reads without an {@code ETag} header. A service exporting
- * an existing tree of files answers that way for files not written through its S3 API. The CRT client demands the
- * header and fails such a request before delivering any byte; the sync client does not.
+ * Whether the async client of one set of SDK clients rejected a response for want of an {@code ETag} header. A service
+ * exporting an existing tree of files answers without the header for files not written through its S3 API. A CRT-based
+ * async client, passed in an {@link S3ClientBundle}, demands the header and fails such a request before delivering any
+ * byte. The clients built by {@link S3ClientCache} make no such demand and never record anything here.
  *
  * <p>One instance per client set, shared by its Storages and readers. The record is per endpoint, never per object, and
  * only moves from absent to omitted.
@@ -37,19 +38,12 @@ final class EndpointEtags {
 
     private final AtomicBoolean omitted = new AtomicBoolean();
 
-    /** Whether this endpoint has answered a read without an ETag header. */
+    /** Whether the async client rejected a response of this endpoint for want of an ETag header. */
     boolean omitted() {
         return omitted.get();
     }
 
-    /** Records an absent or blank ETag as an omission. */
-    void observe(@Nullable String etag) {
-        if (etag == null || etag.isBlank()) {
-            recordOmission();
-        }
-    }
-
-    /** Records that this endpoint omits the header. */
+    /** Records a rejection by the async client for want of the header. */
     void recordOmission() {
         omitted.set(true);
     }

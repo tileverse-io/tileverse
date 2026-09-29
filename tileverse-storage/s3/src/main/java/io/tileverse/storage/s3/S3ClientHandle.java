@@ -31,9 +31,9 @@ import software.amazon.awssdk.transfer.s3.S3TransferManager;
  *       {@link #close()} is a no-op so the caller retains ownership of the SDK clients.
  * </ul>
  *
- * <p>The async client, transfer manager, and presigner are exposed as {@link Optional} because the borrowed-handle
- * variant may carry only a sync {@link S3Client}; in that case {@code read}, multipart upload, and presigned URL
- * operations throw {@link io.tileverse.storage.UnsupportedCapabilityException}.
+ * <p>The async client, transfer manager, and presigner are exposed as {@link Optional} because a borrowed handle may
+ * hold only a sync {@link S3Client}; in that case multipart upload and presigned URL operations throw
+ * {@link io.tileverse.storage.UnsupportedCapabilityException}.
  */
 interface S3ClientHandle extends AutoCloseable {
 
@@ -45,7 +45,7 @@ interface S3ClientHandle extends AutoCloseable {
 
     Optional<S3Presigner> presigner();
 
-    /** Whether this endpoint answers reads without an ETag header, shared by the readers of these clients. */
+    /** The record of the async client rejecting a response for want of an ETag header, shared by its readers. */
     EndpointEtags endpointEtags();
 
     @Override

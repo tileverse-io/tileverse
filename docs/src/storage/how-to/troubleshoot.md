@@ -366,13 +366,14 @@ their fetches still concurrent on the shared executor.
 
 **Problem**: batched S3 reads fail with `Connection Manager failed to acquire a connection within the defined
 timeout`. Every S3 `Storage` opened from a URI or a `StorageConfig` sends its async requests through one pool of 50
-connections per host, shared by the process. A request beyond those 50 waits 10 seconds for a connection and then
+connections per host, shared by the process. A request beyond those 50 waits 30 seconds for a connection and then
 fails. The SDK retries some of those failures, up to 3 times each; when many requests fail together, most of them
 get no retry.
 
 **Solution**: keep fewer requests outstanding against that host. Lower `storage.batch.max-in-flight-fetches`
 (default 8; 0 removes the bound) or the number of concurrent readers. A multipart upload to the same host sends up to
-50 parts at once and holds as many connections while it runs.
+50 parts at once and holds as many connections while it runs. The pool size and the wait are
+[system properties](configure.md#system-properties).
 
 ## File System Issues
 

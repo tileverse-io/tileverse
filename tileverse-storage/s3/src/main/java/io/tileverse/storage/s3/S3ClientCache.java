@@ -17,10 +17,12 @@ package io.tileverse.storage.s3;
 
 import java.net.URI;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
@@ -48,7 +50,8 @@ import software.amazon.awssdk.transfer.s3.S3TransferManager;
  * last lease is released.
  *
  * <p>Every async client runs on the HTTP client of {@link S3SharedHttpClient}, regardless of its key: native memory and
- * event loop threads stay independent of the number of client sets.
+ * event loop threads stay independent of the number of client sets. That HTTP client and the one of every sync client
+ * take their connection settings from {@link S3HttpClientSettings}.
  */
 @NullMarked
 final class S3ClientCache {
@@ -171,13 +174,20 @@ final class S3ClientCache {
 
     private final Map<Key, Entry> entries = new ConcurrentHashMap<>();
     private final S3SharedHttpClient sharedHttpClient;
+    private final Supplier<S3HttpClientSettings> httpClientSettings;
 
     S3ClientCache() {
         this(S3SharedHttpClient.INSTANCE);
     }
 
     S3ClientCache(S3SharedHttpClient sharedHttpClient) {
-        this.sharedHttpClient = sharedHttpClient;
+        this(sharedHttpClient, S3HttpClientSettings::ofProcess);
+    }
+
+    /** @param httpClientSettings read for the sync HTTP client of every client set, when the set is built */
+    S3ClientCache(S3SharedHttpClient sharedHttpClient, Supplier<S3HttpClientSettings> httpClientSettings) {
+        this.sharedHttpClient = Objects.requireNonNull(sharedHttpClient, "sharedHttpClient");
+        this.httpClientSettings = Objects.requireNonNull(httpClientSettings, "httpClientSettings");
     }
 
     int entryCount() {
@@ -196,14 +206,15 @@ final class S3ClientCache {
     private Entry build(Key key) {
         S3SharedHttpClient.Lease httpClientLease = sharedHttpClient.acquire();
         try {
-            return build(key, httpClientLease);
+            return build(key, httpClientLease, httpClientSettings.get());
         } catch (RuntimeException failure) {
             httpClientLease.close();
             throw failure;
         }
     }
 
-    private static Entry build(Key key, S3SharedHttpClient.Lease httpClientLease) {
+    private static Entry build(
+            Key key, S3SharedHttpClient.Lease httpClientLease, S3HttpClientSettings httpClientSettings) {
         S3Configuration syncConfig = S3Configuration.builder()
                 .pathStyleAccessEnabled(key.forcePathStyle())
                 .build();
@@ -217,6 +228,7 @@ final class S3ClientCache {
         // requires them or the caller opts in via GetObjectRequest#checksumMode, while plain
         // reads and writes stay compatible with emulators.
         S3ClientBuilder syncBuilder = S3Client.builder()
+                .httpClientBuilder(httpClientSettings.syncHttpClientBuilder())
                 .region(Region.of(key.region()))
                 .serviceConfiguration(syncConfig)
                 .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)

@@ -102,6 +102,21 @@ class S3ClientCacheTest {
     }
 
     @Test
+    void aClientSetWithSettingsFailingToResolveLeavesNoHttpClientOpen() {
+        S3SharedHttpClient sharedHttpClient = new S3SharedHttpClient(this::newHttpClient);
+        S3ClientCache cache = new S3ClientCache(sharedHttpClient, () -> {
+            throw new IllegalArgumentException("Invalid system property");
+        });
+
+        assertThatThrownBy(() -> cache.acquire(EAST))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Invalid system property");
+
+        assertThat(cache.entryCount()).isZero();
+        assertThat(httpClients).allSatisfy(client -> assertThat(client.closes).isEqualTo(1));
+    }
+
+    @Test
     void closingALeaseTwiceKeepsTheHttpClientForTheOtherClientSets() {
         S3ClientCache cache = cacheCountingHttpClients();
         S3ClientCache.Lease east = cache.acquire(EAST);

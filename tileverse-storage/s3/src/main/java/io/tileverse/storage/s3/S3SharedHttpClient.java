@@ -21,7 +21,6 @@ import java.util.function.Supplier;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import software.amazon.awssdk.http.async.SdkAsyncHttpClient;
-import software.amazon.awssdk.http.crt.AwsCrtAsyncHttpClient;
 
 /**
  * The HTTP client shared by every async S3 client of the process. The first lease builds it, releasing the last lease
@@ -38,7 +37,7 @@ import software.amazon.awssdk.http.crt.AwsCrtAsyncHttpClient;
 // the number of endpoints read by the process
 final class S3SharedHttpClient {
 
-    static final S3SharedHttpClient INSTANCE = new S3SharedHttpClient(S3SharedHttpClient::newCrtHttpClient);
+    static final S3SharedHttpClient INSTANCE = new S3SharedHttpClient(S3SharedHttpClient::newHttpClientOfTheProcess);
 
     private final Supplier<SdkAsyncHttpClient> factory;
 
@@ -49,8 +48,9 @@ final class S3SharedHttpClient {
         this.factory = Objects.requireNonNull(factory, "factory");
     }
 
-    private static SdkAsyncHttpClient newCrtHttpClient() {
-        return AwsCrtAsyncHttpClient.builder().build();
+    private static SdkAsyncHttpClient newHttpClientOfTheProcess() {
+        S3HttpClientSettings settings = S3HttpClientSettings.ofProcess();
+        return settings.newAsyncHttpClient();
     }
 
     synchronized Lease acquire() {

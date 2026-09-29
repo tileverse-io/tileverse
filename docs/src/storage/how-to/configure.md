@@ -162,6 +162,16 @@ The executor behind batched fetches is shared by the whole JVM and picked once, 
 | `io.tileverse.storage.batch.executor` | Executor for batched fetches: `auto`, `virtual` or `pool` | `auto` |
 | `io.tileverse.storage.batch.pool.size` | Size of the `pool` executor | the larger of 8 and the processor count |
 
+The connection pools of the S3 clients take three settings, each read from its system property first and from its environment variable second:
+
+| Property | Environment variable | Description | Default |
+| :--- | :--- | :--- | :--- |
+| `io.tileverse.storage.s3-http-client.max-concurrency` | `IO_TILEVERSE_STORAGE_S3HTTPCLIENT_MAXCONCURRENCY` | Connections pooled per host | 50 |
+| `io.tileverse.storage.s3-http-client.connection-timeout` | `IO_TILEVERSE_STORAGE_S3HTTPCLIENT_CONNECTIONTIMEOUT` | Longest wait for a connection to open | 2 seconds |
+| `io.tileverse.storage.s3-http-client.connection-acquisition-timeout` | `IO_TILEVERSE_STORAGE_S3HTTPCLIENT_CONNECTIONACQUISITIONTIMEOUT` | Longest wait of a request for a pooled connection | 30 seconds |
+
+A duration reads as ISO-8601 (`PT30S`) or as a number and a unit (`30s`, `500ms`).
+
 ## Stack Recommendations
 
 ### For Tile Servers

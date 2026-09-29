@@ -24,6 +24,7 @@ import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.batch.CoalescingPolicy;
+import io.tileverse.storage.it.GarageContainer;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -40,10 +41,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.async.AsyncResponseTransformer;
@@ -72,10 +71,7 @@ class S3RangeReaderCrtBatchIT {
     private static final long FETCH_STRIDE = 300_000L;
 
     @Container
-    // MinIO removed its Docker Hub repository; quay.io serves the same images.
-    static MinIOContainer minio =
-            new MinIOContainer(DockerImageName.parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
-                    .asCompatibleSubstituteFor("minio/minio"));
+    static GarageContainer garage = new GarageContainer();
 
     private static byte[] object;
     private static S3Client syncClient;
@@ -83,12 +79,12 @@ class S3RangeReaderCrtBatchIT {
 
     @BeforeAll
     static void uploadObject() {
-        StaticCredentialsProvider credentials =
-                StaticCredentialsProvider.create(AwsBasicCredentials.create(minio.getUserName(), minio.getPassword()));
-        URI endpoint = URI.create(minio.getS3URL());
+        StaticCredentialsProvider credentials = StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(garage.getAccessKeyId(), garage.getSecretAccessKey()));
+        URI endpoint = URI.create(garage.getS3URL());
         syncClient = S3Client.builder()
                 .endpointOverride(endpoint)
-                .region(Region.US_EAST_1)
+                .region(Region.of(GarageContainer.REGION))
                 .credentialsProvider(credentials)
                 .forcePathStyle(true)
                 .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
@@ -96,7 +92,7 @@ class S3RangeReaderCrtBatchIT {
                 .build();
         crtClient = S3AsyncClient.crtBuilder()
                 .endpointOverride(endpoint)
-                .region(Region.US_EAST_1)
+                .region(Region.of(GarageContainer.REGION))
                 .credentialsProvider(credentials)
                 .forcePathStyle(true)
                 .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)

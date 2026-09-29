@@ -101,7 +101,7 @@ class S3StorageS3ProxyIT extends StorageTCK {
 
     /**
      * Override to skip on s3proxy: the AWS CRT client fails CreateMultipartUpload against s3proxy with "Upload Id not
-     * found in create-multipart-upload response". Multipart uploads are covered by S3StorageMinIOIT and
+     * found in create-multipart-upload response". Multipart uploads are covered by S3StorageGarageIT and
      * S3StorageLocalStackIT.
      */
     @Override
@@ -112,7 +112,7 @@ class S3StorageS3ProxyIT extends StorageTCK {
 
     /**
      * Override to skip on s3proxy: its DeleteObjects response omits the per-key {@code <Deleted>} entries, leaving
-     * {@code DeleteResult#deleted()} empty even though the objects are removed. Real S3, MinIO and LocalStack report
+     * {@code DeleteResult#deleted()} empty even though the objects are removed. Real S3, Garage and LocalStack report
      * each deleted key.
      */
     @Override

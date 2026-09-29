@@ -50,7 +50,7 @@ import org.testcontainers.utility.DockerImageName;
  *
  * <p>Mutates {@code aws.accessKeyId}/{@code aws.secretAccessKey} system properties in {@code @BeforeAll} so the SDK
  * default credentials chain finds the LocalStack container's credentials. {@link ResourceLock} on
- * {@link Resources#SYSTEM_PROPERTIES} serializes execution against {@code S3StorageMinIOIT} (which mutates the same
+ * {@link Resources#SYSTEM_PROPERTIES} serializes execution against {@code S3StorageGarageIT} (which mutates the same
  * keys) and any other test that locks SYSTEM_PROPERTIES.
  */
 @Testcontainers(disabledWithoutDocker = true)
@@ -101,7 +101,7 @@ class S3StorageLocalStackIT extends StorageTCK {
 
     /**
      * Override to skip on LocalStack 3.2: it does not enforce {@code If-None-Match: *} on PutObject (the put succeeds
-     * and overwrites the existing key). Real S3 rejects. Verified via S3StorageMinIOIT (MinIO is stricter).
+     * and overwrites the existing key). Real S3 rejects. Verified via S3StorageS3ProxyIT.
      */
     @Override
     @Test
@@ -111,7 +111,7 @@ class S3StorageLocalStackIT extends StorageTCK {
 
     /**
      * Override to skip on LocalStack 3.2: PutObject with empty body throws a 500 ("'NoneType' object has no attribute
-     * 'to_bytes'") regardless of how the RequestBody is constructed. Real S3 and MinIO accept zero-byte uploads.
+     * 'to_bytes'") regardless of how the RequestBody is constructed. Real S3 and Garage accept zero-byte uploads.
      */
     @Override
     @Test

@@ -33,6 +33,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.images.builder.Transferable;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -83,7 +84,9 @@ class S3StorageS3ProxyFilesystemIT {
                 .withEnv("S3PROXY_CREDENTIAL", CREDENTIAL)
                 .withEnv("S3PROXY_ENDPOINT", "http://0.0.0.0:80")
                 .withEnv("JCLOUDS_PROVIDER", "filesystem")
-                .withEnv("JCLOUDS_FILESYSTEM_BASEDIR", BACKEND_DIR);
+                .withEnv("JCLOUDS_FILESYSTEM_BASEDIR", BACKEND_DIR)
+                // Docker's port proxy accepts connections before s3proxy listens, then closes them unanswered.
+                .waitingFor(Wait.forLogMessage(".*Started .*ServerConnector.*\\n", 1));
         s3proxy.start();
         objectBytes = deterministicBytes(OBJECT_SIZE);
     }

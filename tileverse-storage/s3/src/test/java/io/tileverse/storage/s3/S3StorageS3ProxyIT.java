@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
@@ -64,7 +65,9 @@ class S3StorageS3ProxyIT extends StorageTCK {
                 .withEnv("S3PROXY_IDENTITY", IDENTITY)
                 .withEnv("S3PROXY_CREDENTIAL", CREDENTIAL)
                 .withEnv("S3PROXY_ENDPOINT", "http://0.0.0.0:80")
-                .withEnv("JCLOUDS_PROVIDER", "transient");
+                .withEnv("JCLOUDS_PROVIDER", "transient")
+                // Docker's port proxy accepts connections before s3proxy listens, then closes them unanswered.
+                .waitingFor(Wait.forLogMessage(".*Started .*ServerConnector.*\\n", 1));
         s3proxy.start();
         cache = new S3ClientCache();
     }

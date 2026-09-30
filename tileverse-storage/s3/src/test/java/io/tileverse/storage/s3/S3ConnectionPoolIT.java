@@ -122,7 +122,7 @@ class S3ConnectionPoolIT {
         S3HttpClientSettings settings =
                 new S3HttpClientSettings(POOLED_CONNECTIONS, CONNECTION_TIMEOUT, acquisitionTimeout);
         S3SharedHttpClient sharedHttpClient = new S3SharedHttpClient(settings::newAsyncHttpClient);
-        S3ClientCache cache = new S3ClientCache(sharedHttpClient, () -> settings);
+        S3ClientCache cache = new S3ClientCache(sharedHttpClient, settings::syncHttpClientBuilder);
         URI endpoint = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
         lease = cache.acquire(S3ClientCache.key("us-east-1", endpoint, true, null, null, null, true));
         URI baseUri = URI.create("s3://bucket/");

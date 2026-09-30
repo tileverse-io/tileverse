@@ -23,9 +23,14 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.http.ExecutableHttpRequest;
+import software.amazon.awssdk.http.HttpExecuteRequest;
+import software.amazon.awssdk.http.SdkHttpClient;
 import software.amazon.awssdk.http.async.AsyncExecuteRequest;
 import software.amazon.awssdk.http.async.SdkAsyncHttpClient;
+import software.amazon.awssdk.utils.AttributeMap;
 
 class S3ClientCacheTest {
 
@@ -33,13 +38,23 @@ class S3ClientCacheTest {
     private static final S3ClientCache.Key WEST = S3ClientCache.key("us-west-2", null, true, null, null, null, false);
 
     private final List<CloseCountingHttpClient> httpClients = new ArrayList<>();
+    private final List<CloseCountingSyncHttpClient> syncHttpClients = new ArrayList<>();
 
     private S3ClientCache cacheCountingHttpClients() {
-        return new S3ClientCache(new S3SharedHttpClient(this::newHttpClient));
+        return cacheCountingHttpClients(CloseCountingHttpClient::new);
+    }
+
+    private S3ClientCache cacheCountingHttpClients(Supplier<CloseCountingHttpClient> httpClientFactory) {
+        S3SharedHttpClient sharedHttpClient = new S3SharedHttpClient(() -> newHttpClient(httpClientFactory));
+        return new S3ClientCache(sharedHttpClient, CountingSyncHttpClientBuilder::new);
     }
 
     private SdkAsyncHttpClient newHttpClient() {
-        CloseCountingHttpClient client = new CloseCountingHttpClient();
+        return newHttpClient(CloseCountingHttpClient::new);
+    }
+
+    private SdkAsyncHttpClient newHttpClient(Supplier<CloseCountingHttpClient> httpClientFactory) {
+        CloseCountingHttpClient client = httpClientFactory.get();
         httpClients.add(client);
         return client;
     }
@@ -117,6 +132,38 @@ class S3ClientCacheTest {
     }
 
     @Test
+    void aClientSetFailingToBuildWithAnErrorLeavesNoHttpClientOpen() {
+        S3SharedHttpClient sharedHttpClient = new S3SharedHttpClient(this::newHttpClient);
+        AssertionError failure = new AssertionError("settings failed to load");
+        S3ClientCache cache = new S3ClientCache(sharedHttpClient, () -> {
+            throw failure;
+        });
+
+        assertThatThrownBy(() -> cache.acquire(EAST)).isSameAs(failure);
+
+        assertThat(cache.entryCount()).isZero();
+        assertThat(httpClients)
+                .hasSize(1)
+                .allSatisfy(client -> assertThat(client.closes).isEqualTo(1));
+    }
+
+    @Test
+    void aClientSetFailingAfterItsSyncClientIsBuiltClosesIt() {
+        // the async client names its HTTP client when built, after the sync client
+        S3ClientCache cache = cacheCountingHttpClients(UnnamedHttpClient::new);
+
+        assertThatThrownBy(() -> cache.acquire(EAST)).hasMessage("no name");
+
+        assertThat(syncHttpClients)
+                .singleElement()
+                .satisfies(client -> assertThat(client.closes).isEqualTo(1));
+        assertThat(httpClients)
+                .singleElement()
+                .satisfies(client -> assertThat(client.closes).isEqualTo(1));
+        assertThat(cache.entryCount()).isZero();
+    }
+
+    @Test
     void closingALeaseTwiceKeepsTheHttpClientForTheOtherClientSets() {
         S3ClientCache cache = cacheCountingHttpClients();
         S3ClientCache.Lease east = cache.acquire(EAST);
@@ -128,8 +175,22 @@ class S3ClientCacheTest {
         }
     }
 
+    @Test
+    void aFailingCloseStillForgetsTheClientSet() {
+        IllegalStateException closeFailure = new IllegalStateException("close failed");
+        S3ClientCache cache = cacheCountingHttpClients(() -> new FailingToCloseHttpClient(closeFailure));
+        S3ClientCache.Lease lease = cache.acquire(EAST);
+
+        assertThatThrownBy(lease::close).isSameAs(closeFailure);
+
+        assertThat(syncHttpClients)
+                .singleElement()
+                .satisfies(client -> assertThat(client.closes).isEqualTo(1));
+        assertThat(cache.entryCount()).isZero();
+    }
+
     /** Counts its requests and closes; fails every request, since these tests have no endpoint to reach. */
-    private static final class CloseCountingHttpClient implements SdkAsyncHttpClient {
+    private static class CloseCountingHttpClient implements SdkAsyncHttpClient {
 
         private volatile int requests;
         private int closes;
@@ -140,6 +201,58 @@ class S3ClientCacheTest {
             IllegalStateException failure = new IllegalStateException("no endpoint in this test");
             request.responseHandler().onError(failure);
             return CompletableFuture.failedFuture(failure);
+        }
+
+        @Override
+        public void close() {
+            closes++;
+        }
+    }
+
+    /** Fails when an async S3 client asks for its name while it builds. */
+    private static final class UnnamedHttpClient extends CloseCountingHttpClient {
+
+        @Override
+        public String clientName() {
+            throw new IllegalStateException("no name");
+        }
+    }
+
+    /** Fails every close after counting it. */
+    private static final class FailingToCloseHttpClient extends CloseCountingHttpClient {
+
+        private final RuntimeException closeFailure;
+
+        FailingToCloseHttpClient(RuntimeException closeFailure) {
+            this.closeFailure = closeFailure;
+        }
+
+        @Override
+        public void close() {
+            super.close();
+            throw closeFailure;
+        }
+    }
+
+    /** Builds the HTTP client of a sync S3 client; the S3 client closes it with itself. */
+    private final class CountingSyncHttpClientBuilder implements SdkHttpClient.Builder<CountingSyncHttpClientBuilder> {
+
+        @Override
+        public SdkHttpClient buildWithDefaults(AttributeMap serviceDefaults) {
+            CloseCountingSyncHttpClient client = new CloseCountingSyncHttpClient();
+            syncHttpClients.add(client);
+            return client;
+        }
+    }
+
+    /** Counts its closes; fails every request, since these tests have no endpoint to reach. */
+    private static final class CloseCountingSyncHttpClient implements SdkHttpClient {
+
+        private int closes;
+
+        @Override
+        public ExecutableHttpRequest prepareRequest(HttpExecuteRequest request) {
+            throw new UnsupportedOperationException("no endpoint in this test");
         }
 
         @Override

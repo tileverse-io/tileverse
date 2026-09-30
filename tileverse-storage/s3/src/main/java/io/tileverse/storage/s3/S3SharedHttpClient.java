@@ -21,6 +21,7 @@ import java.util.function.Supplier;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import software.amazon.awssdk.http.async.SdkAsyncHttpClient;
+import software.amazon.awssdk.utils.SdkAutoCloseable;
 
 /**
  * The HTTP client shared by every async S3 client of the process. The first lease builds it, releasing the last lease
@@ -73,7 +74,7 @@ final class S3SharedHttpClient {
     }
 
     /** One holder's share of the client. Closing a lease again releases nothing. */
-    final class Lease implements AutoCloseable {
+    final class Lease implements SdkAutoCloseable {
 
         private final SdkAsyncHttpClient leased;
         private final AtomicBoolean closed = new AtomicBoolean();

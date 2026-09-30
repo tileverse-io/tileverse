@@ -28,6 +28,7 @@ import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
@@ -64,7 +65,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 @Slf4j
 public class S3StorageProvider extends AbstractStorageProvider {
 
-    private final S3ClientCache clientCache = new S3ClientCache();
+    private final S3ClientCache clientCache;
 
     /**
      * Key used as environment variable name to disable this range reader provider
@@ -317,7 +318,13 @@ public class S3StorageProvider extends AbstractStorageProvider {
      * @see AbstractStorageProvider#MEMORY_CACHE_ENABLED
      */
     public S3StorageProvider() {
+        this(new S3ClientCache());
+    }
+
+    /** Creates a provider leasing its clients from {@code clientCache}; tests inspect the cache after an open. */
+    S3StorageProvider(S3ClientCache clientCache) {
         super(true);
+        this.clientCache = Objects.requireNonNull(clientCache, "clientCache");
     }
 
     /**
@@ -437,9 +444,10 @@ public class S3StorageProvider extends AbstractStorageProvider {
     public Storage createStorage(StorageConfig config) {
         URI uri = config.baseUri();
         S3StorageBucketKey ref = S3StorageBucketKey.parse(uri);
-        S3ClientCache.Lease lease = clientCache.acquire(keyFor(config));
         boolean requesterPays = config.getParameter(S3_REQUESTER_PAYS).orElse(false);
         BatchSettings batchSettings = BatchProviderHelper.objectStoreSettings(config);
+        // acquired after resolving the settings: an invalid one must fail the open before a client set is leased
+        S3ClientCache.Lease lease = clientCache.acquire(keyFor(config));
         return new S3Storage(uri, ref, lease, requesterPays, batchSettings);
     }
 

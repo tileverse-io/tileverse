@@ -117,7 +117,7 @@ try (Storage storage = StorageFactory.open(parent, props);
 }
 ```
 
-For full `HttpClient` customization (custom proxy, executor, SSL context, request timeout per call), build the `HttpClient` yourself and pass it through `HttpStorageProvider.open(URI, HttpClient[, HttpAuthentication])`. The returned `Storage` **borrows** the client; closing the `Storage` does NOT close it. The Properties path (`StorageFactory.open(uri, props)`) instead acquires a refcounted lease from `HttpClientCache`, which lets identical configs across multiple `Storage` instances share one underlying client.
+For full `HttpClient` customization (custom proxy, executor, SSL context), build the `HttpClient` yourself and pass it through `HttpStorageProvider.open(URI, HttpClient[, HttpAuthentication])`. The returned `Storage` **borrows** the client; closing the `Storage` does NOT close it. The Properties path (`StorageFactory.open(uri, props)`) instead acquires a refcounted lease from `HttpClientCache`, which lets identical configs across multiple `Storage` instances share one underlying client.
 
 ### Local files
 

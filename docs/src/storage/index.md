@@ -196,7 +196,6 @@ try (Storage storage = StorageFactory.open(URI.create("s3://bucket/data/"))) {
 A handful of backend-specific quirks are documented in the JavaDoc of each provider. The most load-bearing:
 
 - **Local range reads are interruptible, and an interrupt closes the channel for every reader of the file**: a read that starts on a thread whose interrupt flag is already set fails at once, without touching the channel, with a `StorageException` caused by an `InterruptedIOException`, and the flag stays set. A read interrupted midway fails with `ClosedByInterruptException` as the cause and is never retried, while the other readers resume on a fresh channel. Streaming reads and writes through `FileStorage` are not interruptible at all: the JDK marks their channels uninterruptible.
-- **Azure sync SDK does not honor `Thread.interrupt`**: use `WriteOptions.timeout` / `ReadOptions.timeout` for hard time bounds.
 - **S3 Express ETags are random alphanumeric**, not MD5; presigned URLs cap at 5 minutes.
 - **S3 Express list results are not lexicographically ordered** (general S3 GP buckets are).
 - **GCS HNS** detection happens at open via `bucket.getHierarchicalNamespace()`; capabilities adjust accordingly.

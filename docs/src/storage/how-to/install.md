@@ -50,7 +50,7 @@ Include all functionality with a single dependency:
 !!! success "No More Netty Conflicts"
     A major benefit of this library is that the `s3` and `azure` modules can be used together without causing `netty` dependency conflicts.
 
-    Historically, using the AWS and Azure Java SDKs in the same project was challenging because they relied on incompatible versions of Netty. This library solves that problem by using alternative HTTP clients (Apache HttpClient for S3, `java.net.HttpClient` for Azure), removing Netty entirely. You can now build multi-cloud applications without complex dependency management.
+    Historically, using the AWS and Azure Java SDKs in the same project was challenging because they relied on incompatible versions of Netty. This library solves that problem by using alternative HTTP clients (the AWS CRT client for S3, `java.net.http.HttpClient` for Azure), removing Netty entirely. You can build multi-cloud applications without complex dependency management.
 
 ### Individual Modules (Without BOM)
 

@@ -40,8 +40,10 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
@@ -176,12 +178,70 @@ final class FileStorage implements Storage {
         if (!Files.exists(base)) {
             return Stream.empty();
         }
+        if (!spelledAsOnDisk(parsed.prefix())) {
+            // An object store matches a prefix exactly. A case-insensitive filesystem resolves a prefix spelled
+            // differently, and listing under it would accept what every other backend rejects.
+            return Stream.empty();
+        }
         Predicate<String> matcher = parsed.matcher().orElse(k -> true);
+        if (Files.isRegularFile(base)) {
+            if (parsed.prefix().endsWith("/")) {
+                // A prefix ending at a separator asks for a directory's children, and a file has none.
+                return Stream.empty();
+            }
+            // The pattern names this one file. Object stores answer such a pattern by listing that key. Testing
+            // the entry against the pattern keeps a root-named file from answering a glob.
+            StorageEntry entry = toEntry(base, root, false);
+            return matcher.test(entry.key()) ? Stream.of(entry) : Stream.empty();
+        }
         Stream<Path> paths = walk(base, parsed.walkDescendants(), pattern);
         return paths.filter(p -> !p.equals(base))
-                .map(path -> toEntry(path, parsed.walkDescendants()))
+                .map(path -> toEntry(path, root, parsed.walkDescendants()))
                 .filter(Objects::nonNull)
                 .filter(entry -> matcher.test(entry.key()));
+    }
+
+    /**
+     * Whether every component of {@code prefix} is spelled the way the filesystem holds it. Each component is compared
+     * against the names its parent directory reports, which is what a directory read returns and is therefore exact on
+     * a case-insensitive filesystem as well. Nothing is resolved: a symbolic link matches under its own name, and a
+     * component the caller spelled differently matches nothing.
+     *
+     * <p>Verifying the prefix is what lets every listing key be built from {@link #root} directly. The prefix is known
+     * to be spelled correctly and the names below it come from the directory read. Every key therefore names a file the
+     * way it exists on disk.
+     */
+    private boolean spelledAsOnDisk(String prefix) {
+        Path parent = root;
+        for (String component : prefix.split("/")) {
+            if (component.isEmpty()) {
+                continue;
+            }
+            if (!directoryHoldsName(parent, component)) {
+                return false;
+            }
+            parent = parent.resolve(component);
+        }
+        return true;
+    }
+
+    /**
+     * Whether {@code directory} reports an entry named exactly {@code name}. The scan stops at the first match, and it
+     * costs one directory read, which the listing that follows was going to pay anyway.
+     */
+    private static boolean directoryHoldsName(Path directory, String name) {
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(directory)) {
+            for (Path entry : entries) {
+                if (entry.getFileName().toString().equals(name)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (NotDirectoryException e) {
+            return false;
+        } catch (IOException e) {
+            throw new StorageException("Could not read " + directory, e);
+        }
     }
 
     private static Stream<Path> walk(Path base, boolean recursive, String pattern) {
@@ -192,7 +252,7 @@ final class FileStorage implements Storage {
         }
     }
 
-    private StorageEntry toEntry(Path path, boolean recursive) {
+    private static StorageEntry toEntry(Path path, Path root, boolean recursive) {
         String relativeKey = root.relativize(path).toString().replace(File.separatorChar, '/');
         BasicFileAttributes attrs;
         try {

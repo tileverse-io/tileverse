@@ -21,11 +21,13 @@ import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.batch.BatchProviderHelper;
+import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import lombok.NonNull;
@@ -73,7 +75,13 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
      * @see AbstractStorageProvider#MEMORY_CACHE_ENABLED
      */
     public GoogleCloudStorageProvider() {
+        this(new SdkStorageCache());
+    }
+
+    /** Creates a provider leasing its clients from {@code clientCache}; tests inspect the cache after an open. */
+    GoogleCloudStorageProvider(SdkStorageCache clientCache) {
         super(true);
+        this.clientCache = Objects.requireNonNull(clientCache, "clientCache");
     }
 
     /**
@@ -205,7 +213,7 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
             GCS_USER_PROJECT,
             GCS_ENDPOINT);
 
-    private final SdkStorageCache clientCache = new SdkStorageCache();
+    private final SdkStorageCache clientCache;
 
     @Override
     public String getId() {
@@ -277,9 +285,10 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
         URI uri = config.baseUri();
         SdkStorageLocation location = SdkStorageLocation.parse(uri);
         SdkStorageCache.Key key = keyFor(config);
+        BatchSettings batchSettings = BatchProviderHelper.objectStoreSettings(config);
+        // acquired after resolving the settings: an invalid one must fail the open before a client is leased
         SdkStorageCache.Lease lease = clientCache.acquire(key);
-        return new GoogleCloudStorage(
-                uri, location, lease, key.userProject(), BatchProviderHelper.objectStoreSettings(config));
+        return new GoogleCloudStorage(uri, location, lease, key.userProject(), batchSettings);
     }
 
     /**

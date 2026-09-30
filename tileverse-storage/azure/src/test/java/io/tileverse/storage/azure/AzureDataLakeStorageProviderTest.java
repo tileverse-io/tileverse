@@ -16,6 +16,7 @@
 package io.tileverse.storage.azure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import io.tileverse.storage.StorageConfig;
 import org.junit.jupiter.api.Test;
@@ -43,5 +44,22 @@ class AzureDataLakeStorageProviderTest {
         AzureDataLakeStorageProvider p = new AzureDataLakeStorageProvider();
         assertThat(p.canProcess(new StorageConfig("https://acct.blob.core.windows.net/fs/path")))
                 .isFalse();
+    }
+
+    @Test
+    void anAnonymousOpenFailsWithoutKeepingAClient() {
+        AzureClientCache clientCache = new AzureClientCache();
+        AzureDataLakeStorageProvider provider = new AzureDataLakeStorageProvider(clientCache);
+        StorageConfig config = new StorageConfig("https://acct.dfs.core.windows.net/fs/path/")
+                .setParameter(AzureBlobStorageProvider.AZURE_ANONYMOUS, true);
+
+        Throwable failure = catchThrowable(() -> provider.createStorage(config));
+
+        assertThat(clientCache.entryCount())
+                .as("clients kept by the failed open")
+                .isZero();
+        assertThat(failure)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining(AzureBlobStorageProvider.AZURE_ANONYMOUS.key());
     }
 }

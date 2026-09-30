@@ -17,7 +17,6 @@ package io.tileverse.storage.it;
 
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import java.io.IOException;
-import org.testcontainers.containers.Container.ExecResult;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.images.builder.Transferable;

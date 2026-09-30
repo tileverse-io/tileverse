@@ -204,6 +204,8 @@ final class AzureBlobStorage implements Storage {
                 return Optional.empty();
             }
             throw AzureExceptionMapper.map(e, key);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, key);
         }
     }
 
@@ -231,6 +233,8 @@ final class AzureBlobStorage implements Storage {
             log.trace("first-page fetch check, has next: {}", hasNext);
         } catch (HttpResponseException e) {
             throw AzureExceptionMapper.map(e, fullPrefix);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, fullPrefix);
         }
 
         Iterator<BlobItem> wrapped = wrapListIterator(rawItems, fullPrefix);
@@ -261,6 +265,10 @@ final class AzureBlobStorage implements Storage {
                 Map.of());
     }
 
+    /**
+     * Maps the failures of a page fetch, done by {@code hasNext()}. A {@code next()} past the end throws its
+     * {@code NoSuchElementException} unmapped, as required by the Iterator contract.
+     */
     private static <T> Iterator<T> wrapListIterator(Iterator<T> raw, String contextKey) {
         return new Iterator<>() {
             @Override
@@ -269,6 +277,8 @@ final class AzureBlobStorage implements Storage {
                     return raw.hasNext();
                 } catch (HttpResponseException e) {
                     throw AzureExceptionMapper.map(e, contextKey);
+                } catch (RuntimeException e) {
+                    throw AzureExceptionMapper.mapUnexpected(e, contextKey);
                 }
             }
 
@@ -324,18 +334,21 @@ final class AzureBlobStorage implements Storage {
                     Optional.ofNullable(props.getVersionId()),
                     Optional.ofNullable(props.getContentType()),
                     props.getMetadata() == null ? Map.of() : Map.copyOf(props.getMetadata()));
-            return new ReadHandle(new StorageExceptionTranslatingInputStream(stream), metadata);
+            return new ReadHandle(new UncheckedFailureTranslatingInputStream(stream), metadata);
         } catch (BlobStorageException e) {
             throw AzureExceptionMapper.map(e, key);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, key);
         }
     }
 
     /**
-     * Wraps an InputStream so unchecked StorageExceptions raised during read/skip/close are translated to IOException
-     * to satisfy the InputStream JDK contract.
+     * Translates the unchecked failures of read, skip, reset and close, StorageExceptions and SDK failures alike, into
+     * the IOException required by the InputStream contract. Invalid read arguments throw the unchecked exceptions
+     * required by the same contract.
      */
-    private static final class StorageExceptionTranslatingInputStream extends FilterInputStream {
-        StorageExceptionTranslatingInputStream(InputStream in) {
+    private static final class UncheckedFailureTranslatingInputStream extends FilterInputStream {
+        UncheckedFailureTranslatingInputStream(InputStream in) {
             super(in);
         }
 
@@ -343,17 +356,18 @@ final class AzureBlobStorage implements Storage {
         public int read() throws IOException {
             try {
                 return super.read();
-            } catch (StorageException e) {
-                throw new IOException(e);
+            } catch (RuntimeException e) {
+                throw AzureExceptionMapper.mapReadFailure(e);
             }
         }
 
         @Override
         public int read(byte[] b, int off, int len) throws IOException {
+            Objects.checkFromIndexSize(off, len, b.length);
             try {
                 return super.read(b, off, len);
-            } catch (StorageException e) {
-                throw new IOException(e);
+            } catch (RuntimeException e) {
+                throw AzureExceptionMapper.mapReadFailure(e);
             }
         }
 
@@ -361,8 +375,17 @@ final class AzureBlobStorage implements Storage {
         public long skip(long n) throws IOException {
             try {
                 return super.skip(n);
-            } catch (StorageException e) {
-                throw new IOException(e);
+            } catch (RuntimeException e) {
+                throw AzureExceptionMapper.mapReadFailure(e);
+            }
+        }
+
+        @Override
+        public synchronized void reset() throws IOException {
+            try {
+                super.reset();
+            } catch (RuntimeException e) {
+                throw AzureExceptionMapper.mapReadFailure(e);
             }
         }
 
@@ -370,8 +393,8 @@ final class AzureBlobStorage implements Storage {
         public void close() throws IOException {
             try {
                 super.close();
-            } catch (StorageException e) {
-                throw new IOException(e);
+            } catch (RuntimeException e) {
+                throw AzureExceptionMapper.mapReadFailure(e);
             }
         }
     }
@@ -382,11 +405,7 @@ final class AzureBlobStorage implements Storage {
         BlobClient client = blobClient(key);
         BlobParallelUploadOptions opts = new BlobParallelUploadOptions(BinaryData.fromBytes(data));
         applyWriteOptions(opts, options);
-        try {
-            client.uploadWithResponse(opts, null, null);
-        } catch (BlobStorageException e) {
-            throw mapPreconditionOrFail(e, key);
-        }
+        upload(client, opts, key);
         return stat(key).orElseThrow(() -> new StorageException("Wrote key but stat failed: " + key));
     }
 
@@ -398,13 +417,22 @@ final class AzureBlobStorage implements Storage {
             BlobParallelUploadOptions opts = new BlobParallelUploadOptions(in);
             opts.setParallelTransferOptions(new ParallelTransferOptions().setBlockSizeLong((long) (4 * 1024 * 1024)));
             applyWriteOptions(opts, options);
-            client.uploadWithResponse(opts, null, null);
-        } catch (BlobStorageException e) {
-            throw mapPreconditionOrFail(e, key);
+            upload(client, opts, key);
         } catch (IOException e) {
             throw new StorageException("Failed to read source file: " + source, e);
         }
         return stat(key).orElseThrow(() -> new StorageException("Wrote key but stat failed: " + key));
+    }
+
+    /** Only the SDK call runs under the catch-all, leaving a failure of the write options unwrapped. */
+    private void upload(BlobClient client, BlobParallelUploadOptions opts, String key) {
+        try {
+            client.uploadWithResponse(opts, null, null);
+        } catch (BlobStorageException e) {
+            throw mapPreconditionOrFail(e, key);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, key);
+        }
     }
 
     @Override
@@ -443,10 +471,13 @@ final class AzureBlobStorage implements Storage {
     @Override
     public void delete(String key) {
         requireOpen();
+        BlobClient client = blobClient(key);
         try {
-            blobClient(key).deleteIfExists();
+            client.deleteIfExists();
         } catch (BlobStorageException e) {
             throw AzureExceptionMapper.map(e, key);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, key);
         }
     }
 
@@ -460,15 +491,19 @@ final class AzureBlobStorage implements Storage {
         BlobBatchClient batch = batchClient();
         int limit = capabilities.bulkDeleteBatchLimit();
         List<String> blobUrls = new ArrayList<>(limit);
+        String firstKeyOfChunk = null;
         for (String key : keys) {
+            if (blobUrls.isEmpty()) {
+                firstKeyOfChunk = key;
+            }
             blobUrls.add(blobClient(key).getBlobUrl());
             if (blobUrls.size() == limit) {
-                submitDeleteBatch(batch, blobUrls, deleted, didNotExist, failed);
+                submitDeleteBatch(batch, blobUrls, firstKeyOfChunk, deleted, didNotExist, failed);
                 blobUrls.clear();
             }
         }
         if (!blobUrls.isEmpty()) {
-            submitDeleteBatch(batch, blobUrls, deleted, didNotExist, failed);
+            submitDeleteBatch(batch, blobUrls, firstKeyOfChunk, deleted, didNotExist, failed);
         }
         return new DeleteResult(deleted, didNotExist, failed);
     }
@@ -487,12 +522,14 @@ final class AzureBlobStorage implements Storage {
      * Submit one delete batch and reconcile the result. The batch endpoint reports per-blob status codes; the SDK
      * aggregates non-success statuses into {@link BlobBatchStorageException}. We unwrap that exception to populate the
      * three partitions: keys that succeed land in {@code deleted}, 404 Not Found lands in {@code didNotExist}, and
-     * every other per-blob error is recorded in {@code failed}. Other thrown exceptions (e.g. transport failures) fail
-     * the entire chunk.
+     * every other per-blob error is recorded in {@code failed}. Other failures (e.g. transport failures or an
+     * interrupt) end the whole call with a {@link StorageException} naming {@code firstKey}, the first key of the
+     * chunk.
      */
     private void submitDeleteBatch(
             BlobBatchClient batch,
             List<String> blobUrls,
+            String firstKey,
             Set<String> deleted,
             Set<String> didNotExist,
             Map<String, StorageException> failed) {
@@ -519,6 +556,8 @@ final class AzureBlobStorage implements Storage {
                 deleted.remove(key);
                 failed.put(key, AzureExceptionMapper.map(ex, key));
             }
+        } catch (RuntimeException ex) {
+            throw AzureExceptionMapper.mapUnexpected(ex, firstKey);
         }
     }
 
@@ -563,6 +602,8 @@ final class AzureBlobStorage implements Storage {
             target.copyFromUrl(src.getBlobUrl());
         } catch (BlobStorageException e) {
             throw AzureExceptionMapper.map(e, srcKey);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, srcKey);
         }
         return dst.stat(dstKey).orElseThrow(() -> new StorageException("Copy failed for: " + dstKey));
     }

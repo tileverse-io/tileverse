@@ -15,9 +15,9 @@
  */
 package io.tileverse.storage;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -30,7 +30,6 @@ import java.util.OptionalLong;
  * @param ifMatchEtag when present, only writes when the existing object's ETag matches (compare-and-set)
  * @param contentLength optional length hint; required by some backends for streaming put
  * @param disableMultipart when true, forces a single-shot upload (no multipart)
- * @param timeout hard time bound for the operation
  */
 public record WriteOptions(
         Optional<String> contentType,
@@ -38,12 +37,17 @@ public record WriteOptions(
         boolean ifNotExists,
         Optional<String> ifMatchEtag,
         OptionalLong contentLength,
-        boolean disableMultipart,
-        Optional<Duration> timeout) {
+        boolean disableMultipart) {
+
+    public WriteOptions {
+        contentType = Objects.requireNonNullElse(contentType, Optional.empty());
+        userMetadata = (userMetadata == null) ? Map.of() : Map.copyOf(userMetadata);
+        ifMatchEtag = Objects.requireNonNullElse(ifMatchEtag, Optional.empty());
+        contentLength = Objects.requireNonNullElse(contentLength, OptionalLong.empty());
+    }
 
     public static WriteOptions defaults() {
-        return new WriteOptions(
-                Optional.empty(), Map.of(), false, Optional.empty(), OptionalLong.empty(), false, Optional.empty());
+        return new WriteOptions(Optional.empty(), Map.of(), false, Optional.empty(), OptionalLong.empty(), false);
     }
 
     public static Builder builder() {
@@ -57,7 +61,6 @@ public record WriteOptions(
         private Optional<String> ifMatchEtag = Optional.empty();
         private OptionalLong contentLength = OptionalLong.empty();
         private boolean disableMultipart;
-        private Optional<Duration> timeout = Optional.empty();
 
         public Builder contentType(String contentType) {
             this.contentType = Optional.of(contentType);
@@ -94,14 +97,9 @@ public record WriteOptions(
             return this;
         }
 
-        public Builder timeout(Duration timeout) {
-            this.timeout = Optional.of(timeout);
-            return this;
-        }
-
         public WriteOptions build() {
             return new WriteOptions(
-                    contentType, userMetadata, ifNotExists, ifMatchEtag, contentLength, disableMultipart, timeout);
+                    contentType, userMetadata, ifNotExists, ifMatchEtag, contentLength, disableMultipart);
         }
     }
 }

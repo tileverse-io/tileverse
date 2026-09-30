@@ -16,6 +16,7 @@
 package io.tileverse.storage.s3;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.Storage;
@@ -47,6 +48,19 @@ class S3StorageBatchSettingsTest {
     @Test
     void withoutParametersTheObjectStoreDefaultsReachTheReader() throws IOException {
         assertThat(settingsOf(anonymousConfig())).isEqualTo(BatchSettings.objectStoreDefaults());
+    }
+
+    @Test
+    void anInvalidParameterFailsTheOpenWithoutKeepingAClientSet() {
+        S3ClientCache clientCache = new S3ClientCache();
+        S3StorageProvider leasingProvider = new S3StorageProvider(clientCache);
+        StorageConfig config = anonymousConfig().setParameter(BatchProviderHelper.BATCH_MAX_FETCH, 0);
+
+        assertThatThrownBy(() -> leasingProvider.createStorage(config))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxFetchBytes");
+
+        assertThat(clientCache.entryCount()).isZero();
     }
 
     @Test

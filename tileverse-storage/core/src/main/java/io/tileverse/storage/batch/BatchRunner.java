@@ -20,8 +20,10 @@ import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
 import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.RangeRequest;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -35,8 +37,8 @@ import java.util.function.Supplier;
  * <p>The calling thread always works; a plan needing {@code n} workers borrows {@code n - 1} executor threads. A
  * single-fetch plan, or a cap of 1, never resolves the executor supplier. The first failure wins: no new fetch starts
  * once one failed, fetches already in flight drain (blocking I/O is not cancellable), and the recorded failure is
- * rethrown to the caller unchanged. Results written by worker threads are visible to the caller when {@code run}
- * returns.
+ * rethrown to the caller, unchanged when it is a {@link RuntimeException} or an {@link Error}. Results written by
+ * worker threads are visible to the caller when {@code run} returns.
  *
  * <p>The result counts one fetch per planned fetch and, as bytes transferred, what every fetch actually read: the
  * requested bytes plus the merged gaps, short of that only where a fetch ran into EOF.
@@ -79,11 +81,13 @@ public final class BatchRunner {
     /**
      * Runs {@code taskCount} indexed tasks with at most {@code maxConcurrentTasks} running at once, the calling thread
      * included. With one worker the tasks run sequentially on the calling thread and the executor supplier is never
-     * resolved. The first task failure wins: no new task starts once one failed, running tasks drain, and the recorded
-     * failure is rethrown unchanged.
+     * resolved. The first task failure, an {@link Error} included, wins: no new task starts once one failed and running
+     * tasks drain. The recorded failure is then rethrown, unchanged when it is a {@link RuntimeException} or an
+     * {@link Error}; with several workers, a checked exception thrown sneakily by a task comes wrapped in a
+     * {@link CompletionException}.
      *
-     * <p>The supplied executor must not reject submissions (the shared batch executor never does); a rejecting executor
-     * propagates its rejection exception with already-submitted workers left running.
+     * <p>A failure to submit a worker, such as a rejection or an Error raised by a failed thread start, is recorded
+     * like a task failure: the calling thread runs no task and waits for the workers already submitted.
      *
      * @param taskCount how many tasks to run, indexed 0 to taskCount - 1
      * @param task the work, invoked once per index
@@ -103,28 +107,60 @@ public final class BatchRunner {
             return;
         }
         AtomicInteger nextTask = new AtomicInteger();
-        AtomicReference<RuntimeException> failure = new AtomicReference<>();
-        Runnable worker = () -> {
-            int index;
-            while (failure.get() == null && (index = nextTask.getAndIncrement()) < taskCount) {
-                try {
-                    task.accept(index);
-                } catch (RuntimeException taskFailure) {
-                    failure.compareAndSet(null, taskFailure);
-                }
-            }
-        };
-        CompletableFuture<?>[] helpers = new CompletableFuture<?>[workers - 1];
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Runnable worker = () -> runTasks(taskCount, task, nextTask, failure);
         Executor resolved = executor.get();
-        for (int i = 0; i < helpers.length; i++) {
-            helpers[i] = CompletableFuture.runAsync(worker, resolved);
-        }
+        CompletableFuture<Void> helpers = submitHelpers(workers - 1, worker, resolved, failure);
         worker.run();
-        CompletableFuture.allOf(helpers).join();
-        RuntimeException firstFailure = failure.get();
-        if (firstFailure != null) {
-            throw firstFailure;
+        helpers.join();
+        rethrowIfFailed(failure.get());
+    }
+
+    /**
+     * Submits up to {@code count} helper workers, records a failure to submit one like a task failure, and returns a
+     * future completing when every submitted worker finished.
+     */
+    @SuppressWarnings("java:S1181") // an Error must not skip the join on the workers already submitted
+    private static CompletableFuture<Void> submitHelpers(
+            int count, Runnable worker, Executor executor, AtomicReference<Throwable> failure) {
+        List<CompletableFuture<Void>> submitted = new ArrayList<>(count);
+        try {
+            for (int i = 0; i < count; i++) {
+                submitted.add(CompletableFuture.runAsync(worker, executor));
+            }
+        } catch (Throwable submissionFailure) {
+            failure.compareAndSet(null, submissionFailure);
         }
+        CompletableFuture<?>[] submittedWorkers = submitted.toArray(new CompletableFuture<?>[0]);
+        return CompletableFuture.allOf(submittedWorkers);
+    }
+
+    /** Runs tasks until none is left or the batch failed, and records the first task failure instead of throwing it. */
+    @SuppressWarnings("java:S1181") // an Error must not skip the join on helpers still writing caller targets
+    private static void runTasks(
+            int taskCount, IntConsumer task, AtomicInteger nextTask, AtomicReference<Throwable> failure) {
+        int index;
+        while (failure.get() == null && (index = nextTask.getAndIncrement()) < taskCount) {
+            try {
+                task.accept(index);
+            } catch (Throwable taskFailure) {
+                failure.compareAndSet(null, taskFailure);
+            }
+        }
+    }
+
+    private static void rethrowIfFailed(Throwable failure) {
+        if (failure == null) {
+            return;
+        }
+        if (failure instanceof RuntimeException runtimeFailure) {
+            throw runtimeFailure;
+        }
+        if (failure instanceof Error error) {
+            throw error;
+        }
+        // a checked exception thrown sneakily by a task
+        throw new CompletionException(failure);
     }
 
     /** Runs one fetch, records its slices' counts and returns how many bytes the fetch read. */

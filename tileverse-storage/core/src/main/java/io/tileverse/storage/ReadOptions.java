@@ -15,7 +15,6 @@
  */
 package io.tileverse.storage;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -24,48 +23,38 @@ import java.util.OptionalLong;
  * Options for {@link Storage#read(String, ReadOptions)}.
  *
  * @param offset byte offset to start reading from (0 = start of object)
- * @param length number of bytes to read; empty means read to EOF
+ * @param length number of bytes to read, at least one; empty means read to EOF. Use {@link Storage#stat(String)} for
+ *     the metadata alone
  * @param ifMatchEtag conditional read: only return content when the object's ETag matches
  * @param versionId read a specific prior object version; backend errors if versioning is disabled. Empty means latest
  *     version
  * @param ifModifiedSince conditional read: only return content modified since this instant
- * @param timeout hard time bound for the operation; honored by backends that respect it (notably Azure sync SDK does
- *     not respect Thread.interrupt - use timeout for hard limits)
  */
 public record ReadOptions(
         long offset,
         OptionalLong length,
         Optional<String> ifMatchEtag,
         Optional<String> versionId,
-        Optional<Instant> ifModifiedSince,
-        Optional<Duration> timeout) {
+        Optional<Instant> ifModifiedSince) {
 
     public ReadOptions {
         if (offset < 0L) {
             throw new IllegalArgumentException("offset must be >= 0");
         }
+        if (length.isPresent() && length.getAsLong() <= 0L) {
+            throw new IllegalArgumentException("length must be positive");
+        }
     }
 
     public static ReadOptions defaults() {
-        return new ReadOptions(
-                0L, OptionalLong.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+        return new ReadOptions(0L, OptionalLong.empty(), Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     public static ReadOptions fromOffset(long offset) {
-        return new ReadOptions(
-                offset, OptionalLong.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+        return new ReadOptions(offset, OptionalLong.empty(), Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     public static ReadOptions range(long offset, long length) {
-        if (length < 0L) {
-            throw new IllegalArgumentException("length must be >= 0");
-        }
-        return new ReadOptions(
-                offset,
-                OptionalLong.of(length),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty());
+        return new ReadOptions(offset, OptionalLong.of(length), Optional.empty(), Optional.empty(), Optional.empty());
     }
 }

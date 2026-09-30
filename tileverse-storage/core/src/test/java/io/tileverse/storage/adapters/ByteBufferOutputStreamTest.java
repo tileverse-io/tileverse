@@ -17,12 +17,18 @@ package io.tileverse.storage.adapters;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ReadOnlyBufferException;
+import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 class ByteBufferOutputStreamTest {
 
@@ -124,6 +130,81 @@ class ByteBufferOutputStreamTest {
                 .hasCauseInstanceOf(ReadOnlyBufferException.class);
 
         assertThat(stream.bytesWritten()).isZero();
+    }
+
+    @Test
+    void rejectsWritesAfterCloseWithoutTouchingTheBuffer() throws IOException {
+        ByteBuffer target = ByteBuffer.allocate(16);
+        ByteBufferOutputStream stream = new ByteBufferOutputStream(target, 8);
+        stream.write(new byte[] {1, 2, 3}, 0, 3);
+
+        stream.close();
+
+        assertThatThrownBy(() -> stream.write(new byte[] {4, 5}, 0, 2))
+                .isInstanceOf(ByteBufferSinkException.class)
+                .hasMessageContaining("closed");
+        assertThatThrownBy(() -> stream.write(6))
+                .isInstanceOf(ByteBufferSinkException.class)
+                .hasMessageContaining("closed");
+        assertThat(target.position()).isEqualTo(3);
+        assertThat(contents(target, 0, 16)).containsExactly(1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        assertThat(stream.bytesWritten()).isEqualTo(3);
+    }
+
+    @Test
+    @Timeout(value = 20, unit = TimeUnit.SECONDS)
+    void closeWaitsForAWriteInProgress() throws Exception {
+        ByteBuffer target = ByteBuffer.allocate(16);
+        ByteBufferOutputStream stream = new ByteBufferOutputStream(target, 8);
+        CountDownLatch writeStarted = new CountDownLatch(1);
+        CountDownLatch finishWrite = new CountDownLatch(1);
+        FutureTask<Void> writeInProgress =
+                new FutureTask<>(() -> writeHoldingTheStream(stream, writeStarted, finishWrite));
+        Thread writer = new Thread(writeInProgress, "write-in-progress");
+        Thread closer = new Thread(stream::close, "close");
+
+        writer.start();
+        try {
+            writeStarted.await();
+            closer.start();
+            await().atMost(Duration.ofSeconds(5)).until(() -> closer.getState() == Thread.State.BLOCKED);
+        } finally {
+            finishWrite.countDown();
+            writer.join();
+            closer.join();
+        }
+
+        writeInProgress.get();
+        assertThat(contents(target, 0, 3)).containsExactly(1, 2, 3);
+        assertThatThrownBy(() -> stream.write(4))
+                .isInstanceOf(ByteBufferSinkException.class)
+                .hasMessageContaining("closed");
+        assertThat(target.position()).isEqualTo(3);
+        assertThat(contents(target, 3, 13)).containsOnly(0);
+    }
+
+    /** Holds the stream's monitor from start to end, as a write on a transport thread does. */
+    private static Void writeHoldingTheStream(
+            ByteBufferOutputStream stream, CountDownLatch writeStarted, CountDownLatch finishWrite)
+            throws IOException, InterruptedException {
+        synchronized (stream) {
+            writeStarted.countDown();
+            finishWrite.await();
+            stream.write(new byte[] {1, 2, 3}, 0, 3);
+        }
+        return null;
+    }
+
+    @Test
+    void closeIsIdempotent() {
+        ByteBuffer target = ByteBuffer.allocate(4);
+        ByteBufferOutputStream stream = new ByteBufferOutputStream(target, 4);
+
+        stream.close();
+        stream.close();
+
+        assertThatThrownBy(() -> stream.write(1)).isInstanceOf(ByteBufferSinkException.class);
+        assertThat(target.position()).isZero();
     }
 
     @Test

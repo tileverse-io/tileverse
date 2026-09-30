@@ -24,6 +24,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.tileverse.storage.AccessDeniedException;
 import io.tileverse.storage.BatchReadResult;
@@ -31,15 +32,21 @@ import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.StorageException;
 import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.batch.CoalescingPolicy;
+import io.tileverse.storage.s3.ByteBufferAsyncResponseTransformer.Result;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -47,11 +54,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
 import software.amazon.awssdk.core.async.AsyncResponseTransformer;
+import software.amazon.awssdk.core.exception.ApiCallTimeoutException;
 import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.RequestPayer;
 import software.amazon.awssdk.services.s3.model.S3Exception;
@@ -328,6 +339,83 @@ class S3RangeReaderBatchTest {
         }
     }
 
+    /**
+     * A completion admits the next fetch on the completing thread. An {@link Error} launching that fetch, such as an
+     * exhausted heap, must still end the call, with that same Error.
+     */
+    @Test
+    void anErrorLaunchingAFetchAdmittedByACompletionEndsTheCallWithThatError() {
+        OutOfMemoryError heapExhausted = new OutOfMemoryError("Java heap space");
+        object.holdingAsyncResponses().throwingOnAsyncCall(2, heapExhausted).installAsync(asyncClient);
+        S3RangeReader bounded = readerBoundedTo(1);
+        List<RangeRequest> requests = farApartRanges(2);
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<BatchReadResult> batch = caller.submit(() -> bounded.readRanges(requests));
+            await().atMost(Duration.ofSeconds(5)).until(() -> object.heldResponses() == 1);
+
+            object.releaseOne();
+
+            assertThatThrownBy(() -> batch.get(5, TimeUnit.SECONDS))
+                    .isInstanceOf(ExecutionException.class)
+                    .cause()
+                    .isSameAs(heapExhausted);
+        } finally {
+            caller.shutdownNow();
+        }
+    }
+
+    /**
+     * An {@link Error} launching a fetch on the calling thread follows the target contract too: the call throws only
+     * once the fetches in flight have completed, and no fetch writes a target after the call threw.
+     */
+    @Test
+    void anErrorLaunchingAFetchIsThrownOnlyAfterTheFetchesInFlightCompleted() {
+        OutOfMemoryError heapExhausted = new OutOfMemoryError("Java heap space");
+        object.holdingAsyncResponses().throwingOnAsyncCall(2, heapExhausted).installAsync(asyncClient);
+        S3RangeReader bounded = readerBoundedTo(2);
+        List<RangeRequest> requests = farApartRanges(2);
+        ByteBuffer heldTarget = requests.get(0).target();
+        AtomicInteger heldTargetPositionWhenTheCallEnded = new AtomicInteger(-1);
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<BatchReadResult> batch = caller.submit(() -> {
+                try {
+                    return bounded.readRanges(requests);
+                } finally {
+                    heldTargetPositionWhenTheCallEnded.set(heldTarget.position());
+                }
+            });
+            await().atMost(Duration.ofSeconds(5)).until(() -> object.heldResponses() == 1);
+            assertThatThrownBy(() -> batch.get(200, TimeUnit.MILLISECONDS))
+                    .as("the call waits for the fetch in flight")
+                    .isInstanceOf(TimeoutException.class);
+
+            object.releaseOne();
+
+            assertThatThrownBy(() -> batch.get(5, TimeUnit.SECONDS))
+                    .isInstanceOf(ExecutionException.class)
+                    .cause()
+                    .isSameAs(heapExhausted);
+            assertThat(heldTarget.position())
+                    .as("no fetch writes a target after the call threw")
+                    .isEqualTo(heldTargetPositionWhenTheCallEnded.get());
+        } finally {
+            caller.shutdownNow();
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void anErrorFailingAFetchIsRethrownUnchanged() {
+        OutOfMemoryError heapExhausted = new OutOfMemoryError("Java heap space");
+        when(asyncClient.getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class)))
+                .thenReturn(CompletableFuture.failedFuture(heapExhausted));
+        List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {1_000_000, 100}});
+
+        assertThatThrownBy(() -> reader.readRanges(requests)).isSameAs(heapExhausted);
+    }
+
     @Test
     void anUnboundedReaderLaunchesEveryFetchAtOnce() throws Exception {
         object.holdingAsyncResponses().installAsync(asyncClient);
@@ -370,6 +458,92 @@ class S3RangeReaderBatchTest {
         assertContents(requests, counts(result));
         assertThat(result.fetches()).isEqualTo(fetchCount);
         assertThat(object.asyncPeakInFlight()).isEqualTo(1);
+    }
+
+    /**
+     * The SDK's retry stage starts a scheduled attempt without checking whether the call already failed. A retry
+     * scheduled before the API call timeout can stream its body after the batch throws, and that body must not reach
+     * the caller's target.
+     */
+    @Test
+    void aDirectFetchTimingOutWritesNothingToTheTargetAfterTheCallThrows() {
+        TimedOutCall call = new TimedOutCall(asyncClient);
+        ByteBuffer target = ByteBuffer.allocate(100);
+        List<RangeRequest> requests = List.of(RangeRequest.of(0, 100, target));
+
+        assertThatThrownBy(() -> reader.readRanges(requests)).isInstanceOf(StorageException.class);
+        call.startTheScheduledRetry(100);
+
+        assertThat(contents(target, 0, 100)).containsOnly((byte) 0);
+    }
+
+    /** Same as the direct fetch: the body of the retry must not reach the scratch returned to the pool. */
+    @Test
+    void aMergedFetchTimingOutWritesNothingToItsScratchAfterTheCallThrows() {
+        TimedOutCall call = new TimedOutCall(asyncClient);
+        List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {1_000, 100}});
+
+        assertThatThrownBy(() -> reader.readRanges(requests)).isInstanceOf(StorageException.class);
+        call.startTheScheduledRetry(1_100);
+
+        assertThat(call.bytesWrittenByTheRetry()).isZero();
+    }
+
+    /**
+     * Answers every async GET as the SDK does for a call hitting its {@code apiCallTimeout}: it fails the current
+     * attempt through the transformer, then fails the returned future. A retry scheduled earlier can still start a
+     * fresh attempt afterwards.
+     */
+    private static final class TimedOutCall {
+        private final AtomicReference<ByteBufferAsyncResponseTransformer> transformer = new AtomicReference<>();
+        private final AtomicReference<CompletableFuture<Result>> retry = new AtomicReference<>();
+
+        @SuppressWarnings("unchecked")
+        TimedOutCall(S3AsyncClient client) {
+            when(client.getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class)))
+                    .thenAnswer(invocation -> timeOut(invocation.getArgument(1)));
+        }
+
+        private CompletableFuture<Result> timeOut(ByteBufferAsyncResponseTransformer body) {
+            transformer.set(body);
+            ApiCallTimeoutException timeout = ApiCallTimeoutException.create(1_000);
+            body.prepare();
+            body.exceptionOccurred(timeout);
+            return CompletableFuture.failedFuture(timeout);
+        }
+
+        /** Starts a fresh attempt, delivers {@code length} non-zero bytes as its body, and ends it. */
+        void startTheScheduledRetry(int length) {
+            ByteBufferAsyncResponseTransformer body = transformer.get();
+            retry.set(body.prepare());
+            body.onResponse(GetObjectResponse.builder().build());
+            body.onStream(subscriber -> deliver(subscriber, length));
+        }
+
+        private static void deliver(Subscriber<? super ByteBuffer> subscriber, int length) {
+            byte[] late = new byte[length];
+            Arrays.fill(late, (byte) -1);
+            subscriber.onSubscribe(new IdleSubscription());
+            subscriber.onNext(ByteBuffer.wrap(late));
+            subscriber.onComplete();
+        }
+
+        int bytesWrittenByTheRetry() {
+            return retry.get().join().bytesWritten();
+        }
+    }
+
+    /** Leaves emission to the test. */
+    private static final class IdleSubscription implements Subscription {
+        @Override
+        public void request(long demand) {
+            // the test emits explicitly
+        }
+
+        @Override
+        public void cancel() {
+            // nothing to stop
+        }
     }
 
     private S3RangeReader readerBoundedTo(int maxInFlightFetches) {

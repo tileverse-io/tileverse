@@ -82,16 +82,17 @@ final class MultipartByteRangesParser {
      * Advances to the next part, skipping whatever the caller left of the current body.
      *
      * @return the next part's {@code Content-Range}, or null after the closing boundary or the end of the stream
-     * @throws IOException on stream failure or a part without a usable {@code Content-Range}
+     * @throws IOException on stream failure, a stream ending inside the current body, or a part without a usable
+     *     {@code Content-Range}
      */
     ContentRange.Bytes nextPart() throws IOException {
         if (finished) {
             return null;
         }
+        skipBody(remainingInPart);
         if (delimiter == null) {
             return nextSinglePart();
         }
-        skipBody(remainingInPart);
         String line;
         while ((line = readLine()) != null) {
             if (line.equals(delimiter + "--")) {

@@ -227,10 +227,11 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
      * async client, the batched-read template runs the same plan on the shared executor through the sync client.
      *
      * <p>A fetch answered 416 (entirely past EOF) reports 0 bytes for its entries, exactly like {@code readRange}; any
-     * other failure stops the admission of new fetches and aborts the whole call once the fetches in flight have
-     * completed. Worst-case amplification: the requested bytes plus the gaps the object-store policy merges, at most
-     * {@link CoalescingPolicy#maxFetchBytes()} per fetch. Peak heap scratch of one call is the in-flight bound times
-     * that cap, since a merged fetch borrows scratch for its whole extent.
+     * other failure, an {@link Error} included, stops the admission of new fetches and aborts the whole call once the
+     * fetches in flight have completed, rethrowing an Error unchanged. Worst-case amplification: the requested bytes
+     * plus the gaps merged by the object-store policy, at most {@link CoalescingPolicy#maxFetchBytes()} per fetch. Peak
+     * heap scratch of one call is the in-flight bound times that cap, since a merged fetch borrows scratch for its
+     * whole extent.
      *
      * <p>A CRT-based async client rejects the responses of an endpoint omitting the {@code ETag} header. From its first
      * rejection on, batches read through the template path. See {@link EndpointEtags}. The result counts one fetch per
@@ -354,13 +355,14 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
             }
         }
 
+        @SuppressWarnings("java:S1181") // an Error must still settle the batch, or run waits forever
         private void launch(int index) {
             // must be called under the monitor
             inFlight++;
             CompletableFuture<Integer> launched;
             try {
                 launched = fetchAsync(fetches.get(index));
-            } catch (RuntimeException failedToLaunch) {
+            } catch (Throwable failedToLaunch) {
                 completed(index, 0, failedToLaunch);
                 return;
             }
@@ -389,7 +391,8 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
          * Issues one async GET for a fetch, streaming the body into its destination as chunks arrive: the caller's
          * target for a direct fetch, pooled heap scratch scattered to its requests for a merged one. A 416 leaves the
          * fetch's entries at 0 and completes normally; every other failure completes the future exceptionally with the
-         * mapped storage exception.
+         * mapped storage exception, or with the {@link Error} unmapped. A failure before the GET goes out, an Error
+         * included, is thrown.
          */
         private CompletableFuture<Integer> fetchAsync(PlannedFetch fetch) {
             if (fetch.isDirect()) {
@@ -423,13 +426,19 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
         }
     }
 
-    /** Streams a direct fetch into its single requester's target. */
+    /**
+     * Streams a direct fetch into its single requester's target. The completion closes the body before anything else:
+     * no writer may touch the target after the batch returns.
+     */
     @SuppressWarnings("java:S3398") // per-fetch I/O of the reader; the launcher only sequences it
     private CompletableFuture<Integer> fetchDirect(PlannedFetch fetch, List<RangeRequest> requests, int[] counts) {
         int requestIndex = fetch.slices().get(0).requestIndex();
         ByteBuffer target = requests.get(requestIndex).target();
         int start = target.position();
-        return streamFetch(fetch, target).handle((streamed, failure) -> {
+        ByteBufferAsyncResponseTransformer body =
+                new ByteBufferAsyncResponseTransformer(target, fetch.range().length());
+        return streamFetch(fetch, body).handle((streamed, failure) -> {
+            body.close();
             if (failure != null) {
                 return failedFetch(failure);
             }
@@ -440,19 +449,28 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
         });
     }
 
-    /** Streams a merged fetch into pooled scratch and scatters it to its requesters. */
-    @SuppressWarnings("java:S3398") // per-fetch I/O of the reader; the launcher only sequences it
+    /**
+     * Streams a merged fetch into pooled scratch and scatters it to its requesters. The completion closes the body
+     * before anything else: no writer may touch the scratch once it goes back to the pool.
+     */
+    @SuppressWarnings({
+        "java:S3398", // per-fetch I/O of the reader; the launcher only sequences it
+        "java:S1181" // the scratch returns to the pool on any failure before the GET goes out, an Error included
+    })
     private CompletableFuture<Integer> fetchAndScatter(PlannedFetch fetch, List<RangeRequest> requests, int[] counts) {
         PooledByteBuffer pooled = ByteBufferPool.heapBuffer(fetch.range().length());
         ByteBuffer scratch = pooled.buffer();
+        ByteBufferAsyncResponseTransformer body;
         CompletableFuture<ByteBufferAsyncResponseTransformer.Result> attempt;
         try {
-            attempt = streamFetch(fetch, scratch);
-        } catch (RuntimeException synchronousFailure) {
+            body = new ByteBufferAsyncResponseTransformer(scratch, fetch.range().length());
+            attempt = streamFetch(fetch, body);
+        } catch (Throwable synchronousFailure) {
             pooled.close();
             throw synchronousFailure;
         }
         return attempt.handle((streamed, failure) -> {
+            body.close();
             try (pooled) {
                 if (failure != null) {
                     return failedFetch(failure);
@@ -465,15 +483,16 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     private CompletableFuture<ByteBufferAsyncResponseTransformer.Result> streamFetch(
-            PlannedFetch fetch, ByteBuffer destination) {
+            PlannedFetch fetch, ByteBufferAsyncResponseTransformer body) {
         GetObjectRequest request =
                 buildGetRequest(fetch.range().offset(), fetch.range().length());
-        ByteBufferAsyncResponseTransformer body = new ByteBufferAsyncResponseTransformer(
-                destination, fetch.range().length());
         return asyncClient.getObject(request, body);
     }
 
-    /** Completes a 416 fetch normally with its entries left at 0 and no bytes; rethrows every other failure mapped. */
+    /**
+     * Completes a 416 fetch normally with its entries left at 0 and no bytes; rethrows every other failure mapped, and
+     * an {@link Error} as itself.
+     */
     private Integer failedFetch(Throwable failure) {
         StorageException translated = unwrapBatchFailure(failure);
         if (translated instanceof RangeNotSatisfiableException) {
@@ -482,12 +501,18 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
         throw translated;
     }
 
-    /** Unwraps async completion wrappers and maps SDK failures onto the storage exception hierarchy. */
+    /**
+     * Unwraps async completion wrappers and maps SDK failures onto the storage exception hierarchy. An {@link Error} is
+     * rethrown as itself.
+     */
     private StorageException unwrapBatchFailure(Throwable failure) {
         Throwable cause = failure;
         while ((cause instanceof CompletionException || cause instanceof ExecutionException)
                 && cause.getCause() != null) {
             cause = cause.getCause();
+        }
+        if (cause instanceof Error error) {
+            throw error;
         }
         if (cause instanceof StorageException storageFailure) {
             return storageFailure;

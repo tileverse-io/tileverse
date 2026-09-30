@@ -27,6 +27,7 @@ import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -308,13 +309,21 @@ public class HttpStorageProvider extends AbstractStorageProvider {
             HTTP_AUTH_API_KEY,
             HTTP_AUTH_API_KEY_VALUE_PREFIX);
 
+    private final HttpClientCache clientCache;
+
     /**
      * Creates a new HttpRangeReaderProvider with support for caching parameters
      *
      * @see AbstractStorageProvider#MEMORY_CACHE_ENABLED
      */
     public HttpStorageProvider() {
+        this(HttpClientCache.INSTANCE);
+    }
+
+    /** Creates a provider leasing its clients from {@code clientCache}; tests inspect the cache after an open. */
+    HttpStorageProvider(HttpClientCache clientCache) {
         super(true);
+        this.clientCache = Objects.requireNonNull(clientCache, "clientCache");
     }
 
     @Override
@@ -377,9 +386,11 @@ public class HttpStorageProvider extends AbstractStorageProvider {
     @Override
     public Storage createStorage(StorageConfig config) {
         URI uri = config.baseUri();
-        HttpClientCache.Lease lease = HttpClientCache.INSTANCE.acquire(cacheKeyFor(config));
         BatchSettings batchSettings = BatchProviderHelper.httpSettings(config);
-        return new HttpStorage(uri, new LeasedHttpHandle(lease), buildAuthentication(config), batchSettings);
+        HttpAuthentication authentication = buildAuthentication(config);
+        // acquired after resolving the settings: an invalid one must fail the open before a client is leased
+        HttpClientCache.Lease lease = clientCache.acquire(cacheKeyFor(config));
+        return new HttpStorage(uri, new LeasedHttpHandle(lease), authentication, batchSettings);
     }
 
     private static HttpClientCache.Key cacheKeyFor(StorageConfig config) {

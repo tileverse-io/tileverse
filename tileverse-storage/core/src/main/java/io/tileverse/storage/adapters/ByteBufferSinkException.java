@@ -19,8 +19,8 @@ import java.io.IOException;
 
 /**
  * Signals that a {@link ByteBufferOutputStream} could not take the bytes offered to it: the producer sent more than the
- * accepted count, or the target buffer refused the write. Neither is an I/O failure of the producer, and retrying the
- * download does not help.
+ * accepted count or wrote after the stream was closed, or the target buffer refused the write. None is an I/O failure
+ * of the producer, and retrying the download does not help.
  *
  * <p>Checked, because the sink lives inside SDK download pipelines that propagate an {@link IOException} raised by the
  * stream but may drop anything else, leaving the read to wait out its timeout.

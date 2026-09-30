@@ -58,6 +58,7 @@ final class S3ObjectStub {
     private final int chunkSize;
     private final AtomicInteger attempts = new AtomicInteger();
     private final AtomicInteger aborts = new AtomicInteger();
+    private final AtomicInteger asyncCalls = new AtomicInteger();
     private final AtomicInteger asyncInFlight = new AtomicInteger();
     private final AtomicInteger asyncPeakInFlight = new AtomicInteger();
     private final Deque<HeldResponse> held = new ArrayDeque<>();
@@ -65,6 +66,8 @@ final class S3ObjectStub {
     private int bodyFailuresLeft;
     private boolean withoutEtag;
     private boolean holdingAsyncResponses;
+    private int throwingAsyncCall;
+    private Error asyncCallError;
 
     /** An async request whose response the stub keeps back until the test releases or fails it. */
     private record HeldResponse(
@@ -96,6 +99,13 @@ final class S3ObjectStub {
     /** Keeps every async response back until {@link #releaseOne()} or {@link #failOne} lets it through. */
     S3ObjectStub holdingAsyncResponses() {
         this.holdingAsyncResponses = true;
+        return this;
+    }
+
+    /** Makes async {@code getObject} call number {@code call} throw {@code error} instead of answering. */
+    S3ObjectStub throwingOnAsyncCall(int call, Error error) {
+        this.throwingAsyncCall = call;
+        this.asyncCallError = error;
         return this;
     }
 
@@ -193,6 +203,9 @@ final class S3ObjectStub {
 
     private CompletableFuture<Object> serveAsync(
             GetObjectRequest request, AsyncResponseTransformer<GetObjectResponse, Object> transformer) {
+        if (asyncCalls.incrementAndGet() == throwingAsyncCall) {
+            throw asyncCallError;
+        }
         attempts.incrementAndGet();
         int outstanding = asyncInFlight.incrementAndGet();
         asyncPeakInFlight.accumulateAndGet(outstanding, Math::max);

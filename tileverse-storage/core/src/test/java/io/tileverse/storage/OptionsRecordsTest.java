@@ -18,8 +18,10 @@ package io.tileverse.storage;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -43,6 +45,25 @@ class OptionsRecordsTest {
     @Test
     void readOptionsRangeRejectsNegativeOffset() {
         assertThatThrownBy(() -> ReadOptions.range(-1L, 16L)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void readOptionsRangeRejectsZeroLength() {
+        assertThatThrownBy(() -> ReadOptions.range(0L, 0L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("length must be positive");
+    }
+
+    @Test
+    void readOptionsRejectAPresentZeroLength() {
+        OptionalLong zero = OptionalLong.of(0L);
+        Optional<String> noEtag = Optional.empty();
+        Optional<String> noVersion = Optional.empty();
+        Optional<Instant> noDate = Optional.empty();
+
+        assertThatThrownBy(() -> new ReadOptions(0L, zero, noEtag, noVersion, noDate))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("length must be positive");
     }
 
     @Test
@@ -70,7 +91,6 @@ class OptionsRecordsTest {
                 .ifMatchEtag("etag-1")
                 .contentLength(1024L)
                 .disableMultipart(true)
-                .timeout(Duration.ofSeconds(30))
                 .build();
         assertThat(o.contentType()).contains("application/octet-stream");
         assertThat(o.userMetadata()).containsEntry("source", "test");
@@ -78,7 +98,24 @@ class OptionsRecordsTest {
         assertThat(o.ifMatchEtag()).contains("etag-1");
         assertThat(o.contentLength()).hasValue(1024L);
         assertThat(o.disableMultipart()).isTrue();
-        assertThat(o.timeout()).contains(Duration.ofSeconds(30));
+    }
+
+    @Test
+    void writeOptionsIgnoreBuilderChangesAfterBuild() {
+        WriteOptions.Builder builder = WriteOptions.builder().addMetadata("k1", "v1");
+        WriteOptions built = builder.build();
+
+        builder.addMetadata("k2", "v2");
+
+        assertThat(built.userMetadata()).containsExactly(Map.entry("k1", "v1"));
+    }
+
+    @Test
+    void writeOptionsMetadataCannotBeChanged() {
+        WriteOptions built = WriteOptions.builder().addMetadata("k1", "v1").build();
+        Map<String, String> metadata = built.userMetadata();
+
+        assertThatThrownBy(() -> metadata.put("k3", "v3")).isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test

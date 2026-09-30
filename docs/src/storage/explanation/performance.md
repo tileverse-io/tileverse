@@ -68,9 +68,13 @@ We primarily measure:
     *   *GCS / Azure*: up to `storage.batch.max-in-flight-fetches` planned fetches run
         concurrently on a shared executor (virtual threads on Java 21+, a bounded daemon pool on
         Java 17).
-    *   *HTTP*: one `Range: bytes=a-b,c-d,...` request per batch, parsed as a streaming
-        `multipart/byteranges` body; servers without multi-range support fall back to one
-        GET per fetch.
+    *   *HTTP*: a batch of several planned fetches travels as multi-range GETs
+        (`Range: bytes=a-b,c-d,...`) of at most 100 non-overlapping fetches each, up to
+        `storage.batch.max-in-flight-fetches` GETs at once, each answer parsed as it streams (a
+        single-range answer holding the group is streamed with gap skips). A fetch missing from
+        an answer or cut short gets a GET of its own. With merging disabled, or once a server
+        answers a multi-range GET with a 200 or with a single range leaving out bytes requested
+        inside the object, the reader sends one GET per fetch.
     *   *Local files*: sequential exact reads; merging buys nothing at zero round-trip cost.
 *   **Tuning** (per `Storage`): `storage.batch.max-gap` (bytes; negative disables merging),
     `storage.batch.max-fetch` (bytes) and `storage.batch.max-in-flight-fetches` (0 removes the
@@ -89,5 +93,5 @@ We primarily measure:
 
 ## Cloud Considerations
 
-*   **AWS S3**: The `S3RangeReader` uses the Apache HTTP client backend instead of Netty to reduce classpath conflicts. We tune the connection pool size to match standard concurrency levels (default 50).
+*   **AWS S3**: The `S3RangeReader` uses the AWS CRT HTTP client, with no Netty on the classpath. Each HTTP client pools up to 50 connections per host by default.
 *   **Latency**: S3 Time-to-First-Byte (TTFB) is typically 50-100ms. Caching is mandatory for interactive performance.

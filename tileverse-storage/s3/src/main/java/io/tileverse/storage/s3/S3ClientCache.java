@@ -16,6 +16,8 @@
 package io.tileverse.storage.s3;
 
 import java.net.URI;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -33,6 +35,7 @@ import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
 import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
+import software.amazon.awssdk.http.SdkHttpClient;
 import software.amazon.awssdk.http.async.SdkAsyncHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
@@ -42,6 +45,7 @@ import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.transfer.s3.S3TransferManager;
+import software.amazon.awssdk.utils.SdkAutoCloseable;
 
 /**
  * Per-provider reference-counted cache of {@link S3Client}, {@link S3AsyncClient}, {@link S3TransferManager}, and
@@ -121,23 +125,22 @@ final class S3ClientCache {
 
         @Override
         public void close() {
-            if (closed.compareAndSet(false, true)) {
-                release(key);
+            if (!closed.compareAndSet(false, true)) {
+                return;
+            }
+            boolean lastLease = release();
+            if (lastLease) {
+                entry.closeAll();
             }
         }
 
-        private void release(Key key) {
-            entries.compute(key, (k, e) -> {
-                if (e == null) {
-                    return null;
-                }
-                int refCount = e.refCount.decrementAndGet();
-                if (refCount <= 0) {
-                    e.closeAll();
-                    return null;
-                }
-                return e;
-            });
+        /**
+         * Returns whether this lease held the last reference. The entry then leaves the cache before it closes: a
+         * failing close must not leave a closed client set in the cache.
+         */
+        private boolean release() {
+            Entry remaining = entries.computeIfPresent(key, (k, e) -> e.refCount.decrementAndGet() > 0 ? e : null);
+            return remaining == null;
         }
     }
 
@@ -146,48 +149,67 @@ final class S3ClientCache {
         final S3AsyncClient asyncClient;
         final S3TransferManager transferManager;
         final S3Presigner presigner;
-        final S3SharedHttpClient.Lease httpClientLease;
+        final OpenedClients opened;
         final AtomicInteger refCount = new AtomicInteger();
         final EndpointEtags endpointEtags = new EndpointEtags();
 
-        Entry(
-                S3Client sync,
-                S3AsyncClient async,
-                S3TransferManager tm,
-                S3Presigner ps,
-                S3SharedHttpClient.Lease httpClientLease) {
+        Entry(S3Client sync, S3AsyncClient async, S3TransferManager tm, S3Presigner ps, OpenedClients opened) {
             this.syncClient = sync;
             this.asyncClient = async;
             this.transferManager = tm;
             this.presigner = ps;
-            this.httpClientLease = httpClientLease;
+            this.opened = opened;
         }
 
         void closeAll() {
-            transferManager.close();
-            asyncClient.close();
-            httpClientLease.close();
-            syncClient.close();
-            presigner.close();
+            opened.closeAll();
+        }
+    }
+
+    /**
+     * The clients of one client set and its HTTP client lease, closed in the reverse order of their opening. The lease
+     * closes last, after the async client running on it.
+     */
+    private static final class OpenedClients {
+
+        private final Deque<SdkAutoCloseable> clients = new ArrayDeque<>();
+
+        <T extends SdkAutoCloseable> T add(T client) {
+            clients.push(client);
+            return client;
+        }
+
+        void closeAll() {
+            for (SdkAutoCloseable client : clients) {
+                client.close();
+            }
         }
     }
 
     private final Map<Key, Entry> entries = new ConcurrentHashMap<>();
     private final S3SharedHttpClient sharedHttpClient;
-    private final Supplier<S3HttpClientSettings> httpClientSettings;
+    private final Supplier<SdkHttpClient.Builder<?>> syncHttpClientBuilders;
 
     S3ClientCache() {
         this(S3SharedHttpClient.INSTANCE);
     }
 
     S3ClientCache(S3SharedHttpClient sharedHttpClient) {
-        this(sharedHttpClient, S3HttpClientSettings::ofProcess);
+        this(sharedHttpClient, S3ClientCache::syncHttpClientBuilderOfTheProcess);
     }
 
-    /** @param httpClientSettings read for the sync HTTP client of every client set, when the set is built */
-    S3ClientCache(S3SharedHttpClient sharedHttpClient, Supplier<S3HttpClientSettings> httpClientSettings) {
+    /**
+     * @param syncHttpClientBuilders supplies the HTTP client builder of the sync client, each time a client set is
+     *     built
+     */
+    S3ClientCache(S3SharedHttpClient sharedHttpClient, Supplier<SdkHttpClient.Builder<?>> syncHttpClientBuilders) {
         this.sharedHttpClient = Objects.requireNonNull(sharedHttpClient, "sharedHttpClient");
-        this.httpClientSettings = Objects.requireNonNull(httpClientSettings, "httpClientSettings");
+        this.syncHttpClientBuilders = Objects.requireNonNull(syncHttpClientBuilders, "syncHttpClientBuilders");
+    }
+
+    private static SdkHttpClient.Builder<?> syncHttpClientBuilderOfTheProcess() {
+        S3HttpClientSettings settings = S3HttpClientSettings.ofProcess();
+        return settings.syncHttpClientBuilder();
     }
 
     int entryCount() {
@@ -204,17 +226,25 @@ final class S3ClientCache {
     }
 
     private Entry build(Key key) {
-        S3SharedHttpClient.Lease httpClientLease = sharedHttpClient.acquire();
+        OpenedClients opened = new OpenedClients();
+        boolean built = false;
         try {
-            return build(key, httpClientLease, httpClientSettings.get());
-        } catch (RuntimeException failure) {
-            httpClientLease.close();
-            throw failure;
+            S3SharedHttpClient.Lease httpClientLease = opened.add(sharedHttpClient.acquire());
+            Entry entry = build(key, httpClientLease, syncHttpClientBuilders.get(), opened);
+            built = true;
+            return entry;
+        } finally {
+            if (!built) {
+                opened.closeAll();
+            }
         }
     }
 
     private static Entry build(
-            Key key, S3SharedHttpClient.Lease httpClientLease, S3HttpClientSettings httpClientSettings) {
+            Key key,
+            S3SharedHttpClient.Lease httpClientLease,
+            SdkHttpClient.Builder<?> syncHttpClientBuilder,
+            OpenedClients opened) {
         S3Configuration syncConfig = S3Configuration.builder()
                 .pathStyleAccessEnabled(key.forcePathStyle())
                 .build();
@@ -228,7 +258,7 @@ final class S3ClientCache {
         // requires them or the caller opts in via GetObjectRequest#checksumMode, while plain
         // reads and writes stay compatible with emulators.
         S3ClientBuilder syncBuilder = S3Client.builder()
-                .httpClientBuilder(httpClientSettings.syncHttpClientBuilder())
+                .httpClientBuilder(syncHttpClientBuilder)
                 .region(Region.of(key.region()))
                 .serviceConfiguration(syncConfig)
                 .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
@@ -277,10 +307,12 @@ final class S3ClientCache {
         asyncBuilder.credentialsProvider(creds);
         presignerBuilder.credentialsProvider(creds);
 
-        S3Client sync = syncBuilder.build();
-        S3AsyncClient async = asyncBuilder.build();
-        S3TransferManager tm = S3TransferManager.builder().s3Client(async).build();
-        S3Presigner ps = presignerBuilder.build();
-        return new Entry(sync, async, tm, ps, httpClientLease);
+        S3Client sync = opened.add(syncBuilder.build());
+        S3AsyncClient async = opened.add(asyncBuilder.build());
+        S3TransferManager.Builder transferManagerBuilder =
+                S3TransferManager.builder().s3Client(async);
+        S3TransferManager tm = opened.add(transferManagerBuilder.build());
+        S3Presigner ps = opened.add(presignerBuilder.build());
+        return new Entry(sync, async, tm, ps, opened);
     }
 }

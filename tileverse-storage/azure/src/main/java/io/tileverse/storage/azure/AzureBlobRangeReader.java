@@ -18,13 +18,15 @@ package io.tileverse.storage.azure;
 import static java.util.Objects.requireNonNull;
 
 import com.azure.core.http.HttpHeaderName;
-import com.azure.core.http.rest.Response;
-import com.azure.core.util.Context;
 import com.azure.storage.blob.BlobClient;
+import com.azure.storage.blob.models.BlobDownloadAsyncResponse;
+import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRange;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.models.DownloadRetryOptions;
+import com.azure.storage.blob.specialized.BlobAsyncClientBase;
+import com.azure.storage.blob.specialized.SpecializedBlobClientBuilder;
 import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.ContentRange;
 import io.tileverse.storage.RangeReader;
@@ -33,12 +35,16 @@ import io.tileverse.storage.adapters.ByteBufferOutputStream;
 import io.tileverse.storage.adapters.ByteBufferSinkException;
 import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.batch.CoalescingPolicy;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 /**
  * A RangeReader implementation that reads from an Azure Blob Storage container.
@@ -56,6 +62,7 @@ import lombok.extern.slf4j.Slf4j;
 class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
 
     private final BlobClient blobClient;
+    private final BlobAsyncClientBase asyncClient;
     private final BatchSettings batchSettings;
     private final AtomicReference<OptionalLong> contentLength = new AtomicReference<>();
 
@@ -79,8 +86,30 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
      * @param batchSettings the merge policy and in-flight bound for batched reads
      */
     AzureBlobRangeReader(BlobClient blobClient, BatchSettings batchSettings) {
+        this(blobClient, asyncClientFor(blobClient), batchSettings);
+    }
+
+    /**
+     * Creates a new AzureBlobRangeReader sending its requests through {@code asyncClient}.
+     *
+     * @param blobClient The Azure Blob client for the blob URL
+     * @param asyncClient the asynchronous client for the same blob
+     * @param batchSettings the merge policy and in-flight bound for batched reads
+     */
+    AzureBlobRangeReader(BlobClient blobClient, BlobAsyncClientBase asyncClient, BatchSettings batchSettings) {
         this.blobClient = requireNonNull(blobClient, "BlobClient cannot be null");
+        this.asyncClient = requireNonNull(asyncClient, "asynchronous client cannot be null");
         this.batchSettings = requireNonNull(batchSettings, "BatchSettings cannot be null");
+    }
+
+    /**
+     * Blocking on a call of the asynchronous client cancels it on interrupt and keeps the interrupt status; the
+     * synchronous client leaves a download running and clears the status of an interrupted properties request. The
+     * builder reuses the pipeline of {@code blobClient} and sends no request.
+     */
+    private static BlobAsyncClientBase asyncClientFor(BlobClient blobClient) {
+        requireNonNull(blobClient, "BlobClient cannot be null");
+        return new SpecializedBlobClientBuilder().blobClient(blobClient).buildBlockBlobAsyncClient();
     }
 
     BatchSettings batchSettings() {
@@ -88,20 +117,24 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     /**
-     * Streams the range body straight into {@code target} through a {@link ByteBufferOutputStream} handed to the SDK's
-     * download, keeping the per-download retry options. A sink failure, a body longer than requested or a target
-     * refusing the write, is reported as a {@link StorageException} with the sink's message.
+     * Streams the range body straight into {@code target} through a {@link ByteBufferOutputStream}, keeping the
+     * per-download retry options. A sink failure, a body longer than requested or a target refusing the write, is
+     * reported as a {@link StorageException} with the sink's message.
+     *
+     * <p>An interrupt cancels the download, and nothing resumes it. The sink is closed before this method returns or
+     * throws: it rejects a chunk already in flight instead of changing a target already handed back to the caller.
+     *
+     * <p>The download runs without a deadline on the whole range, because a large range on a slow link outlasts any
+     * fixed one. Each stalled download attempt ends on the HTTP client's read timeout between chunks, 60 seconds by
+     * default, unless a caller-supplied client disables it.
      */
     @Override
     protected int readRangeNoFlip(long offset, int actualLength, ByteBuffer target) {
-        try {
+        try (ByteBufferOutputStream sink = new ByteBufferOutputStream(target, actualLength)) {
             final long start = System.nanoTime();
-            BlobRange range = new BlobRange(offset, (long) actualLength);
-            DownloadRetryOptions options = new DownloadRetryOptions().setMaxRetryRequests(3);
-            ByteBufferOutputStream sink = new ByteBufferOutputStream(target, actualLength);
 
-            Response<Void> response = blobClient.downloadStreamWithResponse(
-                    sink, range, options, new BlobRequestConditions(), false, Duration.ofSeconds(60), Context.NONE);
+            BlobDownloadAsyncResponse response =
+                    download(offset, actualLength, sink).block();
 
             if (log.isDebugEnabled()) {
                 long end = System.nanoTime();
@@ -129,6 +162,34 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
                 throw new StorageException(sinkFailure.get().getMessage(), e);
             }
             throw new StorageException("Failed to read range from blob: " + e.getMessage(), e);
+        }
+    }
+
+    private Mono<BlobDownloadAsyncResponse> download(long offset, int length, ByteBufferOutputStream sink) {
+        BlobRange range = new BlobRange(offset, (long) length);
+        DownloadRetryOptions options = new DownloadRetryOptions().setMaxRetryRequests(3);
+        Mono<BlobDownloadAsyncResponse> pending =
+                asyncClient.downloadStreamWithResponse(range, options, new BlobRequestConditions(), false);
+        return pending.flatMap(response -> writeBody(response, sink));
+    }
+
+    private static Mono<BlobDownloadAsyncResponse> writeBody(
+            BlobDownloadAsyncResponse response, ByteBufferOutputStream sink) {
+        Flux<ByteBuffer> body = response.getValue();
+        return body.doOnNext(chunk -> writeChunk(chunk, sink)).then(Mono.just(response));
+    }
+
+    private static void writeChunk(ByteBuffer chunk, ByteBufferOutputStream sink) {
+        try {
+            if (chunk.hasArray()) {
+                sink.write(chunk.array(), chunk.arrayOffset() + chunk.position(), chunk.remaining());
+            } else {
+                byte[] copy = new byte[chunk.remaining()];
+                chunk.duplicate().get(copy);
+                sink.write(copy, 0, copy.length);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
@@ -164,13 +225,22 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     private OptionalLong fetchSize() {
+        BlobProperties properties = fetchProperties().orElseThrow(this::noPropertiesReturned);
+        return OptionalLong.of(properties.getBlobSize());
+    }
+
+    private Optional<BlobProperties> fetchProperties() {
         try {
-            return OptionalLong.of(blobClient.getProperties().getBlobSize());
+            return asyncClient.getProperties().blockOptional();
         } catch (BlobStorageException e) {
             throw AzureExceptionMapper.map(e, blobClient.getBlobUrl());
         } catch (RuntimeException e) {
             throw new StorageException("Failed to get blob size: " + e.getMessage(), e);
         }
+    }
+
+    private StorageException noPropertiesReturned() {
+        return new StorageException("Failed to get blob size: no properties returned for " + blobClient.getBlobUrl());
     }
 
     @Override

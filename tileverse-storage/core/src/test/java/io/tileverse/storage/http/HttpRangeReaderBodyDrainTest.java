@@ -22,6 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import io.tileverse.storage.StorageException;
+import io.tileverse.storage.TransientStorageException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -61,13 +62,47 @@ class HttpRangeReaderBodyDrainTest {
     }
 
     /** A reader whose next GET answers 206 with {@code content} as the body and no Content-Length header. */
-    @SuppressWarnings("unchecked")
     private HttpRangeReader readerServing(byte[] content) throws IOException, InterruptedException {
+        Map<String, List<String>> headers = Map.of("Content-Range", List.of(contentRange(content)));
+        return readerServing(content, headers);
+    }
+
+    /** A reader whose next GET answers 206 with {@code content} as the body and a Content-Length header of its size. */
+    private HttpRangeReader readerDeclaringTheLengthOf(byte[] content) throws IOException, InterruptedException {
+        Map<String, List<String>> headers = Map.of(
+                "Content-Range", List.of(contentRange(content)),
+                "Content-Length", List.of(String.valueOf(content.length)));
+        return readerServing(content, headers);
+    }
+
+    /** A reader whose next GET answers 206 with {@code content} as the whole object and no Content-Length header. */
+    private HttpRangeReader readerServingTheWholeObject(byte[] content) throws IOException, InterruptedException {
+        String wholeObject = "bytes 0-" + (content.length - 1) + "/" + content.length;
+        Map<String, List<String>> headers = Map.of("Content-Range", List.of(wholeObject));
+        return readerServing(content, headers);
+    }
+
+    /**
+     * A reader whose next GET answers 206 with {@code content} as the body and a Content-Range of {@code declared}
+     * bytes.
+     */
+    private HttpRangeReader readerDeclaringARangeOf(int declared, byte[] content)
+            throws IOException, InterruptedException {
+        String declaredRange = "bytes 0-" + (declared - 1) + "/1000";
+        Map<String, List<String>> headers = Map.of("Content-Range", List.of(declaredRange));
+        return readerServing(content, headers);
+    }
+
+    private static String contentRange(byte[] content) {
+        return "bytes 0-" + (content.length - 1) + "/1000";
+    }
+
+    @SuppressWarnings("unchecked")
+    private HttpRangeReader readerServing(byte[] content, Map<String, List<String>> headers)
+            throws IOException, InterruptedException {
         body = new EndTrackingInputStream(content);
         HttpResponse<InputStream> response = mock(HttpResponse.class);
         when(response.statusCode()).thenReturn(206);
-        Map<String, List<String>> headers =
-                Map.of("Content-Range", List.of("bytes 0-" + (content.length - 1) + "/1000"));
         when(response.headers()).thenReturn(HttpHeaders.of(headers, (name, value) -> true));
         when(response.body()).thenReturn(body);
         when(httpClient.<InputStream>send(any(HttpRequest.class), any(BodyHandler.class)))
@@ -98,8 +133,19 @@ class HttpRangeReaderBodyDrainTest {
     }
 
     @Test
+    void aDeclaredLengthLongerThanRequestedIsAStorageErrorAndClosesTheBody() throws IOException, InterruptedException {
+        HttpRangeReader reader = readerDeclaringTheLengthOf(bytes(15));
+        ByteBuffer target = ByteBuffer.allocate(32);
+
+        assertThatThrownBy(() -> reader.readRange(0, 10, target))
+                .isInstanceOf(StorageException.class)
+                .hasMessageContaining("more data than requested");
+        assertThat(body.closed()).as("body closed").isTrue();
+    }
+
+    @Test
     void aBodyEndingEarlyYieldsTheShortCount() throws IOException, InterruptedException {
-        HttpRangeReader reader = readerServing(bytes(4));
+        HttpRangeReader reader = readerServingTheWholeObject(bytes(4));
         ByteBuffer target = ByteBuffer.allocate(10);
 
         int read = reader.readRange(0, 10, target);
@@ -107,5 +153,14 @@ class HttpRangeReaderBodyDrainTest {
         assertThat(read).isEqualTo(4);
         assertThat(target.position()).isEqualTo(4);
         assertThat(body.closedBeforeEnd()).isFalse();
+    }
+
+    @Test
+    void aBodyEndingBeforeItsContentRangeIsATransientErrorAfterTheDrain() throws IOException, InterruptedException {
+        HttpRangeReader reader = readerDeclaringARangeOf(10, bytes(4));
+        ByteBuffer target = ByteBuffer.allocate(10);
+
+        assertThatThrownBy(() -> reader.readRange(0, 10, target)).isInstanceOf(TransientStorageException.class);
+        assertThat(body.closedBeforeEnd()).as("closed before the end").isFalse();
     }
 }

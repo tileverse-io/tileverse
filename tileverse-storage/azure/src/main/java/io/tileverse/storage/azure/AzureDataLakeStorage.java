@@ -187,6 +187,8 @@ final class AzureDataLakeStorage implements Storage {
                 return Optional.empty();
             }
             throw AzureExceptionMapper.map(e, key);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, key);
         }
     }
 
@@ -214,6 +216,8 @@ final class AzureDataLakeStorage implements Storage {
             log.trace("first-page fetch check, has next: {}", hasNext);
         } catch (DataLakeStorageException e) {
             throw AzureExceptionMapper.map(e, fullPrefix);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, fullPrefix);
         }
 
         Iterator<PathItem> wrapped = wrapDataLakeListIterator(rawItems, fullPrefix);
@@ -241,6 +245,10 @@ final class AzureDataLakeStorage implements Storage {
                 Map.of());
     }
 
+    /**
+     * Maps the failures of a page fetch, done by {@code hasNext()}. A {@code next()} past the end throws its
+     * {@code NoSuchElementException} unmapped, as required by the Iterator contract.
+     */
     private static <T> Iterator<T> wrapDataLakeListIterator(Iterator<T> raw, String contextKey) {
         return new Iterator<>() {
             @Override
@@ -249,6 +257,8 @@ final class AzureDataLakeStorage implements Storage {
                     return raw.hasNext();
                 } catch (DataLakeStorageException e) {
                     throw AzureExceptionMapper.map(e, contextKey);
+                } catch (RuntimeException e) {
+                    throw AzureExceptionMapper.mapUnexpected(e, contextKey);
                 }
             }
 
@@ -309,18 +319,21 @@ final class AzureDataLakeStorage implements Storage {
                     Optional.empty(),
                     Optional.ofNullable(props.getContentType()),
                     props.getMetadata() == null ? Map.of() : Map.copyOf(props.getMetadata()));
-            return new ReadHandle(new StorageExceptionTranslatingInputStream(result.getInputStream()), metadata);
+            return new ReadHandle(new UncheckedFailureTranslatingInputStream(result.getInputStream()), metadata);
         } catch (DataLakeStorageException e) {
             throw AzureExceptionMapper.map(e, key);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, key);
         }
     }
 
     /**
-     * Wraps an InputStream so unchecked StorageExceptions raised during read/skip/close are translated to IOException
-     * to satisfy the InputStream JDK contract.
+     * Translates the unchecked failures of read, skip, reset and close, StorageExceptions and SDK failures alike, into
+     * the IOException required by the InputStream contract. Invalid read arguments throw the unchecked exceptions
+     * required by the same contract.
      */
-    private static final class StorageExceptionTranslatingInputStream extends FilterInputStream {
-        StorageExceptionTranslatingInputStream(InputStream in) {
+    private static final class UncheckedFailureTranslatingInputStream extends FilterInputStream {
+        UncheckedFailureTranslatingInputStream(InputStream in) {
             super(in);
         }
 
@@ -328,17 +341,18 @@ final class AzureDataLakeStorage implements Storage {
         public int read() throws IOException {
             try {
                 return super.read();
-            } catch (StorageException e) {
-                throw new IOException(e);
+            } catch (RuntimeException e) {
+                throw AzureExceptionMapper.mapReadFailure(e);
             }
         }
 
         @Override
         public int read(byte[] b, int off, int len) throws IOException {
+            Objects.checkFromIndexSize(off, len, b.length);
             try {
                 return super.read(b, off, len);
-            } catch (StorageException e) {
-                throw new IOException(e);
+            } catch (RuntimeException e) {
+                throw AzureExceptionMapper.mapReadFailure(e);
             }
         }
 
@@ -346,8 +360,17 @@ final class AzureDataLakeStorage implements Storage {
         public long skip(long n) throws IOException {
             try {
                 return super.skip(n);
-            } catch (StorageException e) {
-                throw new IOException(e);
+            } catch (RuntimeException e) {
+                throw AzureExceptionMapper.mapReadFailure(e);
+            }
+        }
+
+        @Override
+        public synchronized void reset() throws IOException {
+            try {
+                super.reset();
+            } catch (RuntimeException e) {
+                throw AzureExceptionMapper.mapReadFailure(e);
             }
         }
 
@@ -355,8 +378,8 @@ final class AzureDataLakeStorage implements Storage {
         public void close() throws IOException {
             try {
                 super.close();
-            } catch (StorageException e) {
-                throw new IOException(e);
+            } catch (RuntimeException e) {
+                throw AzureExceptionMapper.mapReadFailure(e);
             }
         }
     }
@@ -365,7 +388,7 @@ final class AzureDataLakeStorage implements Storage {
     public StorageEntry.File put(String key, byte[] data, WriteOptions options) {
         requireOpen();
         DataLakeFileClient fc = fileClient(key);
-        if (options.ifNotExists() && fc.exists().booleanValue()) {
+        if (options.ifNotExists() && exists(fc, key)) {
             throw new PreconditionFailedException("Key already exists: " + key);
         }
         try {
@@ -373,6 +396,8 @@ final class AzureDataLakeStorage implements Storage {
             applyPostWrite(fc, options);
         } catch (DataLakeStorageException e) {
             throw AzureExceptionMapper.map(e, key);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, key);
         }
         return stat(key).orElseThrow(() -> new StorageException("Wrote key but stat failed: " + key));
     }
@@ -381,7 +406,7 @@ final class AzureDataLakeStorage implements Storage {
     public StorageEntry.File put(String key, Path source, WriteOptions options) {
         requireOpen();
         DataLakeFileClient fc = fileClient(key);
-        if (options.ifNotExists() && fc.exists().booleanValue()) {
+        if (options.ifNotExists() && exists(fc, key)) {
             throw new PreconditionFailedException("Key already exists: " + key);
         }
         try {
@@ -389,8 +414,20 @@ final class AzureDataLakeStorage implements Storage {
             applyPostWrite(fc, options);
         } catch (DataLakeStorageException e) {
             throw AzureExceptionMapper.map(e, key);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, key);
         }
         return stat(key).orElseThrow(() -> new StorageException("Wrote key but stat failed: " + key));
+    }
+
+    private static boolean exists(DataLakeFileClient fc, String key) {
+        try {
+            return fc.exists().booleanValue();
+        } catch (DataLakeStorageException e) {
+            throw AzureExceptionMapper.map(e, key);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, key);
+        }
     }
 
     private static void applyPostWrite(DataLakeFileClient fc, WriteOptions options) {
@@ -413,10 +450,13 @@ final class AzureDataLakeStorage implements Storage {
     @Override
     public void delete(String key) {
         requireOpen();
+        DataLakeFileClient fc = fileClient(key);
         try {
-            fileClient(key).deleteIfExists();
+            fc.deleteIfExists();
         } catch (DataLakeStorageException e) {
             throw AzureExceptionMapper.map(e, key);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, key);
         }
     }
 
@@ -437,6 +477,8 @@ final class AzureDataLakeStorage implements Storage {
                 }
             } catch (DataLakeStorageException e) {
                 failed.put(key, AzureExceptionMapper.map(e, key));
+            } catch (RuntimeException e) {
+                throw AzureExceptionMapper.mapUnexpected(e, key);
             }
         }
         return new DeleteResult(deleted, didNotExist, failed);
@@ -445,32 +487,43 @@ final class AzureDataLakeStorage implements Storage {
     @Override
     public StorageEntry.File copy(String srcKey, String dstKey, CopyOptions options) {
         requireOpen();
-        Storage.requireSafeKey(srcKey);
-        Storage.requireSafeKey(dstKey);
-        // DataLake SDK does not expose a server-side copy primitive; fall through to the
-        // parallel blob endpoint which supports CopyFromUrl on the same data plane.
-        if (options.ifNotExistsAtDestination() && stat(dstKey).isPresent()) {
-            throw new PreconditionFailedException("Destination already exists: " + dstKey);
-        }
-        BlobContainerClient blobContainer = handle.blobServiceClient().getBlobContainerClient(location.container());
-        BlobClient srcBlob = blobContainer.getBlobClient(location.resolve(srcKey));
-        BlobClient dstBlob = blobContainer.getBlobClient(location.resolve(dstKey));
-        try {
-            dstBlob.copyFromUrl(srcBlob.getBlobUrl());
-        } catch (BlobStorageException e) {
-            throw AzureExceptionMapper.map(e, srcKey);
-        }
-        return stat(dstKey).orElseThrow(() -> new StorageException("Copy failed for: " + dstKey));
+        return copyInternal(srcKey, this, dstKey, options);
     }
 
     @Override
     public StorageEntry.File copy(String srcKey, Storage dst, String dstKey, CopyOptions options) {
         requireOpen();
-        if (!(dst instanceof AzureDataLakeStorage)) {
+        if (!(dst instanceof AzureDataLakeStorage other)) {
             throw new UnsupportedCapabilityException("cross-backend copy from AzureDataLakeStorage to "
                     + dst.getClass().getSimpleName());
         }
-        return copy(srcKey, dstKey, options);
+        return copyInternal(srcKey, other, dstKey, options);
+    }
+
+    private StorageEntry.File copyInternal(
+            String srcKey, AzureDataLakeStorage dst, String dstKey, CopyOptions options) {
+        Storage.requireSafeKey(srcKey);
+        Storage.requireSafeKey(dstKey);
+        // DataLake SDK does not expose a server-side copy primitive; fall through to the
+        // parallel blob endpoint which supports CopyFromUrl on the same data plane.
+        if (options.ifNotExistsAtDestination() && dst.stat(dstKey).isPresent()) {
+            throw new PreconditionFailedException("Destination already exists: " + dstKey);
+        }
+        BlobClient srcBlob = blobClient(srcKey);
+        BlobClient dstBlob = dst.blobClient(dstKey);
+        try {
+            dstBlob.copyFromUrl(srcBlob.getBlobUrl());
+        } catch (BlobStorageException e) {
+            throw AzureExceptionMapper.map(e, srcKey);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, srcKey);
+        }
+        return dst.stat(dstKey).orElseThrow(() -> new StorageException("Copy failed for: " + dstKey));
+    }
+
+    private BlobClient blobClient(String key) {
+        BlobContainerClient blobContainer = handle.blobServiceClient().getBlobContainerClient(location.container());
+        return blobContainer.getBlobClient(location.resolve(key));
     }
 
     @Override
@@ -489,6 +542,8 @@ final class AzureDataLakeStorage implements Storage {
                 throw new NotFoundException("Source not found: " + srcKey, e);
             }
             throw AzureExceptionMapper.map(e, srcKey);
+        } catch (RuntimeException e) {
+            throw AzureExceptionMapper.mapUnexpected(e, srcKey);
         }
         return stat(dstKey).orElseThrow(() -> new StorageException("Move failed for: " + dstKey));
     }

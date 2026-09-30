@@ -24,6 +24,7 @@ import static io.tileverse.storage.http.HttpStorageProvider.HTTP_AUTH_USERNAME;
 import static io.tileverse.storage.http.HttpStorageProvider.HTTP_CONNECTION_TIMEOUT_MILLIS;
 import static io.tileverse.storage.http.HttpStorageProvider.HTTP_TRUST_ALL_SSL_CERTIFICATES;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.batch.BatchProviderHelper;
@@ -83,6 +84,21 @@ class HttpStorageProviderTest {
         try (HttpRangeReader reader = (HttpRangeReader) storage.openRangeReader("data.bin")) {
             assertThat(reader.batchSettings()).isEqualTo(BatchSettings.httpDefaults());
         }
+    }
+
+    @Test
+    void anInvalidParameterFailsTheOpenWithoutKeepingAClient() {
+        HttpClientCache clientCache = new HttpClientCache();
+        HttpStorageProvider leasingProvider = new HttpStorageProvider(clientCache);
+        Properties props = new Properties();
+        props.setProperty(BatchProviderHelper.BATCH_MAX_FETCH.key(), "0");
+        StorageConfig config = createConfig(props);
+
+        assertThatThrownBy(() -> leasingProvider.createStorage(config))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxFetchBytes");
+
+        assertThat(clientCache.entryCount()).isZero();
     }
 
     @Test

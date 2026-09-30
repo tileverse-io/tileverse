@@ -362,7 +362,7 @@ public interface Storage extends Closeable {
      * reads from multiple threads. Use {@code openRangeReader} when you need random access.
      *
      * @param key key relative to {@link #baseUri()}
-     * @param options offset, length, conditional-read headers, version selection, and timeout
+     * @param options offset, length, conditional-read headers, and version selection
      * @return an open {@code ReadHandle} that the caller MUST close
      * @throws NotFoundException if no object exists at the key
      * @throws RangeNotSatisfiableException if {@code options.offset()} exceeds the object size
@@ -372,8 +372,7 @@ public interface Storage extends Closeable {
     ReadHandle read(String key, ReadOptions options);
 
     /**
-     * Convenience overload: read with {@link ReadOptions#defaults()} (full object, no conditional headers, no caller
-     * timeout - empty timeout falls through to the SDK / backend default).
+     * Convenience overload: read with {@link ReadOptions#defaults()} (full object, no conditional headers).
      *
      * @param key key relative to {@link #baseUri()}
      * @return an open ReadHandle that the caller MUST close
@@ -498,8 +497,8 @@ public interface Storage extends Closeable {
     /**
      * Generate a presigned PUT URL that allows uploading the object at {@code key} without further authentication. The
      * {@code options} parameter constrains what the uploader is allowed to write (for example, content type and user
-     * metadata). Streaming knobs such as {@code disableMultipart}, {@code timeout}, and {@code contentLength} are not
-     * in scope here; they govern client-side upload behavior and cannot be embedded in a URL signature.
+     * metadata). Streaming knobs such as {@code disableMultipart} and {@code contentLength} are not in scope here; they
+     * govern client-side upload behavior and cannot be embedded in a URL signature.
      *
      * @param key key relative to {@link #baseUri()}
      * @param ttl how long the URL remains valid; must not exceed {@link StorageCapabilities#maxPresignTtl()}

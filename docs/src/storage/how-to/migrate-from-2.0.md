@@ -45,10 +45,10 @@ pass-through reader; the constructors keep aligning the whole file.
 caller-provided buffers. Both decorators propagate batches: the cache forwards only its misses
 (as one call), the aligner quantizes in-region entries to deduplicated blocks. Backends merge
 nearby ranges into shared fetches and run them in parallel (S3 on the async client, GCS
-and Azure on a shared executor, HTTP as one `multipart/byteranges` request with a per-fetch
-fallback). If you maintain a delegating RangeReader decorator, override readRanges to forward
-the batch to the delegate; a wrapper that does not forward it silently degrades batches to the
-sequential per-range default.
+and Azure on a shared executor, HTTP as multi-range GETs of up to 100 fetches
+each, with a per-fetch fallback). If you maintain a delegating RangeReader decorator, override
+readRanges to forward the batch to the delegate; a wrapper that does not forward it silently
+degrades batches to the sequential per-range default.
 
 `readRanges` now returns a `BatchReadResult` instead of an `int[]`: `bytesRead(i)` holds what
 the array entry held, and `fetches()`, `bytesTransferred()` and `bytesFromCache()` report what

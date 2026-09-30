@@ -245,6 +245,27 @@ class FileStorageTest {
             }
         }
 
+        @Test
+        void listsPastASymbolicLinkToAMissingFile(@TempDir Path tmp) throws IOException {
+            Files.writeString(tmp.resolve("real.parquet"), "r");
+            Files.createSymbolicLink(tmp.resolve("broken.parquet"), tmp.resolve("gone.parquet"));
+
+            try (Storage storage = new FileStorage(tmp)) {
+                assertThat(keys(storage, "*.parquet")).containsExactly("real.parquet");
+            }
+        }
+
+        @Test
+        void walksPastASymbolicLinkToAMissingFile(@TempDir Path tmp) throws IOException {
+            Files.createDirectories(tmp.resolve("data"));
+            Files.writeString(tmp.resolve("data/real.parquet"), "r");
+            Files.createSymbolicLink(tmp.resolve("data/broken.parquet"), tmp.resolve("data/gone.parquet"));
+
+            try (Storage storage = new FileStorage(tmp)) {
+                assertThat(keys(storage, "**/*.parquet")).containsExactly("data/real.parquet");
+            }
+        }
+
         private List<String> keys(Storage storage, String pattern) {
             try (Stream<StorageEntry> entries = storage.list(pattern)) {
                 return entries.filter(entry -> entry instanceof StorageEntry.File)

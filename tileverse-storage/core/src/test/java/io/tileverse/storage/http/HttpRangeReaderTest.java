@@ -29,9 +29,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
+import io.tileverse.storage.StorageException;
+import io.tileverse.storage.TransientStorageException;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -43,10 +46,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /** Comprehensive tests for HttpRangeReader using WireMock. */
 @Slf4j
@@ -54,10 +61,14 @@ class HttpRangeReaderTest {
 
     private static final String TEST_PATH = "/test-pmtiles";
     private static final byte[] TEST_DATA = createTestData(100_000); // 100KB of test data
+    private static final String LAST_MODIFIED = "Tue, 29 Sep 2026 10:00:00 GMT";
+    private static final String LATER_LAST_MODIFIED = "Tue, 29 Sep 2026 11:00:00 GMT";
 
+    // Loopback only: a wildcard socket may share its port with an IPv4 listener of another process, and that
+    // listener then receives the requests.
     @RegisterExtension
     WireMockExtension wm = WireMockExtension.newInstance()
-            .options(wireMockConfig().dynamicPort())
+            .options(wireMockConfig().dynamicPort().bindAddress("127.0.0.1"))
             .build();
 
     private URI testUri;
@@ -312,6 +323,285 @@ class HttpRangeReaderTest {
         // Verify that the client requested the full range as asked, without pre-truncating at EOF
         wm.verify(getRequestedFor(urlEqualTo(TEST_PATH))
                 .withHeader("Range", equalTo("bytes=" + offset + "-" + (offset + length - 1))));
+    }
+
+    @Test
+    void answerForOtherBytesThanRequestedIsAStorageError() {
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=50-149"))
+                .willReturn(rangeAnswer(0, 100)));
+        ByteBuffer target = ByteBuffer.allocate(100);
+
+        assertThatThrownBy(() -> rangeReader.readRange(50, 100, target))
+                .isInstanceOf(StorageException.class)
+                .isNotInstanceOf(TransientStorageException.class)
+                .hasMessageContaining("other bytes than requested");
+    }
+
+    /** RFC 9110 section 15.3.7 lets a server answer a subset of a range; the client asks again for the rest. */
+    @Test
+    void rangeAnsweredInPartIsCompletedWithAnotherGet() {
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=1000-1099"))
+                .willReturn(rangeAnswer(1000, 50)));
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=1050-1099"))
+                .willReturn(rangeAnswer(1050, 50)));
+        ByteBuffer target = ByteBuffer.allocate(100);
+
+        int read = rangeReader.readRange(1000, 100, target);
+
+        assertThat(read).isEqualTo(100);
+        assertThat(target.flip()).isEqualTo(ByteBuffer.wrap(TEST_DATA, 1000, 100));
+        wm.verify(2, getRequestedFor(urlEqualTo(TEST_PATH)));
+    }
+
+    /**
+     * Each row names the answer to a read of the range {@code 1000-1099} with its bytes {@code 1000-1049}, and the
+     * answer to the GET of its rest from another version of the object. A 416 while the first answer tells that the
+     * object goes on past 1050 means it shrank.
+     */
+    static Stream<Arguments> restAnswersFromAnotherVersion() {
+        return Stream.of(
+                Arguments.argumentSet(
+                        "another ETag",
+                        rangeAnswer(1000, 50).withHeader("ETag", "\"A\""),
+                        rangeAnswer(1050, 50).withHeader("ETag", "\"B\"")),
+                Arguments.argumentSet(
+                        "another Last-Modified without ETag",
+                        rangeAnswer(1000, 50).withHeader("Last-Modified", LAST_MODIFIED),
+                        rangeAnswer(1050, 50).withHeader("Last-Modified", LATER_LAST_MODIFIED)),
+                Arguments.argumentSet(
+                        "another object size",
+                        rangeAnswer(1000, 50),
+                        rangeAnswerWithObjectSize(1050, 50, 2 * TEST_DATA.length)),
+                Arguments.argumentSet(
+                        "another ETag with an unknown object size",
+                        rangeAnswerOfAnUnknownSize(1000, 50).withHeader("ETag", "\"A\""),
+                        rangeAnswerOfAnUnknownSize(1050, 50).withHeader("ETag", "\"B\"")),
+                Arguments.argumentSet(
+                        "416 before the end of the object",
+                        rangeAnswer(1000, 50),
+                        aResponse().withStatus(416)));
+    }
+
+    /** One range read never returns bytes of two versions of the object. */
+    @ParameterizedTest
+    @MethodSource("restAnswersFromAnotherVersion")
+    void restAnsweredFromAnotherVersionFailsTheRead(ResponseDefinitionBuilder first, ResponseDefinitionBuilder rest) {
+        stubRangeThenRest(first, rest);
+        ByteBuffer target = ByteBuffer.allocate(100);
+
+        assertThatThrownBy(() -> rangeReader.readRange(1000, 100, target))
+                .isInstanceOf(TransientStorageException.class)
+                .hasMessageContaining("changed during the read");
+        byte[] restOfTarget = Arrays.copyOfRange(target.array(), 50, 100);
+        assertThat(restOfTarget).as("bytes of the rest in the target").isEqualTo(new byte[50]);
+    }
+
+    /** An answer without an ETag between two answers with different ETags hides no change of the object. */
+    @Test
+    void restAnsweredFromAnotherVersionAfterAnAnswerWithoutETagFailsTheRead() {
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=1000-1099"))
+                .willReturn(rangeAnswer(1000, 30).withHeader("ETag", "\"A\"")));
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=1030-1099"))
+                .willReturn(rangeAnswer(1030, 40)));
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=1070-1099"))
+                .willReturn(rangeAnswer(1070, 30).withHeader("ETag", "\"B\"")));
+        ByteBuffer target = ByteBuffer.allocate(100);
+
+        assertThatThrownBy(() -> rangeReader.readRange(1000, 100, target))
+                .isInstanceOf(TransientStorageException.class)
+                .hasMessageContaining("changed during the read");
+        wm.verify(3, getRequestedFor(urlEqualTo(TEST_PATH)));
+    }
+
+    /**
+     * Each row names the answer to a read of the range {@code 1000-1099} and the answer to the GET of its rest from
+     * 1050. One of them is rejected while telling another object size than the one reported by a HEAD.
+     */
+    static Stream<Arguments> rejectedAnswersTellingAnotherObjectSize() {
+        int otherSize = 2 * TEST_DATA.length;
+        ResponseDefinitionBuilder restBodyShorterThanItsContentRange = aResponse()
+                .withStatus(206)
+                .withHeader("Content-Range", "bytes 1050-1099/" + otherSize)
+                .withBody(Arrays.copyOfRange(TEST_DATA, 1050, 1080));
+        return Stream.of(
+                Arguments.argumentSet(
+                        "first answer with other bytes than requested",
+                        rangeAnswerWithObjectSize(0, 100, otherSize),
+                        rangeAnswer(1050, 50)),
+                Arguments.argumentSet(
+                        "rest from another version",
+                        rangeAnswerOfAnUnknownSize(1000, 50).withHeader("ETag", "\"A\""),
+                        rangeAnswerWithObjectSize(1050, 50, otherSize).withHeader("ETag", "\"B\"")),
+                Arguments.argumentSet(
+                        "rest with other bytes than requested",
+                        rangeAnswerOfAnUnknownSize(1000, 50),
+                        rangeAnswerWithObjectSize(0, 50, otherSize)),
+                Arguments.argumentSet(
+                        "rest with a body shorter than its Content-Range",
+                        rangeAnswerOfAnUnknownSize(1000, 50),
+                        restBodyShorterThanItsContentRange));
+    }
+
+    /** An answer failing the read leaves the object size to a HEAD. */
+    @ParameterizedTest
+    @MethodSource("rejectedAnswersTellingAnotherObjectSize")
+    void rejectedAnswerLeavesTheObjectSizeUnknown(ResponseDefinitionBuilder first, ResponseDefinitionBuilder rest) {
+        stubRangeThenRest(first, rest);
+        ByteBuffer target = ByteBuffer.allocate(100);
+        assertThatThrownBy(() -> rangeReader.readRange(1000, 100, target)).isInstanceOf(StorageException.class);
+
+        OptionalLong size = rangeReader.size();
+
+        assertThat(size).hasValue(TEST_DATA.length);
+        wm.verify(1, headRequestedFor(urlEqualTo(TEST_PATH)));
+    }
+
+    /**
+     * Each row names the answer to a read of the range {@code 1000-1099} with its bytes {@code 1000-1049}, and the
+     * answer to the GET of its rest from the same version of the object. The ETag, when both answers have one, decides
+     * over Last-Modified.
+     */
+    static Stream<Arguments> restAnswersFromTheSameVersion() {
+        return Stream.of(
+                Arguments.argumentSet(
+                        "same ETag and object size",
+                        rangeAnswer(1000, 50).withHeader("ETag", "\"A\""),
+                        rangeAnswer(1050, 50).withHeader("ETag", "\"A\"")),
+                Arguments.argumentSet(
+                        "same weak ETag",
+                        rangeAnswer(1000, 50).withHeader("ETag", "W/\"A\""),
+                        rangeAnswer(1050, 50).withHeader("ETag", "W/\"A\"")),
+                Arguments.argumentSet(
+                        "same ETag and another Last-Modified",
+                        rangeAnswer(1000, 50).withHeader("ETag", "\"A\"").withHeader("Last-Modified", LAST_MODIFIED),
+                        rangeAnswer(1050, 50)
+                                .withHeader("ETag", "\"A\"")
+                                .withHeader("Last-Modified", LATER_LAST_MODIFIED)));
+    }
+
+    @ParameterizedTest
+    @MethodSource("restAnswersFromTheSameVersion")
+    void restAnsweredFromTheSameVersionCompletesTheRange(
+            ResponseDefinitionBuilder first, ResponseDefinitionBuilder rest) {
+        stubRangeThenRest(first, rest);
+        ByteBuffer target = ByteBuffer.allocate(100);
+
+        int read = rangeReader.readRange(1000, 100, target);
+
+        assertThat(read).isEqualTo(100);
+        assertThat(target.flip()).isEqualTo(ByteBuffer.wrap(TEST_DATA, 1000, 100));
+    }
+
+    /**
+     * Stubs the range {@code 1000-1099} answered with {@code first}, and the GET of its rest from 1050 with
+     * {@code rest}.
+     */
+    private void stubRangeThenRest(ResponseDefinitionBuilder first, ResponseDefinitionBuilder rest) {
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=1000-1099"))
+                .willReturn(first));
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=1050-1099"))
+                .willReturn(rest));
+    }
+
+    /**
+     * Each row names an answer telling that an object of unknown size ends before the rest of a range. A server may
+     * ignore a range past the end of the object and answer the whole object.
+     */
+    static Stream<Arguments> answersToTheRestPastTheEnd() {
+        byte[] objectEndingAtTheRest = Arrays.copyOfRange(TEST_DATA, 0, 1050);
+        return Stream.of(
+                Arguments.argumentSet("416", aResponse().withStatus(416)),
+                Arguments.argumentSet("200 with the whole object", wholeObjectAnswer(objectEndingAtTheRest)),
+                Arguments.argumentSet(
+                        "200 with the whole object and its Content-Length",
+                        wholeObjectAnswerWithItsLength(objectEndingAtTheRest)));
+    }
+
+    @ParameterizedTest
+    @MethodSource("answersToTheRestPastTheEnd")
+    void rangeAnsweredInPartWithAnUnknownSizeKeepsTheShortCountWhenTheObjectEndsBeforeTheRest(
+            ResponseDefinitionBuilder rest) {
+        stubRangeThenRest(rangeAnswerOfAnUnknownSize(1000, 50), rest);
+        ByteBuffer target = ByteBuffer.allocate(100);
+
+        int read = rangeReader.readRange(1000, 100, target);
+
+        assertThat(read).isEqualTo(50);
+        assertThat(target.flip()).isEqualTo(ByteBuffer.wrap(TEST_DATA, 1000, 50));
+        wm.verify(1, getRequestedFor(urlEqualTo(TEST_PATH)).withHeader("Range", equalTo("bytes=1050-1099")));
+        wm.verify(2, getRequestedFor(urlEqualTo(TEST_PATH)));
+    }
+
+    /** Each row names a first answer to the range {@code 1000-1099}, with or without the object size. */
+    static Stream<Arguments> firstAnswersWithAndWithoutTheObjectSize() {
+        return Stream.of(
+                Arguments.argumentSet("known object size", rangeAnswer(1000, 50)),
+                Arguments.argumentSet("unknown object size", rangeAnswerOfAnUnknownSize(1000, 50)));
+    }
+
+    /**
+     * The object size or the Content-Length of the 200 tells that the object goes on past 1050: the server ignored the
+     * range of the rest.
+     */
+    @ParameterizedTest
+    @MethodSource("firstAnswersWithAndWithoutTheObjectSize")
+    void restAnsweredWholeFailsTheReadOfAnObjectGoingOnPastTheRest(ResponseDefinitionBuilder first) {
+        stubRangeThenRest(first, wholeObjectAnswerWithItsLength(TEST_DATA));
+        ByteBuffer target = ByteBuffer.allocate(100);
+
+        assertThatThrownBy(() -> rangeReader.readRange(1000, 100, target))
+                .isInstanceOf(StorageException.class)
+                .isNotInstanceOf(TransientStorageException.class)
+                .hasMessageContaining("ignored the Range header");
+        byte[] restOfTarget = Arrays.copyOfRange(target.array(), 50, 100);
+        assertThat(restOfTarget).as("bytes of the rest in the target").isEqualTo(new byte[50]);
+    }
+
+    /** A 206 answering {@code length} bytes of {@link #TEST_DATA} from {@code offset}, as told by its Content-Range. */
+    private static ResponseDefinitionBuilder rangeAnswer(int offset, int length) {
+        return rangeAnswerWithObjectSize(offset, length, TEST_DATA.length);
+    }
+
+    /**
+     * A 206 answering {@code length} bytes of {@link #TEST_DATA} from {@code offset}, with {@code objectSize} as the
+     * total of its Content-Range.
+     */
+    private static ResponseDefinitionBuilder rangeAnswerWithObjectSize(int offset, int length, int objectSize) {
+        int last = offset + length - 1;
+        return aResponse()
+                .withStatus(206)
+                .withHeader("Content-Range", "bytes " + offset + "-" + last + "/" + objectSize)
+                .withBody(Arrays.copyOfRange(TEST_DATA, offset, offset + length));
+    }
+
+    /**
+     * A 206 answering {@code length} bytes of {@link #TEST_DATA} from {@code offset}, with {@code *} as the total of
+     * its Content-Range.
+     */
+    private static ResponseDefinitionBuilder rangeAnswerOfAnUnknownSize(int offset, int length) {
+        int last = offset + length - 1;
+        return aResponse()
+                .withStatus(206)
+                .withHeader("Content-Range", "bytes " + offset + "-" + last + "/*")
+                .withBody(Arrays.copyOfRange(TEST_DATA, offset, offset + length));
+    }
+
+    /** A 200 answering all of {@code object}, as sent by a server ignoring the range of a GET. */
+    private static ResponseDefinitionBuilder wholeObjectAnswer(byte[] object) {
+        return aResponse().withStatus(200).withBody(object);
+    }
+
+    /** A {@link #wholeObjectAnswer(byte[])} declaring the length of {@code object} in its Content-Length. */
+    private static ResponseDefinitionBuilder wholeObjectAnswerWithItsLength(byte[] object) {
+        return wholeObjectAnswer(object).withHeader("Content-Length", String.valueOf(object.length));
     }
 
     @Test

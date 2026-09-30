@@ -20,16 +20,23 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 
 /**
- * An in-memory input stream that records whether a reader observed its end before closing it. The JDK HTTP client
- * cancels an HTTP/2 stream whose body is closed before its final frame arrived, which is what these flags detect.
+ * An in-memory input stream that records whether it was closed and whether a reader observed its end before closing it.
+ * The JDK HTTP client cancels an HTTP/2 stream whose body is closed before its final frame arrived; the end-tracking
+ * flags detect such a close.
  */
 final class EndTrackingInputStream extends FilterInputStream {
 
     private boolean endObserved;
     private boolean closedBeforeEnd;
+    private boolean closed;
 
     EndTrackingInputStream(byte[] content) {
         super(new ByteArrayInputStream(content));
+    }
+
+    /** Whether {@link #close()} ran. */
+    boolean closed() {
+        return closed;
     }
 
     /** Whether a read returned end of stream. */
@@ -65,6 +72,7 @@ final class EndTrackingInputStream extends FilterInputStream {
         if (!endObserved) {
             closedBeforeEnd = true;
         }
+        closed = true;
         super.close();
     }
 }

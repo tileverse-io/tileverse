@@ -15,6 +15,7 @@
  */
 package io.tileverse.storage.http;
 
+import io.tileverse.storage.ContentRange;
 import io.tileverse.storage.CopyOptions;
 import io.tileverse.storage.DeleteResult;
 import io.tileverse.storage.ListOptions;
@@ -34,20 +35,25 @@ import io.tileverse.storage.TransientStorageException;
 import io.tileverse.storage.UnsupportedCapabilityException;
 import io.tileverse.storage.WriteOptions;
 import io.tileverse.storage.batch.BatchSettings;
+import io.tileverse.storage.http.RangeCompletingInputStream.RestAnswer;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
@@ -153,15 +159,199 @@ final class HttpStorage implements Storage {
         HttpRequest request = buildGetRequest(uri, options);
         try {
             HttpResponse<InputStream> response = client().send(request, HttpResponse.BodyHandlers.ofInputStream());
-            throwOnErrorStatus(uri, response);
+            checkStatus(uri, options, response);
             StorageEntry.File metadata = metadataFromHeaders(key, response);
-            return new ReadHandle(response.body(), metadata);
+            InputStream content = requestedContent(uri, options, response);
+            return new ReadHandle(content, metadata);
         } catch (IOException e) {
             throw new TransientStorageException("GET failed for " + uri, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new TransientStorageException("Interrupted during GET", e);
         }
+    }
+
+    /**
+     * Fails a read unless its answer holds content: a 200 to a read of the whole object, a 206 to a ranged read. A
+     * redirect reaching this check was not followed, and its body is not the object's.
+     */
+    private static void checkStatus(URI uri, ReadOptions options, HttpResponse<InputStream> response) {
+        int status = response.statusCode();
+        if (status == expectedStatus(options)) {
+            return;
+        }
+        ResponseBodies.closeQuietly(response);
+        throw statusFailure(uri, status);
+    }
+
+    private static int expectedStatus(ReadOptions options) {
+        if (setsARange(options)) {
+            return 206;
+        }
+        return 200;
+    }
+
+    /** Returns the failure of a read answered with {@code status}; a 200 fails only a ranged read. */
+    private static StorageException statusFailure(URI uri, int status) {
+        return switch (status) {
+            case 200 -> new StorageException("Server ignored the Range header (HTTP 200) for " + uri);
+            case 301, 302, 303, 307, 308 -> new StorageException("Redirect not followed for " + uri + ": " + status);
+            case 404 -> new NotFoundException("Not found: " + uri);
+            case 412 -> new PreconditionFailedException("Precondition failed for: " + uri);
+            case 416 -> new RangeNotSatisfiableException("Range not satisfiable for: " + uri);
+            default -> new StorageException("GET failed for " + uri + ": " + status);
+        };
+    }
+
+    /**
+     * Returns the content of an answer to a read. The answer to a ranged read must hold the requested bytes, and one
+     * answering the range in part is completed with GETs of the rest, as RFC 9110 section 15.3.7 lets a server answer a
+     * subset of a range. Each body must hold the bytes named by its {@code Content-Range}; without a usable one, the
+     * body stands for at most the requested bytes. Every GET of the rest must answer from the version of the object
+     * named by the first answer.
+     */
+    private InputStream requestedContent(URI uri, ReadOptions options, HttpResponse<InputStream> response) {
+        if (!setsARange(options)) {
+            return response.body();
+        }
+        Optional<ContentRange.Bytes> answered = checkRangeAnswer(uri, options, response);
+        if (answered.isEmpty()) {
+            return requestedBytes(uri, options, response);
+        }
+        ContentRange.Bytes answeredBytes = answered.get();
+        InputStream body = new AnsweredRangeInputStream(response.body(), answeredBytes, uri);
+        long rangeEnd = requestedEnd(options);
+        if (!endsEarly(answeredBytes, rangeEnd)) {
+            return body;
+        }
+        long endOfRead = readEnd(answeredBytes, rangeEnd);
+        AnsweredVersion version = AnsweredVersion.of(response);
+        return new RangeCompletingInputStream(
+                body, options.offset(), endOfRead, offset -> openRestOfRange(uri, options, version, offset));
+    }
+
+    private static boolean setsARange(ReadOptions options) {
+        return options.offset() > 0L || options.length().isPresent();
+    }
+
+    /**
+     * Checks the answer to a ranged GET: a {@code Content-Range} naming other bytes than requested fails the read.
+     * Returns the answered range, empty without a usable {@code Content-Range}.
+     */
+    private static Optional<ContentRange.Bytes> checkRangeAnswer(
+            URI uri, ReadOptions options, HttpResponse<InputStream> response) {
+        String contentRange =
+                response.headers().firstValue(HttpHeaderNames.CONTENT_RANGE).orElse(null);
+        Optional<ContentRange.Bytes> answered = ContentRange.bytesOf(contentRange);
+        if (answered.isPresent() && !withinRange(answered.get(), options)) {
+            ResponseBodies.closeQuietly(response);
+            String requested = rangeHeader(options).orElse("");
+            throw new StorageException("Server answered other bytes than requested (" + requested + ", Content-Range "
+                    + contentRange + ") for " + uri);
+        }
+        return answered;
+    }
+
+    /** Returns whether an answer starts at the requested offset and ends within the range. */
+    private static boolean withinRange(ContentRange.Bytes answered, ReadOptions options) {
+        return answered.firstPos() == options.offset() && answered.lastPos() < requestedEnd(options);
+    }
+
+    /** Returns the body of an answer without a usable {@code Content-Range}, held to at most the requested bytes. */
+    private static InputStream requestedBytes(URI uri, ReadOptions options, HttpResponse<InputStream> response) {
+        if (options.length().isEmpty()) {
+            return response.body();
+        }
+        long requestedLength = options.length().getAsLong();
+        return new RequestedRangeInputStream(response.body(), requestedLength, uri);
+    }
+
+    /** Returns the offset past the last requested byte, or {@link Long#MAX_VALUE} for a read to the end. */
+    private static long requestedEnd(ReadOptions options) {
+        if (options.length().isEmpty()) {
+            return Long.MAX_VALUE;
+        }
+        long length = options.length().getAsLong();
+        if (length > Long.MAX_VALUE - options.offset()) {
+            return Long.MAX_VALUE;
+        }
+        return options.offset() + length;
+    }
+
+    /** Returns whether an answer ends before the end of the range and before the end of the object. */
+    private static boolean endsEarly(ContentRange.Bytes answered, long rangeEnd) {
+        return answered.lastPos() < readEnd(answered, rangeEnd) - 1;
+    }
+
+    /** Returns the offset past the last byte to read: the end of the range, or of the object when it ends first. */
+    private static long readEnd(ContentRange.Bytes answered, long rangeEnd) {
+        long objectEnd = answered.total().orElse(Long.MAX_VALUE);
+        return Math.min(rangeEnd, objectEnd);
+    }
+
+    /**
+     * Opens the answer to a GET of a ranged read from {@code offset} on, or returns empty when the object ends before
+     * {@code offset}. Failures are IOExceptions, as required of a stream read.
+     */
+    private Optional<RestAnswer> openRestOfRange(URI uri, ReadOptions options, AnsweredVersion version, long offset)
+            throws IOException {
+        ReadOptions rest = rangeFrom(options, offset);
+        HttpRequest request = buildGetRequest(uri, rest);
+        HttpResponse<InputStream> response = sendFromStream(request);
+        try {
+            return restOfRange(uri, rest, version, response);
+        } catch (StorageException e) {
+            throw new IOException(e.getMessage(), e);
+        }
+    }
+
+    /** Returns {@code options} with the range cut to start at {@code offset}. */
+    private static ReadOptions rangeFrom(ReadOptions options, long offset) {
+        OptionalLong length = OptionalLong.empty();
+        if (options.length().isPresent()) {
+            length = OptionalLong.of(requestedEnd(options) - offset);
+        }
+        return new ReadOptions(offset, length, options.ifMatchEtag(), options.versionId(), options.ifModifiedSince());
+    }
+
+    /** Sends a GET for a stream read: an interrupt fails it with an IOException, as required of a stream read. */
+    private HttpResponse<InputStream> sendFromStream(HttpRequest request) throws IOException {
+        try {
+            return client().send(request, HttpResponse.BodyHandlers.ofInputStream());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            InterruptedIOException interrupted = new InterruptedIOException("Interrupted during GET");
+            interrupted.initCause(e);
+            throw interrupted;
+        }
+    }
+
+    /**
+     * Returns the content of an answer to a GET of the rest from the {@code version} of the object named by the first
+     * answer, as decided by {@link AnsweredVersion}, or empty when the object ends before the rest.
+     */
+    private static Optional<RestAnswer> restOfRange(
+            URI uri, ReadOptions rest, AnsweredVersion version, HttpResponse<InputStream> response) {
+        if (version.endsTheRead(response, rest.offset(), uri)) {
+            return Optional.empty();
+        }
+        checkStatus(uri, rest, response);
+        version.requireSameVersion(response, uri);
+        return Optional.of(restContent(uri, rest, response));
+    }
+
+    /**
+     * Returns the answer to a GET of the rest, its body held to the bytes named by its {@code Content-Range}; without a
+     * usable one, the body stands for the whole rest and is held to at most its bytes.
+     */
+    private static RestAnswer restContent(URI uri, ReadOptions rest, HttpResponse<InputStream> response) {
+        Optional<ContentRange.Bytes> answered = checkRangeAnswer(uri, rest, response);
+        if (answered.isEmpty()) {
+            InputStream requested = requestedBytes(uri, rest, response);
+            return new RestAnswer(requested, true);
+        }
+        InputStream body = new AnsweredRangeInputStream(response.body(), answered.get(), uri);
+        return new RestAnswer(body, false);
     }
 
     @Override
@@ -243,7 +433,7 @@ final class HttpStorage implements Storage {
     }
 
     private static Optional<String> rangeHeader(ReadOptions options) {
-        if (options.offset() == 0L && options.length().isEmpty()) {
+        if (!setsARange(options)) {
             return Optional.empty();
         }
         if (options.length().isPresent()) {
@@ -253,37 +443,26 @@ final class HttpStorage implements Storage {
         return Optional.of("bytes=" + options.offset() + "-");
     }
 
-    private static void throwOnErrorStatus(URI uri, HttpResponse<InputStream> response) throws IOException {
-        int status = response.statusCode();
-        if (status < 400) {
-            return;
-        }
-        response.body().close();
-        switch (status) {
-            case 404:
-                throw new NotFoundException("Not found: " + uri);
-            case 412:
-                throw new PreconditionFailedException("Precondition failed for: " + uri);
-            case 416:
-                throw new RangeNotSatisfiableException("Range not satisfiable for: " + uri);
-            default:
-                throw new StorageException("GET failed for " + uri + ": " + status);
-        }
-    }
-
     private static StorageEntry.File metadataFromHeaders(String key, HttpResponse<?> response) {
-        long size = Math.max(
-                0L, response.headers().firstValueAsLong("Content-Length").orElse(-1L));
-        Optional<String> etag = response.headers().firstValue("ETag");
-        Optional<String> contentType = response.headers().firstValue("Content-Type");
-        Instant lastModified = parseHttpDate(response.headers().firstValue("Last-Modified"));
+        HttpHeaders headers = response.headers();
+        long contentLength =
+                headers.firstValueAsLong(HttpHeaderNames.CONTENT_LENGTH).orElse(-1L);
+        long size = Math.max(0L, contentLength);
+        Optional<String> etag = headers.firstValue(HttpHeaderNames.ETAG);
+        Optional<String> contentType = headers.firstValue(HttpHeaderNames.CONTENT_TYPE);
+        Instant lastModified = parseHttpDate(headers.firstValue(HttpHeaderNames.LAST_MODIFIED));
         return new StorageEntry.File(key, size, lastModified, etag, Optional.empty(), contentType, Map.of());
     }
 
+    /** Returns the date of an HTTP date header, or {@link Instant#EPOCH} when the header is absent or unparseable. */
     private static Instant parseHttpDate(Optional<String> rawHeader) {
         if (rawHeader.isEmpty()) {
             return Instant.EPOCH;
         }
-        return DateTimeFormatter.RFC_1123_DATE_TIME.parse(rawHeader.get(), Instant::from);
+        try {
+            return DateTimeFormatter.RFC_1123_DATE_TIME.parse(rawHeader.get(), Instant::from);
+        } catch (DateTimeParseException unparseable) {
+            return Instant.EPOCH;
+        }
     }
 }

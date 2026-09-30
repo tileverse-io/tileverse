@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.tileverse.storage.ContentRange;
 import java.io.ByteArrayInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -141,6 +142,18 @@ class MultipartByteRangesParserTest {
         parser.skipBody(5);
         assertThat(readAll(parser, 5)).isEqualTo("WORLD");
         assertThat(parser.nextPart()).isNull();
+    }
+
+    @Test
+    void singlePartEndingBeforeItsContentRangeFailsTheNextPart() throws IOException {
+        InputStream in = new ByteArrayInputStream(new byte[60]);
+        ContentRange.Bytes range = ContentRange.bytesOf("bytes 0-99/1000").orElseThrow();
+        MultipartByteRangesParser parser = MultipartByteRangesParser.singlePart(in, range);
+        parser.nextPart();
+        ByteBuffer scratch = ByteBuffer.allocate(100);
+        assertThat(parser.readBody(scratch, 100)).isEqualTo(60);
+
+        assertThatThrownBy(parser::nextPart).isInstanceOf(EOFException.class);
     }
 
     @Test

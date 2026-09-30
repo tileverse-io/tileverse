@@ -89,6 +89,15 @@ public interface Storage extends Closeable {
      * List entries matching {@code pattern}, where {@code pattern} is a shell-style glob (or plain prefix). See
      * {@link StoragePattern} for parsing rules.
      *
+     * <p>Keys name objects as the backend holds them, which for a filesystem means the spelling of each component on
+     * disk rather than the spelling used in the pattern. A glob is matched against the corrected key; a pattern with a
+     * literal part spelled differently from disk matches nothing.
+     *
+     * <p>A pattern with no glob character names a prefix. Object-store backends return the keys starting with it, with
+     * the delimiter collapsing anything deeper into common prefixes; the filesystem backend returns the file of that
+     * exact name, or the children of the directory of that name. A pattern reaching below a file name lists nothing,
+     * whether it ends at a separator or continues into a glob.
+     *
      * <p>Examples:
      *
      * <pre>{@code

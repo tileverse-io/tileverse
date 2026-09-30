@@ -17,16 +17,21 @@ package io.tileverse.storage.file;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.PreconditionFailedException;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.WriteOptions;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -116,6 +121,136 @@ class FileStorageTest {
             }
             try (Stream<Path> rootEntries = Files.list(tmp)) {
                 assertThat(rootEntries.map(p -> p.getFileName().toString())).containsExactly("dir");
+            }
+        }
+    }
+
+    /**
+     * How a listing spells its keys, what a prefix naming a file answers, and how a symbolic link is named.
+     *
+     * <p>A test of a mis-spelled prefix assumes a case-insensitive filesystem. On a case-sensitive one such a prefix
+     * resolves to nothing, leaving no spelling to correct.
+     */
+    @Nested
+    class Listing {
+
+        @Test
+        void listsKeysByTheNameOnDisk(@TempDir Path tmp) throws IOException {
+            Files.createDirectories(tmp.resolve("data"));
+            Files.writeString(tmp.resolve("data/a.parquet"), "a");
+            assumeTrue(Files.exists(tmp.resolve("DATA")), "needs a case-insensitive filesystem");
+
+            try (Storage storage = new FileStorage(tmp)) {
+                assertThat(keys(storage, "data/*.parquet")).containsExactly("data/a.parquet");
+                assertThat(keys(storage, "DATA/*.parquet")).isEmpty();
+            }
+        }
+
+        @Test
+        void listsNothingForAMisspelledDirectoryPrefix(@TempDir Path tmp) throws IOException {
+            Files.createDirectories(tmp.resolve("data"));
+            Files.writeString(tmp.resolve("data/a.parquet"), "a");
+            assumeTrue(Files.exists(tmp.resolve("DATA")), "needs a case-insensitive filesystem");
+
+            try (Storage storage = new FileStorage(tmp)) {
+                assertThat(keys(storage, "DATA/")).isEmpty();
+                assertThat(keys(storage, "DATA")).isEmpty();
+            }
+        }
+
+        @Test
+        void listsNothingForAMisspelledFileName(@TempDir Path tmp) throws IOException {
+            Files.writeString(tmp.resolve("plain.parquet"), "p");
+            assumeTrue(Files.exists(tmp.resolve("PLAIN.parquet")), "needs a case-insensitive filesystem");
+
+            try (Storage storage = new FileStorage(tmp)) {
+                assertThat(keys(storage, "PLAIN.parquet")).isEmpty();
+            }
+        }
+
+        @Test
+        void listsUnderARootReachedThroughASymbolicLink(@TempDir Path tmp) throws IOException {
+            Path real = Files.createDirectory(tmp.resolve("real"));
+            Files.writeString(real.resolve("a.parquet"), "a");
+            Path link = Files.createSymbolicLink(tmp.resolve("link"), real);
+
+            try (Storage storage = new FileStorage(link)) {
+                assertThat(keys(storage, "*.parquet")).containsExactly("a.parquet");
+            }
+        }
+
+        @Test
+        void listsASymbolicLinkPrefixUnderItsOwnName(@TempDir Path tmp) throws IOException {
+            Files.createDirectories(tmp.resolve("data"));
+            Files.writeString(tmp.resolve("data/a.parquet"), "a");
+            Files.createSymbolicLink(tmp.resolve("link"), tmp.resolve("data"));
+
+            try (Storage storage = new FileStorage(tmp)) {
+                assertThat(keys(storage, "link/*.parquet")).containsExactly("link/a.parquet");
+            }
+        }
+
+        @Test
+        void listsTheFileNamedByAPatternWithoutGlobCharacters(@TempDir Path tmp) throws IOException {
+            Files.writeString(tmp.resolve("plain.parquet"), "p");
+            Files.writeString(tmp.resolve("plain.parquet.bak"), "b");
+
+            try (Storage storage = new FileStorage(tmp)) {
+                assertThat(keys(storage, "plain.parquet")).containsExactly("plain.parquet");
+            }
+        }
+
+        @Test
+        void listsTheChildrenOfADirectoryNamedByAPatternWithoutGlobCharacters(@TempDir Path tmp) throws IOException {
+            Files.createDirectories(tmp.resolve("data"));
+            Files.writeString(tmp.resolve("data/a.parquet"), "a");
+
+            try (Storage storage = new FileStorage(tmp)) {
+                assertThat(keys(storage, "data")).containsExactly("data/a.parquet");
+            }
+        }
+
+        @Test
+        void listsNothingForAPatternNamingNothing(@TempDir Path tmp) throws IOException {
+            try (Storage storage = new FileStorage(tmp)) {
+                assertThat(keys(storage, "absent.parquet")).isEmpty();
+            }
+        }
+
+        @Test
+        void listsNothingForAGlobUnderAFileName(@TempDir Path tmp) throws IOException {
+            Files.writeString(tmp.resolve("plain.parquet"), "p");
+
+            try (Storage storage = new FileStorage(tmp)) {
+                assertThat(keys(storage, "plain.parquet/*.txt")).isEmpty();
+            }
+        }
+
+        @Test
+        void listsNothingWhenAskedForTheChildrenOfAFile(@TempDir Path tmp) throws IOException {
+            Files.writeString(tmp.resolve("plain.parquet"), "p");
+
+            try (Storage storage = new FileStorage(tmp)) {
+                assertThat(keys(storage, "plain.parquet/")).isEmpty();
+            }
+        }
+
+        @Test
+        void listsASymbolicLinkToAFileUnderItsOwnName(@TempDir Path tmp) throws IOException {
+            Files.writeString(tmp.resolve("real.parquet"), "r");
+            Files.createSymbolicLink(tmp.resolve("link.parquet"), tmp.resolve("real.parquet"));
+
+            try (Storage storage = new FileStorage(tmp)) {
+                assertThat(keys(storage, "link.parquet")).containsExactly("link.parquet");
+            }
+        }
+
+        private List<String> keys(Storage storage, String pattern) {
+            try (Stream<StorageEntry> entries = storage.list(pattern)) {
+                return entries.filter(entry -> entry instanceof StorageEntry.File)
+                        .map(StorageEntry::key)
+                        .sorted()
+                        .toList();
             }
         }
     }

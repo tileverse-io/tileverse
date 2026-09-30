@@ -16,6 +16,7 @@
 package io.tileverse.storage.gcs;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 
@@ -24,6 +25,7 @@ import com.google.cloud.storage.Bucket;
 import com.google.cloud.storage.Storage.BucketGetOption;
 import com.google.cloud.storage.StorageOptions;
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.batch.BatchProviderHelper;
 import io.tileverse.storage.batch.BatchSettings;
 import java.io.IOException;
@@ -85,8 +87,28 @@ class GoogleCloudStorageBatchSettingsTest {
     }
 
     @Test
+    void anInvalidParameterFailsTheOpenWithoutKeepingAClient() {
+        SdkStorageCache clientCache = new SdkStorageCache();
+        GoogleCloudStorageProvider provider = new GoogleCloudStorageProvider(clientCache);
+        StorageConfig config = anonymousConfig().setParameter(BatchProviderHelper.BATCH_MAX_FETCH, 0);
+
+        assertThatThrownBy(() -> provider.createStorage(config))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxFetchBytes");
+
+        assertThat(clientCache.entryCount()).isZero();
+    }
+
+    @Test
     void providerDeclaresTheBatchParameters() {
         assertThat(new GoogleCloudStorageProvider().getParameters())
                 .containsAll(BatchProviderHelper.configParameters());
+    }
+
+    /** Without credentials and with a project id, the client builds without reaching the network. */
+    private static StorageConfig anonymousConfig() {
+        return new StorageConfig(BASE_URI)
+                .setParameter(GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS, false)
+                .setParameter(GoogleCloudStorageProvider.GCS_PROJECT_ID, "test-project");
     }
 }

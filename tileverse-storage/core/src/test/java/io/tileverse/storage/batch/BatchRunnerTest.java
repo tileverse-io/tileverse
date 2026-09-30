@@ -28,16 +28,20 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 class BatchRunnerTest {
 
@@ -273,6 +277,165 @@ class BatchRunnerTest {
             caller.shutdownNow();
             workers.shutdownNow();
         }
+    }
+
+    /**
+     * An {@link Error} such as an exhausted heap follows the target contract too: the call waits for the fetches in
+     * flight on other workers, and no fetch starts after the call threw.
+     */
+    @Test
+    void anErrorOnTheCallingThreadIsThrownOnlyAfterTheFetchesInFlightCompleted() throws Exception {
+        List<RangeRequest> batch = eightSeparateRanges();
+        List<PlannedFetch> fetches = BatchPlanner.plan(batch, CoalescingPolicy.NONE);
+        int helpers = 3;
+        OutOfMemoryError heapExhausted = new OutOfMemoryError("Java heap space");
+        AtomicReference<Thread> callingThread = new AtomicReference<>();
+        CountDownLatch helpersInsideAFetch = new CountDownLatch(helpers);
+        CountDownLatch errorThrown = new CountDownLatch(1);
+        CountDownLatch releaseHelpers = new CountDownLatch(1);
+        AtomicInteger helperFetchesStarted = new AtomicInteger();
+        AtomicInteger helperFetchesStartedWhenTheCallEnded = new AtomicInteger(-1);
+        FetchReader failingOnTheCallingThread = (range, target) -> {
+            if (Thread.currentThread() == callingThread.get()) {
+                awaitQuietly(helpersInsideAFetch);
+                errorThrown.countDown();
+                throw heapExhausted;
+            }
+            helperFetchesStarted.incrementAndGet();
+            helpersInsideAFetch.countDown();
+            awaitQuietly(releaseHelpers);
+            return reader.read(range, target);
+        };
+        ExecutorService workers = Executors.newFixedThreadPool(helpers);
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<BatchReadResult> call = caller.submit(() -> {
+                callingThread.set(Thread.currentThread());
+                try {
+                    return BatchRunner.run(batch, fetches, failingOnTheCallingThread, helpers + 1, () -> workers);
+                } finally {
+                    helperFetchesStartedWhenTheCallEnded.set(helperFetchesStarted.get());
+                }
+            });
+            assertThat(errorThrown.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThatThrownBy(() -> call.get(200, TimeUnit.MILLISECONDS))
+                    .as("the call waits for the fetches in flight")
+                    .isInstanceOf(TimeoutException.class);
+
+            releaseHelpers.countDown();
+
+            assertThatThrownBy(() -> call.get(5, TimeUnit.SECONDS))
+                    .isInstanceOf(ExecutionException.class)
+                    .cause()
+                    .isSameAs(heapExhausted);
+            workers.shutdown();
+            assertThat(workers.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(helperFetchesStarted)
+                    .as("no fetch starts after the call threw")
+                    .hasValue(helperFetchesStartedWhenTheCallEnded.get());
+        } finally {
+            caller.shutdownNow();
+            workers.shutdownNow();
+        }
+    }
+
+    @Test
+    void anErrorOnAnotherWorkerIsRethrownUnchanged() {
+        List<RangeRequest> batch = requests(new long[][] {{0, 10}, {1_000, 10}, {2_000, 10}});
+        List<PlannedFetch> fetches = BatchPlanner.plan(batch, CoalescingPolicy.NONE);
+        Thread callingThread = Thread.currentThread();
+        OutOfMemoryError heapExhausted = new OutOfMemoryError("Java heap space");
+        CountDownLatch helperFailed = new CountDownLatch(1);
+        FetchReader failingOnAHelper = (range, target) -> {
+            if (Thread.currentThread() == callingThread) {
+                awaitQuietly(helperFailed);
+                return reader.read(range, target);
+            }
+            helperFailed.countDown();
+            throw heapExhausted;
+        };
+        ExecutorService helper = Executors.newSingleThreadExecutor();
+        try {
+            assertThatThrownBy(() -> BatchRunner.run(batch, fetches, failingOnAHelper, 2, () -> helper))
+                    .isSameAs(heapExhausted);
+        } finally {
+            helper.shutdownNow();
+        }
+    }
+
+    /**
+     * An executor may fail to start a worker, for example when no native thread is left. The workers already started
+     * follow the target contract: the call waits for their fetch in flight, they start no further fetch, and the
+     * calling thread runs none.
+     */
+    @Test
+    @Timeout(10)
+    void aFailureToStartAWorkerIsThrownOnlyAfterTheStartedWorkerStopped() throws Exception {
+        List<RangeRequest> batch = eightSeparateRanges();
+        List<PlannedFetch> fetches = BatchPlanner.plan(batch, CoalescingPolicy.NONE);
+        int helpers = 3;
+        OutOfMemoryError noThreadLeft = new OutOfMemoryError("unable to create native thread");
+        AtomicReference<Thread> callingThread = new AtomicReference<>();
+        CountDownLatch startedWorkerInsideAFetch = new CountDownLatch(1);
+        CountDownLatch releaseStartedWorker = new CountDownLatch(1);
+        AtomicInteger fetchesOnTheCallingThread = new AtomicInteger();
+        AtomicInteger fetchesOnTheStartedWorker = new AtomicInteger();
+        FetchReader blockingOnTheStartedWorker = (range, target) -> {
+            if (Thread.currentThread() == callingThread.get()) {
+                fetchesOnTheCallingThread.incrementAndGet();
+                return reader.read(range, target);
+            }
+            fetchesOnTheStartedWorker.incrementAndGet();
+            startedWorkerInsideAFetch.countDown();
+            awaitQuietly(releaseStartedWorker);
+            return reader.read(range, target);
+        };
+        ExecutorService workers = Executors.newSingleThreadExecutor();
+        AtomicInteger submissions = new AtomicInteger();
+        Executor failingOnTheSecondWorker = command -> {
+            if (submissions.incrementAndGet() == 2) {
+                awaitQuietly(startedWorkerInsideAFetch);
+                throw noThreadLeft;
+            }
+            workers.execute(command);
+        };
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<BatchReadResult> call = caller.submit(() -> {
+                callingThread.set(Thread.currentThread());
+                return BatchRunner.run(
+                        batch, fetches, blockingOnTheStartedWorker, helpers + 1, () -> failingOnTheSecondWorker);
+            });
+            assertThat(startedWorkerInsideAFetch.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThatThrownBy(() -> call.get(200, TimeUnit.MILLISECONDS))
+                    .as("the call waits for the fetch in flight on the started worker")
+                    .isInstanceOf(TimeoutException.class);
+
+            releaseStartedWorker.countDown();
+
+            assertThatThrownBy(() -> call.get(5, TimeUnit.SECONDS))
+                    .isInstanceOf(ExecutionException.class)
+                    .cause()
+                    .isSameAs(noThreadLeft);
+            workers.shutdown();
+            assertThat(workers.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(fetchesOnTheStartedWorker)
+                    .as("the started worker stops after its fetch in flight")
+                    .hasValue(1);
+            assertThat(fetchesOnTheCallingThread)
+                    .as("the calling thread runs no fetch")
+                    .hasValue(0);
+        } finally {
+            caller.shutdownNow();
+            workers.shutdownNow();
+        }
+    }
+
+    /** Eight ten-byte requests, one fetch each without coalescing. */
+    private static List<RangeRequest> eightSeparateRanges() {
+        return requests(new long[][] {
+            {0, 10}, {1_000, 10}, {2_000, 10}, {3_000, 10}, {4_000, 10}, {5_000, 10}, {6_000, 10}, {7_000, 10}
+        });
     }
 
     private static void awaitQuietly(CountDownLatch latch) {

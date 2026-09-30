@@ -24,8 +24,8 @@ import org.jspecify.annotations.NullMarked;
 /**
  * Options for {@link Storage#presignPut(String, java.time.Duration, PresignWriteOptions) Storage.presignPut}.
  *
- * <p>Carries only the fields that can be embedded in a presigned-URL signature: content type, user metadata, and the
- * create-only precondition. Streaming knobs ({@code disableMultipart}, {@code timeout}, {@code contentLength}) live on
+ * <p>Holds only the fields that can be embedded in a presigned-URL signature: content type, user metadata, and the
+ * create-only precondition. Streaming knobs ({@code disableMultipart}, {@code contentLength}) live on
  * {@link WriteOptions} because they govern client-side upload behavior, not the URL signature itself.
  */
 @NullMarked

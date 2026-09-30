@@ -34,15 +34,19 @@ import java.util.Objects;
  * throws {@link ByteBufferSinkException} before touching the buffer, and a write refused by the buffer itself (a
  * read-only, closed, or thread-confined buffer) throws the same exception with the buffer's failure as its cause. The
  * checked type lets an SDK pipeline propagate the failure and lets the caller tell it from an I/O failure of the
- * producer. {@link #close()} and {@link #flush()} do nothing: the stream owns neither the buffer nor any resource.
+ * producer. {@link #flush()} does nothing.
  *
- * <p>Not thread-safe.
+ * <p>{@link #close()} fences the buffer off: it waits for a write in progress, and every later write throws
+ * {@link ByteBufferSinkException} without touching the buffer. A caller closes the stream before handing the buffer
+ * back, because an SDK may keep writing the body from its own thread after the download call has failed. Writes,
+ * {@link #bytesWritten()} and {@link #close()} synchronize on the stream.
  */
 public final class ByteBufferOutputStream extends OutputStream {
 
     private final ByteBuffer target;
     private final int maxBytes;
     private int written;
+    private boolean closed;
 
     /**
      * Creates a stream writing into {@code target} from its current position.
@@ -68,12 +72,13 @@ public final class ByteBufferOutputStream extends OutputStream {
      *
      * @return the byte count written, at most {@code maxBytes}
      */
-    public int bytesWritten() {
+    public synchronized int bytesWritten() {
         return written;
     }
 
     @Override
-    public void write(int b) throws IOException {
+    public synchronized void write(int b) throws IOException {
+        ensureOpen();
         ensureRoomFor(1);
         try {
             target.put((byte) b);
@@ -84,8 +89,9 @@ public final class ByteBufferOutputStream extends OutputStream {
     }
 
     @Override
-    public void write(byte[] source, int offset, int length) throws IOException {
+    public synchronized void write(byte[] source, int offset, int length) throws IOException {
         Objects.checkFromIndexSize(offset, length, source.length);
+        ensureOpen();
         ensureRoomFor(length);
         try {
             target.put(source, offset, length);
@@ -93,6 +99,18 @@ public final class ByteBufferOutputStream extends OutputStream {
             throw refusedWrite(refused);
         }
         written += length;
+    }
+
+    /** Rejects every later write once a write in progress has finished. Closing again has no effect. */
+    @Override
+    public synchronized void close() {
+        closed = true;
+    }
+
+    private void ensureOpen() throws ByteBufferSinkException {
+        if (closed) {
+            throw new ByteBufferSinkException("Stream closed, the target buffer no longer accepts writes");
+        }
     }
 
     private void ensureRoomFor(int length) throws ByteBufferSinkException {

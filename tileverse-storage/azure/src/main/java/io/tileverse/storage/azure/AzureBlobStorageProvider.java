@@ -25,12 +25,14 @@ import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.batch.BatchProviderHelper;
+import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -56,7 +58,7 @@ import java.util.Optional;
  */
 public class AzureBlobStorageProvider extends AbstractStorageProvider {
 
-    private final AzureClientCache clientCache = new AzureClientCache();
+    private final AzureClientCache clientCache;
 
     /**
      * Key used as environment variable name to disable this range reader provider
@@ -259,7 +261,13 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
      * @see AbstractStorageProvider#MEMORY_CACHE_ENABLED
      */
     public AzureBlobStorageProvider() {
+        this(new AzureClientCache());
+    }
+
+    /** Creates a provider leasing its clients from {@code clientCache}; tests inspect the cache after an open. */
+    AzureBlobStorageProvider(AzureClientCache clientCache) {
         super(true);
+        this.clientCache = Objects.requireNonNull(clientCache, "clientCache");
     }
 
     /**
@@ -358,8 +366,10 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
     public Storage createStorage(StorageConfig config) {
         URI uri = config.baseUri();
         AzureBlobLocation location = locationFor(config);
+        BatchSettings batchSettings = BatchProviderHelper.objectStoreSettings(config);
+        // acquired after resolving the settings: an invalid one must fail the open before a client is leased
         AzureClientCache.Lease lease = clientCache.acquire(keyFor(config, location));
-        return new AzureBlobStorage(uri, location, lease, BatchProviderHelper.objectStoreSettings(config));
+        return new AzureBlobStorage(uri, location, lease, batchSettings);
     }
 
     /**

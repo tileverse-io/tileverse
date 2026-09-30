@@ -19,10 +19,12 @@ import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.batch.BatchProviderHelper;
+import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * StorageProvider for Azure Data Lake Storage Gen2 (HNS-enabled accounts). Handles {@code abfs://}, {@code abfss://},
@@ -33,10 +35,16 @@ public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
     public static final String ENABLED_KEY = "IO_TILEVERSE_STORAGE_AZURE_DATALAKE";
     public static final String ID = "azure-datalake";
 
-    private final AzureClientCache clientCache = new AzureClientCache();
+    private final AzureClientCache clientCache;
 
     public AzureDataLakeStorageProvider() {
+        this(new AzureClientCache());
+    }
+
+    /** Creates a provider leasing its clients from {@code clientCache}; tests inspect the cache after an open. */
+    AzureDataLakeStorageProvider(AzureClientCache clientCache) {
         super(true);
+        this.clientCache = Objects.requireNonNull(clientCache, "clientCache");
     }
 
     /**
@@ -119,9 +127,23 @@ public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
 
     @Override
     public Storage createStorage(StorageConfig config) {
+        rejectAnonymousAccess(config);
         URI uri = config.baseUri();
         AzureBlobLocation location = AzureBlobLocation.parse(uri);
+        BatchSettings batchSettings = BatchProviderHelper.objectStoreSettings(config);
+        // acquired after resolving the settings: an invalid one must fail the open before a client is leased
         AzureClientCache.Lease lease = clientCache.acquire(AzureBlobStorageProvider.keyFor(config, location));
-        return new AzureDataLakeStorage(uri, location, lease, BatchProviderHelper.objectStoreSettings(config));
+        return new AzureDataLakeStorage(uri, location, lease, batchSettings);
+    }
+
+    /** Azure Data Lake Gen2 (HNS) has no anonymous access; an anonymous open must fail before a client is leased. */
+    private static void rejectAnonymousAccess(StorageConfig config) {
+        StorageParameter<Boolean> anonymous = AzureBlobStorageProvider.AZURE_ANONYMOUS;
+        boolean requested = config.getParameter(anonymous).orElse(Boolean.FALSE);
+        if (requested) {
+            throw new IllegalArgumentException(anonymous.key()
+                    + "=true is not supported by Azure Data Lake Gen2 (HNS); "
+                    + "open a public container through its .blob.core. endpoint with the Azure Blob provider");
+        }
     }
 }

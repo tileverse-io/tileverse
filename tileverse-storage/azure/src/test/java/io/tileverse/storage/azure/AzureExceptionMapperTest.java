@@ -27,7 +27,14 @@ import io.tileverse.storage.PreconditionFailedException;
 import io.tileverse.storage.RangeNotSatisfiableException;
 import io.tileverse.storage.StorageException;
 import io.tileverse.storage.TransientStorageException;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.SocketTimeoutException;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -73,6 +80,41 @@ class AzureExceptionMapperTest {
     void unmappedStatusFallsBackToStorageException() {
         StorageException mapped = AzureExceptionMapper.map(httpException(418, "Teapot"), "k");
         assertThat(mapped).isInstanceOf(StorageException.class).isNotInstanceOf(NotFoundException.class);
+    }
+
+    static Stream<Arguments> unexpectedFailures() {
+        return Stream.of(
+                Arguments.of(new RuntimeException(new InterruptedException()), true),
+                Arguments.of(new IllegalStateException(new RuntimeException(new InterruptedException())), true),
+                Arguments.of(new UncheckedIOException(new SocketTimeoutException("Read timed out")), false),
+                Arguments.of(new IllegalStateException("socket closed"), false));
+    }
+
+    @ParameterizedTest
+    @MethodSource("unexpectedFailures")
+    void anUnexpectedFailureMapsToStorageExceptionRestoringOnlyAnInterrupt(
+            RuntimeException failure, boolean interrupted) {
+        StorageException mapped = AzureExceptionMapper.mapUnexpected(failure, "k");
+        boolean interruptStatus = Thread.interrupted();
+
+        assertThat(mapped).hasCause(failure).hasMessageContaining("'k'");
+        assertThat(interruptStatus).as("interrupt status after mapping").isEqualTo(interrupted);
+    }
+
+    @Test
+    void anUnexpectedErrorResponseKeepsItsStatusMapping() {
+        StorageException mapped = AzureExceptionMapper.mapUnexpected(httpException(404, "BlobNotFound"), "k");
+        assertThat(mapped).isInstanceOf(NotFoundException.class);
+    }
+
+    @ParameterizedTest
+    @MethodSource("unexpectedFailures")
+    void aStreamReadFailureMapsToIOExceptionRestoringOnlyAnInterrupt(RuntimeException failure, boolean interrupted) {
+        IOException mapped = AzureExceptionMapper.mapReadFailure(failure);
+        boolean interruptStatus = Thread.interrupted();
+
+        assertThat(mapped).hasCause(failure);
+        assertThat(interruptStatus).as("interrupt status after mapping").isEqualTo(interrupted);
     }
 
     private static HttpResponseException httpException(int status, String errorCode) {

@@ -16,12 +16,18 @@
 package io.tileverse.storage.azure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.azure.storage.blob.BlobClient;
+import com.azure.storage.blob.BlobClientBuilder;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.file.datalake.DataLakeServiceClient;
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.batch.BatchProviderHelper;
 import io.tileverse.storage.batch.BatchSettings;
 import java.io.IOException;
@@ -37,7 +43,7 @@ class AzureStorageBatchSettingsTest {
 
     @Test
     void blobStorageHandsItsSettingsToTheReader() throws IOException {
-        BlobServiceClient client = mock(BlobServiceClient.class, RETURNS_DEEP_STUBS);
+        BlobServiceClient client = serviceClientMock();
         AzureBlobLocation location = AzureBlobLocation.parse(BLOB_URI);
 
         try (AzureBlobStorage storage =
@@ -49,7 +55,7 @@ class AzureStorageBatchSettingsTest {
 
     @Test
     void dataLakeStorageHandsItsSettingsToTheReader() throws IOException {
-        BlobServiceClient blobClient = mock(BlobServiceClient.class, RETURNS_DEEP_STUBS);
+        BlobServiceClient blobClient = serviceClientMock();
         DataLakeServiceClient dfsClient = mock(DataLakeServiceClient.class, RETURNS_DEEP_STUBS);
         AzureBlobLocation location = AzureBlobLocation.parse(DFS_URI);
 
@@ -62,7 +68,7 @@ class AzureStorageBatchSettingsTest {
 
     @Test
     void borrowedClientStoragesUseTheObjectStoreDefaults() throws IOException {
-        BlobServiceClient client = mock(BlobServiceClient.class, RETURNS_DEEP_STUBS);
+        BlobServiceClient client = serviceClientMock();
         AzureBlobLocation location = AzureBlobLocation.parse(BLOB_URI);
 
         try (AzureBlobStorage storage = new AzureBlobStorage(BLOB_URI, location, new BorrowedAzureHandle(client));
@@ -72,9 +78,56 @@ class AzureStorageBatchSettingsTest {
     }
 
     @Test
+    void anInvalidParameterFailsABlobStorageOpenWithoutKeepingAClient() {
+        AzureClientCache clientCache = new AzureClientCache();
+        AzureBlobStorageProvider provider = new AzureBlobStorageProvider(clientCache);
+        StorageConfig config = sasTokenConfig(BLOB_URI).setParameter(BatchProviderHelper.BATCH_MAX_FETCH, 0);
+
+        assertThatThrownBy(() -> provider.createStorage(config))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxFetchBytes");
+
+        assertThat(clientCache.entryCount()).isZero();
+    }
+
+    @Test
+    void anInvalidParameterFailsADataLakeStorageOpenWithoutKeepingAClient() {
+        AzureClientCache clientCache = new AzureClientCache();
+        AzureDataLakeStorageProvider provider = new AzureDataLakeStorageProvider(clientCache);
+        StorageConfig config = sasTokenConfig(DFS_URI).setParameter(BatchProviderHelper.BATCH_MAX_FETCH, 0);
+
+        assertThatThrownBy(() -> provider.createStorage(config))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxFetchBytes");
+
+        assertThat(clientCache.entryCount()).isZero();
+    }
+
+    @Test
     void bothProvidersDeclareTheBatchParameters() {
         assertThat(new AzureBlobStorageProvider().getParameters()).containsAll(BatchProviderHelper.configParameters());
         assertThat(new AzureDataLakeStorageProvider().getParameters())
                 .containsAll(BatchProviderHelper.configParameters());
+    }
+
+    /**
+     * A reader builds its asynchronous client from the URL and pipeline of the blob client, and a mocked blob client
+     * returns neither.
+     */
+    private static BlobServiceClient serviceClientMock() {
+        BlobServiceClient client = mock(BlobServiceClient.class, RETURNS_DEEP_STUBS);
+        BlobClient blobClient = new BlobClientBuilder()
+                .endpoint("https://account.blob.core.windows.net")
+                .containerName("container")
+                .blobName("prefix/file.bin")
+                .buildClient();
+        when(client.getBlobContainerClient(anyString()).getBlobClient(anyString()))
+                .thenReturn(blobClient);
+        return client;
+    }
+
+    /** A SAS token builds the Blob and Data Lake clients without reaching the network. */
+    private static StorageConfig sasTokenConfig(URI uri) {
+        return new StorageConfig(uri).setParameter(AzureBlobStorageProvider.AZURE_SAS_TOKEN, "sv=2024-01-01&sig=test");
     }
 }

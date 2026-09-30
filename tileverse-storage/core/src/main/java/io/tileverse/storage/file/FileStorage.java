@@ -192,7 +192,10 @@ final class FileStorage implements Storage {
             // The pattern names this one file. Object stores answer such a pattern by listing that key. Testing
             // the entry against the pattern keeps a root-named file from answering a glob.
             StorageEntry entry = toEntry(base, root, false);
-            return matcher.test(entry.key()) ? Stream.of(entry) : Stream.empty();
+            if (entry == null || !matcher.test(entry.key())) {
+                return Stream.empty();
+            }
+            return Stream.of(entry);
         }
         Stream<Path> paths = walk(base, parsed.walkDescendants(), pattern);
         return paths.filter(p -> !p.equals(base))
@@ -257,6 +260,10 @@ final class FileStorage implements Storage {
         BasicFileAttributes attrs;
         try {
             attrs = Files.readAttributes(path, BasicFileAttributes.class);
+        } catch (NoSuchFileException e) {
+            // A link to a missing file, or a file removed after the directory read: an object store omits such a
+            // key from its listing instead of failing it.
+            return null;
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

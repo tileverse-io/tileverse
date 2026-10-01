@@ -25,8 +25,8 @@ class SdkStorageCacheTest {
     @Test
     void sameKeyReturnsSameLease() {
         SdkStorageCache cache = new SdkStorageCache();
-        SdkStorageCache.Key key =
-                new SdkStorageCache.Key(Optional.empty(), Optional.empty(), Optional.empty(), false, Optional.empty());
+        SdkStorageCache.Key key = new SdkStorageCache.Key(
+                Optional.empty(), Optional.empty(), Optional.empty(), false, Optional.empty(), Optional.empty());
         try (SdkStorageCache.Lease a = cache.acquire(key);
                 SdkStorageCache.Lease b = cache.acquire(key)) {
             assertThat(a.client()).isSameAs(b.client());
@@ -37,9 +37,9 @@ class SdkStorageCacheTest {
     void differentKeysReturnDifferentClients() {
         SdkStorageCache cache = new SdkStorageCache();
         SdkStorageCache.Key k1 = new SdkStorageCache.Key(
-                Optional.empty(), Optional.of("proj-a"), Optional.empty(), false, Optional.empty());
+                Optional.empty(), Optional.of("proj-a"), Optional.empty(), false, Optional.empty(), Optional.empty());
         SdkStorageCache.Key k2 = new SdkStorageCache.Key(
-                Optional.empty(), Optional.of("proj-b"), Optional.empty(), false, Optional.empty());
+                Optional.empty(), Optional.of("proj-b"), Optional.empty(), false, Optional.empty(), Optional.empty());
         try (SdkStorageCache.Lease a = cache.acquire(k1);
                 SdkStorageCache.Lease b = cache.acquire(k2)) {
             assertThat(a.client()).isNotSameAs(b.client());
@@ -49,8 +49,8 @@ class SdkStorageCacheTest {
     @Test
     void releasedAtZeroRefcount() {
         SdkStorageCache cache = new SdkStorageCache();
-        SdkStorageCache.Key key =
-                new SdkStorageCache.Key(Optional.empty(), Optional.empty(), Optional.empty(), false, Optional.empty());
+        SdkStorageCache.Key key = new SdkStorageCache.Key(
+                Optional.empty(), Optional.empty(), Optional.empty(), false, Optional.empty(), Optional.empty());
         SdkStorageCache.Lease a = cache.acquire(key);
         SdkStorageCache.Lease b = cache.acquire(key);
         a.close();
@@ -62,17 +62,47 @@ class SdkStorageCacheTest {
     @Test
     void differentUserProjectsProduceDifferentKeys() {
         SdkStorageCache.Key k1 = new SdkStorageCache.Key(
-                Optional.empty(), Optional.empty(), Optional.empty(), false, Optional.of("billing-a"));
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                Optional.of("billing-a"),
+                Optional.empty());
         SdkStorageCache.Key k2 = new SdkStorageCache.Key(
-                Optional.empty(), Optional.empty(), Optional.empty(), false, Optional.of("billing-b"));
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                false,
+                Optional.of("billing-b"),
+                Optional.empty());
         assertThat(k1).isNotEqualTo(k2);
+    }
+
+    @Test
+    void quotaProjectReachesTheClient() {
+        SdkStorageCache cache = new SdkStorageCache();
+        SdkStorageCache.Key key = new SdkStorageCache.Key(
+                Optional.of("http://localhost:4443"),
+                Optional.of("test"),
+                Optional.empty(),
+                true,
+                Optional.empty(),
+                Optional.of("my-quota-project"));
+        try (SdkStorageCache.Lease lease = cache.acquire(key)) {
+            assertThat(lease.client().getOptions().getQuotaProjectId()).isEqualTo("my-quota-project");
+        }
     }
 
     @Test
     void anonymousModeBuildsClient() {
         SdkStorageCache cache = new SdkStorageCache();
         SdkStorageCache.Key key = new SdkStorageCache.Key(
-                Optional.of("http://localhost:4443"), Optional.of("test"), Optional.empty(), true, Optional.empty());
+                Optional.of("http://localhost:4443"),
+                Optional.of("test"),
+                Optional.empty(),
+                true,
+                Optional.empty(),
+                Optional.empty());
         try (SdkStorageCache.Lease lease = cache.acquire(key)) {
             assertThat(lease.client()).isNotNull();
         }

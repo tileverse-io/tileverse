@@ -30,8 +30,8 @@ import org.jspecify.annotations.NullMarked;
 
 /**
  * Reference-counted cache of {@link com.google.cloud.storage.Storage} GCS SDK client instances. Multiple
- * {@link GoogleCloudStorage} instances against the same (host, projectId, credentials, anonymous) key share one
- * underlying client; the SDK client closes when the last lease releases.
+ * {@link GoogleCloudStorage} instances against the same (host, projectId, credentials, anonymous, userProject,
+ * quotaProjectId) key share one underlying client; the SDK client closes when the last lease releases.
  */
 @NullMarked
 @SuppressWarnings("java:S6548") // one cache per process; tests build caches of their own
@@ -54,13 +54,15 @@ final class SdkStorageCache {
             Optional<String> projectId,
             Optional<String> credentialsSource,
             boolean anonymous,
-            Optional<String> userProject) {
+            Optional<String> userProject,
+            Optional<String> quotaProjectId) {
 
         Key {
             Objects.requireNonNull(hostOverride, "hostOverride");
             Objects.requireNonNull(projectId, "projectId");
             Objects.requireNonNull(credentialsSource, "credentialsSource");
             Objects.requireNonNull(userProject, "userProject");
+            Objects.requireNonNull(quotaProjectId, "quotaProjectId");
         }
     }
 
@@ -130,6 +132,7 @@ final class SdkStorageCache {
         StorageOptions.Builder b = StorageOptions.newBuilder();
         key.projectId().ifPresent(b::setProjectId);
         key.hostOverride().ifPresent(b::setHost);
+        key.quotaProjectId().ifPresent(b::setQuotaProjectId);
         if (key.anonymous()) {
             b.setCredentials(NoCredentials.getInstance());
         } else {

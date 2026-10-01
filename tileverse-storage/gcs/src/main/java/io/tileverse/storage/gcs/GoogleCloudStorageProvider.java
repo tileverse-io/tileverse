@@ -133,9 +133,12 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
             .key("storage.gcs.quota-project-id")
             .title("Quota Project ID")
             .description("""
-                    Quota ProjectId that specifies the project used for quota and billing purposes.
+                    The project charged for the quota and billing of API calls, for example when authenticating \
+                    with user credentials through Application Default Credentials. It overrides the \
+                    quota_project_id of the credentials file.
 
-                    The caller must have serviceusage.services.use permission on the project.
+                    The caller must have serviceusage.services.use permission on the project. Requester Pays \
+                    buckets bill the project of the user project parameter instead.
                     """)
             .type(String.class)
             .group(ID)
@@ -331,6 +334,9 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
                 config.getParameter(GCS_USE_DEFAULT_APPLICTION_CREDENTIALS).orElse(true);
         boolean anonymous = !useDefaultCreds || hostOverride.isPresent();
         Optional<String> userProject = config.getParameter(GCS_USER_PROJECT).filter(s -> !s.isBlank());
-        return new SdkStorageCache.Key(hostOverride, projectId, Optional.empty(), anonymous, userProject);
+        Optional<String> quotaProjectId =
+                config.getParameter(GCS_QUOTA_PROJECT_ID).filter(s -> !s.isBlank());
+        return new SdkStorageCache.Key(
+                hostOverride, projectId, Optional.empty(), anonymous, userProject, quotaProjectId);
     }
 }

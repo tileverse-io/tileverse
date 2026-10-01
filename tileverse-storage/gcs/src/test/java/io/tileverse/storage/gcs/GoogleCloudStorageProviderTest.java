@@ -89,6 +89,20 @@ class GoogleCloudStorageProviderTest {
     }
 
     @Test
+    void quotaProjectFlowsIntoCacheKey() {
+        StorageConfig config = new StorageConfig("gs://bucket/file.bin")
+                .setParameter(GoogleCloudStorageProvider.GCS_QUOTA_PROJECT_ID, "my-quota-project");
+        assertThat(GoogleCloudStorageProvider.keyFor(config).quotaProjectId()).hasValue("my-quota-project");
+    }
+
+    @Test
+    void blankQuotaProjectIsTreatedAsAbsent() {
+        StorageConfig config = new StorageConfig("gs://bucket/file.bin")
+                .setParameter(GoogleCloudStorageProvider.GCS_QUOTA_PROJECT_ID, "   ");
+        assertThat(GoogleCloudStorageProvider.keyFor(config).quotaProjectId()).isEmpty();
+    }
+
+    @Test
     void blankUserProjectIsTreatedAsAbsent() {
         StorageConfig config = new StorageConfig("gs://bucket/file.bin")
                 .setParameter(GoogleCloudStorageProvider.GCS_USER_PROJECT, "   ");

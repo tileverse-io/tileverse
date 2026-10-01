@@ -38,13 +38,18 @@ public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
     private final AzureClientCache clientCache;
 
     public AzureDataLakeStorageProvider() {
-        this(new AzureClientCache());
+        this(AzureClientCache.INSTANCE);
     }
 
     /** Creates a provider leasing its clients from {@code clientCache}; tests inspect the cache after an open. */
     AzureDataLakeStorageProvider(AzureClientCache clientCache) {
         super(true);
         this.clientCache = Objects.requireNonNull(clientCache, "clientCache");
+    }
+
+    /** Returns the cache leasing the clients of the storages created by this provider. */
+    AzureClientCache clientCache() {
+        return clientCache;
     }
 
     /**

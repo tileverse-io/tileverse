@@ -31,12 +31,19 @@ import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Per-provider reference-counted cache of {@link BlobServiceClient} and {@link DataLakeServiceClient} instances.
- * Multiple {@link AzureBlobStorage} and {@link AzureDataLakeStorage} instances against the same account share one
- * entry; the underlying clients close when the last lease releases.
+ * Reference-counted cache of {@link BlobServiceClient} and {@link DataLakeServiceClient} instances. Multiple
+ * {@link AzureBlobStorage} and {@link AzureDataLakeStorage} instances against the same account share one entry; the
+ * underlying clients close when the last lease releases.
  */
 @NullMarked
+@SuppressWarnings("java:S6548") // one cache per process; tests build caches of their own
 final class AzureClientCache {
+
+    /**
+     * The cache of the process, used by both Azure providers created with their public constructors. StorageFactory
+     * instantiates a provider at every lookup: a cache per provider would build the clients again at every open.
+     */
+    static final AzureClientCache INSTANCE = new AzureClientCache();
 
     /**
      * Cache discriminator. {@code accountKey} and {@code sasToken} appear here only as presence indicators and source

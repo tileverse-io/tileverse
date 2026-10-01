@@ -38,6 +38,22 @@ class GoogleCloudStorageProviderTest {
                 .isNotNull();
     }
 
+    /** Every lookup instantiates the provider again, as StorageFactory does at every open. */
+    @Test
+    void providersOfTwoLookupsLeaseFromOneCache() {
+        GoogleCloudStorageProvider first = lookUpProvider();
+        GoogleCloudStorageProvider second = lookUpProvider();
+
+        assertThat(second).isNotSameAs(first);
+        assertThat(second.clientCache()).isSameAs(first.clientCache());
+    }
+
+    private static GoogleCloudStorageProvider lookUpProvider() {
+        StorageProvider found =
+                StorageProvider.findProvider(GoogleCloudStorageProvider.ID).orElseThrow();
+        return (GoogleCloudStorageProvider) found;
+    }
+
     @Test
     void testBuildParametersAndDefaults() {
         List<StorageParameter<?>> parameters = provider.buildParameters();

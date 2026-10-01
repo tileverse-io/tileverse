@@ -318,13 +318,18 @@ public class S3StorageProvider extends AbstractStorageProvider {
      * @see AbstractStorageProvider#MEMORY_CACHE_ENABLED
      */
     public S3StorageProvider() {
-        this(new S3ClientCache());
+        this(S3ClientCache.INSTANCE);
     }
 
     /** Creates a provider leasing its clients from {@code clientCache}; tests inspect the cache after an open. */
     S3StorageProvider(S3ClientCache clientCache) {
         super(true);
         this.clientCache = Objects.requireNonNull(clientCache, "clientCache");
+    }
+
+    /** Returns the cache leasing the clients of the storages created by this provider. */
+    S3ClientCache clientCache() {
+        return clientCache;
     }
 
     /**

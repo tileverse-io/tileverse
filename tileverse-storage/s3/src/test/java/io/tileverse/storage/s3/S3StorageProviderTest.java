@@ -53,6 +53,22 @@ class S3StorageProviderTest {
         assertThat(StorageProvider.getProvider(S3StorageProvider.ID, true)).isNotNull();
     }
 
+    /** Every lookup instantiates the provider again, as StorageFactory does at every open. */
+    @Test
+    void providersOfTwoLookupsLeaseFromOneCache() {
+        S3StorageProvider first = lookUpProvider();
+        S3StorageProvider second = lookUpProvider();
+
+        assertThat(second).isNotSameAs(first);
+        assertThat(second.clientCache()).isSameAs(first.clientCache());
+    }
+
+    private static S3StorageProvider lookUpProvider() {
+        StorageProvider found =
+                StorageProvider.findProvider(S3StorageProvider.ID).orElseThrow();
+        return (S3StorageProvider) found;
+    }
+
     @Test
     @SetSystemProperty(key = S3StorageProvider.ENABLED_KEY, value = "false")
     void testFactoryLookupWhenDisabled() {

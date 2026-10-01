@@ -29,12 +29,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.jspecify.annotations.NullMarked;
 
 /**
- * Per-provider reference-counted cache of {@link com.google.cloud.storage.Storage} GCS SDK client instances. Multiple
+ * Reference-counted cache of {@link com.google.cloud.storage.Storage} GCS SDK client instances. Multiple
  * {@link GoogleCloudStorage} instances against the same (host, projectId, credentials, anonymous) key share one
  * underlying client; the SDK client closes when the last lease releases.
  */
 @NullMarked
+@SuppressWarnings("java:S6548") // one cache per process; tests build caches of their own
 final class SdkStorageCache {
+
+    /**
+     * The cache of the process, used by every provider created with its public constructor. StorageFactory instantiates
+     * a provider at every lookup: a cache per provider would build a client at every open.
+     */
+    static final SdkStorageCache INSTANCE = new SdkStorageCache();
 
     private final Map<SdkStorageCache.Key, SdkStorageCache.Entry> entries = new ConcurrentHashMap<>();
 

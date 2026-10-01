@@ -48,7 +48,7 @@ import software.amazon.awssdk.transfer.s3.S3TransferManager;
 import software.amazon.awssdk.utils.SdkAutoCloseable;
 
 /**
- * Per-provider reference-counted cache of {@link S3Client}, {@link S3AsyncClient}, {@link S3TransferManager}, and
+ * Reference-counted cache of {@link S3Client}, {@link S3AsyncClient}, {@link S3TransferManager}, and
  * {@link S3Presigner} instances, keyed by (region, endpoint, credentials profile, forcePathStyle). Multiple
  * {@link S3Storage} instances sharing the same key share one underlying client set; the SDK clients are closed when the
  * last lease is released.
@@ -59,6 +59,12 @@ import software.amazon.awssdk.utils.SdkAutoCloseable;
  */
 @NullMarked
 final class S3ClientCache {
+
+    /**
+     * The cache of the process, used by every provider created with its public constructor. StorageFactory instantiates
+     * a provider at every lookup: a cache per provider would build a client set at every open.
+     */
+    static final S3ClientCache INSTANCE = new S3ClientCache();
 
     record Key(
             String region,

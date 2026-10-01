@@ -31,6 +31,22 @@ class AzureBlobStorageProviderTest {
 
     private final AzureBlobStorageProvider provider = new AzureBlobStorageProvider();
 
+    /** Every lookup instantiates the provider again, as StorageFactory does at every open. */
+    @Test
+    void providersOfTwoLookupsLeaseFromOneCache() {
+        AzureBlobStorageProvider first = lookUpProvider();
+        AzureBlobStorageProvider second = lookUpProvider();
+
+        assertThat(second).isNotSameAs(first);
+        assertThat(second.clientCache()).isSameAs(first.clientCache());
+    }
+
+    private static AzureBlobStorageProvider lookUpProvider() {
+        StorageProvider found =
+                StorageProvider.findProvider(AzureBlobStorageProvider.ID).orElseThrow();
+        return (AzureBlobStorageProvider) found;
+    }
+
     @Test
     void canProcessAcceptsContainerOnlyUri() {
         assertThat(provider.canProcess(new StorageConfig("https://acct.blob.core.windows.net/my-container")))

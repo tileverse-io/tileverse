@@ -19,9 +19,28 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
 import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.spi.StorageProvider;
 import org.junit.jupiter.api.Test;
 
 class AzureDataLakeStorageProviderTest {
+
+    /** One cache entry holds both clients of an account: the Data Lake and Blob providers share one cache. */
+    @Test
+    void providersOfTwoLookupsLeaseFromTheCacheOfTheBlobProvider() {
+        AzureDataLakeStorageProvider first = lookUpProvider();
+        AzureDataLakeStorageProvider second = lookUpProvider();
+        AzureBlobStorageProvider blobProvider = new AzureBlobStorageProvider();
+
+        assertThat(second).isNotSameAs(first);
+        assertThat(second.clientCache()).isSameAs(first.clientCache());
+        assertThat(blobProvider.clientCache()).isSameAs(first.clientCache());
+    }
+
+    private static AzureDataLakeStorageProvider lookUpProvider() {
+        StorageProvider found =
+                StorageProvider.findProvider(AzureDataLakeStorageProvider.ID).orElseThrow();
+        return (AzureDataLakeStorageProvider) found;
+    }
 
     @Test
     void canProcessAcceptsAbfsUris() {

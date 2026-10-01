@@ -75,13 +75,18 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
      * @see AbstractStorageProvider#MEMORY_CACHE_ENABLED
      */
     public GoogleCloudStorageProvider() {
-        this(new SdkStorageCache());
+        this(SdkStorageCache.INSTANCE);
     }
 
     /** Creates a provider leasing its clients from {@code clientCache}; tests inspect the cache after an open. */
     GoogleCloudStorageProvider(SdkStorageCache clientCache) {
         super(true);
         this.clientCache = Objects.requireNonNull(clientCache, "clientCache");
+    }
+
+    /** Returns the cache leasing the clients of the storages created by this provider. */
+    SdkStorageCache clientCache() {
+        return clientCache;
     }
 
     /**

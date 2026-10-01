@@ -112,20 +112,26 @@ For development against an HTTPS endpoint with a self-signed certificate:
 
 ## AWS S3
 
-The S3 backend uses the AWS SDK v2 default credential chain unless you override it.
+The S3 backend takes the first credentials configured in this order:
+
+1. `storage.s3.anonymous=true`: unsigned requests, for public buckets.
+2. `storage.s3.aws-access-key-id` together with `storage.s3.aws-secret-access-key`: static keys.
+3. `storage.s3.default-credentials-profile`: that profile only, whatever the environment sets.
+4. Nothing set: the AWS SDK v2 default credentials provider chain.
 
 ### Default discovery order
 
-The chain looks for credentials in this order (standard AWS behavior):
+The default chain looks for credentials in this order (standard AWS behavior):
 
-1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
-2. System properties (`aws.accessKeyId`, `aws.secretAccessKey`)
+1. System properties (`aws.accessKeyId`, `aws.secretAccessKey`)
+2. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
 3. Web Identity Token (EKS/K8s)
-4. `~/.aws/credentials` file (default profile, or the one set by `AWS_PROFILE`)
-5. EC2 Instance Profile / ECS Task Role
+4. `~/.aws/credentials` and `~/.aws/config` (the profile named by `AWS_PROFILE`, or `default`)
+5. ECS container credentials
+6. EC2 instance profile
 
-If none of these match and you haven't supplied static keys, the client falls back to anonymous access (useful for
-public buckets).
+The chain never falls back to anonymous access: public buckets need `storage.s3.anonymous=true`. To pick a profile
+per environment, leave `storage.s3.default-credentials-profile` unset and set `AWS_PROFILE`.
 
 ### Static access keys
 
@@ -162,8 +168,6 @@ public buckets).
     ```java
     Properties props = new Properties();
     props.setProperty("storage.s3.default-credentials-profile", "production");
-    // optional:
-    // props.setProperty("storage.s3.use-default-credentials-provider", "true");
     ```
 
 === "SDK-injection"
@@ -320,15 +324,16 @@ For a fully customised `RequestRetryOptions` (secondary host, custom retry polic
 
 ### Application Default Credentials (ADC)
 
-This is the default. The library automatically looks for:
+This is the default: with `storage.gcs.anonymous` unset, the library looks for:
 
 1. `GOOGLE_APPLICATION_CREDENTIALS` environment variable pointing at a service account JSON.
 2. `gcloud auth application-default login` credentials.
 3. Attached Service Account on GCE / GKE / Cloud Run / Cloud Functions.
 
+Opening a `Storage` fails when none is found; the credentials never fall back to anonymous access.
+
 ```java
 Properties props = new Properties();
-props.setProperty("storage.gcs.default-credentials-chain", "true");
 // optional — disambiguates billing when multiple projects are accessible:
 // props.setProperty("storage.gcs.project-id", "my-project");
 
@@ -362,7 +367,7 @@ try (FileInputStream input = new FileInputStream("/path/to/key.json")) {
 
 ```java
 Properties props = new Properties();
-props.setProperty("storage.gcs.default-credentials-chain", "false");
+props.setProperty("storage.gcs.anonymous", "true");
 
 try (Storage storage = StorageFactory.open(URI.create("gs://gcp-public-data-landsat/"), props);
         RangeReader reader = storage.openRangeReader(".../some.tif")) {
@@ -377,6 +382,7 @@ Either rely on URI-pattern detection (`http(s)://host/storage/v1/b/...`) or set 
 ```java
 Properties props = new Properties();
 props.setProperty("storage.gcs.endpoint", "http://localhost:4443");
+props.setProperty("storage.gcs.anonymous", "true");
 
 try (Storage storage = StorageFactory.open(URI.create("gs://my-bucket/"), props);
         RangeReader reader = storage.openRangeReader("data.bin")) {
@@ -384,7 +390,8 @@ try (Storage storage = StorageFactory.open(URI.create("gs://my-bucket/"), props)
 }
 ```
 
-When an endpoint override is in effect, credentials default to anonymous (the emulator typically doesn't validate them).
+An endpoint override keeps the credentials rules of the default endpoint: emulators need `storage.gcs.anonymous=true`,
+and a private or restricted endpoint can use Application Default Credentials.
 
 The earlier key `storage.gcs.host` is still accepted: it is promoted to `storage.gcs.endpoint` when a configuration is loaded.
 
@@ -411,8 +418,8 @@ Set `storage.s3.requester-pays=true` to add `x-amz-request-payer: requester` to 
 ```java
 Properties props = new Properties();
 props.setProperty("storage.s3.requester-pays", "true");
-// Requester Pays buckets reject unsigned requests; supply real credentials (the requester's, not the bucket owner's).
-props.setProperty("storage.s3.use-default-credentials-provider", "true");
+// Requester Pays buckets reject unsigned requests. With no credential parameter set, the AWS default credentials
+// chain supplies the requester's credentials (not the bucket owner's).
 props.setProperty("storage.s3.region", "us-east-1");
 
 URI uri = URI.create("s3://noaa-nexrad-level2/2024/01/01/KAMA/");
@@ -431,8 +438,7 @@ authenticated credentials chain that has `serviceusage.services.use` on that pro
 ```java
 Properties props = new Properties();
 props.setProperty("storage.gcs.user-project", "my-billing-project");
-// Requester Pays needs authenticated credentials on the billing project.
-props.setProperty("storage.gcs.default-credentials-chain", "true");
+// Requester Pays needs authenticated credentials on the billing project: leave storage.gcs.anonymous unset.
 
 URI uri = URI.create("gs://requester-pays-public-bucket/path/data.bin");
 try (Storage storage = StorageFactory.open(uri, props)) {

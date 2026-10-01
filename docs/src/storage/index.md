@@ -214,7 +214,8 @@ Per-backend configuration uses the `storage.*` flat namespace, e.g.:
 | `storage.azure.connection-string` | Azure Blob (Azurite, dev) |
 | `storage.azure.endpoint` | Azure Blob (redirect `az://` to an emulator, sovereign cloud, or custom domain) |
 | `storage.azure.anonymous=true` | Azure Blob (public containers, no credentials) |
-| `storage.gcs.project-id`, `storage.gcs.default-credentials-chain` | GCS |
+| `storage.gcs.project-id`, `storage.gcs.quota-project-id` | GCS |
+| `storage.gcs.anonymous=true` | GCS (public buckets and emulators, no credentials) |
 | `storage.gcs.endpoint` | GCS (fake-gcs-server / emulators; full URL, not a hostname) |
 | `storage.http.timeout-millis`, `storage.http.auth-bearer-token` | HTTP |
 

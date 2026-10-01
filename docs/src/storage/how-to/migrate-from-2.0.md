@@ -29,6 +29,8 @@ an absolute grid; every other read is passed through untouched.
 | `CachingRangeReader.Builder.headerSize(int)` / `withHeaderBuffer()` / `withoutHeaderBuffer()` | declare a region over the header; hot header blocks stay cached |
 | `storage.caching.blockaligned` config key | compose the aligner in code |
 | `storage.caching.blocksize` config key | `BlockAlignedRangeReader.Builder.blockSize(int)` |
+| `storage.s3.use-default-credentials-provider` config key and `S3StorageProvider.S3_USE_DEFAULT_CREDENTIALS_PROVIDER` | none: with no anonymous access, access keys, or profile set, S3 uses the AWS default credentials provider chain, as it did in 2.0 |
+| `storage.gcs.default-credentials-chain` config key and `GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS` | `storage.gcs.anonymous`; a saved `storage.gcs.default-credentials-chain=false` still reads as `storage.gcs.anonymous=true` |
 
 The removed keys are ignored like any unknown parameter; `storage.caching.enabled` keeps
 working but now defaults to `false`; pass `storage.caching.enabled=true` to keep the previous
@@ -79,6 +81,15 @@ honors the in-flight bound too.
 - `Storage.read` streams an object over one connection, through the sync client. 2.0 split a
   large read across connections.
 - An S3-compatible endpoint answering without an `ETag` header reads like any other.
+
+## GCS credentials
+
+- A GCS `Storage` authenticates with Application Default Credentials unless `storage.gcs.anonymous=true`.
+  2.0 read anonymously by default when opened through `StorageFactory`.
+- Opening a `Storage` fails when no Application Default Credentials can be found. 2.0 fell back to
+  anonymous access.
+- An endpoint override (`storage.gcs.endpoint`) keeps the credentials. 2.0 made it anonymous: emulator
+  configurations add `storage.gcs.anonymous=true`.
 
 ## Local files
 

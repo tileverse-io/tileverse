@@ -59,6 +59,14 @@ public class StorageConfig {
      */
     private static final Map<String, String> RENAMED_KEYS = Map.of("storage.gcs.host", "storage.gcs.endpoint");
 
+    /**
+     * Boolean keys replaced by a key of the opposite meaning, mapping each deprecated key to its replacement: a saved
+     * {@code storage.gcs.default-credentials-chain=false} meant anonymous access, stated by
+     * {@code storage.gcs.anonymous=true}. An explicit replacement key wins over the deprecated one.
+     */
+    private static final Map<String, String> INVERTED_KEYS =
+            Map.of("storage.gcs.default-credentials-chain", "storage.gcs.anonymous");
+
     private static final Set<String> warnedLegacyKeys = ConcurrentHashMap.newKeySet();
 
     /** The canonical key used in {@link Properties} to specify the URI of the resource. */
@@ -204,7 +212,7 @@ public class StorageConfig {
         if (FORCE_PROVIDER_ID.key().equals(normalized)) {
             this.providerId = value == null ? null : String.valueOf(value);
         }
-        this.parameterValues.put(normalized, value);
+        putNormalized(parameterValues, normalized, value);
         return this;
     }
 
@@ -451,8 +459,8 @@ public class StorageConfig {
     }
 
     /**
-     * Returns a copy of the given map with every key normalized via {@link #normalizeKey(String)}. Iteration order is
-     * preserved.
+     * Returns a copy of the given map with every key normalized via {@link #normalizeKey(String)}, and every deprecated
+     * boolean key replaced by its opposite key and value. Iteration order is preserved.
      *
      * @param in source map, must not be {@code null}.
      * @return a new {@link LinkedHashMap} with normalized keys.
@@ -460,8 +468,32 @@ public class StorageConfig {
     public static Map<String, Object> normalizeKeys(Map<String, ?> in) {
         requireNonNull(in, "in");
         Map<String, Object> out = new LinkedHashMap<>(in.size());
-        in.forEach((k, v) -> out.put(normalizeKey(k), v));
+        in.forEach((k, v) -> putNormalized(out, normalizeKey(k), v));
         return out;
+    }
+
+    /** Puts {@code value} under its normalized key, or its opposite under the replacement of a deprecated key. */
+    private static void putNormalized(Map<String, Object> values, String normalizedKey, @Nullable Object value) {
+        String replacement = INVERTED_KEYS.get(normalizedKey);
+        if (replacement == null) {
+            values.put(normalizedKey, value);
+            return;
+        }
+        if (value == null) {
+            return;
+        }
+        warnInvertedKeyOnce(normalizedKey, replacement);
+        Boolean deprecatedValue = convert(value, Boolean.class);
+        values.putIfAbsent(replacement, !deprecatedValue);
+    }
+
+    private static void warnInvertedKeyOnce(String deprecatedKey, String replacement) {
+        if (warnedLegacyKeys.add(deprecatedKey)) {
+            log.warn(
+                    "Deprecated parameter key '{}' -- use '{}' with the opposite value. The old key remains accepted for backwards compatibility.",
+                    deprecatedKey,
+                    replacement);
+        }
     }
 
     /**

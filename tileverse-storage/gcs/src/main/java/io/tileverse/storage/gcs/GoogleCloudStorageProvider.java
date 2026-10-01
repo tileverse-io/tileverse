@@ -144,17 +144,21 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
             .group(ID)
             .build();
 
-    /** Use the default application credentials chain, defaults to {@code false} */
-    public static final StorageParameter<Boolean> GCS_USE_DEFAULT_APPLICTION_CREDENTIALS = StorageParameter.builder()
-            .key("storage.gcs.default-credentials-chain")
-            .title("Use the default application credentials chain")
+    /**
+     * When {@code true}, the client sends unsigned requests with no credentials, for public buckets and emulators.
+     * Takes precedence over Application Default Credentials.
+     */
+    public static final StorageParameter<Boolean> GCS_ANONYMOUS = StorageParameter.builder()
+            .key("storage.gcs.anonymous")
+            .title("Anonymous public access")
             .description("""
-                    Whether to use the default application credentials chain.
+                    When true, requests are unsigned: no credentials are looked up or sent. Use for public \
+                    buckets that allow anonymous reads, and for emulators such as fake-gcs-server. \
+                    Takes precedence over Application Default Credentials.
 
-                    To set up Application Default Credentials for your environment, \
-                    see https://cloud.google.com/docs/authentication/external/set-up-adc
-
-                    Not doing so will lead to an error saying "Your default credentials were not found."
+                    When false, Application Default Credentials authenticate the requests; opening a Storage \
+                    fails when none can be found. To set them up, see \
+                    https://cloud.google.com/docs/authentication/external/set-up-adc
                     """)
             .group(ID)
             .subgroup(SUBGROUP_AUTHENTICATION)
@@ -170,9 +174,8 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
      *
      * <p><b>Authentication is mandatory.</b> The requester must be an authenticated principal (service account or end
      * user) that holds {@code serviceusage.services.use} on the project named here; anonymous calls cannot satisfy
-     * either requirement. Enable {@link #GCS_USE_DEFAULT_APPLICTION_CREDENTIALS} or inject a configured
-     * {@link com.google.cloud.storage.Storage} client, and do not pair this parameter with a host override that forces
-     * anonymous mode.
+     * either requirement. Leave {@link #GCS_ANONYMOUS} off, which authenticates with Application Default Credentials,
+     * or inject a configured {@link com.google.cloud.storage.Storage} client.
      */
     public static final StorageParameter<String> GCS_USER_PROJECT = StorageParameter.builder()
             .key("storage.gcs.user-project")
@@ -184,8 +187,8 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
 
                     Authentication is mandatory: the requester must be an authenticated principal (service \
                     account or end user) that holds the serviceusage.services.use permission on the named \
-                    billing project. Anonymous requests cannot satisfy that requirement. Enable \
-                    storage.gcs.default-credentials-chain so application default credentials are used.
+                    billing project. Anonymous requests cannot satisfy that requirement: leave \
+                    storage.gcs.anonymous off to authenticate with Application Default Credentials.
                     """)
             .type(String.class)
             .group(ID)
@@ -193,8 +196,8 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
 
     /**
      * Custom GCS endpoint override (e.g. {@code http://localhost:4443} for fake-gcs-server emulators). When set, the
-     * provider talks to this endpoint instead of the default {@code https://storage.googleapis.com}, and credentials
-     * default to anonymous unless explicitly configured otherwise.
+     * provider talks to this endpoint instead of the default {@code https://storage.googleapis.com}. Credentials follow
+     * {@link #GCS_ANONYMOUS} as for the default endpoint: emulators need it set.
      *
      * <p>The value is a full endpoint URL with scheme (the Google SDK's {@code StorageOptions.Builder.setHost} expects
      * a URI, not a bare hostname).
@@ -208,18 +211,14 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
                     Custom endpoint for GCS-compatible servers (e.g. fake-gcs-server: http://localhost:4443). \
                     When set, the SDK targets this endpoint instead of the public Google endpoint. \
                     The value is a full endpoint URL with scheme, not a bare hostname. \
-                    Authentication defaults to anonymous when an endpoint override is in effect.
+                    Credentials follow storage.gcs.anonymous as for the default endpoint: emulators need it set.
                     """)
             .type(URI.class)
             .group(ID)
             .build();
 
-    private static final List<StorageParameter<?>> PARAMS = List.of(
-            GCS_PROJECT_ID,
-            GCS_QUOTA_PROJECT_ID,
-            GCS_USE_DEFAULT_APPLICTION_CREDENTIALS,
-            GCS_USER_PROJECT,
-            GCS_ENDPOINT);
+    private static final List<StorageParameter<?>> PARAMS =
+            List.of(GCS_PROJECT_ID, GCS_QUOTA_PROJECT_ID, GCS_ANONYMOUS, GCS_USER_PROJECT, GCS_ENDPOINT);
 
     private final SdkStorageCache clientCache;
 
@@ -312,8 +311,8 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
      *   <li>none (use the default Google endpoint)
      * </ol>
      *
-     * <p>When an endpoint override is in effect, credentials default to anonymous unless the application default chain
-     * is explicitly enabled.
+     * <p>Requests are anonymous only when {@link #GCS_ANONYMOUS} is set; an endpoint override keeps the credentials.
+     * {@link StorageConfig} promotes a saved {@code storage.gcs.default-credentials-chain=false} to it.
      */
     static SdkStorageCache.Key keyFor(StorageConfig config) {
         URI uri = config.baseUri();
@@ -330,9 +329,7 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
                 hostOverride = Optional.of(uri.getScheme() + "://" + uri.getAuthority());
             }
         }
-        boolean useDefaultCreds =
-                config.getParameter(GCS_USE_DEFAULT_APPLICTION_CREDENTIALS).orElse(true);
-        boolean anonymous = !useDefaultCreds || hostOverride.isPresent();
+        boolean anonymous = config.getParameter(GCS_ANONYMOUS).orElse(false);
         Optional<String> userProject = config.getParameter(GCS_USER_PROJECT).filter(s -> !s.isBlank());
         Optional<String> quotaProjectId =
                 config.getParameter(GCS_QUOTA_PROJECT_ID).filter(s -> !s.isBlank());

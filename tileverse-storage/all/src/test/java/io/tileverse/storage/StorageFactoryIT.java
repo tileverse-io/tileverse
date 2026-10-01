@@ -252,7 +252,7 @@ class StorageFactoryIT {
 
         testFindBestProvider(URI.create(gcsURL), GoogleCloudStorageProvider.class);
 
-        StorageConfig config = new StorageConfig(gcsURL);
+        StorageConfig config = new StorageConfig(gcsURL).setParameter(GoogleCloudStorageProvider.GCS_ANONYMOUS, true);
         RangeReader reader = testCreate(config);
         assertThat(reader.size()).hasValue(FILE_SIZE);
     }

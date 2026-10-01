@@ -75,25 +75,46 @@ class GoogleCloudStorageProviderConfigTest {
     }
 
     @Test
-    void anonymousMode_whenHostOverridePresent() {
+    void anonymousParameterSendsUnsignedRequests() {
+        StorageConfig config = new StorageConfig(GS_URI).setParameter(GoogleCloudStorageProvider.GCS_ANONYMOUS, true);
+
+        assertThat(GoogleCloudStorageProvider.keyFor(config).anonymous()).isTrue();
+    }
+
+    @Test
+    void withNothingSetTheCredentialsAreUsed() {
+        assertThat(GoogleCloudStorageProvider.keyFor(new StorageConfig(GS_URI)).anonymous())
+                .isFalse();
+    }
+
+    /** StorageFactory layers the declared defaults under the caller's parameters. */
+    @Test
+    void theDeclaredDefaultsUseTheCredentials() {
+        StorageConfig config = new GoogleCloudStorageProvider().getDefaultConfig();
+        config.baseUri(GS_URI);
+
+        assertThat(GoogleCloudStorageProvider.keyFor(config).anonymous()).isFalse();
+    }
+
+    @Test
+    void endpointOverrideKeepsTheCredentials() {
         StorageConfig config = new StorageConfig(GS_URI)
                 .setParameter(GoogleCloudStorageProvider.GCS_ENDPOINT, URI.create("http://localhost:4443"));
 
+        assertThat(GoogleCloudStorageProvider.keyFor(config).anonymous()).isFalse();
+    }
+
+    /** GeoServer catalogs saved by tileverse 2.0 hold the replaced key; false meant anonymous access. */
+    @Test
+    void savedDefaultCredentialsChainFalseReadsAnonymously() {
+        StorageConfig config = new StorageConfig(GS_URI).setParameter("storage.gcs.default-credentials-chain", false);
+
         assertThat(GoogleCloudStorageProvider.keyFor(config).anonymous()).isTrue();
     }
 
     @Test
-    void anonymousMode_whenDefaultCredentialsExplicitlyDisabled() {
-        StorageConfig config = new StorageConfig(GS_URI)
-                .setParameter(GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS, false);
-
-        assertThat(GoogleCloudStorageProvider.keyFor(config).anonymous()).isTrue();
-    }
-
-    @Test
-    void notAnonymous_whenDefaultCredentialsEnabledAndNoHostOverride() {
-        StorageConfig config = new StorageConfig(GS_URI)
-                .setParameter(GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS, true);
+    void savedDefaultCredentialsChainTrueUsesTheCredentials() {
+        StorageConfig config = new StorageConfig(GS_URI).setParameter("storage.gcs.default-credentials-chain", true);
 
         assertThat(GoogleCloudStorageProvider.keyFor(config).anonymous()).isFalse();
     }

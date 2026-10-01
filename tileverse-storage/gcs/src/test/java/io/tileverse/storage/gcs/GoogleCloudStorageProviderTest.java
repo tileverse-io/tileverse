@@ -61,7 +61,7 @@ class GoogleCloudStorageProviderTest {
                 .containsExactly(
                         GoogleCloudStorageProvider.GCS_PROJECT_ID,
                         GoogleCloudStorageProvider.GCS_QUOTA_PROJECT_ID,
-                        GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS,
+                        GoogleCloudStorageProvider.GCS_ANONYMOUS,
                         GoogleCloudStorageProvider.GCS_USER_PROJECT,
                         GoogleCloudStorageProvider.GCS_ENDPOINT,
                         BatchProviderHelper.BATCH_MAX_GAP,
@@ -69,7 +69,7 @@ class GoogleCloudStorageProviderTest {
                         BatchProviderHelper.BATCH_MAX_IN_FLIGHT_FETCHES);
 
         StorageConfig defaults = provider.getDefaultConfig();
-        assertThat(defaults.getParameter(GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS))
+        assertThat(defaults.getParameter(GoogleCloudStorageProvider.GCS_ANONYMOUS))
                 .hasValue(false);
     }
 

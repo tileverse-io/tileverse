@@ -30,7 +30,6 @@ import org.jspecify.annotations.Nullable;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
@@ -293,8 +292,8 @@ final class S3ClientCache {
         //   2. Explicit access-key + secret in the cache key (StaticCredentialsProvider).
         //      Inline secrets in the StorageConfig take precedence over the chains below.
         //   3. Explicit profile name (ProfileCredentialsProvider).
-        //   4. DefaultCredentialsProvider (env vars, system props, ~/.aws/credentials,
-        //      EC2 instance metadata, web identity, etc.).
+        //   4. The AWS default chain (system props, env vars, web identity, ~/.aws files,
+        //      container and EC2 instance roles), failing with a pointer to the anonymous flag.
         AwsCredentialsProvider creds;
         if (key.anonymous()) {
             creds = AnonymousCredentialsProvider.create();
@@ -307,7 +306,7 @@ final class S3ClientCache {
             String profileName = key.profile().orElseThrow();
             creds = ProfileCredentialsProvider.create(profileName);
         } else {
-            creds = DefaultCredentialsProvider.builder().build();
+            creds = new DefaultCredentialsChain();
         }
         syncBuilder.credentialsProvider(creds);
         asyncBuilder.credentialsProvider(creds);

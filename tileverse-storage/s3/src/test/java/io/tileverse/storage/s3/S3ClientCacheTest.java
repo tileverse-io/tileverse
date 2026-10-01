@@ -60,6 +60,18 @@ class S3ClientCacheTest {
     }
 
     @Test
+    void withoutKeysOrProfileTheClientsUseTheDefaultCredentialsChain() {
+        S3ClientCache.Key nothingSet = S3ClientCache.key("us-east-1", null, false, null, null, null, false);
+        S3ClientCache cache = cacheCountingHttpClients();
+        try (S3ClientCache.Lease lease = cache.acquire(nothingSet)) {
+            assertThat(lease.client().serviceClientConfiguration().credentialsProvider())
+                    .isInstanceOf(DefaultCredentialsChain.class);
+            assertThat(lease.asyncClient().serviceClientConfiguration().credentialsProvider())
+                    .isInstanceOf(DefaultCredentialsChain.class);
+        }
+    }
+
+    @Test
     void theAsyncClientSendsItsRequestsThroughTheSharedHttpClient() {
         S3ClientCache cache = cacheCountingHttpClients();
         try (S3ClientCache.Lease lease = cache.acquire(EAST)) {

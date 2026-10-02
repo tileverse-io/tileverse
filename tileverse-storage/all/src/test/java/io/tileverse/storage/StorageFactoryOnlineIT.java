@@ -68,7 +68,7 @@ class StorageFactoryOnlineIT {
 
         testFindBestProvider(URI.create(gcsURL), GoogleCloudStorageProvider.class);
 
-        StorageConfig config = new StorageConfig(gcsURL);
+        StorageConfig config = new StorageConfig(gcsURL).setParameter(GoogleCloudStorageProvider.GCS_ANONYMOUS, true);
         testCreate(config);
     }
 
@@ -80,7 +80,7 @@ class StorageFactoryOnlineIT {
 
         testFindBestProvider(URI.create(gcsURL), GoogleCloudStorageProvider.class);
 
-        StorageConfig config = new StorageConfig(gcsURL);
+        StorageConfig config = new StorageConfig(gcsURL).setParameter(GoogleCloudStorageProvider.GCS_ANONYMOUS, true);
         testCreate(config);
     }
 

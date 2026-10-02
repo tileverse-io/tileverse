@@ -15,10 +15,12 @@
  */
 package io.tileverse.storage.gcs;
 
+import com.google.auth.Credentials;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.NoCredentials;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import io.tileverse.storage.StorageException;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
@@ -30,8 +32,8 @@ import org.jspecify.annotations.NullMarked;
 
 /**
  * Reference-counted cache of {@link com.google.cloud.storage.Storage} GCS SDK client instances. Multiple
- * {@link GoogleCloudStorage} instances against the same (host, projectId, credentials, anonymous) key share one
- * underlying client; the SDK client closes when the last lease releases.
+ * {@link GoogleCloudStorage} instances against the same (host, projectId, credentials, anonymous, userProject,
+ * quotaProjectId) key share one underlying client; the SDK client closes when the last lease releases.
  */
 @NullMarked
 @SuppressWarnings("java:S6548") // one cache per process; tests build caches of their own
@@ -44,6 +46,22 @@ final class SdkStorageCache {
     static final SdkStorageCache INSTANCE = new SdkStorageCache();
 
     private final Map<SdkStorageCache.Key, SdkStorageCache.Entry> entries = new ConcurrentHashMap<>();
+    private final ApplicationDefaultCredentials applicationDefaultCredentials;
+
+    /** Loads the Application Default Credentials, replaced by tests to run the same on every machine. */
+    @FunctionalInterface
+    interface ApplicationDefaultCredentials {
+        GoogleCredentials load() throws IOException;
+    }
+
+    SdkStorageCache() {
+        this(GoogleCredentials::getApplicationDefault);
+    }
+
+    SdkStorageCache(ApplicationDefaultCredentials applicationDefaultCredentials) {
+        this.applicationDefaultCredentials =
+                Objects.requireNonNull(applicationDefaultCredentials, "applicationDefaultCredentials");
+    }
 
     int entryCount() {
         return entries.size();
@@ -54,13 +72,15 @@ final class SdkStorageCache {
             Optional<String> projectId,
             Optional<String> credentialsSource,
             boolean anonymous,
-            Optional<String> userProject) {
+            Optional<String> userProject,
+            Optional<String> quotaProjectId) {
 
         Key {
             Objects.requireNonNull(hostOverride, "hostOverride");
             Objects.requireNonNull(projectId, "projectId");
             Objects.requireNonNull(credentialsSource, "credentialsSource");
             Objects.requireNonNull(userProject, "userProject");
+            Objects.requireNonNull(quotaProjectId, "quotaProjectId");
         }
     }
 
@@ -126,20 +146,28 @@ final class SdkStorageCache {
         return new Lease(key, entry);
     }
 
-    private static Entry build(Key key) {
+    private Entry build(Key key) {
         StorageOptions.Builder b = StorageOptions.newBuilder();
         key.projectId().ifPresent(b::setProjectId);
         key.hostOverride().ifPresent(b::setHost);
-        if (key.anonymous()) {
-            b.setCredentials(NoCredentials.getInstance());
-        } else {
-            try {
-                b.setCredentials(GoogleCredentials.getApplicationDefault());
-            } catch (IOException e) {
-                // Fall back to no credentials if the default chain fails (e.g. local dev without ADC).
-                b.setCredentials(NoCredentials.getInstance());
-            }
-        }
+        key.quotaProjectId().ifPresent(b::setQuotaProjectId);
+        b.setCredentials(credentialsFor(key));
         return new Entry(b.build().getService());
+    }
+
+    /** Returns no credentials for an anonymous key, and the Application Default Credentials otherwise. */
+    private Credentials credentialsFor(Key key) {
+        if (key.anonymous()) {
+            return NoCredentials.getInstance();
+        }
+        try {
+            return applicationDefaultCredentials.load();
+        } catch (IOException notFound) {
+            throw new StorageException(
+                    "No Application Default Credentials found for Google Cloud Storage; set them up "
+                            + "(https://cloud.google.com/docs/authentication/external/set-up-adc), "
+                            + "or set storage.gcs.anonymous=true for a public bucket",
+                    notFound);
+        }
     }
 }

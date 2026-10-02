@@ -17,11 +17,15 @@ package io.tileverse.storage;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
 import org.junit.jupiter.api.Test;
 
 class RangeReaderConfigTest {
+
+    private static final String GCS_CREDENTIALS_CHAIN = "storage.gcs.default-credentials-chain";
+    private static final String GCS_ANONYMOUS = "storage.gcs.anonymous";
 
     @Test
     void normalizeKey_canonicalPrefix_passthrough() {
@@ -61,6 +65,64 @@ class RangeReaderConfigTest {
                 new StorageConfig("gs://bucket/o").setParameter("storage.gcs.host", "http://localhost:4443");
 
         assertThat(config.getParameter("storage.gcs.endpoint")).hasValue("http://localhost:4443");
+    }
+
+    /** A saved {@code storage.gcs.default-credentials-chain=false} meant anonymous access. */
+    @Test
+    void setParameter_gcsCredentialsChainFalse_storedAsAnonymous() {
+        StorageConfig config = new StorageConfig("gs://bucket/o").setParameter(GCS_CREDENTIALS_CHAIN, "false");
+
+        assertThat(config.getParameter(GCS_ANONYMOUS, Boolean.class)).hasValue(true);
+        assertThat(config.getParameter(GCS_CREDENTIALS_CHAIN)).isEmpty();
+    }
+
+    @Test
+    void setParameter_gcsCredentialsChainTrue_storedAsNotAnonymous() {
+        StorageConfig config = new StorageConfig("gs://bucket/o").setParameter(GCS_CREDENTIALS_CHAIN, Boolean.TRUE);
+
+        assertThat(config.getParameter(GCS_ANONYMOUS, Boolean.class)).hasValue(false);
+    }
+
+    @Test
+    void setParameter_legacyGcsCredentialsChain_storedAsAnonymous() {
+        StorageConfig config = new StorageConfig("gs://bucket/o")
+                .setParameter("io.tileverse.rangereader.gcs.default-credentials-chain", Boolean.FALSE);
+
+        assertThat(config.getParameter(GCS_ANONYMOUS, Boolean.class)).hasValue(true);
+    }
+
+    @Test
+    void setParameter_explicitGcsAnonymous_winsOverCredentialsChainInEitherOrder() {
+        StorageConfig anonymousFirst = new StorageConfig("gs://bucket/o")
+                .setParameter(GCS_ANONYMOUS, false)
+                .setParameter(GCS_CREDENTIALS_CHAIN, false);
+        StorageConfig credentialsChainFirst = new StorageConfig("gs://bucket/o")
+                .setParameter(GCS_CREDENTIALS_CHAIN, false)
+                .setParameter(GCS_ANONYMOUS, false);
+
+        assertThat(anonymousFirst.getParameter(GCS_ANONYMOUS, Boolean.class)).hasValue(false);
+        assertThat(credentialsChainFirst.getParameter(GCS_ANONYMOUS, Boolean.class))
+                .hasValue(false);
+    }
+
+    @Test
+    void normalizeKeys_gcsCredentialsChain_rewrittenAsAnonymous() {
+        Map<String, Object> out = StorageConfig.normalizeKeys(Map.of(GCS_CREDENTIALS_CHAIN, "false"));
+
+        assertThat(out).containsOnlyKeys(GCS_ANONYMOUS).containsEntry(GCS_ANONYMOUS, true);
+    }
+
+    @Test
+    void normalizeKeys_explicitGcsAnonymous_winsOverCredentialsChainInEitherOrder() {
+        Map<String, Object> anonymousFirst = new LinkedHashMap<>();
+        anonymousFirst.put(GCS_ANONYMOUS, "false");
+        anonymousFirst.put(GCS_CREDENTIALS_CHAIN, "false");
+        Map<String, Object> credentialsChainFirst = new LinkedHashMap<>();
+        credentialsChainFirst.put(GCS_CREDENTIALS_CHAIN, "false");
+        credentialsChainFirst.put(GCS_ANONYMOUS, "false");
+
+        assertThat(StorageConfig.normalizeKeys(anonymousFirst)).containsOnly(Map.entry(GCS_ANONYMOUS, "false"));
+        assertThat(StorageConfig.normalizeKeys(credentialsChainFirst)).containsOnly(Map.entry(GCS_ANONYMOUS, "false"));
     }
 
     @Test

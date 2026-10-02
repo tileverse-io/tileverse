@@ -23,7 +23,6 @@ import static io.tileverse.storage.s3.S3StorageProvider.S3_ENDPOINT;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_FORCE_PATH_STYLE;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_REGION;
 import static io.tileverse.storage.s3.S3StorageProvider.S3_REQUESTER_PAYS;
-import static io.tileverse.storage.s3.S3StorageProvider.S3_USE_DEFAULT_CREDENTIALS_PROVIDER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -106,7 +105,6 @@ class S3StorageProviderTest {
                         S3_ANONYMOUS,
                         S3_AWS_ACCESS_KEY_ID,
                         S3_AWS_SECRET_ACCESS_KEY,
-                        S3_USE_DEFAULT_CREDENTIALS_PROVIDER,
                         S3_DEFAULT_CREDENTIALS_PROFILE,
                         BatchProviderHelper.BATCH_MAX_GAP,
                         BatchProviderHelper.BATCH_MAX_FETCH,

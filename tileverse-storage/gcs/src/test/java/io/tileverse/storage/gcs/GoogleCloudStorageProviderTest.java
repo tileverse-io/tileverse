@@ -61,7 +61,7 @@ class GoogleCloudStorageProviderTest {
                 .containsExactly(
                         GoogleCloudStorageProvider.GCS_PROJECT_ID,
                         GoogleCloudStorageProvider.GCS_QUOTA_PROJECT_ID,
-                        GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS,
+                        GoogleCloudStorageProvider.GCS_ANONYMOUS,
                         GoogleCloudStorageProvider.GCS_USER_PROJECT,
                         GoogleCloudStorageProvider.GCS_ENDPOINT,
                         BatchProviderHelper.BATCH_MAX_GAP,
@@ -69,7 +69,7 @@ class GoogleCloudStorageProviderTest {
                         BatchProviderHelper.BATCH_MAX_IN_FLIGHT_FETCHES);
 
         StorageConfig defaults = provider.getDefaultConfig();
-        assertThat(defaults.getParameter(GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS))
+        assertThat(defaults.getParameter(GoogleCloudStorageProvider.GCS_ANONYMOUS))
                 .hasValue(false);
     }
 
@@ -86,6 +86,20 @@ class GoogleCloudStorageProviderTest {
         StorageConfig config = new StorageConfig("gs://bucket/file.bin")
                 .setParameter(GoogleCloudStorageProvider.GCS_USER_PROJECT, "my-billing-project");
         assertThat(GoogleCloudStorageProvider.keyFor(config).userProject()).hasValue("my-billing-project");
+    }
+
+    @Test
+    void quotaProjectFlowsIntoCacheKey() {
+        StorageConfig config = new StorageConfig("gs://bucket/file.bin")
+                .setParameter(GoogleCloudStorageProvider.GCS_QUOTA_PROJECT_ID, "my-quota-project");
+        assertThat(GoogleCloudStorageProvider.keyFor(config).quotaProjectId()).hasValue("my-quota-project");
+    }
+
+    @Test
+    void blankQuotaProjectIsTreatedAsAbsent() {
+        StorageConfig config = new StorageConfig("gs://bucket/file.bin")
+                .setParameter(GoogleCloudStorageProvider.GCS_QUOTA_PROJECT_ID, "   ");
+        assertThat(GoogleCloudStorageProvider.keyFor(config).quotaProjectId()).isEmpty();
     }
 
     @Test

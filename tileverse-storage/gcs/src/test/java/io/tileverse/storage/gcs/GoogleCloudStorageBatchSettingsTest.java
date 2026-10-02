@@ -108,7 +108,7 @@ class GoogleCloudStorageBatchSettingsTest {
     /** Without credentials and with a project id, the client builds without reaching the network. */
     private static StorageConfig anonymousConfig() {
         return new StorageConfig(BASE_URI)
-                .setParameter(GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS, false)
+                .setParameter(GoogleCloudStorageProvider.GCS_ANONYMOUS, true)
                 .setParameter(GoogleCloudStorageProvider.GCS_PROJECT_ID, "test-project");
     }
 }

@@ -226,13 +226,11 @@ public class S3StorageProvider extends AbstractStorageProvider {
             .key("storage.s3.aws-access-key-id")
             .title("AWS Access Key ID")
             .description("""
-                    The AWS access key ID to use for authentication.
+                    The AWS access key ID used to sign requests, together with the secret access key; \
+                    either key alone is ignored. Anonymous access takes precedence over the keys.
 
-                    This parameter must be used together with AWS_SECRET_ACCESS_KEY. When both are provided, \
-                    they will be used for authentication regardless of the USE_DEFAULT_CREDENTIALS_PROVIDER setting.
-
-                    If neither AWS_ACCESS_KEY_ID nor AWS_SECRET_ACCESS_KEY are provided, authentication behavior \
-                    is controlled by the USE_DEFAULT_CREDENTIALS_PROVIDER parameter.
+                    Without the keys, requests use the credentials profile when one is named, and the AWS \
+                    default credentials provider chain otherwise.
                     """)
             .type(String.class)
             .group(ID)
@@ -247,13 +245,11 @@ public class S3StorageProvider extends AbstractStorageProvider {
             .key("storage.s3.aws-secret-access-key")
             .title("AWS Secret Access Key")
             .description("""
-                    The AWS secret access key to use for authentication.
+                    The AWS secret access key used to sign requests, together with the access key ID; \
+                    either key alone is ignored. Anonymous access takes precedence over the keys.
 
-                    This parameter must be used together with AWS_ACCESS_KEY_ID. When both are provided, \
-                    they will be used for authentication regardless of the USE_DEFAULT_CREDENTIALS_PROVIDER setting.
-
-                    If neither AWS_ACCESS_KEY_ID nor AWS_SECRET_ACCESS_KEY are provided, authentication behavior \
-                    is controlled by the USE_DEFAULT_CREDENTIALS_PROVIDER parameter.
+                    Without the keys, requests use the credentials profile when one is named, and the AWS \
+                    default credentials provider chain otherwise.
                     """)
             .type(String.class)
             .group(ID)
@@ -261,40 +257,19 @@ public class S3StorageProvider extends AbstractStorageProvider {
             .password(true)
             .build();
 
-    /** Configuration parameter to control whether to use the default AWS credentials provider chain. */
-    public static final StorageParameter<Boolean> S3_USE_DEFAULT_CREDENTIALS_PROVIDER = StorageParameter.builder()
-            .key("storage.s3.use-default-credentials-provider")
-            .title("Use Default Credentials Provider")
-            .description("""
-                    When enabled, the AWS default credentials provider chain is used, which looks for credentials \
-                    in this order:
-                      1. Java System Properties - aws.accessKeyId and aws.secretAccessKey
-                      2. Environment Variables - AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
-                      3. Web Identity Token File - from the path specified in the AWS_WEB_IDENTITY_TOKEN_FILE environment variable
-                      4. Shared Credentials File - at ~/.aws/credentials
-                      5. Amazon ECS Container Credentials - loaded from the endpoint specified in the AWS_CONTAINER_CREDENTIALS_RELATIVE_URI environment variable
-                      6. Amazon EC2 Instance Profile Credentials - loaded from the Amazon EC2 metadata service
-
-                    If neither default credentials provider or access/secret key are used, annonymous access will \
-                    be attempted.
-                    """)
-            .type(Boolean.class)
-            .group(ID)
-            .subgroup(SUBGROUP_AUTHENTICATION)
-            .build();
-
     /** Configuration parameter to specify a custom AWS credentials profile name. */
     public static final StorageParameter<String> S3_DEFAULT_CREDENTIALS_PROFILE = StorageParameter.builder()
             .key("storage.s3.default-credentials-profile")
             .title("Default Credentials Profile")
             .description("""
-                    The AWS credentials profile name to use when USE_DEFAULT_CREDENTIALS_PROVIDER is enabled.
+                    The name of a profile in the AWS credentials file (typically ~/.aws/credentials) or AWS \
+                    config file (typically ~/.aws/config). Requests use only that profile, whatever the \
+                    environment sets. Anonymous access and the access keys take precedence over it.
 
-                    If not specified, the 'default' profile is used. This parameter is only effective when \
-                    USE_DEFAULT_CREDENTIALS_PROVIDER is set to true.
-
-                    The profile should exist in the AWS credentials file (typically ~/.aws/credentials) or \
-                    AWS config file (typically ~/.aws/config).
+                    Without a profile, the access keys, or anonymous access, the AWS default credentials provider \
+                    chain resolves the credentials: system properties, environment variables, a web identity \
+                    token, the profile named by AWS_PROFILE (or 'default'), container credentials, then the EC2 \
+                    instance profile.
                     """)
             .type(String.class)
             .group(ID)
@@ -309,7 +284,6 @@ public class S3StorageProvider extends AbstractStorageProvider {
             S3_ANONYMOUS,
             S3_AWS_ACCESS_KEY_ID,
             S3_AWS_SECRET_ACCESS_KEY,
-            S3_USE_DEFAULT_CREDENTIALS_PROVIDER,
             S3_DEFAULT_CREDENTIALS_PROFILE);
 
     /**

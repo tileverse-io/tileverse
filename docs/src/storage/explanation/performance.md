@@ -93,5 +93,5 @@ We primarily measure:
 
 ## Cloud Considerations
 
-*   **AWS S3**: The `S3RangeReader` uses the AWS CRT HTTP client, with no Netty on the classpath. Each HTTP client pools up to 50 connections per host by default.
+*   **AWS S3**: The `S3RangeReader` uses the AWS CRT HTTP client, with no Netty on the classpath. One HTTP client serves the S3 storages opened from a URI or a `StorageConfig`, with one connection pool per host sized from the memory limit seen by the JVM, or from four times its maximum heap when that is smaller: 50 to 500 connections.
 *   **Latency**: S3 Time-to-First-Byte (TTFB) is typically 50-100ms. Caching is mandatory for interactive performance.

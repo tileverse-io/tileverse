@@ -41,7 +41,7 @@ These classes implement the actual network/disk I/O:
 
 *   **`FileRangeReader`**: Wraps a `FileChannel` opened lazily by the file's real path and closed after the idle timeout with no read in progress. A stale NFS handle or a closed channel retires the channel and the read resumes on a fresh one after the bytes already landed, three attempts per call. Identifies the file by its real path. Uses the OS page cache.
 *   **`HttpRangeReader`**: Uses `java.net.http.HttpClient` to issue `GET` requests with `Range` headers. The `HttpClient` is refcounted at the `HttpStorage` level (via `HttpClientCache`) and shared across sibling readers; per-reader `close()` is a no-op, mirroring `S3` / `Azure` / `GCS`. The client shuts down only when the last `HttpStorage` holding a lease closes.
-*   **`S3RangeReader`**: Wraps AWS SDK v2. Maps exceptions to standard `IOException`. Uses an `S3Client` refcounted by `S3ClientCache` at the `S3Storage` level.
+*   **`S3RangeReader`**: Wraps AWS SDK v2. Maps exceptions to `StorageException`. Uses an `S3AsyncClient` refcounted by `S3ClientCache` at the `S3Storage` level.
 *   **`Azure` / `GCS`**: Similar wrappers for their respective SDKs, with matching refcounted client caches.
 
 ### Decorator Layer

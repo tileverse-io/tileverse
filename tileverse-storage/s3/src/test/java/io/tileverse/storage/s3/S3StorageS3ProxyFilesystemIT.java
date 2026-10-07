@@ -17,15 +17,18 @@ package io.tileverse.storage.s3;
 
 import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.ReadHandle;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageException;
 import io.tileverse.storage.WriteOptions;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -48,7 +51,7 @@ import software.amazon.awssdk.services.s3.S3AsyncClient;
  * Reads objects from an s3proxy on a filesystem backend, where a file placed directly in the backend directory is
  * served without an {@code ETag} header. Objects written through the S3 API do have one, which
  * {@link S3StorageS3ProxyIT} covers on the transient backend. The clients of {@link S3ClientCache} read both; a
- * CRT-based async client passed by the caller rejects the first kind and falls back to the sync client.
+ * CRT-based async client passed by the caller rejects the first kind.
  */
 @Testcontainers(disabledWithoutDocker = true)
 class S3StorageS3ProxyFilesystemIT {
@@ -116,7 +119,7 @@ class S3StorageS3ProxyFilesystemIT {
 
     /**
      * Places one object directly in the backend directory, the case answered without an ETag, and writes another
-     * through the S3 API. A fresh client cache per test means a fresh ETag record.
+     * through the S3 API. A fresh client cache per test.
      */
     @BeforeEach
     void setUp() throws IOException, InterruptedException {
@@ -184,27 +187,19 @@ class S3StorageS3ProxyFilesystemIT {
         int[] counts = counts(storage.openRangeReader(DIRECT_KEY).readRanges(requests));
 
         assertBatchMatchesTheObject(requests, counts);
-        assertThat(lease.endpointEtags().omitted()).isFalse();
     }
 
     @Test
-    void aCrtClientPassedByTheCallerFallsBackToTheSyncClient() {
-        try (S3AsyncClient crtClient = crtClient()) {
-            S3ClientBundle bundle =
-                    new S3ClientBundle(lease.client(), Optional.of(crtClient), Optional.empty(), Optional.empty());
-            BorrowedS3Handle borrowed = new BorrowedS3Handle(bundle);
-            URI baseUri = URI.create("s3://" + bucket + "/");
-            S3Storage withCrtClient = new S3Storage(baseUri, S3StorageBucketKey.parse(baseUri), borrowed, false);
-            List<RangeRequest> first = batch();
-            List<RangeRequest> second = batch();
+    void aCrtClientPassedByTheCallerFailsWithoutAnEtag() throws IOException {
+        URI baseUri = URI.create("s3://" + bucket + "/");
+        try (S3AsyncClient crtClient = crtClient();
+                Storage withCrtClient = S3StorageProvider.open(baseUri, crtClient);
+                RangeReader reader = withCrtClient.openRangeReader(DIRECT_KEY)) {
+            List<RangeRequest> requests = batch();
 
-            int[] firstCounts = counts(withCrtClient.openRangeReader(DIRECT_KEY).readRanges(first));
-            int[] secondCounts =
-                    counts(withCrtClient.openRangeReader(DIRECT_KEY).readRanges(second));
-
-            assertBatchMatchesTheObject(first, firstCounts);
-            assertBatchMatchesTheObject(second, secondCounts);
-            assertThat(borrowed.endpointEtags().omitted()).isTrue();
+            assertThatThrownBy(() -> reader.readRanges(requests))
+                    .isInstanceOf(StorageException.class)
+                    .hasStackTraceContaining("missing required ETag header");
         }
     }
 
@@ -236,6 +231,5 @@ class S3StorageS3ProxyFilesystemIT {
         }
 
         assertBatchMatchesTheObject(requests, counts);
-        assertThat(lease.endpointEtags().omitted()).isFalse();
     }
 }

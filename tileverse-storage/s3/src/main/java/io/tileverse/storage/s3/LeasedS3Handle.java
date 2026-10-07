@@ -17,13 +17,12 @@ package io.tileverse.storage.s3;
 
 import java.util.Optional;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
-import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.transfer.s3.S3TransferManager;
 
 /**
- * {@link S3ClientHandle} that wraps an {@link S3ClientCache.Lease}. Exposes the four cached SDK objects (sync, async,
- * transfer manager, presigner) and releases the lease on close, which decrements the cache refcount.
+ * {@link S3ClientHandle} over an {@link S3ClientCache.Lease}: the client of a cached client set, and its transfer
+ * manager and presigner, built on first use. Closing releases the lease.
  */
 final class LeasedS3Handle implements S3ClientHandle {
 
@@ -34,28 +33,23 @@ final class LeasedS3Handle implements S3ClientHandle {
     }
 
     @Override
-    public S3Client client() {
+    public S3AsyncClient client() {
         return lease.client();
     }
 
     @Override
-    public Optional<S3AsyncClient> asyncClient() {
-        return Optional.of(lease.asyncClient());
+    public S3TransferManager transferManager() {
+        return lease.transferManager();
     }
 
     @Override
-    public Optional<S3TransferManager> transferManager() {
-        return Optional.of(lease.transferManager());
+    public boolean presigns() {
+        return true;
     }
 
     @Override
     public Optional<S3Presigner> presigner() {
         return Optional.of(lease.presigner());
-    }
-
-    @Override
-    public EndpointEtags endpointEtags() {
-        return lease.endpointEtags();
     }
 
     @Override

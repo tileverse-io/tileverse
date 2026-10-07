@@ -18,39 +18,54 @@ package io.tileverse.storage.s3;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
-import software.amazon.awssdk.http.ExecutableHttpRequest;
-import software.amazon.awssdk.http.HttpExecuteRequest;
-import software.amazon.awssdk.http.SdkHttpClient;
+import org.junit.jupiter.api.io.TempDir;
+import software.amazon.awssdk.core.async.AsyncResponseTransformer;
+import software.amazon.awssdk.http.SdkHttpMethod;
+import software.amazon.awssdk.http.SdkHttpRequest;
 import software.amazon.awssdk.http.async.AsyncExecuteRequest;
 import software.amazon.awssdk.http.async.SdkAsyncHttpClient;
-import software.amazon.awssdk.utils.AttributeMap;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.transfer.s3.S3TransferManager;
+import software.amazon.awssdk.transfer.s3.model.FileUpload;
+import software.amazon.awssdk.transfer.s3.model.UploadFileRequest;
 
 class S3ClientCacheTest {
 
     private static final S3ClientCache.Key EAST = S3ClientCache.key("us-east-1", null, true, null, null, null, false);
     private static final S3ClientCache.Key WEST = S3ClientCache.key("us-west-2", null, true, null, null, null, false);
+    private static final S3HttpClientSettings HTTP_CLIENT_SETTINGS =
+            new S3HttpClientSettings(50, Duration.ofSeconds(2), Duration.ofSeconds(30));
 
     private final List<CloseCountingHttpClient> httpClients = new ArrayList<>();
-    private final List<CloseCountingSyncHttpClient> syncHttpClients = new ArrayList<>();
 
     private S3ClientCache cacheCountingHttpClients() {
         return cacheCountingHttpClients(CloseCountingHttpClient::new);
     }
 
     private S3ClientCache cacheCountingHttpClients(Supplier<CloseCountingHttpClient> httpClientFactory) {
-        S3SharedHttpClient sharedHttpClient = new S3SharedHttpClient(() -> newHttpClient(httpClientFactory));
-        return new S3ClientCache(sharedHttpClient, CountingSyncHttpClientBuilder::new);
-    }
-
-    private SdkAsyncHttpClient newHttpClient() {
-        return newHttpClient(CloseCountingHttpClient::new);
+        S3SharedHttpClient sharedHttpClient =
+                new S3SharedHttpClient(() -> HTTP_CLIENT_SETTINGS, settings -> newHttpClient(httpClientFactory));
+        return new S3ClientCache(sharedHttpClient);
     }
 
     private SdkAsyncHttpClient newHttpClient(Supplier<CloseCountingHttpClient> httpClientFactory) {
@@ -66,20 +81,60 @@ class S3ClientCacheTest {
         try (S3ClientCache.Lease lease = cache.acquire(nothingSet)) {
             assertThat(lease.client().serviceClientConfiguration().credentialsProvider())
                     .isInstanceOf(DefaultCredentialsChain.class);
-            assertThat(lease.asyncClient().serviceClientConfiguration().credentialsProvider())
-                    .isInstanceOf(DefaultCredentialsChain.class);
         }
     }
 
     @Test
-    void theAsyncClientSendsItsRequestsThroughTheSharedHttpClient() {
+    void theClientSendsItsRequestsThroughTheSharedHttpClient() {
         S3ClientCache cache = cacheCountingHttpClients();
         try (S3ClientCache.Lease lease = cache.acquire(EAST)) {
             CompletableFuture<?> request =
-                    lease.asyncClient().headObject(head -> head.bucket("bucket").key("key"));
+                    lease.client().headObject(head -> head.bucket("bucket").key("key"));
 
             assertThatThrownBy(() -> request.get(10, TimeUnit.SECONDS)).isInstanceOf(ExecutionException.class);
             assertThat(httpClients.get(0).requests).isPositive();
+        }
+    }
+
+    @Test
+    void theClientOfASetSendsAWholeObjectGetAsOneRequest() {
+        S3ClientCache cache = cacheCountingHttpClients();
+        try (S3ClientCache.Lease lease = cache.acquire(EAST)) {
+            GetObjectRequest wholeObject =
+                    GetObjectRequest.builder().bucket("bucket").key("key").build();
+
+            CompletableFuture<?> read = lease.client().getObject(wholeObject, AsyncResponseTransformer.toBytes());
+
+            assertThatThrownBy(() -> read.get(10, TimeUnit.SECONDS)).isInstanceOf(ExecutionException.class);
+            assertThat(httpClients.get(0).sent).isNotEmpty().allSatisfy(request -> {
+                assertThat(request.rawQueryParameters()).doesNotContainKey("partNumber");
+                assertThat(request.firstMatchingHeader("Range")).isEmpty();
+            });
+        }
+    }
+
+    @Test
+    void theTransferManagerOfASetUploadsAFileAboveTheThresholdInParts(@TempDir Path dir) throws IOException {
+        // the multipart client splits uploads above 8 MiB, its default threshold and part size
+        int aboveTheThreshold = 8 * 1024 * 1024 + 1;
+        Path source = dir.resolve("source.bin");
+        Files.write(source, new byte[aboveTheThreshold]);
+        S3ClientCache cache = cacheCountingHttpClients();
+        try (S3ClientCache.Lease lease = cache.acquire(EAST)) {
+            UploadFileRequest request = UploadFileRequest.builder()
+                    .source(source)
+                    .putObjectRequest(put -> put.bucket("bucket").key("key"))
+                    .build();
+            S3TransferManager transferManager = lease.transferManager();
+
+            FileUpload upload = transferManager.uploadFile(request);
+
+            CompletableFuture<?> uploaded = upload.completionFuture();
+            assertThatThrownBy(() -> uploaded.get(10, TimeUnit.SECONDS)).isInstanceOf(ExecutionException.class);
+            assertThat(httpClients.get(0).sent).first().satisfies(createMultipartUpload -> {
+                assertThat(createMultipartUpload.method()).isEqualTo(SdkHttpMethod.POST);
+                assertThat(createMultipartUpload.rawQueryParameters()).containsKey("uploads");
+            });
         }
     }
 
@@ -88,7 +143,7 @@ class S3ClientCacheTest {
         S3ClientCache cache = cacheCountingHttpClients();
         try (S3ClientCache.Lease east = cache.acquire(EAST);
                 S3ClientCache.Lease west = cache.acquire(WEST)) {
-            assertThat(east.asyncClient()).isNotSameAs(west.asyncClient());
+            assertThat(east.client()).isNotSameAs(west.client());
             assertThat(httpClients).hasSize(1);
         }
     }
@@ -129,46 +184,132 @@ class S3ClientCacheTest {
     }
 
     @Test
-    void aClientSetWithSettingsFailingToResolveLeavesNoHttpClientOpen() {
-        S3SharedHttpClient sharedHttpClient = new S3SharedHttpClient(this::newHttpClient);
-        S3ClientCache cache = new S3ClientCache(sharedHttpClient, () -> {
+    void aSharedHttpClientFailingToBuildLeavesNoClientSet() {
+        S3SharedHttpClient failing = new S3SharedHttpClient(() -> {
             throw new IllegalArgumentException("Invalid system property");
         });
+        S3ClientCache cache = new S3ClientCache(failing);
 
         assertThatThrownBy(() -> cache.acquire(EAST))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Invalid system property");
-
         assertThat(cache.entryCount()).isZero();
-        assertThat(httpClients).allSatisfy(client -> assertThat(client.closes).isEqualTo(1));
     }
 
     @Test
     void aClientSetFailingToBuildWithAnErrorLeavesNoHttpClientOpen() {
-        S3SharedHttpClient sharedHttpClient = new S3SharedHttpClient(this::newHttpClient);
-        AssertionError failure = new AssertionError("settings failed to load");
-        S3ClientCache cache = new S3ClientCache(sharedHttpClient, () -> {
-            throw failure;
-        });
+        AssertionError failure = new AssertionError("client failed to build");
+        S3ClientCache cache = cacheCountingHttpClients(() -> new UnnamedHttpClient(1, failure));
 
         assertThatThrownBy(() -> cache.acquire(EAST)).isSameAs(failure);
 
         assertThat(cache.entryCount()).isZero();
         assertThat(httpClients)
-                .hasSize(1)
-                .allSatisfy(client -> assertThat(client.closes).isEqualTo(1));
+                .singleElement()
+                .satisfies(client -> assertThat(client.closes).isEqualTo(1));
     }
 
     @Test
-    void aClientSetFailingAfterItsSyncClientIsBuiltClosesIt() {
-        // the async client names its HTTP client when built, after the sync client
-        S3ClientCache cache = cacheCountingHttpClients(UnnamedHttpClient::new);
+    void aClientSetOpensOnlyItsClientUntilAskedForMore() {
+        S3ClientCache cache = cacheCountingHttpClients();
+        try (S3ClientCache.Lease lease = cache.acquire(EAST)) {
+            assertThat(lease.openedClients())
+                    .as("the HTTP client lease and the client")
+                    .isEqualTo(2);
+        }
+    }
 
-        assertThatThrownBy(() -> cache.acquire(EAST)).hasMessage("no name");
+    @Test
+    void theFirstTransferManagerRequestOpensTheMultipartClientWithIt() {
+        S3ClientCache cache = cacheCountingHttpClients();
+        try (S3ClientCache.Lease lease = cache.acquire(EAST)) {
+            S3TransferManager first = lease.transferManager();
 
-        assertThat(syncHttpClients)
-                .singleElement()
-                .satisfies(client -> assertThat(client.closes).isEqualTo(1));
+            assertThat(lease.transferManager()).isSameAs(first);
+            assertThat(lease.openedClients())
+                    .as("plus the multipart client and the transfer manager")
+                    .isEqualTo(4);
+        }
+    }
+
+    @Test
+    void concurrentFirstRequestsBuildOneTransferManager() throws Exception {
+        S3ClientCache cache = cacheCountingHttpClients();
+        int callers = 8;
+        ExecutorService threads = Executors.newFixedThreadPool(callers);
+        try (S3ClientCache.Lease lease = cache.acquire(EAST)) {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<S3TransferManager>> requests = new ArrayList<>();
+            for (int i = 0; i < callers; i++) {
+                requests.add(threads.submit(() -> {
+                    start.await();
+                    return lease.transferManager();
+                }));
+            }
+            start.countDown();
+            Set<S3TransferManager> built = Collections.newSetFromMap(new IdentityHashMap<>());
+            for (Future<S3TransferManager> request : requests) {
+                built.add(request.get(10, TimeUnit.SECONDS));
+            }
+
+            assertThat(built).hasSize(1);
+            assertThat(lease.openedClients()).isEqualTo(4);
+        } finally {
+            threads.shutdownNow();
+        }
+    }
+
+    @Test
+    void thePresignerOpensOnFirstUse() {
+        S3ClientCache cache = cacheCountingHttpClients();
+        try (S3ClientCache.Lease lease = cache.acquire(EAST)) {
+            S3Presigner presigner = lease.presigner();
+
+            assertThat(lease.presigner()).isSameAs(presigner);
+            assertThat(lease.openedClients()).isEqualTo(3);
+        }
+    }
+
+    @Test
+    void aLeasedHandlePresignsWithoutOpeningThePresigner() {
+        S3ClientCache cache = cacheCountingHttpClients();
+        S3ClientCache.Lease lease = cache.acquire(EAST);
+        try (LeasedS3Handle handle = new LeasedS3Handle(lease)) {
+            assertThat(handle.presigns()).isTrue();
+            assertThat(lease.openedClients())
+                    .as("the HTTP client lease and the client")
+                    .isEqualTo(2);
+        }
+    }
+
+    @Test
+    void aMemberRequestedAfterTheSetClosedFails() {
+        S3ClientCache cache = cacheCountingHttpClients();
+        S3ClientCache.Lease lease = cache.acquire(EAST);
+        lease.close();
+        int openedBeforeTheRequests = lease.openedClients();
+
+        assertThatThrownBy(lease::transferManager).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(lease::presigner).isInstanceOf(IllegalStateException.class);
+        assertThat(lease.openedClients()).as("nothing opened").isEqualTo(openedBeforeTheRequests);
+    }
+
+    @Test
+    void aTransferManagerFailingToBuildLeavesTheSetUsable() {
+        // a client asks the HTTP client for its name twice as it builds: the third call comes from the multipart
+        // client
+        S3ClientCache cache = cacheCountingHttpClients(() -> new UnnamedHttpClient(3, null));
+        S3ClientCache.Lease lease = cache.acquire(EAST);
+
+        assertThatThrownBy(lease::transferManager)
+                .hasMessage("no name")
+                .hasStackTraceContaining("ClientFactory.multipartClient");
+
+        assertThat(lease.openedClients()).isEqualTo(2);
+        assertThat(lease.presigner()).isNotNull();
+        assertThat(lease.openedClients()).as("plus the presigner").isEqualTo(3);
+        assertThat(httpClients.get(0).closes).isZero();
+        lease.close();
         assertThat(httpClients)
                 .singleElement()
                 .satisfies(client -> assertThat(client.closes).isEqualTo(1));
@@ -195,20 +336,19 @@ class S3ClientCacheTest {
 
         assertThatThrownBy(lease::close).isSameAs(closeFailure);
 
-        assertThat(syncHttpClients)
-                .singleElement()
-                .satisfies(client -> assertThat(client.closes).isEqualTo(1));
         assertThat(cache.entryCount()).isZero();
     }
 
     /** Counts its requests and closes; fails every request, since these tests have no endpoint to reach. */
     private static class CloseCountingHttpClient implements SdkAsyncHttpClient {
 
+        final List<SdkHttpRequest> sent = new CopyOnWriteArrayList<>();
         private volatile int requests;
         private int closes;
 
         @Override
         public CompletableFuture<Void> execute(AsyncExecuteRequest request) {
+            sent.add(request.request());
             requests++;
             IllegalStateException failure = new IllegalStateException("no endpoint in this test");
             request.responseHandler().onError(failure);
@@ -221,11 +361,28 @@ class S3ClientCacheTest {
         }
     }
 
-    /** Fails when an async S3 client asks for its name while it builds. */
+    /** Fails from the {@code failingFrom}th time an async S3 client asks for its name while it builds. */
     private static final class UnnamedHttpClient extends CloseCountingHttpClient {
+
+        private final int failingFrom;
+        private final Error error;
+        private int names;
+
+        /** @param error thrown instead of an IllegalStateException, when not null */
+        UnnamedHttpClient(int failingFrom, Error error) {
+            this.failingFrom = failingFrom;
+            this.error = error;
+        }
 
         @Override
         public String clientName() {
+            names++;
+            if (names < failingFrom) {
+                return super.clientName();
+            }
+            if (error != null) {
+                throw error;
+            }
             throw new IllegalStateException("no name");
         }
     }
@@ -243,33 +400,6 @@ class S3ClientCacheTest {
         public void close() {
             super.close();
             throw closeFailure;
-        }
-    }
-
-    /** Builds the HTTP client of a sync S3 client; the S3 client closes it with itself. */
-    private final class CountingSyncHttpClientBuilder implements SdkHttpClient.Builder<CountingSyncHttpClientBuilder> {
-
-        @Override
-        public SdkHttpClient buildWithDefaults(AttributeMap serviceDefaults) {
-            CloseCountingSyncHttpClient client = new CloseCountingSyncHttpClient();
-            syncHttpClients.add(client);
-            return client;
-        }
-    }
-
-    /** Counts its closes; fails every request, since these tests have no endpoint to reach. */
-    private static final class CloseCountingSyncHttpClient implements SdkHttpClient {
-
-        private int closes;
-
-        @Override
-        public ExecutableHttpRequest prepareRequest(HttpExecuteRequest request) {
-            throw new UnsupportedOperationException("no endpoint in this test");
-        }
-
-        @Override
-        public void close() {
-            closes++;
         }
     }
 
@@ -316,11 +446,11 @@ class S3ClientCacheTest {
     }
 
     @Test
-    void leaseExposesAsyncClientAndTransferManager() {
+    void leaseExposesClientAndTransferManager() {
         S3ClientCache cache = new S3ClientCache();
         S3ClientCache.Key key = S3ClientCache.key("us-east-1", null, false, null, null, null, false);
         try (S3ClientCache.Lease lease = cache.acquire(key)) {
-            assertThat(lease.asyncClient()).isNotNull();
+            assertThat(lease.client()).isNotNull();
             assertThat(lease.transferManager()).isNotNull();
         }
     }

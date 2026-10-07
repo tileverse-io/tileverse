@@ -286,7 +286,7 @@ export JAVA_HOME=/path/to/java17
 
 3. **For S3, configure the client and inject it**:
    ```java
-   var s3Client = S3Client.builder()
+   var s3Client = S3AsyncClient.builder()
        .overrideConfiguration(ClientOverrideConfiguration.builder()
            .apiCallTimeout(Duration.ofMinutes(2))
            .apiCallAttemptTimeout(Duration.ofSeconds(30))
@@ -315,16 +315,15 @@ export JAVA_HOME=/path/to/java17
 
 2. **Configure AWS SDK proxy**:
    ```java
-   var proxyConfig = ProxyConfiguration.builder()
-       .endpoint(URI.create("http://proxy.company.com:8080"))
-       .username("proxyuser")
-       .password("proxypass")
-       .build();
-   
-   var s3Client = S3Client.builder()
-       .overrideConfiguration(ClientOverrideConfiguration.builder()
-           .proxyConfiguration(proxyConfig)
-           .build())
+   var s3Client = S3AsyncClient.builder()
+       .httpClientBuilder(AwsCrtAsyncHttpClient.builder()
+           .proxyConfiguration(ProxyConfiguration.builder()
+               .scheme("http")
+               .host("proxy.company.com")
+               .port(8080)
+               .username("proxyuser")
+               .password("proxypass")
+               .build()))
        .build();
    ```
 
@@ -357,22 +356,23 @@ export JAVA_HOME=/path/to/java17
 an existing tree of files: an object placed directly in its backend is served without the header, while an object
 written through the S3 API has one.
 
-**Solution**: none needed. Only the AWS CRT S3 client demands the header. A `Storage` opened from a URI or a
-`StorageConfig` uses no such client and reads the endpoint like any other. With a CRT-based client passed in an
-`S3ClientBundle`, batched reads of that endpoint run on the sync client instead, from the first rejection on, with
-their fetches still concurrent on the shared executor.
+**Solution**: none needed for a `Storage` opened from a URI or a `StorageConfig`: its client makes no such demand. A
+CRT-based client passed to `S3StorageProvider.open(URI, S3AsyncClient)` fails on such an endpoint; pass a client
+built with `S3AsyncClient.builder()` instead.
 
 ### S3 Requests Waiting for a Connection
 
-**Problem**: batched S3 reads fail with `Connection Manager failed to acquire a connection within the defined
-timeout`. Every S3 `Storage` opened from a URI or a `StorageConfig` sends its async requests through one pool of 50
-connections per host, shared by the process. A request beyond those 50 waits 30 seconds for a connection and then
-fails. The SDK retries some of those failures, up to 3 times each; when many requests fail together, most of them
-get no retry.
+**Problem**: S3 requests fail with `Connection Manager failed to acquire a connection within the defined timeout`. S3
+storages opened from a URI or a `StorageConfig` send their requests through one pool per host, shared by the
+process: single reads, batches and uploads. Without a configured size, the pool holds a tenth of the memory limit
+seen by the JVM, or of four times its maximum heap when that is smaller, divided by 7 MiB connections, between
+50 and 500. A request beyond those connections waits 30 seconds for one and then fails. The SDK retries some of
+those failures, up to 3 times each; when many requests fail together, most of them get no retry.
 
-**Solution**: keep fewer requests outstanding against that host. Lower `storage.batch.max-in-flight-fetches`
-(default 8; 0 removes the bound) or the number of concurrent readers. A multipart upload to the same host sends up to
-50 parts at once and holds as many connections while it runs. The pool size and the wait are
+**Solution**: raise `io.tileverse.storage.s3-http-client.max-concurrency`, or keep fewer requests outstanding
+against that host: lower `storage.batch.max-in-flight-fetches` (default 8; 0 removes the bound) or the number of
+concurrent readers. A multipart upload to the same host keeps an eighth of the pool in flight while it runs,
+6 connections of 50; several uploads at once add up. The pool size and the wait are
 [system properties](configure.md#system-properties).
 
 ## File System Issues
@@ -524,5 +524,5 @@ If you're still experiencing issues:
 | `NoSuchFileException` | File not found | Verify file/object exists |
 | `SocketTimeoutException` | Network timeout | Increase timeout or check connectivity |
 | `OutOfMemoryError` | Several `CacheManager` instances, or caching a streaming workload | The shared cache holds at most 20% of the maximum heap per manager; keep one manager and skip caching for reads done once |
-| `Response missing required ETag header` | S3-compatible endpoint serving a file it never received through the S3 API | Handled automatically; reads fall back to the sync client |
+| `Response missing required ETag header` | A CRT-based `S3AsyncClient` passed by the caller, against an S3-compatible endpoint serving a file never written through the S3 API | Pass a client built with `S3AsyncClient.builder()`, or open the `Storage` from a URI or a `StorageConfig` |
 | `UnsupportedClassVersionError` | Wrong Java version | Use Java 17 or higher |

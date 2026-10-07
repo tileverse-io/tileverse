@@ -39,24 +39,22 @@ import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
+import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.core.interceptor.Context;
 import software.amazon.awssdk.core.interceptor.ExecutionAttributes;
 import software.amazon.awssdk.core.interceptor.ExecutionInterceptor;
 import software.amazon.awssdk.http.SdkHttpRequest;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.DeleteBucketRequest;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.transfer.s3.S3TransferManager;
 
 /**
  * Wire-level verification of {@link S3StorageProvider#S3_REQUESTER_PAYS}: every operation builds an SDK request and the
  * SDK serialises {@code RequestPayer.REQUESTER} as {@code x-amz-request-payer: requester}. An
- * {@link ExecutionInterceptor} attached to the sync client records each outgoing {@link SdkHttpRequest}; tests assert
- * that the header is present (when {@code requesterPays=true}) or absent (when {@code requesterPays=false}) for each
+ * {@link ExecutionInterceptor} attached to the client records each outgoing {@link SdkHttpRequest}; tests assert that
+ * the header is present (when {@code requesterPays=true}) or absent (when {@code requesterPays=false}) for each
  * affected operation.
  *
  * <p>LocalStack does not enforce the header server-side, so the interceptor is the source of truth; LocalStack's role
@@ -85,10 +83,7 @@ class S3RequesterPaysIT {
         }
     };
 
-    private static S3Client sync;
-    private static S3AsyncClient async;
-    private static S3Presigner presigner;
-    private static S3TransferManager transferManager;
+    private static S3AsyncClient client;
 
     private String bucket;
 
@@ -96,56 +91,45 @@ class S3RequesterPaysIT {
     static void setUp() {
         StaticCredentialsProvider creds = StaticCredentialsProvider.create(
                 AwsBasicCredentials.create(localstack.getAccessKey(), localstack.getSecretKey()));
-        sync = S3Client.builder()
-                .endpointOverride(localstack.getEndpoint())
-                .region(Region.of(localstack.getRegion()))
-                .credentialsProvider(creds)
-                .serviceConfiguration(
-                        S3Configuration.builder().pathStyleAccessEnabled(true).build())
-                .overrideConfiguration(o -> o.addExecutionInterceptor(CAPTURING_INTERCEPTOR))
-                .build();
-        async = S3AsyncClient.crtBuilder()
+        client = S3AsyncClient.builder()
                 .endpointOverride(localstack.getEndpoint())
                 .region(Region.of(localstack.getRegion()))
                 .credentialsProvider(creds)
                 .forcePathStyle(true)
-                .build();
-        transferManager = S3TransferManager.builder().s3Client(async).build();
-        presigner = S3Presigner.builder()
-                .endpointOverride(localstack.getEndpoint())
-                .region(Region.of(localstack.getRegion()))
-                .credentialsProvider(creds)
-                .serviceConfiguration(
-                        S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
+                .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED)
+                .overrideConfiguration(o -> o.addExecutionInterceptor(CAPTURING_INTERCEPTOR))
                 .build();
     }
 
     @AfterAll
     static void tearDown() {
-        if (transferManager != null) transferManager.close();
-        if (presigner != null) presigner.close();
-        if (async != null) async.close();
-        if (sync != null) sync.close();
+        if (client != null) {
+            client.close();
+        }
     }
 
     @BeforeEach
     void createBucket() {
         bucket = "rp-" + UUID.randomUUID().toString().substring(0, 12);
-        sync.createBucket(CreateBucketRequest.builder().bucket(bucket).build());
+        client.createBucket(CreateBucketRequest.builder().bucket(bucket).build())
+                .join();
         capturedRequests.clear();
     }
 
     @AfterEach
     void deleteBucket() {
         try {
-            sync.deleteBucket(DeleteBucketRequest.builder().bucket(bucket).build());
+            client.deleteBucket(DeleteBucketRequest.builder().bucket(bucket).build())
+                    .join();
         } catch (Exception ignored) {
             // best-effort
         }
     }
 
     @Test
-    void requesterPaysHeaderOnEverySyncOperation() throws IOException {
+    @SuppressWarnings("java:S3415") // capturedRequests is the actual value: the requests sent by the client
+    void requesterPaysHeaderOnEveryStorageOperation() throws IOException {
         try (S3Storage storage = openStorage(true)) {
             storage.put("a.bin", new byte[] {1, 2, 3}, WriteOptions.defaults());
             storage.put("b.bin", new byte[] {4, 5}, WriteOptions.defaults());
@@ -167,6 +151,7 @@ class S3RequesterPaysIT {
     }
 
     @Test
+    @SuppressWarnings("java:S3415") // capturedRequests is the actual value: the requests sent by the client
     void requesterPaysHeaderOnRangeReader() throws IOException {
         // Seed an object with requesterPays disabled, then re-open the reader with requesterPays enabled
         // so the captured requests reflect the read path only.
@@ -190,6 +175,7 @@ class S3RequesterPaysIT {
     }
 
     @Test
+    @SuppressWarnings("java:S3415") // capturedRequests is the actual value: the requests sent by the client
     void noHeaderWhenRequesterPaysDisabled() throws IOException {
         try (S3Storage storage = openStorage(false)) {
             storage.put("a.bin", new byte[] {1, 2, 3}, WriteOptions.defaults());
@@ -209,7 +195,17 @@ class S3RequesterPaysIT {
 
     @Test
     void presignGetUrlEmbedsRequesterPays() throws IOException {
-        try (S3Storage storage = openStorage(true)) {
+        S3ClientCache cache = new S3ClientCache();
+        S3ClientCache.Key key = S3ClientCache.key(
+                localstack.getRegion(),
+                localstack.getEndpoint(),
+                false,
+                localstack.getAccessKey(),
+                localstack.getSecretKey(),
+                null,
+                true);
+        URI baseUri = URI.create("s3://" + bucket + "/");
+        try (S3Storage storage = new S3Storage(baseUri, S3StorageBucketKey.parse(baseUri), cache.acquire(key), true)) {
             storage.put("p.bin", new byte[] {9}, WriteOptions.defaults());
             URI url = storage.presignGet("p.bin", java.time.Duration.ofMinutes(5));
             // SigV4 either embeds the header value as a query parameter or signs it as a required
@@ -227,8 +223,7 @@ class S3RequesterPaysIT {
     private S3Storage openStorage(boolean requesterPays) {
         URI baseUri = URI.create("s3://" + bucket + "/");
         S3StorageBucketKey ref = S3StorageBucketKey.parse(baseUri);
-        S3ClientBundle bundle = S3ClientBundle.of(sync, async, transferManager, presigner);
-        return new S3Storage(baseUri, ref, new BorrowedS3Handle(bundle), requesterPays);
+        return new S3Storage(baseUri, ref, new BorrowedS3Handle(client), requesterPays);
     }
 
     private static Optional<String> headerValue(SdkHttpRequest req, String name) {

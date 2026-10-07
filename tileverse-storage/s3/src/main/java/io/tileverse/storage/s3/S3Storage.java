@@ -18,6 +18,7 @@ package io.tileverse.storage.s3;
 import io.tileverse.storage.CopyOptions;
 import io.tileverse.storage.DeleteResult;
 import io.tileverse.storage.ListOptions;
+import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.PreconditionFailedException;
 import io.tileverse.storage.PresignWriteOptions;
 import io.tileverse.storage.RangeReader;
@@ -47,24 +48,25 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import org.jspecify.annotations.Nullable;
 import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.async.AsyncRequestBody;
+import software.amazon.awssdk.core.async.AsyncResponseTransformer;
 import software.amazon.awssdk.core.exception.SdkException;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.core.sync.ResponseTransformer;
-import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
@@ -77,19 +79,18 @@ import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.MetadataDirective;
-import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.RequestPayer;
 import software.amazon.awssdk.services.s3.model.S3Error;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.S3Object;
-import software.amazon.awssdk.services.s3.paginators.ListObjectsV2Iterable;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 import software.amazon.awssdk.transfer.s3.S3TransferManager;
 import software.amazon.awssdk.transfer.s3.model.FileUpload;
+import software.amazon.awssdk.transfer.s3.model.UploadFileRequest;
 
 /**
  * AWS S3 implementation of {@link Storage}, supporting both general-purpose buckets and S3 Express One Zone (Directory
@@ -142,7 +143,7 @@ final class S3Storage implements Storage {
         this.requesterPays = requesterPays;
         this.batchSettings = Objects.requireNonNull(batchSettings, "batchSettings cannot be null");
         this.isDirectoryBucket = EXPRESS_BUCKET_PATTERN.matcher(ref.bucket()).matches();
-        this.capabilities = buildCapabilities(this.isDirectoryBucket);
+        this.capabilities = buildCapabilities(this.isDirectoryBucket, handle.presigns());
     }
 
     /**
@@ -151,11 +152,11 @@ final class S3Storage implements Storage {
      * and the same bucket and key on two endpoints are two different objects. The client is the only place that knows
      * the effective endpoint on every construction path, borrowed clients included.
      */
-    private static @Nullable URI resolveEndpoint(S3Client client) {
+    private static @Nullable URI resolveEndpoint(S3AsyncClient client) {
         try {
             return client.serviceClientConfiguration().endpointOverride().orElse(null);
         } catch (UnsupportedOperationException e) {
-            // A hand-written S3Client implementation that keeps the interface's default method. Without an endpoint
+            // A hand-written S3AsyncClient implementation keeping the interface's default method. Without an endpoint
             // to tell sources apart, the readers identify as canonical s3:// URIs.
             return null;
         }
@@ -172,21 +173,14 @@ final class S3Storage implements Storage {
         }
     }
 
-    private S3TransferManager transferManager() {
-        return handle.transferManager()
-                .orElseThrow(() -> new UnsupportedCapabilityException("multipart upload requires an S3TransferManager; "
-                        + "construct this Storage via the SPI path or supply an S3ClientBundle with a transfer manager, "
-                        + "or set WriteOptions.disableMultipart()"));
-    }
-
     private S3Presigner presigner() {
         return handle.presigner()
-                .orElseThrow(() -> new UnsupportedCapabilityException("presigned URLs require an S3Presigner; "
-                        + "construct this Storage via the SPI path or supply an S3ClientBundle with a presigner"));
+                .orElseThrow(() -> new UnsupportedCapabilityException("presigned URLs need a Storage opened from a URI "
+                        + "or a StorageConfig; a Storage over a caller-supplied S3AsyncClient has no presigner"));
     }
 
-    private static StorageCapabilities buildCapabilities(boolean isDirectoryBucket) {
-        StorageCapabilities.Builder b = StorageCapabilities.builder()
+    private static StorageCapabilities buildCapabilities(boolean isDirectoryBucket, boolean presigns) {
+        return StorageCapabilities.builder()
                 .rangeReads(true)
                 .streamingReads(true)
                 .stat(true)
@@ -203,14 +197,20 @@ final class S3Storage implements Storage {
                 .deleteReportsExistence(false)
                 .serverSideCopy(true)
                 .atomicMove(false)
-                .presignedUrls(true)
-                .strongReadAfterWrite(true);
-        if (isDirectoryBucket) {
-            b.maxPresignTtl(Optional.of(Duration.ofMinutes(5))).versioning(false);
-        } else {
-            b.maxPresignTtl(Optional.of(Duration.ofDays(7))).versioning(true);
+                .presignedUrls(presigns)
+                .maxPresignTtl(maxPresignTtl(isDirectoryBucket, presigns))
+                .strongReadAfterWrite(true)
+                .versioning(!isDirectoryBucket)
+                .build();
+    }
+
+    /** The longest time-to-live of a presigned URL; empty when the Storage cannot presign. */
+    private static Optional<Duration> maxPresignTtl(boolean isDirectoryBucket, boolean presigns) {
+        if (!presigns) {
+            return Optional.empty();
         }
-        return b.build();
+        Duration max = isDirectoryBucket ? Duration.ofMinutes(5) : Duration.ofDays(7);
+        return Optional.of(max);
     }
 
     @Override
@@ -251,28 +251,27 @@ final class S3Storage implements Storage {
     @Override
     public Optional<StorageEntry.File> stat(String key) {
         requireOpen();
-        String fullKey = resolve(key);
+        HeadObjectRequest.Builder requestBuilder =
+                HeadObjectRequest.builder().bucket(ref.bucket()).key(resolve(key));
+        applyRequesterPays(requestBuilder::requestPayer);
+        HeadObjectRequest request = requestBuilder.build();
         try {
-            HeadObjectRequest.Builder requestBuilder =
-                    HeadObjectRequest.builder().bucket(ref.bucket()).key(fullKey);
-            applyRequesterPays(requestBuilder::requestPayer);
-            HeadObjectResponse resp = handle.client().headObject(requestBuilder.build());
-            return Optional.of(new StorageEntry.File(
-                    key,
-                    resp.contentLength(),
-                    resp.lastModified(),
-                    Optional.ofNullable(resp.eTag()),
-                    normalizeVersionId(resp.versionId()),
-                    Optional.ofNullable(resp.contentType()),
-                    resp.metadata() == null ? Map.of() : Map.copyOf(resp.metadata())));
-        } catch (NoSuchKeyException e) {
+            HeadObjectResponse resp = S3Calls.await(key, () -> handle.client().headObject(request));
+            return Optional.of(fileEntryOf(key, resp));
+        } catch (NotFoundException missing) {
             return Optional.empty();
-        } catch (S3Exception e) {
-            if (e.statusCode() == 404) {
-                return Optional.empty();
-            }
-            throw S3ExceptionMapper.map(e, key);
         }
+    }
+
+    private static StorageEntry.File fileEntryOf(String key, HeadObjectResponse resp) {
+        return new StorageEntry.File(
+                key,
+                resp.contentLength(),
+                resp.lastModified(),
+                Optional.ofNullable(resp.eTag()),
+                normalizeVersionId(resp.versionId()),
+                Optional.ofNullable(resp.contentType()),
+                resp.metadata() == null ? Map.of() : Map.copyOf(resp.metadata()));
     }
 
     @Override
@@ -295,24 +294,9 @@ final class S3Storage implements Storage {
         }
         applyRequesterPays(requestBuilder::requestPayer);
 
-        // Force the first page read up-front so wrong-region / missing-bucket / permission
-        // errors propagate synchronously as a typed StorageException from the list(...) call
-        // itself rather than escaping raw during stream consumption.
-        ListObjectsV2Iterable paginator;
-        Iterator<ListObjectsV2Response> rawPages;
-        try {
-            paginator = handle.client().listObjectsV2Paginator(requestBuilder.build());
-            rawPages = paginator.iterator();
-            // Force the first-page fetch so auth/region/missing-bucket errors propagate here as typed
-            // StorageException rather than escaping raw during stream consumption.
-            rawPages.hasNext(); // NOSONAR java:S899 -- side-effecting call, return value intentionally ignored
-        } catch (S3Exception e) {
-            throw S3ExceptionMapper.map(e, fullPrefix);
-        }
-
-        Iterator<ListObjectsV2Response> wrapped = wrapListIterator(rawPages, fullPrefix);
+        Iterator<ListObjectsV2Response> pages = new ListPages(requestBuilder.build(), fullPrefix);
         Stream<ListObjectsV2Response> pageStream =
-                StreamSupport.stream(Spliterators.spliteratorUnknownSize(wrapped, Spliterator.ORDERED), false);
+                StreamSupport.stream(Spliterators.spliteratorUnknownSize(pages, Spliterator.ORDERED), false);
 
         boolean recursive = parsed.walkDescendants();
         return pageStream.flatMap(page -> entriesFromPage(page, recursive)).filter(entry -> matcher.test(entry.key()));
@@ -342,26 +326,65 @@ final class S3Storage implements Storage {
                 Map.of());
     }
 
-    private static <T> Iterator<T> wrapListIterator(Iterator<T> raw, String contextKey) {
-        return new Iterator<>() {
-            @Override
-            public boolean hasNext() {
-                try {
-                    return raw.hasNext();
-                } catch (S3Exception e) {
-                    throw S3ExceptionMapper.map(e, contextKey);
-                }
-            }
+    /**
+     * The pages of one listing, fetched one at a time as the stream advances. The first page is fetched on
+     * construction: a missing bucket or a denied listing fails the {@code list} call itself, before the stream's
+     * consumer starts.
+     */
+    private final class ListPages implements Iterator<ListObjectsV2Response> {
 
-            @Override
-            public T next() {
-                try {
-                    return raw.next();
-                } catch (S3Exception e) {
-                    throw S3ExceptionMapper.map(e, contextKey);
-                }
+        private final String contextKey;
+
+        @Nullable
+        private ListObjectsV2Request nextRequest;
+
+        @Nullable
+        private ListObjectsV2Response fetched;
+
+        ListPages(ListObjectsV2Request firstRequest, String contextKey) {
+            this.contextKey = contextKey;
+            this.fetched = fetch(firstRequest);
+        }
+
+        @Override
+        public boolean hasNext() {
+            if (fetched == null && nextRequest != null) {
+                fetched = fetch(nextRequest);
             }
-        };
+            return fetched != null;
+        }
+
+        @Override
+        public ListObjectsV2Response next() {
+            if (!hasNext()) {
+                throw new NoSuchElementException();
+            }
+            ListObjectsV2Response page = fetched;
+            fetched = null;
+            return page;
+        }
+
+        /** Fetches a page and keeps the request of the next one, if the listing goes on. */
+        private ListObjectsV2Response fetch(ListObjectsV2Request request) {
+            ListObjectsV2Response page =
+                    S3Calls.await(contextKey, () -> handle.client().listObjectsV2(request));
+            nextRequest = continuationOf(request, page);
+            return page;
+        }
+    }
+
+    /**
+     * The request of the page after {@code page}; {@code null} when the page names no continuation token. The token
+     * decides whatever {@code IsTruncated} says, as in the paginator of the SDK: the listing of a server omitting the
+     * flag misses no key.
+     */
+    private static @Nullable ListObjectsV2Request continuationOf(
+            ListObjectsV2Request request, ListObjectsV2Response page) {
+        String token = page.nextContinuationToken();
+        if (token == null || token.isEmpty()) {
+            return null;
+        }
+        return request.toBuilder().continuationToken(token).build();
     }
 
     @Override
@@ -371,28 +394,19 @@ final class S3Storage implements Storage {
         // Reuse our cached SDK clients (which already have the right endpoint, region, credentials).
         // Opening issues no request; a missing key is reported by the first read or size() call.
         return new S3RangeReader(
-                handle.client(),
-                handle.asyncClient().orElse(null),
-                new S3Reference(endpoint, ref.bucket(), fullKey, null),
-                requesterPays,
-                handle.endpointEtags(),
-                batchSettings);
+                handle.client(), new S3Reference(endpoint, ref.bucket(), fullKey, null), requesterPays, batchSettings);
     }
 
-    /** Streams the object through the sync client, over one connection. */
+    /** Streams the object through the async client, over one connection. */
     @Override
     public ReadHandle read(String key, ReadOptions options) {
         requireOpen();
         GetObjectRequest request = getRequestFor(key, options);
-        try {
-            ResponseInputStream<GetObjectResponse> raw =
-                    handle.client().getObject(request, ResponseTransformer.toInputStream());
-            return readHandleFor(key, raw);
-        } catch (S3Exception e) {
-            throw S3ExceptionMapper.map(e, key);
-        } catch (SdkException e) {
-            throw new StorageException("read failed for: " + key, e);
-        }
+        ResponseInputStream<GetObjectResponse> raw = S3Calls.await(
+                key,
+                () -> handle.client().getObject(request, AsyncResponseTransformer.toBlockingInputStream()),
+                ResponseInputStream::abort);
+        return readHandleFor(key, raw);
     }
 
     /** Builds the GET behind a streaming read, honoring the version, range and conditional options. */
@@ -484,11 +498,7 @@ final class S3Storage implements Storage {
         if (options.contentLength().isPresent()) {
             requestBuilder.contentLength(options.contentLength().getAsLong());
         }
-        try {
-            handle.client().putObject(requestBuilder.build(), RequestBody.fromBytes(data));
-        } catch (S3Exception e) {
-            throw S3ExceptionMapper.map(e, key);
-        }
+        putInOneRequest(key, requestBuilder.build(), AsyncRequestBody.fromBytes(data));
         return stat(key).orElseThrow(() -> new StorageException("Wrote key but stat failed: " + key));
     }
 
@@ -506,34 +516,31 @@ final class S3Storage implements Storage {
         }
         // For zero-byte files, single-shot PutObject is required: TransferManager / multipart
         // upload of empty content is rejected by some S3-compatible backends (notably LocalStack).
-        // Empty Path uploads also confuse some backends, so we route empties through fromBytes.
+        // An empty body replaces the file: empty Path uploads also confuse some backends.
         if (sourceSize == 0L) {
-            try {
-                handle.client().putObject(putBuilder.build(), RequestBody.empty());
-            } catch (S3Exception e) {
-                throw S3ExceptionMapper.map(e, key);
-            }
+            putInOneRequest(key, putBuilder.build(), AsyncRequestBody.empty());
         } else if (options.disableMultipart()) {
-            try {
-                handle.client().putObject(putBuilder.build(), source);
-            } catch (S3Exception e) {
-                throw S3ExceptionMapper.map(e, key);
-            }
+            putInOneRequest(key, putBuilder.build(), AsyncRequestBody.fromFile(source));
         } else {
-            PutObjectRequest putObjectRequest = putBuilder.build();
-            FileUpload fileUpload =
-                    transferManager().uploadFile(b -> b.source(source).putObjectRequest(putObjectRequest));
-            try {
-                fileUpload.completionFuture().join();
-            } catch (CompletionException e) {
-                Throwable cause = e.getCause();
-                if (cause instanceof S3Exception s3e) {
-                    throw S3ExceptionMapper.map(s3e, key);
-                }
-                throw new StorageException("Upload failed for: " + key, cause);
-            }
+            uploadInParts(key, putBuilder.build(), source);
         }
         return stat(key).orElseThrow(() -> new StorageException("Wrote key but stat failed: " + key));
+    }
+
+    private void putInOneRequest(String key, PutObjectRequest request, AsyncRequestBody body) {
+        S3Calls.await(key, () -> handle.client().putObject(request, body));
+    }
+
+    private void uploadInParts(String key, PutObjectRequest request, Path source) {
+        UploadFileRequest upload = UploadFileRequest.builder()
+                .source(source)
+                .putObjectRequest(request)
+                .build();
+        S3TransferManager transferManager = handle.transferManager();
+        S3Calls.await(key, () -> {
+            FileUpload started = transferManager.uploadFile(upload);
+            return started.completionFuture();
+        });
     }
 
     @Override
@@ -547,14 +554,11 @@ final class S3Storage implements Storage {
     public void delete(String key) {
         requireOpen();
         String fullKey = resolve(key);
-        try {
-            DeleteObjectRequest.Builder requestBuilder =
-                    DeleteObjectRequest.builder().bucket(ref.bucket()).key(fullKey);
-            applyRequesterPays(requestBuilder::requestPayer);
-            handle.client().deleteObject(requestBuilder.build());
-        } catch (S3Exception e) {
-            throw S3ExceptionMapper.map(e, key);
-        }
+        DeleteObjectRequest.Builder requestBuilder =
+                DeleteObjectRequest.builder().bucket(ref.bucket()).key(fullKey);
+        applyRequesterPays(requestBuilder::requestPayer);
+        DeleteObjectRequest request = requestBuilder.build();
+        S3Calls.await(key, () -> handle.client().deleteObject(request));
     }
 
     @Override
@@ -562,35 +566,45 @@ final class S3Storage implements Storage {
         requireOpen();
         Set<String> deleted = new HashSet<>();
         Map<String, StorageException> failed = new HashMap<>();
-
         final List<String> all = List.copyOf(keys);
         final int batchSize = capabilities.bulkDeleteBatchLimit();
-        S3Client client = handle.client();
-
         for (int i = 0; i < all.size(); i += batchSize) {
             List<String> batch = all.subList(i, Math.min(i + batchSize, all.size()));
-            List<ObjectIdentifier> ids = batch.stream()
-                    .map(k -> ObjectIdentifier.builder().key(resolve(k)).build())
-                    .toList();
-            try {
-                DeleteObjectsRequest.Builder deleteObjectsBuilder = DeleteObjectsRequest.builder()
-                        .bucket(ref.bucket())
-                        .delete(d -> d.objects(ids).quiet(false));
-                applyRequesterPays(deleteObjectsBuilder::requestPayer);
-                DeleteObjectsResponse resp = client.deleteObjects(deleteObjectsBuilder.build());
-                for (DeletedObject d : resp.deleted()) {
-                    deleted.add(ref.relativize(d.key()));
-                }
-                for (S3Error err : resp.errors()) {
-                    String relKey = ref.relativize(err.key());
-                    failed.put(relKey, new StorageException(err.code() + ": " + err.message()));
-                }
-            } catch (S3Exception e) {
-                batch.forEach(k -> failed.put(k, S3ExceptionMapper.map(e, k)));
-            }
+            deleteBatch(batch, deleted, failed);
         }
         // S3's DeleteObjects API does not flag missing keys; deleteReportsExistence is reported false in capabilities.
         return new DeleteResult(deleted, Set.of(), failed);
+    }
+
+    /**
+     * Deletes one batch and records the outcome per key. A service error fails the keys of the batch and leaves the
+     * next batches to run; a client-side failure or an interrupt ends the call.
+     */
+    private void deleteBatch(List<String> batch, Set<String> deleted, Map<String, StorageException> failed) {
+        List<ObjectIdentifier> ids = batch.stream()
+                .map(k -> ObjectIdentifier.builder().key(resolve(k)).build())
+                .toList();
+        DeleteObjectsRequest.Builder requestBuilder = DeleteObjectsRequest.builder()
+                .bucket(ref.bucket())
+                .delete(d -> d.objects(ids).quiet(false));
+        applyRequesterPays(requestBuilder::requestPayer);
+        DeleteObjectsRequest request = requestBuilder.build();
+        DeleteObjectsResponse resp;
+        try {
+            resp = S3Calls.await(batch.get(0), () -> handle.client().deleteObjects(request));
+        } catch (StorageException batchFailure) {
+            if (!(batchFailure.getCause() instanceof S3Exception serviceFailure)) {
+                throw batchFailure;
+            }
+            batch.forEach(k -> failed.put(k, S3ExceptionMapper.map(serviceFailure, k)));
+            return;
+        }
+        for (DeletedObject d : resp.deleted()) {
+            deleted.add(ref.relativize(d.key()));
+        }
+        for (S3Error err : resp.errors()) {
+            failed.put(ref.relativize(err.key()), new StorageException(err.code() + ": " + err.message()));
+        }
     }
 
     @Override
@@ -626,11 +640,8 @@ final class S3Storage implements Storage {
             requestBuilder.metadata(md);
         });
         applyRequesterPays(requestBuilder::requestPayer);
-        try {
-            handle.client().copyObject(requestBuilder.build());
-        } catch (S3Exception e) {
-            throw S3ExceptionMapper.map(e, srcKey);
-        }
+        CopyObjectRequest request = requestBuilder.build();
+        S3Calls.await(srcKey, () -> handle.client().copyObject(request));
         return dst.stat(dstKey).orElseThrow(() -> new StorageException("Copy failed for: " + dstKey));
     }
 
@@ -656,7 +667,7 @@ final class S3Storage implements Storage {
                     applyRequesterPays(r::requestPayer);
                 })
                 .build();
-        URL url = presigner().presignGetObject(presignReq).url();
+        URL url = presign(key, signer -> signer.presignGetObject(presignReq).url());
         return URI.create(url.toString());
     }
 
@@ -675,8 +686,21 @@ final class S3Storage implements Storage {
                     applyRequesterPays(b::requestPayer);
                 })
                 .build();
-        URL url = presigner().presignPutObject(presignReq).url();
+        URL url = presign(key, signer -> signer.presignPutObject(presignReq).url());
         return URI.create(url.toString());
+    }
+
+    /**
+     * Signs with the presigner of the handle. A failure of the SDK, such as missing credentials, arrives as a
+     * {@link StorageException}, as for requests.
+     */
+    private URL presign(String key, Function<S3Presigner, URL> signing) {
+        S3Presigner presigner = presigner();
+        try {
+            return signing.apply(presigner);
+        } catch (SdkException failure) {
+            throw S3Calls.map(failure, key);
+        }
     }
 
     /**

@@ -91,7 +91,8 @@ class S3StorageLocalStackIT extends StorageTCK {
             setup.client()
                     .createBucket(software.amazon.awssdk.services.s3.model.CreateBucketRequest.builder()
                             .bucket(bucket)
-                            .build());
+                            .build())
+                    .join();
         }
         URI baseUri = URI.create("s3://" + bucket + "/");
         S3StorageBucketKey ref = S3StorageBucketKey.parse(baseUri);
@@ -149,7 +150,8 @@ class S3StorageLocalStackIT extends StorageTCK {
             setup.client()
                     .deleteBucket(software.amazon.awssdk.services.s3.model.DeleteBucketRequest.builder()
                             .bucket(bucket)
-                            .build());
+                            .build())
+                    .join();
         } catch (Exception ignored) {
             // best-effort
         }

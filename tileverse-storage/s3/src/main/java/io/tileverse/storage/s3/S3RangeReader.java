@@ -20,7 +20,6 @@ import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
 import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.ContentRange;
-import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.RangeNotSatisfiableException;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeRequest;
@@ -35,35 +34,30 @@ import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.jspecify.annotations.Nullable;
 import software.amazon.awssdk.core.async.AsyncResponseTransformer;
-import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
-import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
-import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.RequestPayer;
-import software.amazon.awssdk.services.s3.model.S3Exception;
 
 /**
  * A {@link RangeReader} implementation that reads data from an AWS S3-compatible object storage service.
  *
- * <p>This class reads S3 objects through the {@link S3Client} of the AWS SDK for Java v2 and serves both standard AWS
- * S3 and self-hosted S3-compatible services like MinIO.
+ * <p>This class reads S3 objects through the {@link S3AsyncClient} of the AWS SDK for Java v2 and serves both standard
+ * AWS S3 and self-hosted S3-compatible services like MinIO.
  *
  * <h2>Construction and Configuration</h2>
  *
- * Readers are opened by {@code S3Storage#openRangeReader(String)} and borrow the SDK clients of that storage; opening a
+ * Readers are opened by {@code S3Storage#openRangeReader(String)} and borrow the SDK client of that storage; opening a
  * reader issues no request. Credentials, region, endpoint and path-style addressing are therefore settled before a
  * reader exists: {@link S3StorageProvider} resolves them from the {@code storage.s3.*} parameters and the base URI, and
- * {@link S3ClientCache} builds one client set per distinct combination, shared by every storage that requests it. A
- * caller that already holds a configured {@link S3Client} hands it to {@link S3StorageProvider#open(java.net.URI,
- * S3Client)} instead.
+ * {@link S3ClientCache} builds one client set per distinct combination, shared by the storages requesting it. A caller
+ * holding a configured {@link S3AsyncClient} hands it to {@link S3StorageProvider#open(java.net.URI, S3AsyncClient)}
+ * instead.
  *
  * <h2>S3-Compatible Endpoints</h2>
  *
@@ -75,99 +69,49 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
  *
  * <h2>Batched and Streaming Reads</h2>
  *
- * {@code readRanges} merges nearby ranges under the {@link BatchSettings} of the Storage the reader was opened from
- * and, when an {@link S3AsyncClient} is present, fetches the planned ranges in parallel with one async
- * {@code getObject} each. Without the async client the {@link AbstractRangeReader} template runs the same plan on the
- * shared batch executor.
+ * {@code readRanges} merges nearby ranges under the {@link BatchSettings} of the Storage opening the reader and fetches
+ * the planned ranges in parallel, with one async {@code getObject} each.
  *
- * <p>Range bodies stream straight into their destination, heap or direct, on every path: single reads through a
- * {@link software.amazon.awssdk.core.sync.ResponseTransformer} that keeps the SDK's body-read retries, batched fetches
- * through an {@link AsyncResponseTransformer} writing chunks as they arrive. No read holds a full-size heap copy of the
- * response; transient heap per read is bounded by the SDK's chunk size, plus one pooled scratch buffer for a merged
- * fetch that scatters to several requests.
+ * <p>Range bodies stream straight into their destination, heap or direct, through an {@link AsyncResponseTransformer}
+ * writing chunks as they arrive, inside the SDK's retry loop. No read holds a full-size heap copy of the response;
+ * transient heap per read is bounded by the SDK's chunk size, plus one pooled scratch buffer for a merged fetch
+ * scattering to several requests. Once a read returns or throws, no thread writes its destination.
  */
 final class S3RangeReader extends AbstractRangeReader implements RangeReader {
 
-    private final S3Client s3Client;
-
-    @Nullable
-    private final S3AsyncClient asyncClient;
-
+    private final S3AsyncClient client;
     private final S3Reference s3Location;
     private final boolean requesterPays;
-    private final EndpointEtags endpointEtags;
     private final BatchSettings batchSettings;
 
     private final AtomicReference<OptionalLong> contentLength = new AtomicReference<>();
 
     /**
-     * Creates a reader without an async client; batched reads run through the {@link AbstractRangeReader} template.
-     *
-     * @param s3Client The S3 client to use
-     * @param s3Location The S3 reference (bucket + key)
-     * @param requesterPays when {@code true}, every request adds {@code x-amz-request-payer: requester}
-     */
-    S3RangeReader(S3Client s3Client, S3Reference s3Location, boolean requesterPays) {
-        this(s3Client, null, s3Location, requesterPays);
-    }
-
-    /**
-     * Creates a new S3RangeReader for the specified S3 object.
+     * Creates a reader batching under the {@link BatchSettings#objectStoreDefaults() object-store defaults}.
      *
      * <p>Construction performs no I/O. A missing object is reported by the first {@link #readRange(long, int)} or
      * {@link #size()} call instead of at construction time.
      *
-     * @param s3Client The S3 client to use for single reads and metadata
-     * @param asyncClient the async client for parallel batched reads, or null to batch through the shared executor
-     * @param s3Location The S3 reference (bucket + key)
-     * @param requesterPays when {@code true}, every request adds {@code x-amz-request-payer: requester}
+     * @param client the client serving the reads
+     * @param s3Location the S3 reference (bucket + key)
+     * @param requesterPays when {@code true}, requests add {@code x-amz-request-payer: requester}
      */
-    S3RangeReader(
-            S3Client s3Client, @Nullable S3AsyncClient asyncClient, S3Reference s3Location, boolean requesterPays) {
-        this(s3Client, asyncClient, s3Location, requesterPays, new EndpointEtags());
-    }
-
-    /**
-     * Creates a reader that shares the endpoint's ETag record with the other readers of the same clients, batching
-     * under the {@link BatchSettings#objectStoreDefaults() object-store defaults}.
-     *
-     * @param s3Client The S3 client to use for single reads and metadata
-     * @param asyncClient the async client for parallel batched reads, or null to batch through the shared executor
-     * @param s3Location The S3 reference (bucket + key)
-     * @param requesterPays when {@code true}, every request adds {@code x-amz-request-payer: requester}
-     * @param endpointEtags the shared record of the async client rejecting a response for want of an ETag header
-     */
-    S3RangeReader(
-            S3Client s3Client,
-            @Nullable S3AsyncClient asyncClient,
-            S3Reference s3Location,
-            boolean requesterPays,
-            EndpointEtags endpointEtags) {
-        this(s3Client, asyncClient, s3Location, requesterPays, endpointEtags, BatchSettings.objectStoreDefaults());
+    S3RangeReader(S3AsyncClient client, S3Reference s3Location, boolean requesterPays) {
+        this(client, s3Location, requesterPays, BatchSettings.objectStoreDefaults());
     }
 
     /**
      * Creates a reader with the batch settings of the Storage it belongs to.
      *
-     * @param s3Client The S3 client to use for single reads and metadata
-     * @param asyncClient the async client for parallel batched reads, or null to batch through the shared executor
-     * @param s3Location The S3 reference (bucket + key)
-     * @param requesterPays when {@code true}, every request adds {@code x-amz-request-payer: requester}
-     * @param endpointEtags the shared record of the async client rejecting a response for want of an ETag header
+     * @param client the client serving the reads
+     * @param s3Location the S3 reference (bucket + key)
+     * @param requesterPays when {@code true}, requests add {@code x-amz-request-payer: requester}
      * @param batchSettings the merge policy and in-flight bound for batched reads
      */
-    S3RangeReader(
-            S3Client s3Client,
-            @Nullable S3AsyncClient asyncClient,
-            S3Reference s3Location,
-            boolean requesterPays,
-            EndpointEtags endpointEtags,
-            BatchSettings batchSettings) {
-        this.s3Client = Objects.requireNonNull(s3Client, "S3Client cannot be null");
-        this.asyncClient = asyncClient;
+    S3RangeReader(S3AsyncClient client, S3Reference s3Location, boolean requesterPays, BatchSettings batchSettings) {
+        this.client = Objects.requireNonNull(client, "S3AsyncClient cannot be null");
         this.s3Location = Objects.requireNonNull(s3Location, "S3Location cannot be null");
         this.requesterPays = requesterPays;
-        this.endpointEtags = Objects.requireNonNull(endpointEtags, "EndpointEtags cannot be null");
         this.batchSettings = Objects.requireNonNull(batchSettings, "BatchSettings cannot be null");
     }
 
@@ -188,26 +132,23 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     /**
-     * Streams the range body straight into {@code target} through {@link ByteBufferResponseTransformer}, inside the
-     * SDK's retry loop. A body longer than requested is a {@link StorageException} raised by the transformer and
-     * rethrown here whether or not the SDK wrapped it.
+     * Streams the range body straight into {@code target} through {@link ByteBufferAsyncResponseTransformer}, inside
+     * the SDK's retry loop, and waits for it. The transformer closes before this method returns or throws: an attempt
+     * abandoned by the SDK, a scheduled retry included, never writes the target afterwards.
      */
     @Override
     protected int readRangeNoFlip(final long offset, final int actualLength, ByteBuffer target) {
+        int start = target.position();
+        GetObjectRequest request = buildGetRequest(offset, actualLength);
+        ByteBufferAsyncResponseTransformer body = new ByteBufferAsyncResponseTransformer(target, actualLength);
         try {
-            ByteBufferResponseTransformer body = new ByteBufferResponseTransformer(target, actualLength);
-            GetObjectResponse response = s3Client.getObject(buildGetRequest(offset, actualLength), body);
-            captureSizeFrom(response);
-            return body.bytesWritten();
-        } catch (NoSuchKeyException e) {
-            throw new NotFoundException("S3 object does not exist: s3://" + s3Location, e);
-        } catch (S3Exception e) {
-            throw S3ExceptionMapper.map(e, s3Location.key());
-        } catch (SdkException e) {
-            if (e.getCause() instanceof StorageException raisedWhileStreaming) {
-                throw raisedWhileStreaming;
-            }
-            throw new StorageException("Failed to read range from S3: " + e.getMessage(), e);
+            ByteBufferAsyncResponseTransformer.Result streamed =
+                    S3Calls.await(s3Location.key(), () -> client.getObject(request, body));
+            captureSizeFrom(streamed.response());
+            target.position(start + streamed.bytesWritten());
+            return streamed.bytesWritten();
+        } finally {
+            body.close();
         }
     }
 
@@ -222,30 +163,22 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     /**
-     * Reads a batch with one async {@code getObject} per planned fetch when the async client is present, at most
-     * {@link #maxConcurrentFetches()} of them in flight at once with each completion admitting the next; without the
-     * async client, the batched-read template runs the same plan on the shared executor through the sync client.
+     * Reads a batch with one async {@code getObject} per planned fetch, at most {@link #maxConcurrentFetches()} of them
+     * in flight at once, with each completion admitting the next.
      *
      * <p>A fetch answered 416 (entirely past EOF) reports 0 bytes for its entries, exactly like {@code readRange}; any
      * other failure, an {@link Error} included, stops the admission of new fetches and aborts the whole call once the
      * fetches in flight have completed, rethrowing an Error unchanged. Worst-case amplification: the requested bytes
      * plus the gaps merged by the object-store policy, at most {@link CoalescingPolicy#maxFetchBytes()} per fetch. Peak
      * heap scratch of one call is the in-flight bound times that cap, since a merged fetch borrows scratch for its
-     * whole extent.
+     * whole extent. The result counts one fetch per async GET issued and, as bytes transferred, the bytes streamed by
+     * those GETs.
      *
-     * <p>A CRT-based async client rejects the responses of an endpoint omitting the {@code ETag} header. From its first
-     * rejection on, batches read through the template path. See {@link EndpointEtags}. The result counts one fetch per
-     * async GET issued and, as bytes transferred, the bytes streamed by those GETs; the GETs rejected before the switch
-     * to the template path stay in the count.
-     *
-     * @param requests the ranges to read and the buffers they land in
+     * @param requests the ranges to read and their target buffers
      * @return the bytes read per request, in request order, and what the call cost
      */
     @Override
     public BatchReadResult readRanges(List<RangeRequest> requests) {
-        if (asyncClient == null || endpointEtags.omitted()) {
-            return super.readRanges(requests);
-        }
         RangeRequest.validate(requests);
         if (requests.isEmpty()) {
             return BatchReadResult.EMPTY;
@@ -255,15 +188,11 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
         if (fetches.isEmpty()) {
             return BatchReadResult.of(requests, counts, 0, 0, 0);
         }
-        int[] targetPositions = targetPositions(requests);
         BoundedFetches run = new BoundedFetches(fetches, requests, counts);
         try {
             run.run(maxConcurrentFetches());
         } catch (CompletionException failure) {
-            if (EndpointEtags.rejectedForMissingEtag(failure)) {
-                return rereadThroughSyncClient(requests, targetPositions).merge(run.cost());
-            }
-            throw unwrapBatchFailure(failure);
+            throw S3Calls.map(failure, s3Location.key());
         }
         return BatchReadResult.of(requests, counts, run.fetchesLaunched(), run.bytesTransferred(), 0);
     }
@@ -312,11 +241,6 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
                 total += perFetch;
             }
             return total;
-        }
-
-        /** The transport numbers alone, for a result whose per-request view comes from elsewhere. */
-        BatchReadResult cost() {
-            return BatchReadResult.of(List.of(), new int[0], fetchesLaunched(), bytesTransferred(), 0);
         }
 
         /**
@@ -403,30 +327,6 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     /**
-     * Reruns a batch on the template path and records the endpoint. Targets go back to their positions at the start of
-     * the batch: a fetch that already wrote would otherwise land its bytes twice.
-     */
-    private BatchReadResult rereadThroughSyncClient(List<RangeRequest> requests, int[] targetPositions) {
-        endpointEtags.recordOmission();
-        restoreTargetPositions(requests, targetPositions);
-        return super.readRanges(requests);
-    }
-
-    private static int[] targetPositions(List<RangeRequest> requests) {
-        int[] positions = new int[requests.size()];
-        for (int i = 0; i < positions.length; i++) {
-            positions[i] = requests.get(i).target().position();
-        }
-        return positions;
-    }
-
-    private static void restoreTargetPositions(List<RangeRequest> requests, int[] positions) {
-        for (int i = 0; i < positions.length; i++) {
-            requests.get(i).target().position(positions[i]);
-        }
-    }
-
-    /**
      * Streams a direct fetch into its single requester's target. The completion closes the body before anything else:
      * no writer may touch the target after the batch returns.
      */
@@ -486,7 +386,7 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
             PlannedFetch fetch, ByteBufferAsyncResponseTransformer body) {
         GetObjectRequest request =
                 buildGetRequest(fetch.range().offset(), fetch.range().length());
-        return asyncClient.getObject(request, body);
+        return client.getObject(request, body);
     }
 
     /**
@@ -494,36 +394,11 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
      * an {@link Error} as itself.
      */
     private Integer failedFetch(Throwable failure) {
-        StorageException translated = unwrapBatchFailure(failure);
+        StorageException translated = S3Calls.map(failure, s3Location.key());
         if (translated instanceof RangeNotSatisfiableException) {
             return 0;
         }
         throw translated;
-    }
-
-    /**
-     * Unwraps async completion wrappers and maps SDK failures onto the storage exception hierarchy. An {@link Error} is
-     * rethrown as itself.
-     */
-    private StorageException unwrapBatchFailure(Throwable failure) {
-        Throwable cause = failure;
-        while ((cause instanceof CompletionException || cause instanceof ExecutionException)
-                && cause.getCause() != null) {
-            cause = cause.getCause();
-        }
-        if (cause instanceof Error error) {
-            throw error;
-        }
-        if (cause instanceof StorageException storageFailure) {
-            return storageFailure;
-        }
-        if (cause instanceof NoSuchKeyException noSuchKey) {
-            return new NotFoundException("S3 object does not exist: s3://" + s3Location, noSuchKey);
-        }
-        if (cause instanceof S3Exception s3Failure) {
-            return S3ExceptionMapper.map(s3Failure, s3Location.key());
-        }
-        return new StorageException("Failed to read ranges from S3: " + cause.getMessage(), cause);
     }
 
     @Override
@@ -536,22 +411,15 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     private OptionalLong fetchSize() {
-        try {
-            HeadObjectRequest.Builder headBuilder =
-                    HeadObjectRequest.builder().bucket(s3Location.bucket()).key(s3Location.key());
-            if (requesterPays) {
-                headBuilder.requestPayer(RequestPayer.REQUESTER);
-            }
-            HeadObjectResponse headResponse = s3Client.headObject(headBuilder.build());
-            Long size = headResponse.contentLength();
-            return size == null ? OptionalLong.empty() : OptionalLong.of(size);
-        } catch (NoSuchKeyException e) {
-            throw new NotFoundException("S3 object does not exist: s3://" + s3Location, e);
-        } catch (S3Exception e) {
-            throw S3ExceptionMapper.map(e, s3Location.key());
-        } catch (SdkException e) {
-            throw new StorageException("Failed to access S3 object " + s3Location + ": " + e.getMessage(), e);
+        HeadObjectRequest.Builder headBuilder =
+                HeadObjectRequest.builder().bucket(s3Location.bucket()).key(s3Location.key());
+        if (requesterPays) {
+            headBuilder.requestPayer(RequestPayer.REQUESTER);
         }
+        HeadObjectRequest request = headBuilder.build();
+        HeadObjectResponse headResponse = S3Calls.await(s3Location.key(), () -> client.headObject(request));
+        Long size = headResponse.contentLength();
+        return size == null ? OptionalLong.empty() : OptionalLong.of(size);
     }
 
     /**
@@ -574,6 +442,6 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
 
     @Override
     public void close() {
-        // S3Client is typically managed externally and should be closed by the caller
+        // the S3AsyncClient belongs to the Storage opening this reader
     }
 }

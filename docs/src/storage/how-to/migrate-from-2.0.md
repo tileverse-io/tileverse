@@ -31,6 +31,8 @@ an absolute grid; every other read is passed through untouched.
 | `storage.caching.blocksize` config key | `BlockAlignedRangeReader.Builder.blockSize(int)` |
 | `storage.s3.use-default-credentials-provider` config key and `S3StorageProvider.S3_USE_DEFAULT_CREDENTIALS_PROVIDER` | none: with no anonymous access, access keys, or profile set, S3 uses the AWS default credentials provider chain, as it did in 2.0 |
 | `storage.gcs.default-credentials-chain` config key and `GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS` | `storage.gcs.anonymous`; a saved `storage.gcs.default-credentials-chain=false` still reads as `storage.gcs.anonymous=true` |
+| `S3StorageProvider.open(URI, S3Client)` | `S3StorageProvider.open(URI, S3AsyncClient)` |
+| `S3StorageProvider.open(URI, S3ClientBundle)` and `S3ClientBundle` | `S3StorageProvider.open(URI, S3AsyncClient)`; presigned URLs need a `Storage` opened from a URI or a `StorageConfig` |
 
 The removed keys are ignored like any unknown parameter; `storage.caching.enabled` keeps
 working but now defaults to `false`; pass `storage.caching.enabled=true` to keep the previous
@@ -75,12 +77,29 @@ honors the in-flight bound too.
 
 ## S3 clients
 
-- Every S3 `Storage` opened from a URI or a `StorageConfig` runs its async requests on one CRT
-  HTTP client shared by the process. 2.0 built a CRT-based `S3AsyncClient` per endpoint and
-  credentials, each reserving a native buffer pool of at least 1 GiB.
-- `Storage.read` streams an object over one connection, through the sync client. 2.0 split a
-  large read across connections.
-- An S3-compatible endpoint answering without an `ETag` header reads like any other.
+- S3 storages opened from a URI or a `StorageConfig` send their requests through one CRT HTTP
+  client shared by the process, with one connection pool per host: single reads, batches and
+  uploads share it. 2.0 built a CRT-based `S3AsyncClient` per endpoint and credentials, each
+  reserving a native buffer pool of at least 1 GiB.
+- Without `io.tileverse.storage.s3-http-client.max-concurrency`, a pool holds up to a tenth of
+  the memory limit seen by the JVM, or of four times its maximum heap when that is smaller,
+  divided by 7 MiB connections, between 50 and 500.
+- A multipart upload keeps at most an eighth of the pool in flight. 2.0 left the number of
+  parts in flight to its CRT S3 client.
+- A `Storage.read` stream left unread buffers about 5 MiB of its body.
+- `Storage.read` streams an object over one connection. 2.0 split a large read across
+  connections.
+- `S3StorageProvider.open(URI, S3AsyncClient)` takes the place of `open(URI, S3Client)` and
+  `open(URI, S3ClientBundle)`. The `Storage` uses the client as built and leaves it open;
+  presigned URLs need a `Storage` opened from a URI or a `StorageConfig`.
+- Failures of the SDK client itself, such as a refused connection or missing credentials,
+  arrive as `StorageException`. An interrupted `readRange` or `Storage` call fails with an
+  `InterruptedIOException` cause and leaves the interrupt flag set; `readRanges` ignores the
+  interrupt and completes its batch.
+- A wrong region, a missing bucket or a denied listing fails `Storage.list` itself. 2.0 failed
+  while the stream was consumed.
+- An S3-compatible endpoint answering without an `ETag` header reads like any other. A
+  CRT-based client passed by the caller rejects such answers.
 
 ## GCS credentials
 

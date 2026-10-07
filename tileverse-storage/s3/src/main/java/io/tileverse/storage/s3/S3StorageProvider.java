@@ -33,7 +33,7 @@ import java.util.Optional;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3AsyncClient;
 
 /**
  * {@link StorageProvider} implementation for AWS S3.
@@ -307,52 +307,30 @@ public class S3StorageProvider extends AbstractStorageProvider {
     }
 
     /**
-     * Opens a {@link io.tileverse.storage.Storage} backed by the supplied sync
-     * {@link software.amazon.awssdk.services.s3.S3Client}, bypassing the SPI configuration path. Useful for
-     * Spring-managed clients, LocalStack/MinIO test fixtures, or custom credential-provider chains expressible only as
-     * a built {@code S3Client}.
+     * Opens a {@link Storage} over an {@link S3AsyncClient} built by the caller. It serves tests, and client
+     * configuration with no {@code storage.s3.*} parameter yet.
      *
-     * <p><b>Capability degradation</b>: with only a sync client, batched range reads run on the shared executor, and
-     * multipart upload (via {@code S3TransferManager}) and presigned URL operations are unavailable and throw
-     * {@link io.tileverse.storage.UnsupportedCapabilityException}. For full feature parity, build the matching
-     * async/transfer/presigner objects and call {@link #open(java.net.URI, S3ClientBundle)} instead.
+     * <p>The {@code Storage} uses the client as built and never closes it. Multipart uploads go through a transfer
+     * manager built at the first one and closed with the {@code Storage}; they run in parts only on a multipart-enabled
+     * or CRT-based client. Presigned URLs throw {@link io.tileverse.storage.UnsupportedCapabilityException}: they need
+     * a {@code Storage} opened from a URI or a {@link StorageConfig}.
      *
-     * <p>The returned {@code Storage} <b>borrows</b> the supplied client; closing the {@code Storage} does NOT close
-     * the client. The caller retains ownership.
-     *
-     * @param uri canonical {@code s3://bucket[/prefix/]} URI; bucket parsing follows the standard S3-compatible
-     *     conventions also accepted by the SPI path
-     * @param client a pre-configured sync S3 client; not closed by the returned {@code Storage}
-     * @return a borrowed-client {@code S3Storage} with sync-only capabilities
-     */
-    public static Storage open(URI uri, S3Client client) {
-        if (client == null) {
-            throw new IllegalArgumentException("client");
-        }
-        return open(uri, S3ClientBundle.syncOnly(client));
-    }
-
-    /**
-     * Opens a {@link io.tileverse.storage.Storage} backed by the supplied {@link S3ClientBundle}, bypassing the SPI
-     * configuration path. Use this overload when the caller wants the full feature set (range reads, {@code read},
-     * multipart upload, presigned URLs) with externally-managed SDK objects.
-     *
-     * <p>The returned {@code Storage} <b>borrows</b> all SDK objects in the bundle; closing the {@code Storage} does
-     * NOT close them. The caller retains ownership and lifetime control.
+     * <p>A multipart-enabled client also downloads whole objects part by part and copies large objects in parts. A
+     * CRT-based client fails on S3-compatible endpoints omitting the {@code ETag} header.
      *
      * @param uri canonical {@code s3://bucket[/prefix/]} URI
-     * @param bundle the SDK objects to use; required to have a sync client, optional async/transfer/presigner
-     * @return a borrowed-client {@code S3Storage} with the capabilities reflected by the bundle's optional objects
+     * @param client the client serving the operations; never closed by the returned {@code Storage}
+     * @return a {@code Storage} over the caller's client
      */
-    public static Storage open(URI uri, S3ClientBundle bundle) {
+    public static Storage open(URI uri, S3AsyncClient client) {
         if (uri == null) {
             throw new IllegalArgumentException("uri");
         }
-        if (bundle == null) {
-            throw new IllegalArgumentException("bundle");
+        if (client == null) {
+            throw new IllegalArgumentException("client");
         }
         S3StorageBucketKey ref = S3StorageBucketKey.parse(uri);
-        return new S3Storage(uri, ref, new BorrowedS3Handle(bundle), false);
+        return new S3Storage(uri, ref, new BorrowedS3Handle(client), false);
     }
 
     @Override

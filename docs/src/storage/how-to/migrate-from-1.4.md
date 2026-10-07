@@ -233,38 +233,23 @@ try (Storage storage = StorageFactory.open(bucket, props);
 }
 ```
 
-For SDK-injection use cases (Spring-managed clients, custom retry policies,
-fake/mock SDK objects in tests), each provider exposes a public
+For SDK-injection use cases (fake or mock SDK objects in tests, client
+configuration with no parameter yet), each provider exposes a public
 `open(URI, sdkClient)` static factory that returns a {@code Storage} backed by
 the supplied client. The returned Storage **borrows** the client; closing the
 Storage does NOT close the client.
 
-```java
-// 2.0.x — SDK-injection escape hatch
-@Bean Storage tiles(S3Client springS3) {
-    return S3StorageProvider.open(
-        URI.create("s3://my-bucket/tiles/"), springS3);
-}
-
-// elsewhere:
-try (RangeReader r = storage.openRangeReader("00/00.pmtiles")) { ... }
-```
-
 | Backend | Public escape-hatch factory |
 |---|---|
 | HTTP | `HttpStorageProvider.open(URI, HttpClient[, HttpAuthentication])` |
-| S3 | `S3StorageProvider.open(URI, S3Client)` *(degraded)* |
-| S3 | `S3StorageProvider.open(URI, S3ClientBundle)` *(full feature set)* |
+| S3 | `S3StorageProvider.open(URI, S3AsyncClient)` |
 | Azure Blob | `AzureBlobStorageProvider.open(URI, BlobServiceClient)` |
 | Azure DataLake Gen2 | `AzureDataLakeStorageProvider.open(URI, DataLakeServiceClient, BlobServiceClient)` |
 | GCS | `GoogleCloudStorageProvider.open(URI, com.google.cloud.storage.Storage)` |
 
-S3 has two overloads because `S3Storage` uses up to four SDK objects (sync
-`S3Client`, `S3AsyncClient`, `S3TransferManager`, `S3Presigner`) for the full
-feature surface. Pass a sync-only `S3Client` to get range reads and small writes;
-build an `S3ClientBundle.of(sync, async, tm, presigner)` for full feature parity
-with the SPI path. Operations that require an absent SDK object throw
-`UnsupportedCapabilityException`.
+Over `S3StorageProvider.open(URI, S3AsyncClient)`, presigned URLs throw
+`UnsupportedCapabilityException`: they need a `Storage` opened through
+`StorageFactory`.
 
 ## New `Storage` API surface
 
@@ -362,8 +347,7 @@ key (load-bearing for HTTP signed URLs and SAS tokens on the leaf).
    one-line case. Close the `Storage` on dispose.
 6. Replace `XxxRangeReader.builder()...build()` callers. For Properties-driven
    configuration use `StorageFactory.open(parentUri, props)`. For SDK-client
-   injection use `XxxStorageProvider.open(URI, sdkClient)` (e.g.
-   `S3StorageProvider.open(uri, mySpringS3)`).
+   injection use `XxxStorageProvider.open(URI, sdkClient)`.
 7. Migrate config keys from `io.tileverse.rangereader.*` to
    `storage.*` to silence the legacy-key warnings.
 8. Run your tests.

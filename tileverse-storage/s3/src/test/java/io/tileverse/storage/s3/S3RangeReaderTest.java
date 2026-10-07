@@ -17,6 +17,7 @@ package io.tileverse.storage.s3;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.lenient;
@@ -28,26 +29,35 @@ import static org.mockito.Mockito.when;
 
 import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.StorageException;
-import io.tileverse.storage.adapters.ByteBufferSinkException;
+import java.io.InterruptedIOException;
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.core.async.AsyncResponseTransformer;
 import software.amazon.awssdk.core.exception.SdkException;
-import software.amazon.awssdk.core.sync.ResponseTransformer;
-import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 
 /**
- * Unit tests for the single-range path of {@link S3RangeReader}: bodies stream through the SDK's
- * {@link ResponseTransformer} straight into the caller's buffer.
+ * Unit tests for the single-range path of {@link S3RangeReader}: a body streams through the async client's
+ * {@link AsyncResponseTransformer} straight into the caller's buffer, and nothing writes that buffer once the read
+ * returned or threw.
  */
 @ExtendWith(MockitoExtension.class)
 class S3RangeReaderTest {
@@ -61,10 +71,12 @@ class S3RangeReaderTest {
     private static final byte[] TEST_DATA = createTestData(CONTENT_LENGTH);
 
     @Mock
-    private S3Client s3Client;
+    private S3AsyncClient client;
 
     @Mock
     private HeadObjectResponse headObjectResponse;
+
+    private final ExecutorService caller = Executors.newSingleThreadExecutor();
 
     private S3ObjectStub object;
     private S3RangeReader reader;
@@ -81,17 +93,24 @@ class S3RangeReaderTest {
     @BeforeEach
     void setUp() {
         object = new S3ObjectStub(TEST_DATA, CHUNK_SIZE);
-        object.installSync(s3Client);
+        object.installAsync(client);
         reader = newReader(KEY);
     }
 
+    @AfterEach
+    void stopCaller() {
+        caller.shutdownNow();
+    }
+
     private S3RangeReader newReader(String key) {
-        return new S3RangeReader(s3Client, new S3Reference(null, BUCKET, key, null), false);
+        return new S3RangeReader(client, new S3Reference(null, BUCKET, key, null), false);
     }
 
     /** Stubs the HEAD response used by {@code size()}. Called only by tests that exercise size(). */
     private void stubHeadObject() {
-        lenient().when(s3Client.headObject(any(HeadObjectRequest.class))).thenReturn(headObjectResponse);
+        lenient()
+                .when(client.headObject(any(HeadObjectRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(headObjectResponse));
         lenient().when(headObjectResponse.contentLength()).thenReturn((long) CONTENT_LENGTH);
         lenient().when(headObjectResponse.lastModified()).thenReturn(Instant.EPOCH);
     }
@@ -102,11 +121,10 @@ class S3RangeReaderTest {
         return argThat(request -> range.equals(request.range()));
     }
 
-    /** The range went out as one streamed GET and never through the byte-array entry point. */
+    /** The range went out as one streamed GET. */
     @SuppressWarnings("unchecked")
     private void verifyStreamedGet(long offset, int length) {
-        verify(s3Client).getObject(requestForRange(offset, length), any(ResponseTransformer.class));
-        verify(s3Client, never()).getObjectAsBytes(any(GetObjectRequest.class));
+        verify(client).getObject(requestForRange(offset, length), any(AsyncResponseTransformer.class));
     }
 
     private static byte[] contents(ByteBuffer buffer, int from, int length) {
@@ -118,32 +136,33 @@ class S3RangeReaderTest {
     @Test
     void testConstructorMakesNoRequests() {
         newReader(KEY);
-        verifyNoInteractions(s3Client);
+        verifyNoInteractions(client);
     }
 
     @Test
     void testGetSize() {
         stubHeadObject();
         assertThat(reader.size()).hasValue(CONTENT_LENGTH);
-        verify(s3Client, times(1)).headObject(any(HeadObjectRequest.class));
+        verify(client, times(1)).headObject(any(HeadObjectRequest.class));
     }
 
     @Test
     void testSizeIsLazyAndMemoized() {
         stubHeadObject();
         S3RangeReader lazy = newReader(KEY);
-        verify(s3Client, never()).headObject(any(HeadObjectRequest.class));
+        verify(client, never()).headObject(any(HeadObjectRequest.class));
 
         assertThat(lazy.size()).hasValue(CONTENT_LENGTH);
         assertThat(lazy.size()).hasValue(CONTENT_LENGTH);
-        verify(s3Client, times(1)).headObject(any(HeadObjectRequest.class));
+        verify(client, times(1)).headObject(any(HeadObjectRequest.class));
     }
 
     @Test
     void testSizeThrowsNotFoundForMissingKey() {
         S3RangeReader missing = newReader("missing");
-        when(s3Client.headObject(any(HeadObjectRequest.class)))
-                .thenThrow(NoSuchKeyException.builder().message("no such key").build());
+        when(client.headObject(any(HeadObjectRequest.class)))
+                .thenReturn(CompletableFuture.failedFuture(
+                        NoSuchKeyException.builder().message("no such key").build()));
 
         assertThatThrownBy(missing::size).isInstanceOf(NotFoundException.class);
     }
@@ -154,15 +173,16 @@ class S3RangeReaderTest {
         lazy.readRange(0, 10);
 
         assertThat(lazy.size()).hasValue(CONTENT_LENGTH);
-        verify(s3Client, never()).headObject(any(HeadObjectRequest.class));
+        verify(client, never()).headObject(any(HeadObjectRequest.class));
     }
 
     @Test
     @SuppressWarnings("unchecked")
     void testNotFoundThrownOnFirstReadNotAtConstruction() {
         S3RangeReader missing = newReader("missing");
-        when(s3Client.getObject(any(GetObjectRequest.class), any(ResponseTransformer.class)))
-                .thenThrow(NoSuchKeyException.builder().message("no such key").build());
+        when(client.getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class)))
+                .thenReturn(CompletableFuture.failedFuture(
+                        NoSuchKeyException.builder().message("no such key").build()));
 
         assertThatThrownBy(() -> missing.readRange(0, 10)).isInstanceOf(NotFoundException.class);
     }
@@ -243,7 +263,7 @@ class S3RangeReaderTest {
         ByteBuffer buffer = reader.readRange(100, 0).flip();
 
         assertThat(buffer.remaining()).isZero();
-        verify(s3Client, never()).getObject(any(GetObjectRequest.class), any(ResponseTransformer.class));
+        verify(client, never()).getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class));
     }
 
     @Test
@@ -259,26 +279,23 @@ class S3RangeReaderTest {
     @Test
     @SuppressWarnings("unchecked")
     void testS3ExceptionDuringRead() {
-        when(s3Client.getObject(any(GetObjectRequest.class), any(ResponseTransformer.class)))
-                .thenThrow(SdkException.builder().message("S3 download error").build());
+        when(client.getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class)))
+                .thenReturn(CompletableFuture.failedFuture(
+                        SdkException.builder().message("S3 download error").build()));
 
         assertThatThrownBy(() -> reader.readRange(0, 100)).isInstanceOf(StorageException.class);
     }
 
     @Test
     void testS3ReturnsMoreThanRequested() {
-        // A server that ignores the requested range and returns more data than asked for is a
-        // storage error, not an EOF condition; the connection is aborted instead of drained.
+        // A server ignoring the requested range sends more than asked for: a storage error, not an EOF
+        // condition, and the body is cancelled instead of drained.
         object.respondingWithExtraBytes(50);
 
-        // The SDK wraps the transformer's failure in its own SdkException before it reaches the
-        // reader; the reader unwraps that SdkException and rethrows the original StorageException
-        // as-is, its cause still the sink's failure, instead of wrapping it a second time.
         assertThatThrownBy(() -> reader.readRange(0, 100))
                 .isInstanceOf(StorageException.class)
-                .hasMessageContaining("more data than requested")
-                .hasCauseInstanceOf(ByteBufferSinkException.class);
-        assertThat(object.aborts()).isEqualTo(1);
+                .hasMessageContaining("more data than requested");
+        assertThat(object.cancellations()).isEqualTo(1);
     }
 
     @Test
@@ -304,5 +321,65 @@ class S3RangeReaderTest {
 
         assertThat(read).isZero();
         assertThat(target.position()).isZero();
+    }
+
+    /**
+     * The SDK's retry stage starts a scheduled attempt without checking whether the call already failed. A retry
+     * scheduled before the API call timeout can stream its body after the read throws, and that body must not reach the
+     * caller's target.
+     */
+    @Test
+    void aReadTimingOutWritesNothingToTheTargetAfterItThrows() {
+        TimedOutCall call = new TimedOutCall(client);
+        ByteBuffer target = ByteBuffer.allocate(100);
+
+        assertThatThrownBy(() -> reader.readRange(0, 100, target)).isInstanceOf(StorageException.class);
+        call.startTheScheduledRetry(100);
+
+        assertThat(contents(target, 0, 100)).containsOnly((byte) 0);
+        assertThat(target.position()).isZero();
+    }
+
+    @Test
+    void anInterruptedReadFailsAndLeavesTheTargetToTheCaller() throws Exception {
+        object.holdingAsyncResponses();
+        ByteBuffer target = ByteBuffer.allocate(300);
+        AtomicReference<Thread> reading = new AtomicReference<>();
+        Future<Throwable> outcome = caller.submit(() -> {
+            reading.set(Thread.currentThread());
+            try {
+                reader.readRange(0, 300, target);
+                return null;
+            } catch (StorageException failure) {
+                return Thread.interrupted() ? failure : new AssertionError("interrupt flag cleared", failure);
+            }
+        });
+        await().atMost(Duration.ofSeconds(5)).until(() -> object.heldResponses() == 1);
+
+        reading.get().interrupt();
+        Throwable failure = outcome.get(5, TimeUnit.SECONDS);
+        object.releaseAll();
+
+        assertThat(failure).isInstanceOf(StorageException.class).hasCauseInstanceOf(InterruptedIOException.class);
+        assertThat(target.position()).isZero();
+        assertThat(contents(target, 0, 300)).containsOnly((byte) 0);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aReadByAnInterruptedThreadSendsNoRequest() throws Exception {
+        Future<Throwable> outcome = caller.submit(() -> {
+            Thread.currentThread().interrupt();
+            try {
+                reader.readRange(0, 100);
+                return null;
+            } catch (StorageException failure) {
+                Thread.interrupted();
+                return failure;
+            }
+        });
+
+        assertThat(outcome.get(5, TimeUnit.SECONDS)).hasCauseInstanceOf(InterruptedIOException.class);
+        verify(client, never()).getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class));
     }
 }

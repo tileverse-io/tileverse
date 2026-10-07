@@ -116,8 +116,7 @@ class S3OvertureMapsLiveIT {
         Properties props = anonymous();
         props.setProperty(S3StorageProvider.S3_REGION.key(), "us-east-2");
         try (Storage storage = StorageFactory.open(baseUri, props)) {
-            Stream<StorageEntry> list = storage.list("theme=addresses/**/*.parquet");
-            assertThatThrownBy(() -> list.limit(1).count())
+            assertThatThrownBy(() -> storage.list("theme=addresses/**/*.parquet"))
                     .isInstanceOf(io.tileverse.storage.StorageException.class)
                     .hasCauseInstanceOf(software.amazon.awssdk.services.s3.model.S3Exception.class)
                     .hasMessageContaining("Service: S3, Status Code: 301");

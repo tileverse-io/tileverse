@@ -16,11 +16,13 @@
 package io.tileverse.storage.s3;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -36,8 +38,17 @@ import software.amazon.awssdk.http.crt.AwsCrtAsyncHttpClient;
 
 class S3SharedHttpClientTest {
 
+    private static final S3HttpClientSettings SETTINGS =
+            new S3HttpClientSettings(16, Duration.ofSeconds(2), Duration.ofSeconds(30));
+
     private final List<SdkAsyncHttpClient> built = new ArrayList<>();
-    private final S3SharedHttpClient shared = new S3SharedHttpClient(this::buildClient);
+    private final AtomicInteger settingsResolved = new AtomicInteger();
+    private final S3SharedHttpClient shared = new S3SharedHttpClient(this::resolveSettings, settings -> buildClient());
+
+    private S3HttpClientSettings resolveSettings() {
+        settingsResolved.incrementAndGet();
+        return SETTINGS;
+    }
 
     private synchronized SdkAsyncHttpClient buildClient() {
         SdkAsyncHttpClient client = mock(SdkAsyncHttpClient.class);
@@ -51,6 +62,16 @@ class S3SharedHttpClientTest {
                 S3SharedHttpClient.Lease second = shared.acquire()) {
             assertThat(first.client()).isSameAs(second.client());
             assertThat(built).hasSize(1);
+        }
+    }
+
+    @Test
+    void leasesShareTheSettingsOfTheirClientResolvedOnce() {
+        try (S3SharedHttpClient.Lease first = shared.acquire();
+                S3SharedHttpClient.Lease second = shared.acquire()) {
+            assertThat(first.settings()).isSameAs(SETTINGS);
+            assertThat(second.settings()).isSameAs(SETTINGS);
+            assertThat(settingsResolved).hasValue(1);
         }
     }
 
@@ -91,9 +112,28 @@ class S3SharedHttpClientTest {
     }
 
     @Test
+    void aClientFailingToBuildLeavesTheHolderReusable() {
+        IllegalStateException failure = new IllegalStateException("client failed to build");
+        AtomicInteger builds = new AtomicInteger();
+        S3SharedHttpClient failingFirst = new S3SharedHttpClient(() -> SETTINGS, settings -> {
+            if (builds.incrementAndGet() == 1) {
+                throw failure;
+            }
+            return buildClient();
+        });
+
+        assertThatThrownBy(failingFirst::acquire).isSameAs(failure);
+
+        S3SharedHttpClient.Lease later = failingFirst.acquire();
+        assertThat(later.client()).isSameAs(built.get(0));
+        later.close();
+        verify(built.get(0)).close();
+    }
+
+    @Test
     void concurrentHoldersNeverReceiveAClosedClient() throws InterruptedException {
         AtomicInteger closedWhileLeased = new AtomicInteger();
-        S3SharedHttpClient tracked = new S3SharedHttpClient(ClosedFlagClient::new);
+        S3SharedHttpClient tracked = new S3SharedHttpClient(() -> SETTINGS, settings -> new ClosedFlagClient());
         int threads = 8;
         ExecutorService workers = Executors.newFixedThreadPool(threads);
         CountDownLatch done = new CountDownLatch(threads);

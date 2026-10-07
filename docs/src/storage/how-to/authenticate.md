@@ -9,7 +9,7 @@ For every backend you have a choice of two paths:
 - **Properties-driven**: pass a `Properties` map (or a `StorageConfig`) to `StorageFactory.open(URI, Properties)` and
   call `Storage.openRangeReader` (or any other `Storage` method) on the returned handle. This is what GeoTools,
   GeoServer, and Spring property-binding setups use.
-- **SDK-injection**: build your own SDK client (`HttpClient`, `S3Client`, `BlobServiceClient`, GCS `Storage`) and pass it
+- **SDK-injection**: build your own SDK client (`HttpClient`, `S3AsyncClient`, `BlobServiceClient`, GCS `Storage`) and pass it
   through `XxxStorageProvider.open(URI, sdkClient)`. The returned `Storage` *borrows* the client; closing the `Storage`
   does NOT close the client. Use this when you need configuration that the Properties surface can't express
   (custom retry policies, application-managed credential providers, custom HTTP transports, test fakes).
@@ -150,7 +150,7 @@ per environment, leave `storage.s3.default-credentials-profile` unset and set `A
 
 === "SDK-injection"
     ```java
-    S3Client s3 = S3Client.builder()
+    S3AsyncClient s3 = S3AsyncClient.builder()
         .region(Region.US_WEST_2)
         .credentialsProvider(StaticCredentialsProvider.create(
             AwsBasicCredentials.create(accessKey, secretKey)))
@@ -172,7 +172,7 @@ per environment, leave `storage.s3.default-credentials-profile` unset and set `A
 
 === "SDK-injection"
     ```java
-    S3Client s3 = S3Client.builder()
+    S3AsyncClient s3 = S3AsyncClient.builder()
         .credentialsProvider(ProfileCredentialsProvider.create("production"))
         .region(Region.US_EAST_1)
         .build();
@@ -192,7 +192,7 @@ StsAssumeRoleCredentialsProvider roleProvider = StsAssumeRoleCredentialsProvider
         .roleSessionName("tileverse-session"))
     .build();
 
-S3Client s3 = S3Client.builder()
+S3AsyncClient s3 = S3AsyncClient.builder()
     .credentialsProvider(roleProvider)
     .region(Region.US_EAST_1)
     .build();
@@ -203,21 +203,10 @@ try (Storage storage = S3StorageProvider.open(URI.create("s3://external-bucket/"
 }
 ```
 
-### Full feature set (parallel batched reads, multipart upload, presigned URLs)
+### Presigned URLs
 
-The 1-arg `S3StorageProvider.open(URI, S3Client)` overload is sync-only: batched range reads run on a shared
-executor, and multipart upload and presigned URLs throw `UnsupportedCapabilityException`. For the full feature set,
-build the bundle:
-
-```java
-S3ClientBundle bundle = S3ClientBundle.of(syncClient, asyncClient, transferManager, presigner);
-try (Storage storage = S3StorageProvider.open(URI.create("s3://my-bucket/"), bundle)) {
-    // batched reads on the async client, multipart, presignGet and presignPut all work
-}
-```
-
-The Properties path always goes through the SPI's full-bundle code path, so `StorageFactory.open(uri, props)` returns a
-`Storage` with all four SDK objects available.
+A `Storage` over a caller-supplied `S3AsyncClient` reads and writes; presigned URLs throw
+`UnsupportedCapabilityException`. Open the `Storage` from a URI or a `StorageConfig` to presign.
 
 ## Azure Blob Storage
 

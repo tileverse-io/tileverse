@@ -18,36 +18,33 @@ package io.tileverse.storage.s3;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Deque;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 import software.amazon.awssdk.core.async.AsyncResponseTransformer;
 import software.amazon.awssdk.core.async.SdkPublisher;
-import software.amazon.awssdk.core.exception.NonRetryableException;
 import software.amazon.awssdk.core.exception.RetryableException;
-import software.amazon.awssdk.core.sync.ResponseTransformer;
-import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
-import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 /**
- * Serves a fixed byte array through mocked S3 clients as the SDK does. The sync stub hands the caller's
- * {@link ResponseTransformer} the body as an {@link AbortableInputStream} delivered in chunks of a configured size and
- * re-invokes the transformer on a retryable exception, like the SDK's retry loop. A request starting past the end fails
- * with a 416; a range running past the end is truncated as a real object store answers it. The async stub drives the
- * caller's {@link AsyncResponseTransformer} through {@code prepare}, {@code onResponse}, and {@code onStream} with a
- * publisher emitting the same chunks, each a view of the body array at its own offset. In {@link #holdingAsyncResponses
- * holding} mode the async stub keeps each response back until the test {@link #releaseOne releases} or {@link #failOne
- * fails} it, which is how a test observes how many fetches a reader keeps in flight.
+ * Serves a fixed byte array through a mocked async S3 client as the SDK does: it drives the caller's
+ * {@link AsyncResponseTransformer} through {@code prepare}, {@code onResponse}, and {@code onStream} with a publisher
+ * emitting the body in chunks of a configured size, each a view of the body array at its own offset. A body failing
+ * mid-stream fails its attempt with a retryable error, and the stub starts a fresh attempt with a new
+ * {@code prepare()}, like the SDK's retry stage, up to its attempt limit. A request starting past the end fails with a
+ * 416; a range running past the end is truncated as a real object store answers it; a request without a range gets the
+ * whole object. In {@link #holdingAsyncResponses holding} mode the stub keeps each response back until the test
+ * {@link #releaseOne releases} or {@link #failOne fails} it, which is how a test observes how many fetches a reader
+ * keeps in flight.
  */
 final class S3ObjectStub {
 
@@ -57,19 +54,18 @@ final class S3ObjectStub {
     private final byte[] data;
     private final int chunkSize;
     private final AtomicInteger attempts = new AtomicInteger();
-    private final AtomicInteger aborts = new AtomicInteger();
+    private final AtomicInteger cancellations = new AtomicInteger();
     private final AtomicInteger asyncCalls = new AtomicInteger();
     private final AtomicInteger asyncInFlight = new AtomicInteger();
     private final AtomicInteger asyncPeakInFlight = new AtomicInteger();
     private final Deque<HeldResponse> held = new ArrayDeque<>();
     private int extraBytes;
-    private int bodyFailuresLeft;
-    private boolean withoutEtag;
+    private int bodyFailuresLeft; // guarded by this
     private boolean holdingAsyncResponses;
     private int throwingAsyncCall;
     private Error asyncCallError;
 
-    /** An async request whose response the stub keeps back until the test releases or fails it. */
+    /** An attempt whose response the stub keeps back until the test releases or fails it. */
     private record HeldResponse(
             GetObjectRequest request, AsyncResponseTransformer<GetObjectResponse, Object> transformer) {}
 
@@ -84,14 +80,8 @@ final class S3ObjectStub {
         return this;
     }
 
-    /** Answers without an {@code ETag} header, like a gateway serving a file not written through its S3 API. */
-    S3ObjectStub respondingWithoutEtag() {
-        this.withoutEtag = true;
-        return this;
-    }
-
-    /** Makes the next {@code count} body reads fail after their first chunk, like a dropped connection. */
-    S3ObjectStub failingBodyReads(int count) {
+    /** Makes the next {@code count} bodies fail after their first chunk with a retryable error, like a dropped link. */
+    synchronized S3ObjectStub failingBodyReads(int count) {
         this.bodyFailuresLeft = count;
         return this;
     }
@@ -109,9 +99,14 @@ final class S3ObjectStub {
         return this;
     }
 
-    /** The number of transform attempts driven by the stub, retries included. */
+    /** The number of attempts driven by the stub, retries included. */
     int attempts() {
         return attempts.get();
+    }
+
+    /** The number of bodies cancelled by their consumer before their end. */
+    int cancellations() {
+        return cancellations.get();
     }
 
     /** The largest number of async requests outstanding at once, from {@code getObject} to its future's completion. */
@@ -151,49 +146,7 @@ final class S3ObjectStub {
         return next;
     }
 
-    /** The number of bodies aborted by the caller instead of drained. */
-    int aborts() {
-        return aborts.get();
-    }
-
     /** Stubs {@code getObject(request, transformer)} for every range of the object. */
-    @SuppressWarnings("unchecked")
-    void installSync(S3Client client) {
-        lenient()
-                .when(client.getObject(any(GetObjectRequest.class), any(ResponseTransformer.class)))
-                .thenAnswer(invocation -> serveSync(invocation.getArgument(0), invocation.getArgument(1)));
-    }
-
-    private Object serveSync(GetObjectRequest request, ResponseTransformer<GetObjectResponse, Object> transformer)
-            throws Exception {
-        long[] bounds = requestedRange(request);
-        if (bounds[0] >= data.length) {
-            throw rangeNotSatisfiable();
-        }
-        byte[] body = bodyFor(bounds);
-        GetObjectResponse response = responseFor(bounds[0], body.length - extraBytes);
-        for (int attempt = 1; ; attempt++) {
-            attempts.incrementAndGet();
-            AbortableInputStream stream = AbortableInputStream.create(nextBody(body), aborts::incrementAndGet);
-            try {
-                return transformer.transform(response, stream);
-            } catch (RetryableException retry) {
-                if (attempt == MAX_ATTEMPTS) {
-                    throw retry;
-                }
-            } catch (RuntimeException other) {
-                // Mirrors BaseSyncClientHandler's response-handler adapter: a non-retryable
-                // failure out of the transformer reaches the caller wrapped in an SdkException,
-                // never raw.
-                throw NonRetryableException.builder()
-                        .message("transform failed")
-                        .cause(other)
-                        .build();
-            }
-        }
-    }
-
-    /** Stubs {@code getObject(request, asyncTransformer)} for every range of the object. */
     @SuppressWarnings("unchecked")
     void installAsync(S3AsyncClient client) {
         lenient()
@@ -206,21 +159,45 @@ final class S3ObjectStub {
         if (asyncCalls.incrementAndGet() == throwingAsyncCall) {
             throw asyncCallError;
         }
-        attempts.incrementAndGet();
         int outstanding = asyncInFlight.incrementAndGet();
         asyncPeakInFlight.accumulateAndGet(outstanding, Math::max);
+        CompletableFuture<Object> call = new CompletableFuture<>();
         // The caller chains on the returned future; completing it after the decrement keeps the count exact
         // whatever the caller does on completion.
-        CompletableFuture<Object> outcome =
-                transformer.prepare().whenComplete((ignored, failure) -> asyncInFlight.decrementAndGet());
+        CompletableFuture<Object> outcome = call.whenComplete((ignored, failure) -> asyncInFlight.decrementAndGet());
+        startAttempt(request, transformer, call, 1);
+        return outcome;
+    }
+
+    /** Runs one attempt as the SDK's retry stage does: a fresh {@code prepare()}, then the response or a retry. */
+    private void startAttempt(
+            GetObjectRequest request,
+            AsyncResponseTransformer<GetObjectResponse, Object> transformer,
+            CompletableFuture<Object> call,
+            int attempt) {
+        attempts.incrementAndGet();
+        transformer.prepare().whenComplete((value, failure) -> {
+            if (failure == null) {
+                call.complete(value);
+            } else if (retryable(failure) && attempt < MAX_ATTEMPTS) {
+                startAttempt(request, transformer, call, attempt + 1);
+            } else {
+                call.completeExceptionally(failure);
+            }
+        });
         if (holdingAsyncResponses) {
             synchronized (this) {
                 held.addLast(new HeldResponse(request, transformer));
             }
-            return outcome;
+            return;
         }
         serveHeld(request, transformer);
-        return outcome;
+    }
+
+    private static boolean retryable(Throwable failure) {
+        Throwable cause =
+                failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
+        return cause instanceof RetryableException;
     }
 
     private void serveHeld(GetObjectRequest request, AsyncResponseTransformer<GetObjectResponse, Object> transformer) {
@@ -231,50 +208,34 @@ final class S3ObjectStub {
         }
         byte[] body = bodyFor(bounds);
         transformer.onResponse(responseFor(bounds[0], body.length - extraBytes));
-        transformer.onStream(chunkedPublisher(body));
+        transformer.onStream(chunkedPublisher(body, takeBodyFailure()));
     }
 
-    /** Emits the body in chunks of the configured size, each a view of the body array at its own offset. */
-    private SdkPublisher<ByteBuffer> chunkedPublisher(byte[] body) {
-        return subscriber -> subscriber.onSubscribe(new Subscription() {
-            private int position;
-            private boolean done;
-
-            @Override
-            public void request(long demand) {
-                long remaining = demand;
-                while (!done && remaining > 0) {
-                    if (position >= body.length) {
-                        done = true;
-                        subscriber.onComplete();
-                        return;
-                    }
-                    int length = Math.min(chunkSize, body.length - position);
-                    subscriber.onNext(ByteBuffer.wrap(body, position, length));
-                    position += length;
-                    remaining--;
-                }
-            }
-
-            @Override
-            public void cancel() {
-                done = true;
-            }
-        });
-    }
-
-    private InputStream nextBody(byte[] body) {
-        if (bodyFailuresLeft > 0) {
-            bodyFailuresLeft--;
-            return new ChunkedInputStream(body, chunkSize, chunkSize);
+    private synchronized boolean takeBodyFailure() {
+        if (bodyFailuresLeft == 0) {
+            return false;
         }
-        return new ChunkedInputStream(body, chunkSize, -1);
+        bodyFailuresLeft--;
+        return true;
     }
 
-    /** Parses the request's {@code bytes=first-last} header into {@code {first, last}}. */
+    private SdkPublisher<ByteBuffer> chunkedPublisher(byte[] body, boolean failAfterFirstChunk) {
+        return subscriber -> subscriber.onSubscribe(new ChunkedSubscription(subscriber, body, failAfterFirstChunk));
+    }
+
+    /**
+     * Parses the request's {@code bytes=first-last} header into {@code {first, last}}. An open end, or no header at
+     * all, reads to the end of the object.
+     */
     static long[] requestedRange(GetObjectRequest request) {
-        String[] bounds = request.range().replace("bytes=", "").split("-");
-        return new long[] {Long.parseLong(bounds[0]), Long.parseLong(bounds[1])};
+        String range = request.range();
+        if (range == null) {
+            return new long[] {0, Long.MAX_VALUE - 1};
+        }
+        String[] bounds = range.replace("bytes=", "").split("-", -1);
+        long first = Long.parseLong(bounds[0]);
+        long last = bounds[1].isEmpty() ? Long.MAX_VALUE - 1 : Long.parseLong(bounds[1]);
+        return new long[] {first, last};
     }
 
     /** The bytes answered by a real store for the range: truncated at the object's end, plus any configured excess. */
@@ -285,13 +246,11 @@ final class S3ObjectStub {
     }
 
     GetObjectResponse responseFor(long offset, int length) {
-        GetObjectResponse.Builder response = GetObjectResponse.builder()
+        return GetObjectResponse.builder()
                 .contentLength((long) length)
-                .contentRange("bytes " + offset + "-" + (offset + length - 1) + "/" + data.length);
-        if (!withoutEtag) {
-            response.eTag("\"" + Integer.toHexString(data.length) + "\"");
-        }
-        return response.build();
+                .contentRange("bytes " + offset + "-" + (offset + length - 1) + "/" + data.length)
+                .eTag("\"" + Integer.toHexString(data.length) + "\"")
+                .build();
     }
 
     static S3Exception rangeNotSatisfiable() {
@@ -304,38 +263,70 @@ final class S3ObjectStub {
                 .build();
     }
 
-    /** Serves a body at most {@code chunkSize} bytes per read, failing once {@code failAt} bytes have been served. */
-    private static final class ChunkedInputStream extends InputStream {
+    /**
+     * Emits a body in chunks, never more than requested, and never from inside a subscriber's own request call: a
+     * request made from {@code onNext} raises the demand served by the loop already running. A failing body stops after
+     * its first chunk with a retryable error.
+     */
+    private final class ChunkedSubscription implements Subscription {
 
+        private final Subscriber<? super ByteBuffer> subscriber;
         private final byte[] body;
-        private final int chunkSize;
-        private final int failAt;
+        private final boolean failAfterFirstChunk;
+        private long demand;
         private int position;
+        private boolean emitting;
+        private boolean done;
 
-        ChunkedInputStream(byte[] body, int chunkSize, int failAt) {
+        ChunkedSubscription(Subscriber<? super ByteBuffer> subscriber, byte[] body, boolean failAfterFirstChunk) {
+            this.subscriber = subscriber;
             this.body = body;
-            this.chunkSize = chunkSize;
-            this.failAt = failAt;
+            this.failAfterFirstChunk = failAfterFirstChunk;
         }
 
         @Override
-        public int read() throws IOException {
-            byte[] one = new byte[1];
-            return read(one, 0, 1) == -1 ? -1 : one[0] & 0xFF;
+        public synchronized void request(long count) {
+            boolean unbounded = count == Long.MAX_VALUE || demand + count < 0;
+            demand = unbounded ? Long.MAX_VALUE : demand + count;
+            if (emitting) {
+                return;
+            }
+            emitting = true;
+            try {
+                emitWhileDemanded();
+            } finally {
+                emitting = false;
+            }
+        }
+
+        private void emitWhileDemanded() {
+            while (!done && demand > 0) {
+                if (failAfterFirstChunk && position > 0) {
+                    done = true;
+                    subscriber.onError(RetryableException.builder()
+                            .message("connection reset")
+                            .build());
+                    return;
+                }
+                if (position >= body.length) {
+                    done = true;
+                    subscriber.onComplete();
+                    return;
+                }
+                int start = position;
+                int length = Math.min(chunkSize, body.length - start);
+                position += length;
+                demand--;
+                subscriber.onNext(ByteBuffer.wrap(body, start, length));
+            }
         }
 
         @Override
-        public int read(byte[] into, int offset, int length) throws IOException {
-            if (failAt >= 0 && position >= failAt) {
-                throw new IOException("connection reset");
+        public synchronized void cancel() {
+            if (!done) {
+                cancellations.incrementAndGet();
             }
-            if (position >= body.length) {
-                return -1;
-            }
-            int count = Math.min(length, Math.min(chunkSize, body.length - position));
-            System.arraycopy(body, position, into, offset, count);
-            position += count;
-            return count;
+            done = true;
         }
     }
 }

@@ -54,15 +54,11 @@ The aligner expands a request inside a declared region into whole blocks before 
 
 ### Amazon S3
 
-For deep AWS SDK customization (custom HTTP client, retry policy, credentials provider), build the `S3Client` yourself and pass it through `S3StorageProvider.open(URI, S3Client)`. The returned `Storage` borrows the client; closing the `Storage` does NOT close the client.
+For deep AWS SDK customization (retry policy, credentials provider, execution interceptors), build the `S3AsyncClient` yourself and pass it through `S3StorageProvider.open(URI, S3AsyncClient)`. The returned `Storage` borrows the client; closing the `Storage` does NOT close the client. Presigned URLs need a `Storage` opened from a URI or a `StorageConfig`.
 
 ```java
-S3Client s3Client = S3Client.builder()
+S3AsyncClient s3Client = S3AsyncClient.builder()
     .region(Region.US_WEST_2)
-    .httpClient(ApacheHttpClient.builder()
-        .maxConnections(50)
-        .socketTimeout(Duration.ofSeconds(10))
-        .build())
     .build();
 
 URI bucket = URI.create("s3://maps/");
@@ -162,15 +158,17 @@ The executor behind batched fetches is shared by the whole JVM and picked once, 
 | `io.tileverse.storage.batch.executor` | Executor for batched fetches: `auto`, `virtual` or `pool` | `auto` |
 | `io.tileverse.storage.batch.pool.size` | Size of the `pool` executor | the larger of 8 and the processor count |
 
-The connection pools of the S3 clients take three settings, each read from its system property first and from its environment variable second:
+The connection pool of the S3 clients takes three settings, each read from its system property first and from its environment variable second:
 
 | Property | Environment variable | Description | Default |
 | :--- | :--- | :--- | :--- |
-| `io.tileverse.storage.s3-http-client.max-concurrency` | `IO_TILEVERSE_STORAGE_S3HTTPCLIENT_MAXCONCURRENCY` | Connections pooled per host | 50 |
+| `io.tileverse.storage.s3-http-client.max-concurrency` | `IO_TILEVERSE_STORAGE_S3HTTPCLIENT_MAXCONCURRENCY` | Connections pooled per host, shared by single reads, batches and uploads | a tenth of the memory limit seen by the JVM, or of four times its maximum heap when that is smaller, divided by 7 MiB, between 50 and 500 |
 | `io.tileverse.storage.s3-http-client.connection-timeout` | `IO_TILEVERSE_STORAGE_S3HTTPCLIENT_CONNECTIONTIMEOUT` | Longest wait for a connection to open | 2 seconds |
 | `io.tileverse.storage.s3-http-client.connection-acquisition-timeout` | `IO_TILEVERSE_STORAGE_S3HTTPCLIENT_CONNECTIONACQUISITIONTIMEOUT` | Longest wait of a request for a pooled connection | 30 seconds |
 
 A duration reads as ISO-8601 (`PT30S`) or as a number and a unit (`30s`, `500ms`).
+
+A multipart upload keeps at most an eighth of the pool in flight, 6 connections of 50; the rest serves single reads, batches and other uploads.
 
 ## Stack Recommendations
 

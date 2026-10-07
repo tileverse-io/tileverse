@@ -17,36 +17,32 @@ package io.tileverse.storage.s3;
 
 import java.util.Optional;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
-import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.transfer.s3.S3TransferManager;
 
 /**
- * Package-private indirection between {@link S3Storage} and the SDK clients it uses. Two implementations:
+ * Package-private indirection between {@link S3Storage} and its SDK objects. Two implementations:
  *
  * <ul>
- *   <li>{@code LeasedS3Handle} (SPI path): wraps {@link S3ClientCache.Lease}; {@link #close()} releases the lease so
- *       refcounted SDK clients can shut down when the last reference drops.
- *   <li>{@code BorrowedS3Handle} (escape-hatch path, added in step 3): wraps a caller-supplied {@code S3ClientBundle};
- *       {@link #close()} is a no-op so the caller retains ownership of the SDK clients.
+ *   <li>{@code LeasedS3Handle} (SPI path): wraps an {@link S3ClientCache.Lease}; {@link #close()} releases the lease,
+ *       and the client set closes with its last lease.
+ *   <li>{@code BorrowedS3Handle}: wraps an {@link S3AsyncClient} passed by the caller; {@link #close()} closes the
+ *       transfer manager built by the handle and leaves the client open.
  * </ul>
- *
- * <p>The async client, transfer manager, and presigner are exposed as {@link Optional} because a borrowed handle may
- * hold only a sync {@link S3Client}; in that case multipart upload and presigned URL operations throw
- * {@link io.tileverse.storage.UnsupportedCapabilityException}.
  */
 interface S3ClientHandle extends AutoCloseable {
 
-    S3Client client();
+    /** The client of the Storage and reader operations. */
+    S3AsyncClient client();
 
-    Optional<S3AsyncClient> asyncClient();
+    /** The transfer manager of multipart uploads, built on the first call. */
+    S3TransferManager transferManager();
 
-    Optional<S3TransferManager> transferManager();
+    /** Whether {@link #presigner()} returns a presigner. Answering builds nothing. */
+    boolean presigns();
 
+    /** The presigner; empty for a caller-supplied client. */
     Optional<S3Presigner> presigner();
-
-    /** The record of the async client rejecting a response for want of an ETag header, shared by its readers. */
-    EndpointEtags endpointEtags();
 
     @Override
     void close();

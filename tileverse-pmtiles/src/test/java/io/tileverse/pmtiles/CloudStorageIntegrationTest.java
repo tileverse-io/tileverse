@@ -40,7 +40,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3AsyncClient;
 
 /**
  * Integration tests for cloud storage access with PMTilesReader using RangeReaderBuilder.
@@ -98,12 +98,12 @@ class CloudStorageIntegrationTest {
 
         URI bucketUri = URI.create("s3://" + s3Bucket + "/");
 
-        S3Client s3Client = S3Client.builder()
+        S3AsyncClient s3Client = S3AsyncClient.builder()
                 .region(Region.of(s3Region))
                 .credentialsProvider(DefaultCredentialsProvider.builder().build())
                 .build();
 
-        try (S3Client closeable = s3Client;
+        try (S3AsyncClient closeable = s3Client;
                 Storage storage = S3StorageProvider.open(bucketUri, s3Client);
                 RangeReader baseReader = storage.openRangeReader(s3Key);
                 RangeReader rangeReader = CachingRangeReader.of(baseReader)) {

@@ -32,11 +32,9 @@ import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.StorageException;
 import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.batch.CoalescingPolicy;
-import io.tileverse.storage.s3.ByteBufferAsyncResponseTransformer.Result;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -46,7 +44,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -54,22 +51,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.reactivestreams.Subscriber;
-import org.reactivestreams.Subscription;
 import software.amazon.awssdk.core.async.AsyncResponseTransformer;
-import software.amazon.awssdk.core.exception.ApiCallTimeoutException;
-import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
-import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.RequestPayer;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 /**
  * Unit tests for the batched read path of {@link S3RangeReader}: one parallel async GET per planned fetch, streamed
- * into its destination, when the CRT client is present; the AbstractRangeReader template otherwise.
+ * into its destination.
  */
 @ExtendWith(MockitoExtension.class)
 class S3RangeReaderBatchTest {
@@ -81,9 +72,6 @@ class S3RangeReaderBatchTest {
     private static final int CHUNK_SIZE = 4096;
 
     private static final byte[] OBJECT = bytesFor(0, OBJECT_SIZE);
-
-    @Mock
-    private S3Client s3Client;
 
     @Mock
     private S3AsyncClient asyncClient;
@@ -112,7 +100,7 @@ class S3RangeReaderBatchTest {
     @BeforeEach
     void createReader() {
         object = new S3ObjectStub(OBJECT, CHUNK_SIZE);
-        reader = new S3RangeReader(s3Client, asyncClient, new S3Reference(null, BUCKET, KEY, null), false);
+        reader = new S3RangeReader(asyncClient, new S3Reference(null, BUCKET, KEY, null), false);
     }
 
     private static List<RangeRequest> batchOf(long[][] ranges) {
@@ -145,8 +133,6 @@ class S3RangeReaderBatchTest {
 
         assertContents(requests, counts);
         verify(asyncClient, times(3)).getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class));
-        verify(s3Client, never()).getObject(any(GetObjectRequest.class), any(ResponseTransformer.class));
-        verify(s3Client, never()).getObjectAsBytes(any(GetObjectRequest.class));
     }
 
     @Test
@@ -250,14 +236,14 @@ class S3RangeReaderBatchTest {
         reader.readRanges(batchOf(new long[][] {{0, 100}, {1_000_000, 100}}));
 
         assertThat(reader.size()).hasValue(OBJECT_SIZE);
-        verify(s3Client, never()).headObject(any(HeadObjectRequest.class));
+        verify(asyncClient, never()).headObject(any(HeadObjectRequest.class));
     }
 
     @Test
     @SuppressWarnings("unchecked")
     void requesterPaysAppliesToAsyncBatchRequests() {
         object.installAsync(asyncClient);
-        S3RangeReader paying = new S3RangeReader(s3Client, asyncClient, new S3Reference(null, BUCKET, KEY, null), true);
+        S3RangeReader paying = new S3RangeReader(asyncClient, new S3Reference(null, BUCKET, KEY, null), true);
 
         paying.readRanges(batchOf(new long[][] {{0, 100}, {1_000_000, 100}}));
 
@@ -267,8 +253,8 @@ class S3RangeReaderBatchTest {
     }
 
     /**
-     * With the CRT client the reader keeps at most the configured number of fetches in flight: two of five fetches
-     * start at once, each completion admits the next, and the batch lands every byte.
+     * The reader keeps at most the configured number of fetches in flight: two of five fetches start at once, each
+     * completion admits the next, and the batch lands every byte.
      */
     @Test
     void theInFlightBoundAdmitsTheNextFetchOnCompletion() throws Exception {
@@ -489,67 +475,9 @@ class S3RangeReaderBatchTest {
         assertThat(call.bytesWrittenByTheRetry()).isZero();
     }
 
-    /**
-     * Answers every async GET as the SDK does for a call hitting its {@code apiCallTimeout}: it fails the current
-     * attempt through the transformer, then fails the returned future. A retry scheduled earlier can still start a
-     * fresh attempt afterwards.
-     */
-    private static final class TimedOutCall {
-        private final AtomicReference<ByteBufferAsyncResponseTransformer> transformer = new AtomicReference<>();
-        private final AtomicReference<CompletableFuture<Result>> retry = new AtomicReference<>();
-
-        @SuppressWarnings("unchecked")
-        TimedOutCall(S3AsyncClient client) {
-            when(client.getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class)))
-                    .thenAnswer(invocation -> timeOut(invocation.getArgument(1)));
-        }
-
-        private CompletableFuture<Result> timeOut(ByteBufferAsyncResponseTransformer body) {
-            transformer.set(body);
-            ApiCallTimeoutException timeout = ApiCallTimeoutException.create(1_000);
-            body.prepare();
-            body.exceptionOccurred(timeout);
-            return CompletableFuture.failedFuture(timeout);
-        }
-
-        /** Starts a fresh attempt, delivers {@code length} non-zero bytes as its body, and ends it. */
-        void startTheScheduledRetry(int length) {
-            ByteBufferAsyncResponseTransformer body = transformer.get();
-            retry.set(body.prepare());
-            body.onResponse(GetObjectResponse.builder().build());
-            body.onStream(subscriber -> deliver(subscriber, length));
-        }
-
-        private static void deliver(Subscriber<? super ByteBuffer> subscriber, int length) {
-            byte[] late = new byte[length];
-            Arrays.fill(late, (byte) -1);
-            subscriber.onSubscribe(new IdleSubscription());
-            subscriber.onNext(ByteBuffer.wrap(late));
-            subscriber.onComplete();
-        }
-
-        int bytesWrittenByTheRetry() {
-            return retry.get().join().bytesWritten();
-        }
-    }
-
-    /** Leaves emission to the test. */
-    private static final class IdleSubscription implements Subscription {
-        @Override
-        public void request(long demand) {
-            // the test emits explicitly
-        }
-
-        @Override
-        public void cancel() {
-            // nothing to stop
-        }
-    }
-
     private S3RangeReader readerBoundedTo(int maxInFlightFetches) {
         BatchSettings noMerging = new BatchSettings(-1, CoalescingPolicy.DEFAULT_MAX_FETCH_BYTES, maxInFlightFetches);
-        return new S3RangeReader(
-                s3Client, asyncClient, new S3Reference(null, BUCKET, KEY, null), false, new EndpointEtags(), noMerging);
+        return new S3RangeReader(asyncClient, new S3Reference(null, BUCKET, KEY, null), false, noMerging);
     }
 
     /** One fetch per range: the ranges sit farther apart than any gap a merging policy would bridge. */
@@ -559,25 +487,5 @@ class S3RangeReaderBatchTest {
             ranges[i] = new long[] {i * 700_000L, 100};
         }
         return batchOf(ranges);
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    void withoutAsyncClientTheTemplateRunsOnTheSyncClient() {
-        object.installSync(s3Client);
-        S3RangeReader syncOnly = new S3RangeReader(s3Client, new S3Reference(null, BUCKET, KEY, null), false);
-
-        List<RangeRequest> farApart = batchOf(new long[][] {{0, 100}, {1_000_000, 200}});
-        int[] counts = counts(syncOnly.readRanges(farApart));
-
-        assertContents(farApart, counts);
-        verify(s3Client, times(2)).getObject(any(GetObjectRequest.class), any(ResponseTransformer.class));
-        verify(asyncClient, never()).getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class));
-
-        List<RangeRequest> nearby = batchOf(new long[][] {{0, 100}, {1_000, 100}});
-        int[] mergedCounts = counts(syncOnly.readRanges(nearby));
-
-        assertContents(nearby, mergedCounts);
-        verify(s3Client, times(3)).getObject(any(GetObjectRequest.class), any(ResponseTransformer.class));
     }
 }

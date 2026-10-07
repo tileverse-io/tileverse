@@ -17,6 +17,7 @@ package io.tileverse.storage.s3;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -24,8 +25,8 @@ import software.amazon.awssdk.http.async.SdkAsyncHttpClient;
 import software.amazon.awssdk.utils.SdkAutoCloseable;
 
 /**
- * The HTTP client shared by every async S3 client of the process. The first lease builds it, releasing the last lease
- * closes it, and a later lease builds a new one.
+ * The HTTP client shared by the async S3 clients of the process. The first lease builds it from settings resolved at
+ * that moment, releasing the last lease closes it, and a later lease builds a new one.
  *
  * <p>An async S3 client built on its own CRT S3 engine reserves a native buffer pool of at least 1 GiB, per client. A
  * process holding clients for several endpoints cannot afford one pool each. The CRT HTTP client keeps a connection
@@ -38,28 +39,34 @@ import software.amazon.awssdk.utils.SdkAutoCloseable;
 // the number of endpoints read by the process
 final class S3SharedHttpClient {
 
-    static final S3SharedHttpClient INSTANCE = new S3SharedHttpClient(S3SharedHttpClient::newHttpClientOfTheProcess);
+    static final S3SharedHttpClient INSTANCE = new S3SharedHttpClient(S3HttpClientSettings::ofProcess);
 
-    private final Supplier<SdkAsyncHttpClient> factory;
+    private final Supplier<S3HttpClientSettings> settingsSource;
+    private final Function<S3HttpClientSettings, SdkAsyncHttpClient> factory;
 
     private @Nullable SdkAsyncHttpClient client;
+    private @Nullable S3HttpClientSettings clientSettings;
     private int leases;
 
-    S3SharedHttpClient(Supplier<SdkAsyncHttpClient> factory) {
-        this.factory = Objects.requireNonNull(factory, "factory");
+    S3SharedHttpClient(Supplier<S3HttpClientSettings> settingsSource) {
+        this(settingsSource, S3HttpClientSettings::newAsyncHttpClient);
     }
 
-    private static SdkAsyncHttpClient newHttpClientOfTheProcess() {
-        S3HttpClientSettings settings = S3HttpClientSettings.ofProcess();
-        return settings.newAsyncHttpClient();
+    S3SharedHttpClient(
+            Supplier<S3HttpClientSettings> settingsSource, Function<S3HttpClientSettings, SdkAsyncHttpClient> factory) {
+        this.settingsSource = Objects.requireNonNull(settingsSource, "settingsSource");
+        this.factory = Objects.requireNonNull(factory, "factory");
     }
 
     synchronized Lease acquire() {
         if (client == null) {
-            client = factory.get();
+            S3HttpClientSettings settings = settingsSource.get();
+            client = factory.apply(settings);
+            clientSettings = settings;
         }
+        S3HttpClientSettings leasedSettings = Objects.requireNonNull(clientSettings);
         leases++;
-        return new Lease(client);
+        return new Lease(client, leasedSettings);
     }
 
     @SuppressWarnings("java:S3398") // runs under the holder's monitor, shared with acquire()
@@ -70,6 +77,7 @@ final class S3SharedHttpClient {
         }
         SdkAsyncHttpClient idle = Objects.requireNonNull(client);
         client = null;
+        clientSettings = null;
         idle.close();
     }
 
@@ -77,14 +85,21 @@ final class S3SharedHttpClient {
     final class Lease implements SdkAutoCloseable {
 
         private final SdkAsyncHttpClient leased;
+        private final S3HttpClientSettings settings;
         private final AtomicBoolean closed = new AtomicBoolean();
 
-        private Lease(SdkAsyncHttpClient leased) {
+        private Lease(SdkAsyncHttpClient leased, S3HttpClientSettings settings) {
             this.leased = leased;
+            this.settings = settings;
         }
 
         SdkAsyncHttpClient client() {
             return leased;
+        }
+
+        /** The settings used to build the client. */
+        S3HttpClientSettings settings() {
+            return settings;
         }
 
         @Override

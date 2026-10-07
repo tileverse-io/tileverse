@@ -33,6 +33,7 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -51,6 +52,7 @@ class S3RangeReaderLocalStackIT extends AbstractRangeReaderIT {
 
     private static Path testFile;
     private static S3Client s3Client;
+    private static S3AsyncClient asyncClient;
     private static StaticCredentialsProvider credentialsProvider;
 
     @Container
@@ -77,6 +79,13 @@ class S3RangeReaderLocalStackIT extends AbstractRangeReaderIT {
                 PutObjectRequest.builder().bucket(BUCKET_NAME).key(KEY_NAME).build();
         RequestBody body = RequestBody.fromFile(testFile);
         s3Client.putObject(putObjectRequest, body);
+
+        asyncClient = S3AsyncClient.builder()
+                .endpointOverride(localstack.getEndpoint())
+                .region(Region.of(localstack.getRegion()))
+                .credentialsProvider(credentialsProvider)
+                .forcePathStyle(true)
+                .build();
     }
 
     @AfterAll
@@ -84,19 +93,15 @@ class S3RangeReaderLocalStackIT extends AbstractRangeReaderIT {
         if (s3Client != null) {
             s3Client.close();
         }
+        if (asyncClient != null) {
+            asyncClient.close();
+        }
     }
 
     @Override
     protected RangeReader createBaseReader() throws IOException {
-        S3Client client = S3Client.builder()
-                .endpointOverride(localstack.getEndpoint())
-                .region(Region.of(localstack.getRegion()))
-                .credentialsProvider(credentialsProvider)
-                .forcePathStyle(true)
-                .build();
-
         URI bucketUri = URI.create("s3://" + BUCKET_NAME + "/");
-        Storage storage = S3StorageProvider.open(bucketUri, client);
+        Storage storage = S3StorageProvider.open(bucketUri, asyncClient);
         try {
             return RangeReaderTestSupport.bundle(storage.openRangeReader(KEY_NAME), storage);
         } catch (RuntimeException e) {

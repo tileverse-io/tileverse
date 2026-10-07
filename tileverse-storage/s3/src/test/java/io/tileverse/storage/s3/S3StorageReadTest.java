@@ -16,7 +16,9 @@
 package io.tileverse.storage.s3;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.tileverse.storage.ReadHandle;
@@ -24,16 +26,16 @@ import io.tileverse.storage.ReadOptions;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Arrays;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.core.async.AsyncResponseTransformer;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
-import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 
-/** Streaming reads run on the sync client, regardless of the other clients in the client set. */
+/** Streaming reads run on the async client's blocking stream, one GET per read. */
 @ExtendWith(MockitoExtension.class)
 class S3StorageReadTest {
 
@@ -42,10 +44,7 @@ class S3StorageReadTest {
     private static final byte[] OBJECT = deterministicBytes(OBJECT_SIZE);
 
     @Mock
-    private S3Client syncClient;
-
-    @Mock
-    private S3AsyncClient asyncClient;
+    private S3AsyncClient client;
 
     private S3Storage storage;
 
@@ -60,21 +59,31 @@ class S3StorageReadTest {
     @BeforeEach
     void openStorage() {
         // A mock has no client configuration to report; the Storage then identifies its readers by s3:// URIs.
-        when(syncClient.serviceClientConfiguration()).thenThrow(new UnsupportedOperationException());
-        new S3ObjectStub(OBJECT, CHUNK_SIZE).installSync(syncClient);
-        S3ClientBundle bundle =
-                new S3ClientBundle(syncClient, Optional.of(asyncClient), Optional.empty(), Optional.empty());
+        when(client.serviceClientConfiguration()).thenThrow(new UnsupportedOperationException());
+        new S3ObjectStub(OBJECT, CHUNK_SIZE).installAsync(client);
         URI baseUri = URI.create("s3://bucket/");
-        storage = new S3Storage(baseUri, S3StorageBucketKey.parse(baseUri), new BorrowedS3Handle(bundle), false);
+        storage = new S3Storage(baseUri, S3StorageBucketKey.parse(baseUri), new BorrowedS3Handle(client), false);
     }
 
     @Test
-    void aStreamingReadNeverTouchesTheAsyncClient() throws IOException {
+    void aRangedReadStreamsTheRange() throws IOException {
         try (ReadHandle handle = storage.read("object.bin", ReadOptions.range(1024, 8192))) {
             byte[] content = handle.content().readAllBytes();
 
             assertThat(content).containsExactly(Arrays.copyOfRange(OBJECT, 1024, 1024 + 8192));
         }
-        verifyNoInteractions(asyncClient);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aWholeObjectReadIsOneGetWithoutARange() throws IOException {
+        try (ReadHandle handle = storage.read("object.bin")) {
+            assertThat(handle.content().readAllBytes()).containsExactly(OBJECT);
+        }
+
+        verify(client)
+                .getObject(
+                        argThat((GetObjectRequest request) -> request.range() == null && request.partNumber() == null),
+                        any(AsyncResponseTransformer.class));
     }
 }

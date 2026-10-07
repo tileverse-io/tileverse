@@ -21,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.StorageException;
@@ -44,8 +45,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Requests beyond the pooled connections of a host, against a server holding every response for a while: they wait
- * their turn for as long as the acquisition timeout allows, on the async client of batches and on the sync client of
- * single reads alike.
+ * their turn for as long as the acquisition timeout allows, single reads and batches alike, in one pool per host.
  */
 class S3ConnectionPoolIT {
 
@@ -121,8 +121,8 @@ class S3ConnectionPoolIT {
     private RangeReader readerWaitingForAConnection(Duration acquisitionTimeout) {
         S3HttpClientSettings settings =
                 new S3HttpClientSettings(POOLED_CONNECTIONS, CONNECTION_TIMEOUT, acquisitionTimeout);
-        S3SharedHttpClient sharedHttpClient = new S3SharedHttpClient(settings::newAsyncHttpClient);
-        S3ClientCache cache = new S3ClientCache(sharedHttpClient, settings::syncHttpClientBuilder);
+        S3SharedHttpClient sharedHttpClient = new S3SharedHttpClient(() -> settings);
+        S3ClientCache cache = new S3ClientCache(sharedHttpClient);
         URI endpoint = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
         lease = cache.acquire(S3ClientCache.key("us-east-1", endpoint, true, null, null, null, true));
         URI baseUri = URI.create("s3://bucket/");
@@ -180,6 +180,22 @@ class S3ConnectionPoolIT {
                 .cause()
                 .isInstanceOf(StorageException.class)
                 .hasMessageContaining("failed to acquire a connection");
+    }
+
+    @Test
+    void singleReadsAndABatchShareOnePool() throws Exception {
+        RangeReader reader = readerWaitingForAConnection(PATIENT);
+        ExecutorService batchThread = Executors.newSingleThreadExecutor();
+        try {
+            Future<BatchReadResult> batch = batchThread.submit(() -> reader.readRanges(ranges(POOLED_CONNECTIONS)));
+            List<Integer> singles = readAtOnce(reader, POOLED_CONNECTIONS);
+
+            assertThat(counts(batch.get())).containsOnly(LENGTH);
+            assertThat(singles).containsOnly(LENGTH);
+            assertThat(mostRequestsHeldAtOnce).hasValue(POOLED_CONNECTIONS);
+        } finally {
+            batchThread.shutdownNow();
+        }
     }
 
     private static List<Integer> readAtOnce(RangeReader reader, int readers) throws Exception {

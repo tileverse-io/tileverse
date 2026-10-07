@@ -27,7 +27,7 @@ import java.net.URI;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3AsyncClient;
 
 /**
  * The source identifier of an S3 reader partitions the shared range cache, hence it has to differ whenever the bytes
@@ -87,7 +87,7 @@ class S3StorageSourceIdentifierTest {
 
     @Test
     void borrowedClientEndpointIsPartOfTheIdentifier() throws IOException {
-        try (S3Client client = S3Client.builder()
+        try (S3AsyncClient client = S3AsyncClient.builder()
                         .region(Region.US_EAST_1)
                         .endpointOverride(URI.create("http://minio:9000"))
                         .credentialsProvider(AnonymousCredentialsProvider.create())
@@ -100,7 +100,7 @@ class S3StorageSourceIdentifierTest {
 
     @Test
     void borrowedClientThatHidesItsConfigurationFallsBackToTheCanonicalS3Uri() throws IOException {
-        S3Client client = mock(S3Client.class);
+        S3AsyncClient client = mock(S3AsyncClient.class);
         when(client.serviceClientConfiguration()).thenThrow(new UnsupportedOperationException());
         try (Storage storage = S3StorageProvider.open(URI.create("s3://bucket/prefix/"), client)) {
             assertThat(identifierOf(storage)).isEqualTo("s3://bucket/prefix/" + KEY);

@@ -30,7 +30,10 @@ import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
+import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.BucketVersioningStatus;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
@@ -48,15 +51,25 @@ class S3VersioningIT {
             new LocalStackContainer(DockerImageName.parse("localstack/localstack:3.7")).withServices("s3");
 
     private S3Client adminClient;
+    private S3AsyncClient storageClient;
 
     @BeforeAll
     void provisionVersionedBucket() {
+        StaticCredentialsProvider credentials = StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(LOCALSTACK.getAccessKey(), LOCALSTACK.getSecretKey()));
         adminClient = S3Client.builder()
                 .endpointOverride(LOCALSTACK.getEndpoint())
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(LOCALSTACK.getAccessKey(), LOCALSTACK.getSecretKey())))
+                .credentialsProvider(credentials)
                 .region(Region.of(LOCALSTACK.getRegion()))
                 .forcePathStyle(true)
+                .build();
+        storageClient = S3AsyncClient.builder()
+                .endpointOverride(LOCALSTACK.getEndpoint())
+                .credentialsProvider(credentials)
+                .region(Region.of(LOCALSTACK.getRegion()))
+                .forcePathStyle(true)
+                .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
+                .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED)
                 .build();
         adminClient.createBucket(CreateBucketRequest.builder().bucket(BUCKET).build());
         adminClient.putBucketVersioning(PutBucketVersioningRequest.builder()
@@ -72,15 +85,17 @@ class S3VersioningIT {
         if (adminClient != null) {
             adminClient.close();
         }
+        if (storageClient != null) {
+            storageClient.close();
+        }
     }
 
     @Test
     void writingTwiceProducesDistinctVersionIds() throws Exception {
         URI baseUri = URI.create("s3://" + BUCKET + "/");
-        // Pass the pre-configured client directly so the S3 provider picks up the
-        // LocalStack endpoint and credentials without going through StorageFactory's
-        // URI-scheme dispatch (which routes http://host:port URIs to HTTP storage).
-        try (Storage s = S3StorageProvider.open(baseUri, adminClient)) {
+        // Pass a pre-configured client: the S3 provider then uses the LocalStack endpoint and credentials without the
+        // URI-scheme dispatch of StorageFactory, which routes http://host:port URIs to HTTP storage.
+        try (Storage s = S3StorageProvider.open(baseUri, storageClient)) {
             StorageEntry.File first = s.put("k", "v1".getBytes());
             StorageEntry.File second = s.put("k", "v2".getBytes());
 

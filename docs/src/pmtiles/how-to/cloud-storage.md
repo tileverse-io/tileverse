@@ -86,24 +86,6 @@ try (PMTilesReader reader = PMTilesReader.open(URI.create("gs://my-bucket/world.
 }
 ```
 
-## Pre-built SDK clients (escape hatch)
-
-For Spring-managed SDK clients, custom retry policies, or test fakes that the
-Properties-driven `StorageFactory` route can't express, each backend provider
-exposes a public static factory `XxxStorageProvider.open(URI, sdkClient)` that
-returns a `Storage`. The returned `Storage` borrows the supplied client. Closing the
-`Storage` leaves the client open, and the caller keeps control of its lifetime:
-
-```java
-@Bean Storage tiles(S3Client springS3) {
-    return S3StorageProvider.open(URI.create("s3://my-bucket/tiles/"), springS3);
-}
-
-// elsewhere:
-try (RangeReader r = storage.openRangeReader("00/00.pmtiles");
-        PMTilesReader reader = new PMTilesReader(r)) { ... }
-```
-
 ## Performance Optimization
 
 ### Memory Caching

@@ -34,7 +34,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -98,7 +97,6 @@ class S3RangeReaderAsyncBatchIT {
         httpClient = S3SharedHttpClient.INSTANCE.acquire();
         asyncClient = S3AsyncClient.builder()
                 .httpClient(httpClient.client())
-                .multipartEnabled(true)
                 .endpointOverride(endpoint)
                 .region(Region.of(GarageContainer.REGION))
                 .credentialsProvider(credentials)
@@ -169,7 +167,7 @@ class S3RangeReaderAsyncBatchIT {
                 RangeRequest.of(0, FETCH_LENGTH, ByteBuffer.allocate(FETCH_LENGTH)),
                 RangeRequest.of(2 * FETCH_STRIDE, FETCH_LENGTH, ByteBuffer.allocate(FETCH_LENGTH)));
 
-        assertThat(reading.asyncClient()).isNotSameAs(closing.asyncClient());
+        assertThat(reading.client()).isNotSameAs(closing.client());
         closing.close();
         try (Storage storage = new S3Storage(baseUri, S3StorageBucketKey.parse(baseUri), reading, false);
                 RangeReader reader = storage.openRangeReader(KEY)) {
@@ -223,11 +221,13 @@ class S3RangeReaderAsyncBatchIT {
 
     private BatchReadResult read(S3AsyncClient asyncClient, BatchSettings settings, List<RangeRequest> requests)
             throws IOException {
-        S3ClientBundle bundle =
-                new S3ClientBundle(syncClient, Optional.of(asyncClient), Optional.empty(), Optional.empty());
         URI baseUri = URI.create("s3://" + BUCKET + "/");
         try (Storage storage = new S3Storage(
-                        baseUri, S3StorageBucketKey.parse(baseUri), new BorrowedS3Handle(bundle), false, settings);
+                        baseUri,
+                        S3StorageBucketKey.parse(baseUri),
+                        new BorrowedS3Handle(asyncClient),
+                        false,
+                        settings);
                 RangeReader reader = storage.openRangeReader(KEY)) {
             return reader.readRanges(requests);
         }

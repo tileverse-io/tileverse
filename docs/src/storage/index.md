@@ -187,7 +187,7 @@ try (Storage storage = StorageFactory.open(URI.create("s3://bucket/data/"))) {
 ## Resource lifecycle
 
 - `Storage` instances should be closed when no longer needed (try-with-resources).
-- The underlying SDK clients (`S3Client`, `BlobServiceClient`, GCS `Storage`) are reference-counted by the provider's internal cache - opening many `Storage` instances against the same account does not multiply client cost.
+- The underlying SDK clients (`S3AsyncClient`, `BlobServiceClient`, GCS `Storage`) are reference-counted by the provider's internal cache - opening many `Storage` instances against the same account does not multiply client cost.
 - Streams returned by `list(...)` and `ReadHandle`s returned by `read(...)` must be closed by the caller.
 - Local readers hold a file descriptor only while a channel is open: from the first read until the idle timeout elapses with no read in progress. A closed reader never reopens one.
 

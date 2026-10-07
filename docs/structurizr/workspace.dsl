@@ -471,7 +471,5 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
                 color #000000
             }
         }
-
-        theme default
     }
 }

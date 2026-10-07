@@ -31,7 +31,6 @@ import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -53,8 +52,8 @@ import java.util.Optional;
  * </pre>
  * </ul>
  *
- * When {@code http/s} URL schemes are used, {@link #canProcessHeaders(URI, Map)} disambiguates by checking if a header
- * starting with {@code x-ms-} was returned from the HEAD request.
+ * <p>The {@code az://} form selects this provider by itself. An {@code http(s)} URL is served only when the config
+ * names the provider ({@code storage.provider=azure}).
  */
 public class AzureBlobStorageProvider extends AbstractStorageProvider {
 
@@ -326,31 +325,32 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
 
     @Override
     public boolean canProcess(StorageConfig config) {
-        if (!matches(config, "https", "http", "az")) {
-            return false;
+        if (matches(config, "az")) {
+            return hasContainer(config.baseUri());
         }
-        URI uri = config.baseUri();
-        // az:// is parsed by AzureBlobLocation directly. http(s) URIs go through BlobUrlParts so we keep
-        // the existing host-shape validation (account name embedded in host, container in path).
-        if ("az".equalsIgnoreCase(uri.getScheme())) {
-            try {
-                AzureBlobLocation loc = AzureBlobLocation.parse(uri);
-                return loc.container() != null && !loc.container().isEmpty();
-            } catch (RuntimeException e) {
-                return false;
-            }
-        }
-        BlobUrlParts parts;
+        boolean namedHttpUrl = matches(config, "http", "https") && isNamedBy(config);
+        return namedHttpUrl && isBlobUrlWithContainer(config.baseUri());
+    }
+
+    private static boolean hasContainer(URI azUri) {
         try {
-            parts = parseBlobUrlParts(uri);
+            AzureBlobLocation location = AzureBlobLocation.parse(azUri);
+            String container = location.container();
+            return container != null && !container.isEmpty();
         } catch (RuntimeException e) {
             return false;
         }
-        // Both blob-rooted URIs and container-rooted URIs are valid Storage roots: openRangeReader(key)
-        // supplies the leaf at read time.
-        return parts.getHost() != null
-                && parts.getBlobContainerName() != null
-                && !parts.getBlobContainerName().isEmpty();
+    }
+
+    /** Blob-rooted and container-rooted URLs are both Storage roots: {@code openRangeReader(key)} names the leaf. */
+    private static boolean isBlobUrlWithContainer(URI httpUrl) {
+        try {
+            BlobUrlParts parts = parseBlobUrlParts(httpUrl);
+            String container = parts.getBlobContainerName();
+            return parts.getHost() != null && container != null && !container.isEmpty();
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     static BlobUrlParts parseBlobUrlParts(URI endpointUrl) {
@@ -360,11 +360,6 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
         }
         String url = endpointUrl.toString();
         return BlobUrlParts.parse(url);
-    }
-
-    @Override
-    public boolean canProcessHeaders(URI uri, Map<String, List<String>> headers) {
-        return headers.containsKey("x-ms-request-id");
     }
 
     @Override

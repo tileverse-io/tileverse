@@ -34,7 +34,7 @@ First, add the dependencies:
 
 ## Reading Tiles from a Local File
 
-`PMTilesReader.open(URI)` is a one-line entry point that opens the parent `Storage`, gets a `RangeReader` for the leaf, and bundles them so that closing the reader releases both. The same call works for any URI scheme (`file:`, `http(s):`, `s3:`, `gs:`, Azure URLs).
+`PMTilesReader.open(URI)` is a one-line entry point that opens the parent `Storage`, gets a `RangeReader` for the leaf, and bundles them so that closing the reader releases both. The same call works for any URI scheme (`file:`, `http(s):`, `s3:`, `gs:`, `az:`, `abfss:`).
 
 ```java
 import io.tileverse.pmtiles.PMTilesReader;

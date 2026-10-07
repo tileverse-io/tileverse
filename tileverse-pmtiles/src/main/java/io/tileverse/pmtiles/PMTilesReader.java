@@ -157,9 +157,8 @@ public class PMTilesReader implements AutoCloseable {
      * {@link Storage#openRangeReader(String)} for the tail key. The returned {@code PMTilesReader} owns both the
      * {@code RangeReader} and the parent {@code Storage}; closing the {@code PMTilesReader} closes both.
      *
-     * @param uri the PMTiles URI; e.g. {@code s3://bucket/tiles.pmtiles},
-     *     {@code https://acct.blob.core.windows.net/container/tiles.pmtiles}, {@code gs://bucket/tiles.pmtiles},
-     *     {@code file:///path/to/tiles.pmtiles}
+     * @param uri the PMTiles URI; e.g. {@code s3://bucket/tiles.pmtiles}, {@code az://acct/container/tiles.pmtiles},
+     *     {@code gs://bucket/tiles.pmtiles}, {@code file:///path/to/tiles.pmtiles}
      * @return a new {@code PMTilesReader}
      * @throws IllegalArgumentException if the URI does not include a key
      * @throws IOException if the URI cannot be opened

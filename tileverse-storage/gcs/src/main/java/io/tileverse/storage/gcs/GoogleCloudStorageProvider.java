@@ -26,10 +26,8 @@ import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import lombok.NonNull;
 
 /**
@@ -53,8 +51,8 @@ import lombok.NonNull;
  * </pre>
  * </ul>
  *
- * When {@code http/s} URL schemes are used, {@link #canProcessHeaders(URI, Map)} disambiguates by checking if a header
- * starting with {@code x-goog-} was returned from the HEAD request.
+ * <p>The {@code gs://} form selects this provider by itself. An {@code http(s)} URL is served only when the config
+ * names the provider ({@code storage.provider=gcs}).
  */
 public class GoogleCloudStorageProvider extends AbstractStorageProvider {
 
@@ -249,27 +247,11 @@ public class GoogleCloudStorageProvider extends AbstractStorageProvider {
 
     @Override
     public boolean canProcess(StorageConfig config) {
-        URI uri = config.baseUri();
-        String scheme = uri.getScheme();
-        if ("gs".equalsIgnoreCase(scheme)) {
-            return matches(config, "gs");
-        }
-        if (!matches(config, "http", "https")) {
-            return false;
-        }
-        return isRecognizedGcsHttpUri(uri);
-    }
-
-    @Override
-    public boolean canProcessHeaders(URI uri, Map<String, List<String>> headers) {
-        if (isRecognizedGcsHttpUri(uri)) {
+        if (matches(config, "gs")) {
             return true;
         }
-        // Accept x-goog-* headers only for explicit emulator-style endpoints.
-        Set<String> headerNames = headers.keySet();
-        boolean hasGoogHeaders =
-                headerNames.stream().anyMatch(h -> h.toLowerCase().startsWith("x-goog-"));
-        return hasGoogHeaders && isEmulatorApiUri(uri);
+        boolean namedHttpUrl = matches(config, "http", "https") && isNamedBy(config);
+        return namedHttpUrl && isRecognizedGcsHttpUri(config.baseUri());
     }
 
     private static boolean isRecognizedGcsHttpUri(URI uri) {

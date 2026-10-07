@@ -218,7 +218,7 @@ A `Storage` over a caller-supplied `S3AsyncClient` reads and writes; presigned U
     props.setProperty("storage.azure.sas-token", "sv=2020-08-04&ss=b&srt=o&sp=r&se=2024-01-01...");
 
     try (Storage storage = StorageFactory.open(
-                URI.create("https://account.blob.core.windows.net/container/"), props);
+                URI.create("az://account/container/"), props);
             RangeReader reader = storage.openRangeReader("blob")) {
         // ...
     }
@@ -366,7 +366,7 @@ try (Storage storage = StorageFactory.open(URI.create("gs://gcp-public-data-land
 
 ### fake-gcs-server (emulators)
 
-Either rely on URI-pattern detection (`http(s)://host/storage/v1/b/...`) or set `storage.gcs.endpoint` explicitly. The value is a full endpoint URL with scheme, not a bare hostname:
+Set `storage.gcs.endpoint`, or open the emulator URL (`http(s)://host/storage/v1/b/...`) with `storage.provider=gcs`. The value of `storage.gcs.endpoint` is a full endpoint URL with scheme, not a bare hostname:
 
 ```java
 Properties props = new Properties();

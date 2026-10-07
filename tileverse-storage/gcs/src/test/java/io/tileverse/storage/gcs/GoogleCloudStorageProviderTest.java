@@ -22,10 +22,11 @@ import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.batch.BatchProviderHelper;
 import io.tileverse.storage.spi.StorageProvider;
-import java.net.URI;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class GoogleCloudStorageProviderTest {
 
@@ -118,35 +119,34 @@ class GoogleCloudStorageProviderTest {
 
         assertThat(provider.canProcess(config.baseUri("gs://bucket/file.pmtiles")))
                 .isTrue();
-        assertThat(provider.canProcess(config.baseUri("https://storage.googleapis.com/bucket/file.pmtiles")))
-                .isTrue();
-        assertThat(provider.canProcess(config.baseUri("https://storage.cloud.google.com/bucket/file.pmtiles")))
-                .isTrue();
-        assertThat(provider.canProcess(config.baseUri("http://localhost:4443/storage/v1/b/bucket/o/file.pmtiles")))
-                .isTrue();
-
-        assertThat(provider.canProcess(config.baseUri("https://example.com/bucket/file.pmtiles")))
-                .isFalse();
-        assertThat(provider.canProcess(config.baseUri("https://demo-bucket.protomaps.com/v4.pmtiles")))
-                .isFalse();
         assertThat(provider.canProcess(config.providerId("http").baseUri("gs://bucket/file.pmtiles")))
+                .isFalse();
+
+        StorageConfig namingGcs = provider.getDefaultConfig().providerId(GoogleCloudStorageProvider.ID);
+        assertThat(provider.canProcess(namingGcs.baseUri("https://example.com/bucket/file.pmtiles")))
+                .isFalse();
+        assertThat(provider.canProcess(namingGcs.baseUri("https://demo-bucket.protomaps.com/v4.pmtiles")))
                 .isFalse();
     }
 
-    @Test
-    void testCanProcessHeaders() {
-        assertThat(provider.canProcessHeaders(
-                        URI.create("https://storage.googleapis.com/bucket/file.pmtiles"), Map.of()))
-                .isTrue();
+    @ParameterizedTest
+    @MethodSource("httpUrlForms")
+    void canProcessAnHttpUrlOnlyForAConfigNamingTheProvider(String url) {
+        StorageConfig namingNoProvider = new StorageConfig(url);
+        StorageConfig namingGcs = new StorageConfig(url).providerId(GoogleCloudStorageProvider.ID);
+        StorageConfig namingHttp = new StorageConfig(url).providerId("http");
 
-        assertThat(provider.canProcessHeaders(
-                        URI.create("http://localhost:4443/storage/v1/b/bucket/o/file.pmtiles"),
-                        Map.of("x-goog-generation", List.of("1"))))
-                .isTrue();
-
-        assertThat(provider.canProcessHeaders(
-                        URI.create("https://example.com/bucket/file.pmtiles"),
-                        Map.of("x-goog-generation", List.of("1"))))
+        assertThat(provider.canProcess(namingNoProvider))
+                .as("no provider named")
                 .isFalse();
+        assertThat(provider.canProcess(namingGcs)).as("gcs named").isTrue();
+        assertThat(provider.canProcess(namingHttp)).as("http named").isFalse();
+    }
+
+    static Stream<String> httpUrlForms() {
+        return Stream.of(
+                "https://storage.googleapis.com/bucket/file.pmtiles",
+                "https://storage.cloud.google.com/bucket/file.pmtiles",
+                "http://localhost:4443/storage/v1/b/bucket/o/file.pmtiles");
     }
 }

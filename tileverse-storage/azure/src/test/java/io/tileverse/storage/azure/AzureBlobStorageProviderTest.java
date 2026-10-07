@@ -24,8 +24,10 @@ import io.tileverse.storage.batch.BatchProviderHelper;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class AzureBlobStorageProviderTest {
 
@@ -49,18 +51,25 @@ class AzureBlobStorageProviderTest {
 
     @Test
     void canProcessAcceptsContainerOnlyUri() {
-        assertThat(provider.canProcess(new StorageConfig("https://acct.blob.core.windows.net/my-container")))
-                .isTrue();
-        assertThat(provider.canProcess(new StorageConfig("https://acct.blob.core.windows.net/my-container/prefix/")))
-                .isTrue();
-        assertThat(provider.canProcess(new StorageConfig("https://acct.blob.core.windows.net/my-container/blob.bin")))
-                .isTrue();
+        StorageConfig container = configNamingTheProvider("https://acct.blob.core.windows.net/my-container");
+        StorageConfig prefix = configNamingTheProvider("https://acct.blob.core.windows.net/my-container/prefix/");
+        StorageConfig blob = configNamingTheProvider("https://acct.blob.core.windows.net/my-container/blob.bin");
+
+        assertThat(provider.canProcess(container)).isTrue();
+        assertThat(provider.canProcess(prefix)).isTrue();
+        assertThat(provider.canProcess(blob)).isTrue();
     }
 
     @Test
     void canProcessRejectsHostWithoutContainer() {
-        assertThat(provider.canProcess(new StorageConfig("https://acct.blob.core.windows.net/")))
-                .isFalse();
+        StorageConfig accountRoot = configNamingTheProvider("https://acct.blob.core.windows.net/");
+
+        assertThat(provider.canProcess(accountRoot)).isFalse();
+    }
+
+    /** The http(s) forms are claimed only for a config naming the provider. */
+    private static StorageConfig configNamingTheProvider(String url) {
+        return new StorageConfig(url).providerId(AzureBlobStorageProvider.ID);
     }
 
     @Test
@@ -92,7 +101,7 @@ class AzureBlobStorageProviderTest {
 
     @Test
     void testCanProcess() {
-        StorageConfig config = provider.getDefaultConfig();
+        StorageConfig config = provider.getDefaultConfig().providerId(AzureBlobStorageProvider.ID);
 
         assertThatThrownBy(() -> provider.canProcess(null)).isInstanceOf(NullPointerException.class);
 
@@ -112,6 +121,27 @@ class AzureBlobStorageProviderTest {
         assertThat(provider.canProcess(config.baseUri("ftp://account.blob.core.windows.net/container/blob.pmtiles")))
                 .isFalse();
         assertThat(provider.canProcess(config.baseUri("https://example.com"))).isFalse();
+    }
+
+    @ParameterizedTest
+    @MethodSource("httpUrlForms")
+    void canProcessAnHttpUrlOnlyForAConfigNamingTheProvider(String url) {
+        StorageConfig namingNoProvider = new StorageConfig(url);
+        StorageConfig namingAzure = new StorageConfig(url).providerId(AzureBlobStorageProvider.ID);
+        StorageConfig namingHttp = new StorageConfig(url).providerId("http");
+
+        assertThat(provider.canProcess(namingNoProvider))
+                .as("no provider named")
+                .isFalse();
+        assertThat(provider.canProcess(namingAzure)).as("azure named").isTrue();
+        assertThat(provider.canProcess(namingHttp)).as("http named").isFalse();
+    }
+
+    static Stream<String> httpUrlForms() {
+        return Stream.of(
+                "https://account.blob.core.windows.net/container",
+                "https://account.blob.core.windows.net/container/blob.pmtiles",
+                "http://127.0.0.1:10000/account/container/blob.pmtiles");
     }
 
     @Test
@@ -142,17 +172,5 @@ class AzureBlobStorageProviderTest {
         assertThat(loc.accountName()).isEqualTo("acct");
         assertThat(loc.container()).isEqualTo("container");
         assertThat(loc.prefix()).isEmpty();
-    }
-
-    @Test
-    void testCanProcessHeaders() {
-        assertThat(provider.canProcessHeaders(
-                        URI.create("https://account.blob.core.windows.net/container/blob.pmtiles"),
-                        Map.of("x-ms-request-id", List.of("123"))))
-                .isTrue();
-        assertThat(provider.canProcessHeaders(
-                        URI.create("https://account.blob.core.windows.net/container/blob.pmtiles"),
-                        Map.of("x-custom", List.of("value"))))
-                .isFalse();
     }
 }

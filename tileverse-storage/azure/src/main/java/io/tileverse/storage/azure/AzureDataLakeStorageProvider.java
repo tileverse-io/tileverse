@@ -27,8 +27,9 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * StorageProvider for Azure Data Lake Storage Gen2 (HNS-enabled accounts). Handles {@code abfs://}, {@code abfss://},
- * and {@code https://*.dfs.core.windows.net/...} URIs.
+ * StorageProvider for Azure Data Lake Storage Gen2 (HNS-enabled accounts). Serves {@code abfs://} and {@code abfss://}
+ * URIs, and {@code https://*.dfs.core.windows.net/...} URLs when the config names the provider
+ * ({@code storage.provider=azure-datalake}).
  */
 public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
 
@@ -104,15 +105,14 @@ public class AzureDataLakeStorageProvider extends AbstractStorageProvider {
 
     @Override
     public boolean canProcess(StorageConfig config) {
-        if (!matches(config, "abfs", "abfss", "https", "http")) {
-            return false;
-        }
-        URI uri = config.baseUri();
-        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
-        if (scheme.equals("abfs") || scheme.equals("abfss")) {
-            return uri.getHost() != null && uri.getHost().contains(".dfs.core.");
-        }
-        return uri.getHost() != null && uri.getHost().contains(".dfs.core.");
+        boolean nativeScheme = matches(config, "abfs", "abfss");
+        boolean namedHttpUrl = matches(config, "http", "https") && isNamedBy(config);
+        return (nativeScheme || namedHttpUrl) && hasDfsHost(config.baseUri());
+    }
+
+    private static boolean hasDfsHost(URI uri) {
+        String host = uri.getHost();
+        return host != null && host.contains(".dfs.core.");
     }
 
     @Override

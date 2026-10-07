@@ -121,8 +121,8 @@ try (Storage storage = StorageFactory.open(URI.create("s3://bucket/"), props);
 // Azure Blob reader with a connection string
 Properties azureProps = new Properties();
 azureProps.setProperty("storage.azure.connection-string", connectionString);
-URI container = URI.create("https://account.blob.core.windows.net/container/");
-URI blob = URI.create("https://account.blob.core.windows.net/container/path/to/blob.pmtiles");
+URI container = URI.create("az://account/container/");
+URI blob = URI.create("az://account/container/path/to/blob.pmtiles");
 try (Storage storage = StorageFactory.open(container, azureProps);
         RangeReader azureReader = storage.openRangeReader(blob)) {
     // ...
@@ -446,16 +446,17 @@ TokenCredential managedIdentity = new ManagedIdentityCredentialBuilder()
 
 #### 5. Direct URI Access
 
-For public blobs or when using SAS tokens in the URI:
+A public blob reads through its `https://` URL with no provider named: the HTTP backend serves it. To use a SAS
+token embedded in the URL, name the Azure Blob provider:
 
 ```java
-// Using a blob URI with embedded SAS token
+// Using a container URL with an embedded SAS token
+Properties props = new Properties();
+props.setProperty("storage.provider", "azure");
 URI containerUri = URI.create("https://account.blob.core.windows.net/container/?sv=2022-11-02&ss=b&srt=co&sp=r&sig=XXX");
-Storage storage = StorageFactory.open(containerUri);
+Storage storage = StorageFactory.open(containerUri, props);
 RangeReader reader = storage.openRangeReader("blob.pmtiles");
 ```
-
-This will force using the Azure Blob Storage client instead of the regular HTTP client.
 
 
 ### Authentication Best Practices

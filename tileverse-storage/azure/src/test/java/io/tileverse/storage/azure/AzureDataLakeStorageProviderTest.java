@@ -54,15 +54,24 @@ class AzureDataLakeStorageProviderTest {
     @Test
     void canProcessAcceptsHttpsToDfsHost() {
         AzureDataLakeStorageProvider p = new AzureDataLakeStorageProvider();
+        StorageConfig namingDataLake = new StorageConfig("https://acct.dfs.core.windows.net/fs/path")
+                .providerId(AzureDataLakeStorageProvider.ID);
+        assertThat(p.canProcess(namingDataLake)).isTrue();
+    }
+
+    @Test
+    void canProcessRejectsHttpsToDfsHostWithNoProviderNamed() {
+        AzureDataLakeStorageProvider p = new AzureDataLakeStorageProvider();
         assertThat(p.canProcess(new StorageConfig("https://acct.dfs.core.windows.net/fs/path")))
-                .isTrue();
+                .isFalse();
     }
 
     @Test
     void canProcessRejectsBlobHost() {
         AzureDataLakeStorageProvider p = new AzureDataLakeStorageProvider();
-        assertThat(p.canProcess(new StorageConfig("https://acct.blob.core.windows.net/fs/path")))
-                .isFalse();
+        StorageConfig namingDataLake = new StorageConfig("https://acct.blob.core.windows.net/fs/path")
+                .providerId(AzureDataLakeStorageProvider.ID);
+        assertThat(p.canProcess(namingDataLake)).isFalse();
     }
 
     @Test

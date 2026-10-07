@@ -250,9 +250,12 @@ class StorageFactoryIT {
         String gcsURL = "http://%s:%d/storage/v1/b/%s/o/%s?alt=media"
                 .formatted(emulatorHost, emulatorPort, BUCKET_NAME, FILE_NAME);
 
-        testFindBestProvider(URI.create(gcsURL), GoogleCloudStorageProvider.class);
+        testFindBestProvider(URI.create(gcsURL), HttpStorageProvider.class);
 
-        StorageConfig config = new StorageConfig(gcsURL).setParameter(GoogleCloudStorageProvider.GCS_ANONYMOUS, true);
+        StorageConfig config = new StorageConfig(gcsURL)
+                .providerId(GoogleCloudStorageProvider.ID)
+                .setParameter(GoogleCloudStorageProvider.GCS_ANONYMOUS, true);
+        testFindBestProvider(config, GoogleCloudStorageProvider.class);
         RangeReader reader = testCreate(config);
         assertThat(reader.size()).hasValue(FILE_SIZE);
     }
@@ -293,6 +296,7 @@ class StorageFactoryIT {
     @SetSystemProperty(key = "aws.region", value = "us-east-1")
     void testS3LocalStack() throws IOException {
         final URI localstackURI = URI.create("%s/%s/%s".formatted(localstack.getEndpoint(), BUCKET_NAME, FILE_NAME));
+        testFindBestProvider(localstackURI, HttpStorageProvider.class);
         String accessKey = localstack.getAccessKey();
         String secretKey = localstack.getSecretKey();
 
@@ -300,13 +304,11 @@ class StorageFactoryIT {
         assertThat(reader.size()).hasValue(FILE_SIZE);
     }
 
-    /**
-     * Garage answers an anonymous HEAD request without the {@code x-amz-request-id} header, leaving nothing to tell it
-     * apart from a plain HTTP server. The S3 provider is forced instead of detected.
-     */
+    /** Garage is reached by its plain URL like the other S3-compatible services: with the S3 provider named. */
     @Test
     void testS3Garage() throws IOException {
         URI garageURI = URI.create("%s/%s/%s".formatted(garage.getS3URL(), BUCKET_NAME, FILE_NAME));
+        testFindBestProvider(garageURI, HttpStorageProvider.class);
         StorageConfig config = new StorageConfig(garageURI).providerId(S3StorageProvider.ID);
         config.setParameter(S3StorageProvider.S3_REGION, GarageContainer.REGION);
         config.setParameter(S3StorageProvider.S3_AWS_ACCESS_KEY_ID, garage.getAccessKeyId());
@@ -317,20 +319,19 @@ class StorageFactoryIT {
     }
 
     static RangeReader testAzureBlob(String url, String accountKey) throws IOException {
-        testFindBestProvider(URI.create(url), AzureBlobStorageProvider.class);
+        testFindBestProvider(URI.create(url), HttpStorageProvider.class);
 
-        StorageConfig config = new StorageConfig(url);
-
+        StorageConfig config = new StorageConfig(url).providerId(AzureBlobStorageProvider.ID);
+        testFindBestProvider(config, AzureBlobStorageProvider.class);
         if (accountKey != null) {
             config.setParameter(AzureBlobStorageProvider.AZURE_ACCOUNT_KEY, accountKey);
         }
-
         return testCreate(config);
     }
 
     /**
-     * Single-arg overload aimed at public-bucket URLs. Sets {@code S3_ANONYMOUS=true} so the SDK does not consult the
-     * default credential chain, which would fail on a clean CI box.
+     * Opens a public-bucket URL with the S3 provider named and {@code S3_ANONYMOUS=true}. The default credential chain
+     * fails on a clean CI box.
      */
     static RangeReader testS3(String uri) throws IOException {
         return testS3(uri, null);
@@ -342,9 +343,8 @@ class StorageFactoryIT {
      * supplying it here keeps the test independent of the local AWS setup.
      */
     static RangeReader testS3(String uri, String region) throws IOException {
-        URI s3URI = URI.create(uri);
-        testFindBestProvider(s3URI, S3StorageProvider.class);
-        StorageConfig config = new StorageConfig(s3URI);
+        StorageConfig config = new StorageConfig(uri).providerId(S3StorageProvider.ID);
+        testFindBestProvider(config, S3StorageProvider.class);
         config.setParameter(S3StorageProvider.S3_ANONYMOUS, true);
         if (region != null) {
             config.setParameter(S3StorageProvider.S3_REGION, region);
@@ -358,8 +358,8 @@ class StorageFactoryIT {
 
     static RangeReader testS3(final URI s3URI, String accessKey, String secretKey, boolean anonymous)
             throws IOException {
-        testFindBestProvider(s3URI, S3StorageProvider.class);
-        StorageConfig config = new StorageConfig(s3URI);
+        StorageConfig config = new StorageConfig(s3URI).providerId(S3StorageProvider.ID);
+        testFindBestProvider(config, S3StorageProvider.class);
         if (accessKey != null && secretKey != null) {
             // The negative "no credentials -> IOException" path is environment-sensitive
             // (the AWS DefaultCredentialsProvider may pick up ambient creds), so we only
@@ -373,6 +373,7 @@ class StorageFactoryIT {
         return testCreate(config);
     }
 
+    /** Asserts the provider selected for {@code uri} by a config naming no provider. */
     static void testFindBestProvider(URI uri, Class<? extends StorageProvider> expected) {
         StorageConfig config = new StorageConfig(uri);
         testFindBestProvider(config, expected);
@@ -380,8 +381,9 @@ class StorageFactoryIT {
 
     static void testFindBestProvider(StorageConfig config, Class<? extends StorageProvider> expected) {
         StorageProvider provider = StorageFactory.findProvider(config);
+        String named = config.providerId().orElse("no provider");
         assertThat(provider)
-                .as("With only URI, findProvider() should dissambiguate to " + expected.getName())
+                .as("findProvider() for %s naming %s", config.baseUri(), named)
                 .isInstanceOf(expected);
     }
 
@@ -393,13 +395,9 @@ class StorageFactoryIT {
     static RangeReader testCreate(StorageConfig config) throws IOException {
         URI leaf = config.baseUri();
         URI parent = leaf.resolve(".");
-        // Provider dispatch is driven by the leaf URL's shape (e.g. an S3 path-style URL like
-        // http://host/bucket/key); the parent of that URL alone is ambiguous, so we pin the provider id derived from
-        // the leaf into the parent-rooted config to keep the dispatcher honest.
-        StorageProvider provider = StorageFactory.findProvider(config);
+        // The parent of the leaf opens like the leaf: by the provider named in the config, or by the URI scheme.
         java.util.Properties props = config.toProperties();
         props.setProperty(StorageConfig.URI_KEY, parent.toString());
-        props.setProperty(StorageConfig.PROVIDER_ID_KEY, provider.getId());
         io.tileverse.storage.Storage storage = StorageFactory.open(StorageConfig.fromProperties(props));
         RangeReader reader;
         try {

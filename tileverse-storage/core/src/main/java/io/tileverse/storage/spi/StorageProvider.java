@@ -22,7 +22,6 @@ import io.tileverse.storage.StorageParameter;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.ServiceLoader;
@@ -31,8 +30,8 @@ import java.util.stream.Stream;
 
 /**
  * Service Provider Interface (SPI) for opening {@link Storage} instances. Implementations are discovered at runtime via
- * {@link ServiceLoader} and selected by {@link io.tileverse.storage.StorageFactory} based on the URI (and, for
- * ambiguous {@code http(s)} URIs, a HEAD-probe disambiguation step).
+ * {@link ServiceLoader}. {@link io.tileverse.storage.StorageFactory} selects the provider named by the config or, with
+ * none named, the provider claiming the URI scheme; no request is sent to choose one.
  *
  * <p>To produce a {@link RangeReader} for a single object, open a {@link Storage} rooted at the object's container with
  * {@link #createStorage(StorageConfig)} and call {@link Storage#openRangeReader(String)} with the relative key (or
@@ -79,11 +78,18 @@ public interface StorageProvider {
     }
 
     /**
-     * Performs a fast, static check to see if this provider can likely handle the given config. This check should be
-     * based on URI schemes and hostname patterns only, without I/O.
+     * Tells whether this provider serves {@code config}, from the config alone and with no I/O.
      *
-     * @param config The configuration to check.
-     * @return {@code true} if this provider can likely handle the config, {@code false} otherwise.
+     * <ul>
+     *   <li>A config {@link #isNamedBy(StorageConfig) naming this provider} is served for the native URI schemes of the
+     *       provider and for its {@code http(s)} URL forms.
+     *   <li>A config naming no provider is served for the native schemes only. Nothing in an {@code http(s)} URL tells
+     *       an object store from a web server: such a URL belongs to the HTTP provider.
+     *   <li>A config naming another provider is never served.
+     * </ul>
+     *
+     * @param config the configuration to check
+     * @return {@code true} if this provider serves the config
      */
     boolean canProcess(StorageConfig config);
 
@@ -101,8 +107,8 @@ public interface StorageProvider {
     default boolean matches(StorageConfig config, String... acceptedUriSchemes) {
         Objects.requireNonNull(config, "config parameter is null");
         Objects.requireNonNull(config.baseUri(), "config baseUri is null");
-        if (config.providerId().isPresent()
-                && !config.providerId().orElseThrow().equals(getId())) {
+        boolean namesAnotherProvider = config.providerId().isPresent() && !isNamedBy(config);
+        if (namesAnotherProvider) {
             return false;
         }
         // may be null; null in acceptedUriSchemes matches scheme-less URIs (bare paths).
@@ -111,19 +117,20 @@ public interface StorageProvider {
     }
 
     /**
-     * Performs a more definitive check by inspecting HTTP headers from a HEAD request. This method is only called for
-     * ambiguous http(s) URIs as a final disambiguation step.
+     * Tells whether {@code config} names this provider. Ids compare ignoring case, as in {@link #findProvider(String)}.
      *
-     * @param uri the URI of the returned headers, can be used to disambiguate based on well-known host names
-     * @param headers The HTTP headers from a HEAD request to the resource URI.
-     * @return {@code true} if the headers confirm this provider can handle the resource.
+     * @param config the configuration to check
+     * @return {@code true} if {@link StorageConfig#providerId()} holds the {@link #getId() id} of this provider
      */
-    default boolean canProcessHeaders(URI uri, Map<String, List<String>> headers) {
-        return false; // Opt-in: only cloud providers need to implement this.
+    default boolean isNamedBy(StorageConfig config) {
+        Optional<String> providerId = config.providerId();
+        return providerId.isPresent() && providerId.orElseThrow().equalsIgnoreCase(getId());
     }
 
     /**
-     * Gets the order value of this provider. Lower values have higher priority. The default priority is 0.
+     * Gets the order value of this provider. Among several providers claiming one config, the lowest order wins, and
+     * equal orders raise an ambiguity error. The built-in providers claim distinct URI schemes: the order decides only
+     * against a third-party provider claiming one of those schemes. The default is 0.
      *
      * @return The order value.
      */

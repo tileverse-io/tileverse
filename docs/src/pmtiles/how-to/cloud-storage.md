@@ -69,8 +69,8 @@ try (Storage storage = StorageFactory.open(bucket, props);
 Properties azureProps = new Properties();
 azureProps.setProperty("storage.azure.connection-string", connectionString);
 
-URI container = URI.create("https://account.blob.core.windows.net/tiles/");
-URI leaf = URI.create("https://account.blob.core.windows.net/tiles/world.pmtiles");
+URI container = URI.create("az://account/tiles/");
+URI leaf = URI.create("az://account/tiles/world.pmtiles");
 try (Storage storage = StorageFactory.open(container, azureProps);
         RangeReader azureReader = storage.openRangeReader(leaf);
         PMTilesReader reader = new PMTilesReader(azureReader)) {

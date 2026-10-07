@@ -24,6 +24,7 @@ import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.ReadHandle;
 import io.tileverse.storage.ReadOptions;
 import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.StorageFactory;
 import java.io.IOException;
@@ -75,7 +76,15 @@ class AzureBlobOvertureMapsLiveIT {
         }
     }
 
+    /** Names the Azure Blob provider: the https form of the container reaches it only when named. */
     private static Properties anonymousProps() {
+        Properties props = anonymousPropsNamingNoProvider();
+        props.setProperty(StorageConfig.PROVIDER_ID_KEY, AzureBlobStorageProvider.ID);
+        return props;
+    }
+
+    /** Unsigned access with no provider named: the {@code az} scheme alone selects the backend. */
+    private static Properties anonymousPropsNamingNoProvider() {
         Properties props = new Properties();
         props.setProperty(AzureBlobStorageProvider.AZURE_ANONYMOUS.key(), "true");
         return props;
@@ -102,7 +111,7 @@ class AzureBlobOvertureMapsLiveIT {
     @Test
     void azSchemeListsAddressesParquetFiles() throws IOException {
         URI azUri = URI.create("az://overturemapswestus2/release/" + currentRelease() + "/");
-        try (Storage storage = StorageFactory.open(azUri, anonymousProps());
+        try (Storage storage = StorageFactory.open(azUri, anonymousPropsNamingNoProvider());
                 Stream<StorageEntry> stream = storage.list("theme=addresses/**/*.parquet")) {
             List<StorageEntry> first = stream.limit(5).toList();
             assertThat(first).hasSize(5);
@@ -193,6 +202,22 @@ class AzureBlobOvertureMapsLiveIT {
                 assertThat(magicAt(reader, 0)).isEqualTo("PAR1");
                 assertThat(magicAt(reader, file.size() - 4)).isEqualTo("PAR1");
             }
+        }
+    }
+
+    /** A public blob reads through its https URL with no provider named and no credentials: plain HTTP serves it. */
+    @Test
+    void httpsUrlWithNoProviderReadsThroughHttp() throws IOException {
+        String key;
+        try (Storage azure = StorageFactory.open(baseUri, anonymousProps())) {
+            key = firstParquetFile(azure).key();
+        }
+        StorageConfig namingNoProvider = new StorageConfig(baseUri);
+        assertThat(StorageFactory.findProvider(namingNoProvider).getId()).isEqualTo("http");
+
+        try (Storage http = StorageFactory.open(namingNoProvider);
+                RangeReader reader = http.openRangeReader(key)) {
+            assertThat(magicAt(reader, 0)).isEqualTo("PAR1");
         }
     }
 

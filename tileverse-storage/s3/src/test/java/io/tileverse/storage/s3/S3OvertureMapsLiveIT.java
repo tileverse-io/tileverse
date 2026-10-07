@@ -24,6 +24,7 @@ import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.ReadHandle;
 import io.tileverse.storage.ReadOptions;
 import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.StorageFactory;
 import java.io.IOException;
@@ -174,6 +175,24 @@ class S3OvertureMapsLiveIT {
                 assertThat(magicAt(reader, 0)).isEqualTo("PAR1");
                 assertThat(magicAt(reader, file.size() - 4)).isEqualTo("PAR1");
             }
+        }
+    }
+
+    /** A public object reads through its https URL with no provider named and no credentials: plain HTTP serves it. */
+    @Test
+    void httpsUrlWithNoProviderReadsThroughHttp() throws IOException {
+        String key;
+        try (Storage s3 = StorageFactory.open(baseUri, anonymous())) {
+            key = firstParquetFile(s3).key();
+        }
+        String release = baseUri.getPath();
+        URI httpsBaseUri = URI.create("https://overturemaps-us-west-2.s3.amazonaws.com" + release);
+        StorageConfig namingNoProvider = new StorageConfig(httpsBaseUri);
+        assertThat(StorageFactory.findProvider(namingNoProvider).getId()).isEqualTo("http");
+
+        try (Storage http = StorageFactory.open(namingNoProvider);
+                RangeReader reader = http.openRangeReader(key)) {
+            assertThat(magicAt(reader, 0)).isEqualTo("PAR1");
         }
     }
 

@@ -22,9 +22,9 @@ import java.util.Properties;
 import lombok.NonNull;
 
 /**
- * Top-level entrypoint for opening a {@link Storage}. Selects the appropriate {@link StorageProvider} via
- * {@link StorageProviderResolver}, which handles unambiguous matches, HTTP HEAD-probing for ambiguous
- * {@code http(s)://} URIs, and priority-based tie-breaking.
+ * Top-level entrypoint for opening a {@link Storage}. The {@link StorageProvider} is the one named by the config
+ * ({@code storage.provider}) or, with none named, the one claiming the URI scheme: an {@code http(s)} URI then opens
+ * the HTTP backend. Selection sends no request.
  *
  * <p>The {@link Properties}-accepting overloads delegate to {@link StorageConfig#fromProperties(Properties)} - this is
  * the bridge for tools (GeoTools datastores, Spring config binding, etc.) that pass provider configuration as a map.
@@ -62,8 +62,8 @@ public final class StorageFactory {
     }
 
     /**
-     * Open a {@link Storage} from a fully-populated {@link StorageConfig}. The config's {@link StorageConfig#baseUri()}
-     * drives provider selection.
+     * Open a {@link Storage} from a fully-populated {@link StorageConfig}. The provider named by the config opens it;
+     * with none named, the scheme of {@link StorageConfig#baseUri()} selects the provider.
      *
      * @throws StorageException if the backend cannot be opened
      */

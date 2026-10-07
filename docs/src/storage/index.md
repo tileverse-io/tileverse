@@ -8,23 +8,36 @@ The `Storage` API is the recommended entrypoint when you need anything beyond by
 
 | URI scheme | Backend | Notes |
 | :--- | :--- | :--- |
-| `file:` | Local filesystem | Real directories, atomic rename |
+| `file:`, no scheme | Local filesystem | Real directories, atomic rename |
 | `http:`, `https:` | HTTP / HTTPS | Read-only; range GET |
-| `s3:`, `s3a:` | AWS S3 | General-purpose buckets and S3 Express One Zone (Directory Buckets) |
-| `https://*.blob.core.windows.net`, `az:` | Azure Blob Storage | Flat keyspace + virtual directories. `az://<account>/<container>/<path>` is a short-form alias for the canonical `https://` URL (DuckDB / fsspec convention). |
-| `abfs:`, `abfss:`, `https://*.dfs.core.windows.net` | Azure Data Lake Storage Gen2 | Real directories + atomic rename when HNS is enabled |
+| `s3:` | AWS S3 | General-purpose buckets and S3 Express One Zone (Directory Buckets) |
+| `az:` | Azure Blob Storage | Flat keyspace + virtual directories. `az://<account>/<container>/<path>` addresses `https://<account>.blob.core.windows.net/<container>/<path>` (DuckDB / fsspec convention). |
+| `abfs:`, `abfss:` | Azure Data Lake Storage Gen2 | Real directories + atomic rename when HNS is enabled |
 | `gs:` | Google Cloud Storage | Flat or Hierarchical Namespace; HNS auto-detected |
+
+The URI scheme alone selects the backend, and no request is sent to choose it. An `http(s)` URL opens the HTTP backend, the URL of an object in a cloud service included: a public object reads without credentials, and a private one is refused (401 or 403; Azure Blob answers 404 or 409). To reach a cloud backend through an `http(s)` URL, name the provider with `storage.provider` (`s3`, `azure`, `azure-datalake` or `gcs`), or use the native scheme.
 
 ## S3-compatible endpoints
 
-The `s3://` backend transparently handles **any S3-compatible service**, not just AWS. Provider selection works in two ways:
+The S3 backend serves **any S3-compatible service**, not just AWS. Address the service in one of two forms:
 
-- For an `s3://bucket/key` URI, the S3 backend is selected outright.
-- For an `http(s)://endpoint/bucket/key` URI, the resolver issues a HEAD request and selects the S3 backend if the response returns an `x-amz-*` header (`x-amz-request-id` in particular). All major S3-compatible services do.
+- Keep the service URL and name the provider: `http(s)://endpoint/bucket/key` with `storage.provider=s3`. The endpoint comes from the URL.
+- Keep a canonical `s3://bucket/key` URI and point it at the service with `storage.s3.endpoint` (e.g. `http://localhost:9000` for MinIO). This separates *where the object lives* (the URI) from *where the service is* (the endpoint), and auto-enables path-style addressing. See [Configure - Amazon S3](how-to/configure.md#amazon-s3).
 
-Tested or known to work via this path:
+```java
+Properties props = new Properties();
+props.setProperty("storage.provider", "s3");
 
-| Service | URL form | Notes |
+try (Storage storage = StorageFactory.open(URI.create("http://minio:9000/my-bucket/datasets/"), props)) {
+    // ... use the Storage ...
+}
+```
+
+With no provider named, the same URL opens the read-only HTTP backend.
+
+Tested or known to work:
+
+| Service | Service URL | Notes |
 | :--- | :--- | :--- |
 | **MinIO** | `http://host:9000/bucket/key` | Self-hosted; the `force-path-style` parameter is auto-enabled for non-AWS hosts. |
 | **Ceph RADOS Gateway (RGW)** | `https://rgw.example.com/bucket/key` | The dominant S3-compatible backend in modern OpenStack and on-prem deployments. |
@@ -36,11 +49,9 @@ Tested or known to work via this path:
 | **IBM Cloud Object Storage** | `https://s3.<region>.cloud-object-storage.appdomain.cloud/bucket/key` | Use the public S3 endpoint, not the legacy Swift one. |
 | **Linode Object Storage** | `https://<region>.linodeobjects.com/bucket/key` | |
 | **OVHcloud Object Storage (S3 endpoint)** | `https://s3.<region>.cloud.ovh.net/bucket/key` | OVH offers both S3 and Swift endpoints; use the S3 one. |
-| **Custom / enterprise** | `https://s3.company.internal/bucket/key` | Anything that returns `x-amz-*` headers. |
+| **Custom / enterprise** | `https://s3.company.internal/bucket/key` | Any service speaking the S3 API. |
 
-Credentials and region come from the same parameters as AWS S3 (`storage.s3.aws-access-key-id`, `storage.s3.aws-secret-access-key`, `storage.s3.region`); the SDK's default credential chain is used when none are set. If the HEAD probe fails (firewalled endpoint, custom auth required to GET headers), force the provider explicitly via `storage.providerId=s3` in the config.
-
-Alternatively, keep a canonical `s3://bucket/key` URI and point it at the custom service with `storage.s3.endpoint` (e.g. `http://localhost:9000` for MinIO). This separates *where the object lives* (the URI) from *where the service is* (the endpoint), and auto-enables path-style addressing. See [Configure - Amazon S3](how-to/configure.md#amazon-s3).
+Credentials and region come from the same parameters as AWS S3 (`storage.s3.aws-access-key-id`, `storage.s3.aws-secret-access-key`, `storage.s3.region`); the SDK's default credential chain is used when none are set.
 
 !!! info "Native protocols for OpenStack Swift, Azure Files, FTP, etc. are intentionally not supported"
     `tileverse-storage`'s scope is *cloud-optimized object storage for the GeoTools/GeoServer ecosystem*. Native OpenStack Swift, Azure Files (SMB), HDFS-via-WebHDFS, FTP, and similar are out of scope: the audience is overwhelmingly served by S3-compatible endpoints (which all of the above offer), and adding alternate-protocol backends would multiply the maintenance burden without serving a real user. See [Why tileverse-storage?](explanation/why.md#when-not-to-use-this-library) for the broader scope rationale.
@@ -77,7 +88,7 @@ try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/datasets/v
 }
 ```
 
-`StorageFactory.open(URI)` selects the registered `StorageProvider` whose `canProcess(StorageConfig)` returns `true` for the URI. Authentication uses the SDK's default credential chain unless you provide a `StorageConfig` with explicit credentials.
+`StorageFactory.open(URI)` opens the backend of the URI scheme. The overloads taking `Properties` or a `StorageConfig` open the provider named by `storage.provider` when one is set. Authentication uses the SDK's default credential chain unless you provide a `StorageConfig` with explicit credentials.
 
 ## What can you do with it?
 

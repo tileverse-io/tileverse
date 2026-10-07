@@ -27,10 +27,8 @@ import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
@@ -59,8 +57,8 @@ import software.amazon.awssdk.services.s3.S3AsyncClient;
  * </pre>
  * </ul>
  *
- * When {@code http/s} URL schemes are used, {@link #canProcessHeaders(URI, Map)} disambiguates by checking if a header
- * starting with {@code x-amz-} was returned from the HEAD request.
+ * <p>The {@code s3://} form selects this provider by itself. An {@code http(s)} URL is served only when the config
+ * names the provider ({@code storage.provider=s3}); the endpoint then comes from the URL.
  */
 @Slf4j
 public class S3StorageProvider extends AbstractStorageProvider {
@@ -360,41 +358,39 @@ public class S3StorageProvider extends AbstractStorageProvider {
 
     @Override
     public boolean canProcess(StorageConfig config) {
-        if (matches(config, "s3", "http", "https")) {
-            try {
-                URI uri = config.baseUri();
-                S3Reference l = S3CompatibleUrlParser.parseS3Url(uri);
-
-                boolean hasValidBucket =
-                        l.bucket() != null && !l.bucket().trim().isEmpty();
-                if (!hasValidBucket) {
-                    log.debug("Skipping URL {} - no bucket parsed", uri);
-                    return false;
-                }
-
-                String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
-                // For s3:// / s3a://, bucket is sufficient (Storage use case includes bucket-only URIs).
-                // For http(s)://, also require a key so that ambiguous custom-domain URLs fall back to HTTP.
-                if (scheme.equals("s3") || scheme.equals("s3a")) {
-                    return true;
-                }
-                boolean hasValidKey = l.key() != null && !l.key().trim().isEmpty();
-                if (!hasValidKey) {
-                    log.debug("Skipping HTTP URL {} - no key parsed", uri);
-                    return false;
-                }
-                return true;
-            } catch (IllegalArgumentException e) {
-                log.debug("Can't process URL {}: {}", config.baseUri(), e.getMessage());
-            }
+        if (matches(config, "s3")) {
+            Optional<S3Reference> reference = parse(config.baseUri());
+            return reference.filter(S3StorageProvider::hasBucket).isPresent();
         }
-        return false;
+        boolean namedHttpUrl = matches(config, "http", "https") && isNamedBy(config);
+        if (!namedHttpUrl) {
+            return false;
+        }
+        Optional<S3Reference> reference = parse(config.baseUri());
+        return reference.filter(S3StorageProvider::hasBucketAndKey).isPresent();
     }
 
-    @Override
-    public boolean canProcessHeaders(URI uri, Map<String, List<String>> headers) {
-        Set<String> headerNames = headers.keySet();
-        return headerNames.stream().anyMatch("x-amz-request-id"::equalsIgnoreCase);
+    /** A Storage can be rooted at a bucket: an {@code s3://} URI needs no key. */
+    private static boolean hasBucket(S3Reference reference) {
+        return isPresent(reference.bucket());
+    }
+
+    /** An {@code http(s)} URL with no key is a service endpoint or a bucket root, and is left unclaimed. */
+    private static boolean hasBucketAndKey(S3Reference reference) {
+        return hasBucket(reference) && isPresent(reference.key());
+    }
+
+    private static boolean isPresent(String part) {
+        return part != null && !part.isBlank();
+    }
+
+    private static Optional<S3Reference> parse(URI uri) {
+        try {
+            return Optional.of(S3CompatibleUrlParser.parseS3Url(uri));
+        } catch (IllegalArgumentException e) {
+            log.debug("Can't process URL {}: {}", uri, e.getMessage());
+            return Optional.empty();
+        }
     }
 
     @Override

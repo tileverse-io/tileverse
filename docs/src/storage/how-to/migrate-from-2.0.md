@@ -1,7 +1,7 @@
 # Migrating from 2.0
 
-Version 2.1 moves block alignment out of `CachingRangeReader` and out of configuration, and
-adds the `readRanges` batch read.
+Version 2.1 moves block alignment out of `CachingRangeReader` and out of configuration,
+adds the `readRanges` batch read, and selects the backend by URI scheme alone.
 
 ## Block alignment is composed, not configured
 
@@ -33,6 +33,7 @@ an absolute grid; every other read is passed through untouched.
 | `storage.gcs.default-credentials-chain` config key and `GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS` | `storage.gcs.anonymous`; a saved `storage.gcs.default-credentials-chain=false` still reads as `storage.gcs.anonymous=true` |
 | `S3StorageProvider.open(URI, S3Client)` | `S3StorageProvider.open(URI, S3AsyncClient)` |
 | `S3StorageProvider.open(URI, S3ClientBundle)` and `S3ClientBundle` | `S3StorageProvider.open(URI, S3AsyncClient)`; presigned URLs need a `Storage` opened from a URI or a `StorageConfig` |
+| `StorageProvider.canProcessHeaders(URI, Map)` | none: provider selection sends no request; a provider overriding it drops the override |
 
 The removed keys are ignored like any unknown parameter; `storage.caching.enabled` keeps
 working but now defaults to `false`; pass `storage.caching.enabled=true` to keep the previous
@@ -74,6 +75,32 @@ object-store and HTTP providers, resolved once per `Storage`: `storage.batch.max
 `io.tileverse.storage.batch.maxfetch` system properties of the 2.1 milestones are gone; set
 the parameters instead. The S3 async path, which used to start every planned fetch at once, now
 honors the in-flight bound too.
+
+## Provider selection
+
+With no `storage.provider`, the URI scheme alone selects the backend: `s3` -> S3; `gs` -> GCS;
+`az` -> Azure Blob; `abfs`, `abfss` -> Azure Data Lake; `http`, `https` -> HTTP; `file` or no scheme ->
+local files. 2.0 sent a HEAD request to an `http(s)` URL and picked S3, Azure Blob or GCS from the
+response headers or the host.
+
+- An `http(s)` URL with no provider named opens the HTTP backend. Public objects read without
+  credentials. What used to reach a cloud backend this way needs the provider named, or the native
+  scheme:
+    - a private bucket or container is refused: 401 or 403, and 404 or 409 from Azure Blob;
+    - `list` and the write operations raise `UnsupportedCapabilityException`;
+    - an S3-compatible service addressed by its URL (MinIO, Ceph RGW, Swift `s3api`, R2): keep the URL
+      and set `storage.provider=s3`, or use `s3://bucket/key` with `storage.s3.endpoint`;
+    - `https://<account>.blob.core.windows.net/...`, `https://<account>.dfs.core.windows.net/...` and
+      `https://storage.googleapis.com/...`: set `storage.provider` to `azure`, `azure-datalake` or `gcs`,
+      or use `az://`, `abfss://`, `gs://`.
+- `canProcess` of the S3, Azure and GCS providers answers `false` for an `http(s)` URI unless the
+  config names them.
+- A provider of your own claiming `http(s)` URIs competes with the HTTP provider by `getOrder()`
+  alone. Claim them only when `isNamedBy(config)` answers `true`, as the built-in providers do.
+- Selection sends no request. `URI ambiguity detected` can only come from providers of equal order
+  claiming one scheme.
+- A blank `storage.provider` names no provider. 2.0 failed with `The specified StorageProvider is not
+  found`.
 
 ## S3 clients
 

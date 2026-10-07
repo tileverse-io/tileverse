@@ -95,8 +95,7 @@ See [Configure - Custom endpoint](configure.md#custom-endpoint-minio-and-other-s
 ```java
 import java.time.Duration;
 
-try (Storage storage = StorageFactory.open(URI.create(
-        "https://myaccount.blob.core.windows.net/my-container/datasets/"))) {
+try (Storage storage = StorageFactory.open(URI.create("az://myaccount/my-container/datasets/"))) {
 
     // Generate a SAS-based presigned URL valid for 15 minutes
     if (storage.capabilities().presignedUrls()) {
@@ -107,7 +106,7 @@ try (Storage storage = StorageFactory.open(URI.create(
 
 Authentication uses `DefaultAzureCredential` by default (env vars, managed identity, Azure CLI). Provide `storage.azure.account-key` or `storage.azure.sas-token` in `StorageConfig` for explicit credentials.
 
-The `https://` and `abfs[s]://` URI forms already encode the endpoint in their host. The short-form `az://account/container` URI, by contrast, resolves to the public `https://<account>.blob.core.windows.net` endpoint. Set `storage.azure.endpoint` to redirect it to an emulator, a sovereign cloud (Azure Government, Azure China), or a custom domain. The value is the full Blob service endpoint, including the account where the service expects it in the path (the Azurite emulator embeds the account in the path):
+`az://account/container` resolves to the public `https://<account>.blob.core.windows.net` endpoint. The `https://` URL of a container opens this backend when `storage.provider=azure` is set; the endpoint then comes from the URL. Set `storage.azure.endpoint` to redirect an `az://` URI to an emulator, a sovereign cloud (Azure Government, Azure China), or a custom domain. The value is the full Blob service endpoint, including the account where the service expects it in the path (the Azurite emulator embeds the account in the path):
 
 ```java
 Properties props = new Properties();
@@ -134,9 +133,11 @@ try (Storage storage = StorageFactory.open(URI.create(
     }
 }
 
-// https:// URI form to the dfs endpoint also works
+// https:// URL of the dfs endpoint: name the provider
+Properties props = new Properties();
+props.setProperty("storage.provider", "azure-datalake");
 try (Storage storage = StorageFactory.open(URI.create(
-        "https://myaccount.dfs.core.windows.net/my-fs/data/"))) {
+        "https://myaccount.dfs.core.windows.net/my-fs/data/"), props)) {
     // ...
 }
 ```

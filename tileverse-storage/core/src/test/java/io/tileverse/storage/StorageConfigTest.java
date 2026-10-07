@@ -20,7 +20,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class RangeReaderConfigTest {
 
@@ -206,5 +209,29 @@ class RangeReaderConfigTest {
         assertThat(out.getProperty("storage.uri")).isEqualTo("file:///tmp/x.pmtiles");
         assertThat(out.getProperty("storage.provider")).isEqualTo("s3");
         assertThat(out.getProperty("storage.s3.region")).isEqualTo("us-west-2");
+    }
+
+    @ParameterizedTest
+    @MethodSource("blankProviderIds")
+    void providerId_blank_namesNoProvider(String blankId) {
+        StorageConfig config = new StorageConfig("http://example.com/data/").providerId(blankId);
+
+        assertThat(config.providerId()).isEmpty();
+    }
+
+    static Stream<String> blankProviderIds() {
+        return Stream.of("", "   ");
+    }
+
+    @Test
+    void fromProperties_blankProviderKey_namesNoProvider() {
+        Properties props = new Properties();
+        props.setProperty("storage.uri", "http://example.com/data/");
+        props.setProperty("storage.provider", "");
+
+        StorageConfig config = StorageConfig.fromProperties(props);
+
+        assertThat(config.providerId()).isEmpty();
+        assertThat(config.toProperties()).doesNotContainKey("storage.provider");
     }
 }

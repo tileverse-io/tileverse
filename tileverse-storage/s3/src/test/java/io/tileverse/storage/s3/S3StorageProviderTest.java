@@ -30,12 +30,13 @@ import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.batch.BatchProviderHelper;
 import io.tileverse.storage.spi.StorageProvider;
-import java.net.URI;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.util.ReadsSystemProperty;
 import org.junit.jupiter.api.util.SetSystemProperty;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class S3StorageProviderTest {
 
@@ -132,7 +133,7 @@ class S3StorageProviderTest {
     @SuppressWarnings("java:S5778")
     void canProcess() {
         assertThatThrownBy(() -> provider.canProcess(null)).isInstanceOf(NullPointerException.class);
-        StorageConfig config = provider.getDefaultConfig();
+        StorageConfig config = configNamingTheProvider();
         assertThatThrownBy(() -> provider.canProcess(config))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("config baseUri is null");
@@ -155,7 +156,7 @@ class S3StorageProviderTest {
                 .isFalse();
 
         // S3 URIs: bucket-only is accepted (Storage use case); bucket+key is the range-reader case.
-        // The strict bucket+key requirement is preserved only for ambiguous http(s):// URIs above.
+        // An http(s) URL needs a bucket and a key, see above.
         assertThat(provider.canProcess(config.baseUri("s3://my-bucket"))).isTrue();
         assertThat(provider.canProcess(config.baseUri("s3://my-bucket/"))).isTrue();
         assertThat(provider.canProcess(config.baseUri("s3://my-bucket/my-blob")))
@@ -180,7 +181,7 @@ class S3StorageProviderTest {
                 .isTrue();
 
         // Bucket root URLs: s3:// scheme is now accepted (Storage use case).
-        // http(s):// without a key remains rejected to fall back to HTTP for ambiguous custom domains.
+        // http(s):// without a key is not claimed.
         assertThat(provider.canProcess(config.baseUri("s3://my-bucket/"))).isTrue();
         assertThat(provider.canProcess(config.baseUri("http://localhost:9000/my-bucket/")))
                 .isFalse();
@@ -190,7 +191,7 @@ class S3StorageProviderTest {
 
     @Test
     void canProcessWithSpecialCharacters() {
-        StorageConfig config = provider.getDefaultConfig();
+        StorageConfig config = configNamingTheProvider();
 
         // URL encoded characters should be handled
         assertThat(provider.canProcess(config.baseUri("s3://my-bucket/path/file%20with%20spaces.txt")))
@@ -208,7 +209,7 @@ class S3StorageProviderTest {
 
     @Test
     void canProcessDifferentS3Services() {
-        StorageConfig config = provider.getDefaultConfig();
+        StorageConfig config = configNamingTheProvider();
 
         // AWS S3 formats
         assertThat(provider.canProcess(config.baseUri("s3://my-bucket/file.txt")))
@@ -237,7 +238,7 @@ class S3StorageProviderTest {
 
     @Test
     void canProcessForcePathStyleParameter() {
-        StorageConfig config = provider.getDefaultConfig();
+        StorageConfig config = configNamingTheProvider();
 
         // The FORCE_PATH_STYLE parameter doesn't affect canProcess() anymore
         // because the URL parsing now automatically detects the required style
@@ -262,7 +263,7 @@ class S3StorageProviderTest {
 
     @Test
     void canProcessEdgeCases() {
-        StorageConfig config = provider.getDefaultConfig();
+        StorageConfig config = configNamingTheProvider();
 
         // Endpoint-only URLs (like what MinIO container provides) should fail
         // because they don't contain bucket/key information
@@ -275,23 +276,52 @@ class S3StorageProviderTest {
                 .as("URLs without bucket/key path cannot be processed")
                 .isFalse();
 
-        // URLs with only bucket but no key point to bucket root, not files (should use HTTP)
+        // URLs with only a bucket and no key are not claimed
         assertThat(provider.canProcess(config.baseUri("http://localhost:9000/my-bucket")))
-                .as("Bucket root URLs should use HTTP, not S3 client")
+                .as("Bucket root URLs are not claimed")
                 .isFalse();
     }
 
-    @Test
-    void canProcessHeaders() {
-        URI uri = URI.create("http://localhost:9000/my-bucket/my-object");
-        Map<String, List<String>> headers = Map.of("x-custom-header", List.of(), "x-amz-request-id", List.of());
-        assertThat(provider.canProcessHeaders(uri, headers)).isTrue();
+    /** The http(s) forms are claimed only for a config naming the provider. */
+    private StorageConfig configNamingTheProvider() {
+        return provider.getDefaultConfig().providerId(S3StorageProvider.ID);
+    }
 
-        headers = Map.of("x-custom-header", List.of(), "X-Amz-Request-Id", List.of());
-        assertThat(provider.canProcessHeaders(uri, headers)).isTrue();
+    @ParameterizedTest
+    @MethodSource("httpUrlForms")
+    void canProcessAnHttpUrlOnlyForAConfigNamingTheProvider(String url) {
+        StorageConfig namingNoProvider = new StorageConfig(url);
+        StorageConfig namingS3 = new StorageConfig(url).providerId(S3StorageProvider.ID);
+        StorageConfig namingHttp = new StorageConfig(url).providerId("http");
 
-        headers = Map.of("x-custom-header", List.of());
-        assertThat(provider.canProcessHeaders(uri, headers)).isFalse();
+        assertThat(provider.canProcess(namingNoProvider))
+                .as("no provider named")
+                .isFalse();
+        assertThat(provider.canProcess(namingS3)).as("s3 named").isTrue();
+        assertThat(provider.canProcess(namingHttp)).as("http named").isFalse();
+    }
+
+    static Stream<String> httpUrlForms() {
+        return Stream.of(
+                "https://my-bucket.s3.amazonaws.com/my-blob",
+                "https://my-bucket.s3.us-west-2.amazonaws.com/my-blob",
+                "https://s3.amazonaws.com/my-bucket/my-blob",
+                "https://s3.us-west-2.amazonaws.com/my-bucket/my-blob",
+                "http://localhost:9000/my-bucket/my-blob",
+                "http://192.168.1.100:9000/my-bucket/file.txt",
+                "https://minio.example.com/my-bucket/my-blob",
+                "https://storage.googleapis.com/my-bucket/my-blob",
+                "https://s3.company.internal/my-bucket/file.txt");
+    }
+
+    @ParameterizedTest
+    @MethodSource("nativeUris")
+    void canProcessANativeUriWithNoProviderNamed(String uri) {
+        assertThat(provider.canProcess(new StorageConfig(uri))).isTrue();
+    }
+
+    static Stream<String> nativeUris() {
+        return Stream.of("s3://my-bucket", "s3://my-bucket/", "s3://my-bucket/my-blob");
     }
 
     // The legacy create(URI) / create(StorageConfig) / prepareRangeReaderBuilder(...) factory paths

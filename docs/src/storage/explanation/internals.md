@@ -90,7 +90,7 @@ To support dynamic loading (e.g., for configuration-driven applications), we exp
 
 
 1.  **Discovery**: Uses `java.util.ServiceLoader` to find registered `StorageProvider` implementations.
-2.  **Resolution**: `StorageFactory.open(uri)` (or `findProvider(StorageConfig)`) iterates providers. The first one returning `true` for `canProcess(StorageConfig)` is instantiated; ambiguous `http(s)://` URIs go through a HEAD-probe disambiguation step.
+2.  **Resolution**: `StorageFactory.open` and `findProvider(StorageConfig)` resolve the provider named by `storage.provider`. With none named, the providers answer `canProcess(StorageConfig)` from the URI scheme, with no request sent, and an `http(s)` URI opens the HTTP provider. Among several providers claiming one scheme the lowest `getOrder()` wins, and equal orders are an error.
 3.  **Per-key reads**: `Storage.openRangeReader(String key)` on the returned `Storage` produces a `RangeReader` for a single object under the storage root.
 4.  **Extensibility**: Users can write their own backend (e.g., `FtpStorageProvider`) and register it via `META-INF/services` without forking the codebase.
 

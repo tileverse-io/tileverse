@@ -73,8 +73,9 @@ public class StorageConfig {
     public static final String URI_KEY = KEY_PREFIX + "uri";
 
     /**
-     * The canonical key used in {@link Properties} to specify the ID of a {@link StorageProvider}. This can be used to
-     * force the use of a specific provider when URI-based disambiguation is not sufficient.
+     * The canonical key used in {@link Properties} to name a {@link StorageProvider} by its ID. With no provider named
+     * the URI scheme selects one, and an {@code http(s)} URI opens the HTTP backend: naming the provider is how such a
+     * URI reaches a cloud backend.
      */
     public static final String PROVIDER_ID_KEY = KEY_PREFIX + "provider";
 
@@ -103,8 +104,8 @@ public class StorageConfig {
     private URI baseUri;
 
     /**
-     * Optional provider {@link StorageProvider#getId() id}, useful to force using a given provider when the URI or
-     * parameters are not enough to disambiguate.
+     * Optional provider {@link StorageProvider#getId() id}. An {@code http(s)} URI reaches a cloud backend only when
+     * its provider is named here; a blank id names no provider.
      */
     private @Nullable String providerId;
 
@@ -176,12 +177,12 @@ public class StorageConfig {
     }
 
     /**
-     * Returns the optional provider ID.
+     * Returns the id of the provider named by this config. A blank id names no provider.
      *
-     * @return An {@link Optional} containing the provider ID, or empty if not set.
+     * @return An {@link Optional} containing the provider ID, or empty if none is named.
      */
     public Optional<String> providerId() {
-        return Optional.ofNullable(providerId);
+        return Optional.ofNullable(providerId).filter(id -> !id.isBlank());
     }
 
     /**
@@ -321,9 +322,7 @@ public class StorageConfig {
         if (baseUri != null) {
             properties.setProperty(URI_KEY, baseUri.toString());
         }
-        if (providerId != null) {
-            properties.setProperty(PROVIDER_ID_KEY, providerId);
-        }
+        providerId().ifPresent(id -> properties.setProperty(PROVIDER_ID_KEY, id));
 
         parameterValues.forEach((name, v) -> {
             if (v != null) {

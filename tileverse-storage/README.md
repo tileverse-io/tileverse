@@ -43,16 +43,18 @@ try (Storage s = StorageFactory.open(URI.create("file:///data/cache/"))) {
 }
 ```
 
-`StorageFactory.open(URI)` selects the backend by URI scheme:
+`StorageFactory.open(URI)` selects the backend by URI scheme alone:
 
 | URI scheme | Backend |
 |---|---|
-| `file:` | local filesystem |
-| `http:`, `https:` | HTTP (read-only) or cloud-detected via response headers |
-| `s3:`, `s3a:` | AWS S3 (general-purpose buckets and S3 Express One Zone) |
-| `https://*.blob.core.windows.net` | Azure Blob Storage |
-| `abfs:`, `abfss:`, `https://*.dfs.core.windows.net` | Azure Data Lake Storage Gen2 (HNS) |
+| `file:`, no scheme | local filesystem |
+| `http:`, `https:` | HTTP (read-only) |
+| `s3:` | AWS S3 (general-purpose buckets and S3 Express One Zone) |
+| `az:` | Azure Blob Storage |
+| `abfs:`, `abfss:` | Azure Data Lake Storage Gen2 (HNS) |
 | `gs:` | Google Cloud Storage (flat or HNS) |
+
+To reach a cloud backend through an `http(s)` URL, name the provider with `storage.provider`.
 
 Use `storage.capabilities()` to discover what each backend supports before
 calling optional methods (`atomicMove`, `presignedUrls`, `realDirectories`,

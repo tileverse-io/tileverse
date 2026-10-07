@@ -71,7 +71,7 @@ try (Storage storage = S3StorageProvider.open(bucket, s3Client);
 
 #### Custom endpoint (MinIO and other S3-compatible services)
 
-To target a non-AWS S3-compatible service (MinIO, Ceph RGW, Cloudflare R2, DigitalOcean Spaces, Wasabi, LocalStack) you can either encode the service host into an `http(s)://host/bucket/key` URI, or keep a canonical `s3://bucket/key` URI and set the endpoint out of band with `storage.s3.endpoint`:
+To target a non-AWS S3-compatible service (MinIO, Ceph RGW, Cloudflare R2, DigitalOcean Spaces, Wasabi, LocalStack) you can either keep the service URL (`http(s)://host/bucket/key`) and name the provider with `storage.provider=s3`, or keep a canonical `s3://bucket/key` URI and set the endpoint out of band with `storage.s3.endpoint`:
 
 ```java
 Properties props = new Properties();
@@ -90,7 +90,7 @@ try (Storage storage = StorageFactory.open(bucket, props);
 
 How `storage.s3.endpoint` interacts with the other S3 parameters:
 
-- **Precedence**: an explicit `storage.s3.endpoint` wins over any endpoint inferred from an `http(s)://host/bucket/key` URI. Leave it unset to use the default AWS endpoints for the region.
+- **Precedence**: an explicit `storage.s3.endpoint` wins over the endpoint of an `http(s)://host/bucket/key` URI opened with `storage.provider=s3`. Leave it unset to use the default AWS endpoints for the region.
 - **`storage.s3.force-path-style`**: defaults to `true` whenever an endpoint override is in effect (from either the parameter or the URI), and `false` for canonical AWS URIs. Most S3-compatible services require path-style. Set `storage.s3.force-path-style` explicitly to override the default.
 - **`storage.s3.region`**: still required by the SDK even for services that ignore it (e.g. MinIO). It falls back to `us-east-1` when neither the parameter nor the URI specifies one. For Cloudflare R2, use `storage.s3.region=auto`.
 - **Credentials** (`storage.s3.anonymous`, `storage.s3.aws-access-key-id` / `storage.s3.aws-secret-access-key`, `storage.s3.default-credentials-profile`, the default chain): fully orthogonal to the endpoint. The endpoint selects the service; credentials select the identity. Static access-key + secret is the usual pairing for self-hosted services.

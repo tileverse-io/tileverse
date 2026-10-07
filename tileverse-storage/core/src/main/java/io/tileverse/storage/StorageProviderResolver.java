@@ -17,98 +17,46 @@ package io.tileverse.storage;
 
 import static java.util.Objects.requireNonNull;
 
-import io.tileverse.storage.http.HttpStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
-import lombok.extern.slf4j.Slf4j;
 
 /**
- * Resolves the best {@link StorageProvider} for a given {@link StorageConfig}.
- *
- * <p>Selection rules (in order):
+ * Resolves the {@link StorageProvider} of a {@link StorageConfig} from the config alone, with no request.
  *
  * <ol>
- *   <li>Explicit {@code config.providerId()} wins.
- *   <li>Single available provider whose {@code canProcess(config)} is true wins.
- *   <li>For {@code http(s)://} URIs with multiple candidates: probe the URI with a HEAD request and call
- *       {@code canProcessHeaders(uri, headers)} on each candidate; if exactly one matches, use it; otherwise fall back
- *       to the generic HTTP provider.
- *   <li>For non-HTTP schemes with multiple candidates: pick the one with the lowest {@link StorageProvider#getOrder()}
- *       (highest priority).
+ *   <li>The provider named by {@code config.providerId()} wins.
+ *   <li>With none named, the available providers answering {@code canProcess(config)} are the candidates. The URI
+ *       scheme decides among the built-in providers, and an {@code http(s)} URI belongs to the HTTP provider.
+ *   <li>Several candidates are settled by the lowest {@link StorageProvider#getOrder()}; equal orders are an error.
  * </ol>
  *
  * <p>This is package-private internal machinery; the public entry point is {@link StorageFactory}.
  */
-@Slf4j
 final class StorageProviderResolver {
-
-    private static final HttpClient HTTP_CLIENT =
-            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
 
     private StorageProviderResolver() {}
 
     static StorageProvider findBestProvider(StorageConfig config) {
-        URI uri = requireNonNull(config.baseUri(), "StorageConfig.baseUri() is required");
-
-        if (config.providerId().isPresent()) {
-            return StorageProvider.getProvider(config.providerId().orElseThrow(), true);
+        requireNonNull(config.baseUri(), "StorageConfig.baseUri() is required");
+        Optional<String> namedProvider = config.providerId();
+        if (namedProvider.isPresent()) {
+            return StorageProvider.getProvider(namedProvider.orElseThrow(), true);
         }
+        return selectByUri(config, StorageProvider.getAvailableProviders());
+    }
 
-        List<StorageProvider> candidates = StorageProvider.getAvailableProviders().stream()
-                .filter(p -> p.canProcess(config))
-                .toList();
+    /** Selects among {@code availableProviders} for a config naming no provider. */
+    static StorageProvider selectByUri(StorageConfig config, List<StorageProvider> availableProviders) {
+        List<StorageProvider> candidates =
+                availableProviders.stream().filter(p -> p.canProcess(config)).toList();
 
         return switch (candidates.size()) {
-            case 0 -> throw new IllegalStateException("No suitable provider found for URI: " + uri);
+            case 0 -> throw new IllegalStateException("No suitable provider found for URI: " + config.baseUri());
             case 1 -> candidates.get(0);
-            default -> disambiguate(uri, candidates);
+            default -> resolveByPriority(candidates);
         };
-    }
-
-    private static StorageProvider disambiguate(URI uri, List<StorageProvider> candidates) {
-        String scheme = uri.getScheme();
-        boolean isHttp = "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme);
-        return isHttp ? disambiguateHttpUri(uri, candidates) : resolveByPriority(candidates);
-    }
-
-    private static StorageProvider disambiguateHttpUri(URI uri, List<StorageProvider> httpCandidates) {
-        // Prefer specific cloud providers over the generic HTTP provider.
-        List<StorageProvider> specificCandidates = httpCandidates.stream()
-                .filter(p -> !(p instanceof HttpStorageProvider))
-                .toList();
-
-        try {
-            Map<String, List<String>> headers = probeUriHeaders(uri);
-            List<StorageProvider> probedCandidates = specificCandidates.stream()
-                    .filter(p -> p.canProcessHeaders(uri, headers))
-                    .toList();
-
-            if (probedCandidates.isEmpty()) {
-                return httpCandidates.stream()
-                        .filter(HttpStorageProvider.class::isInstance)
-                        .findFirst()
-                        .orElseThrow(() -> new IllegalStateException("HttpRangeReaderProvider not found"));
-            }
-            if (probedCandidates.size() == 1) {
-                return probedCandidates.get(0);
-            }
-            specificCandidates = probedCandidates;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("HEAD request probe interrupted for {}: {}", uri, e.getMessage());
-        } catch (Exception e) {
-            log.warn("HEAD request probe failed for {}: {}", uri, e.getMessage(), e);
-        }
-
-        return resolveByPriority(specificCandidates);
     }
 
     private static StorageProvider resolveByPriority(List<StorageProvider> candidates) {
@@ -128,15 +76,5 @@ final class StorageProviderResolver {
                             + "Please specify a provider ID in the StorageConfig to resolve this ambiguity.");
         }
         return bestCandidates.get(0);
-    }
-
-    private static Map<String, List<String>> probeUriHeaders(URI uri) throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(uri)
-                .method("HEAD", HttpRequest.BodyPublishers.noBody())
-                .timeout(Duration.ofSeconds(3))
-                .build();
-        HttpResponse<Void> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.discarding());
-        return response.headers().map();
     }
 }

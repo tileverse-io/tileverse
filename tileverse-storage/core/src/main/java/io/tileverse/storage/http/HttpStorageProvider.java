@@ -104,11 +104,11 @@ import java.util.Optional;
  *
  * <h2>Provider Selection</h2>
  *
- * <p>This provider handles {@code http://} and {@code https://} URIs that are not recognized as cloud provider
- * endpoints (S3, Azure, GCS). For ambiguous cases, this provider can be explicitly selected using:
+ * <p>This provider serves the {@code http://} and {@code https://} URIs of a config naming no provider, the URLs of
+ * cloud endpoints (S3, Azure, GCS) included. A cloud provider serves such a URI only when the config names it:
  *
  * <pre>{@code
- * config.setProperty("storage.provider", "http");
+ * config.setProperty("storage.provider", "s3");
  * }</pre>
  *
  * @see HttpRangeReader

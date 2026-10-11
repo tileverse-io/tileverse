@@ -78,6 +78,12 @@ class SubCache<K, V> implements Cache<K, V> {
     }
 
     @Override
+    public @Nullable V getIfPresentQuietly(K key) {
+        SubCacheKey innerKey = innerKey(key);
+        return asSubKey().getIfPresentQuietly(innerKey);
+    }
+
+    @Override
     public V get(final K key, Function<? super K, ? extends V> mappingFunction) {
         SubCacheKey innerKey = innerKey(key);
         return asSubKey().get(innerKey, k -> mapValue(k, mappingFunction));

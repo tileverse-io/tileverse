@@ -87,9 +87,7 @@ public class GoogleCloudStorageRangeReaderIT extends AbstractRangeReaderIT {
         gcsEmulator.start();
 
         // Configure the Storage client to use the emulator
-        String emulatorHost = gcsEmulator.getHost();
-        Integer emulatorPort = gcsEmulator.getFirstMappedPort();
-        String emulatorEndpoint = "http://" + emulatorHost + ":" + emulatorPort;
+        String emulatorEndpoint = gcsEmulator.url();
 
         // Create Storage client
         storage = StorageOptions.newBuilder()
@@ -113,9 +111,7 @@ public class GoogleCloudStorageRangeReaderIT extends AbstractRangeReaderIT {
     @Override
     protected RangeReader createBaseReader() throws IOException {
         // Use explicit no-op credentials so local ADC state does not interfere with emulator tests.
-        String emulatorHost = gcsEmulator.getHost();
-        Integer emulatorPort = gcsEmulator.getFirstMappedPort();
-        String emulatorEndpoint = "http://" + emulatorHost + ":" + emulatorPort;
+        String emulatorEndpoint = gcsEmulator.url();
 
         Storage gcsClient = StorageOptions.newBuilder()
                 .setProjectId(PROJECT_ID)

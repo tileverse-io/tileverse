@@ -159,12 +159,14 @@ public interface RangeReader extends Closeable, Supplier<SeekableByteChannel> {
      */
     default BatchReadResult readRanges(List<RangeRequest> requests) {
         RangeRequest.validate(requests);
-        int[] read = new int[requests.size()];
+        int[] bytesRead = new int[requests.size()];
         for (int i = 0; i < requests.size(); i++) {
             RangeRequest request = requests.get(i);
-            read[i] = readRange(request.range(), request.target());
+            ByteRange range = request.range();
+            ByteBuffer target = request.target();
+            bytesRead[i] = readRange(range, target);
         }
-        return BatchReadResult.perRange(requests, read);
+        return BatchReadResult.perRange(requests, bytesRead);
     }
 
     /**

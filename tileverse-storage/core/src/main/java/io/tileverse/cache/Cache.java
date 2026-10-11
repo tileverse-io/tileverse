@@ -50,6 +50,21 @@ public interface Cache<K, V extends Object> {
     @Nullable
     V getIfPresent(@NonNull K key);
 
+    /**
+     * Returns the value cached for {@code key}, or {@code null}, leaving no trace of the lookup: no hit or miss is
+     * recorded and the entry does not count as accessed for eviction or expiry. A caller looking a key up more than
+     * once for one request uses it to keep the statistics at one count per request.
+     *
+     * <p>The default implementation delegates to {@link #getIfPresent(Object)}, for caches with nothing to record.
+     *
+     * @param key the key to look up
+     * @return the cached value, or {@code null} if this cache holds none for the key
+     */
+    @Nullable
+    default V getIfPresentQuietly(@NonNull K key) {
+        return getIfPresent(key);
+    }
+
     void forEach(BiConsumer<K, V> consumer);
 
     /**

@@ -50,12 +50,13 @@ stack as `BlockAlignedRangeReader` above `CachingRangeReader` above the backend:
 
 *   **`CachingRangeReader`**: Intercepts `readRange`/`readRanges`. Checks an in-memory Caffeine
     cache for the exact `(offset, length)` requested. On a miss, calls the delegate, stores the
-    result under that exact key, and returns the data. The cache is shared across readers and
-    partitioned by the delegate's `getSourceIdentifier()`, which is why S3 and GCS readers over a
-    non-default endpoint include that endpoint in their identifier: the same bucket and key on two
-    endpoints must never share cached bytes. In the other direction, a local file identifies as its
-    real path, and one file reached through a symlink or another spelling of its path shares one
-    partition.
+    result under that exact key, and returns the data. When another read of the same reader is
+    already fetching the range, the read waits for that fetch instead of starting its own. The
+    cache is shared across readers and partitioned by the delegate's `getSourceIdentifier()`,
+    which is why S3 and GCS readers over a non-default endpoint include that endpoint in their
+    identifier: the same bucket and key on two endpoints must never share cached bytes. In the
+    other direction, a local file identifies as its real path, and one file reached through a
+    symlink or another spelling of its path shares one partition.
 *   **`BlockAlignedRangeReader`**: Expands a request that falls fully inside a declared byte
     region (e.g., "bytes 100-150" inside a declared header region) to the blocks that cover it
     (e.g., "bytes 0-4096"), fetched from its delegate in one batch call. Requests outside every

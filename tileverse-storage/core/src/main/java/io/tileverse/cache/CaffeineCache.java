@@ -94,6 +94,12 @@ public class CaffeineCache<K, V> implements Cache<K, V> {
 
     @Override
     @Nullable
+    public V getIfPresentQuietly(K key) {
+        return cache.policy().getIfPresentQuietly(key);
+    }
+
+    @Override
+    @Nullable
     public V get(K key, Function<? super K, ? extends V> mappingFunction) {
         return cache.get(key, mappingFunction);
     }

@@ -9,7 +9,8 @@
         <appender-ref ref="STDOUT"/>
     </root>
 
-    <logger name="io.tileverse" level="DEBUG"/>
+    <logger name="io.tileverse" level="INFO"/>
+    <logger name="reactor.core.publisher" level="OFF"/>
     <logger name="com.azure.core.http.jdk.httpclient" level="ERROR"/>
     <logger name="org.testcontainers" level="WARN"/>
     <logger name="com.github.dockerjava.zerodep.shaded.org.apache.hc.client5" level="WARN"/>

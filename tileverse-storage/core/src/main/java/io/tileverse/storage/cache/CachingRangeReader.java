@@ -26,12 +26,9 @@ import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeRequest;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.OptionalLong;
 import java.util.Set;
 
@@ -47,108 +44,73 @@ import java.util.Set;
  * partitioned by the delegate's {@link RangeReader#getSourceIdentifier() source identifier} so that ranges from
  * different sources never collide.
  *
- * <p><strong>Batch reads:</strong> {@link #readRanges(List)} serves cache hits directly, forwards the distinct misses
- * to the delegate as a single {@code readRanges} call, and stores each miss before copying its bytes out to the caller.
- * Two requests for the same range within one batch collapse into a single delegate fetch and cache store.
+ * <p><strong>Concurrent reads:</strong> the reads going through one {@code CachingRangeReader} fetch a range once. A
+ * read needing a range being fetched by another read, single or batch, waits for that fetch and takes the cached value.
+ * A wait lasts 10 seconds at most; past it, the read fetches the range itself. When the awaited fetch fails, the read
+ * tries the range once more before failing, and can wait a second time for a fetch started by another read in the
+ * meantime: 20 seconds of waiting at most, besides the time of its own fetches. Readers built separately over the same
+ * source share the cached ranges, not the fetches in progress.
+ *
+ * <p><strong>Batch reads:</strong> {@link #readRanges(List)} serves cache hits directly and forwards the distinct
+ * ranges neither cached nor being fetched to the delegate as a single {@code readRanges} call. Two requests for the
+ * same range within one batch collapse into a single delegate fetch and cache store.
  */
 public class CachingRangeReader extends AbstractRangeReader implements RangeReader {
 
     private final RangeReader delegate;
-    private final RangeReaderCache cache;
+    private final ByteRangeCache cache;
+    private final BatchRangeLoader loader;
 
-    CachingRangeReader(RangeReader delegate, RangeReaderCache cache) {
+    CachingRangeReader(RangeReader delegate, ByteRangeCache cache, BatchRangeLoader loader) {
         this.delegate = requireNonNull(delegate, "Delegate RangeReader cannot be null");
         this.cache = requireNonNull(cache, "Cache cannot be null");
+        this.loader = requireNonNull(loader, "Loader cannot be null");
+    }
+
+    /**
+     * Creates a caching reader over {@code delegate} with the default cache manager, equivalent to
+     * {@code builder(delegate).build()}.
+     *
+     * @param delegate the reader whose ranges are cached
+     * @return a new CachingRangeReader instance
+     */
+    public static CachingRangeReader of(RangeReader delegate) {
+        return builder(delegate).build();
+    }
+
+    /**
+     * Creates a new builder for CachingRangeReader with the mandatory delegate parameter.
+     *
+     * @param delegate the delegate RangeReader to wrap with caching
+     * @return a new builder instance with the delegate set
+     */
+    public static Builder builder(RangeReader delegate) {
+        return new Builder(delegate);
     }
 
     @Override
     protected int readRangeNoFlip(long offset, int actualLength, ByteBuffer target) {
-        ByteRange key = new ByteRange(offset, actualLength);
-        ByteBuffer cachedBuffer = cache.get(key);
-        if (cachedBuffer == null) {
-            return 0;
-        }
-        ByteBuffer duplicate = cachedBuffer.duplicate();
-        int bytesRead = duplicate.remaining();
-        target.put(duplicate);
-        return bytesRead;
+        ByteRange range = ByteRange.of(offset, actualLength);
+        BatchLoadOutcome loaded = loader.load(List.of(range), this::fetchSingleRange);
+        ByteBuffer cached = loaded.cachedValue(range);
+        return copyTo(cached, target);
     }
 
     /**
      * {@inheritDoc}
      *
-     * <p>Hits are served from the cache; the distinct misses are forwarded down as one {@code readRanges} call on the
-     * delegate and stored before the results are copied out. Amplification: none, every forwarded range is exactly a
-     * requested range. The result counts the hits, and every repeat of a missed range within the batch, as bytes from
-     * cache, and takes the fetches and bytes transferred from the delegate call. Concurrency note: unlike single reads,
-     * the batch path has no cross-thread single-flight; two threads missing the same range concurrently both fetch it
-     * once and one store wins.
+     * <p>Hits are served from the cache. The distinct ranges neither cached nor being fetched by another read are
+     * forwarded down as one {@code readRanges} call on the delegate and stored; the ranges being fetched by another
+     * read are awaited and taken from the cache. Amplification: none, the forwarded ranges are requested ranges. The
+     * result counts the hits, the ranges taken from another read and the repeats of a range within the batch as bytes
+     * from cache; it takes the fetches and bytes transferred from the delegate calls of this read.
      */
     @Override
     public BatchReadResult readRanges(List<RangeRequest> requests) {
         RangeRequest.validate(requests);
-        int[] read = new int[requests.size()];
-        long bytesFromCache = 0;
-
-        Map<ByteRange, ByteBuffer> misses = new LinkedHashMap<>();
-        List<Integer> pending = new ArrayList<>();
-        for (int i = 0; i < requests.size(); i++) {
-            RangeRequest request = requests.get(i);
-            ByteRange key = request.range();
-            if (key.length() == 0) {
-                continue;
-            }
-            ByteBuffer cached = cache.getIfPresent(key);
-            if (cached != null) {
-                read[i] = copyTo(cached, request.target());
-                bytesFromCache += read[i];
-            } else {
-                misses.computeIfAbsent(key, k -> ByteBuffer.allocate(k.length()));
-                pending.add(i);
-            }
-        }
-        if (misses.isEmpty()) {
-            return BatchReadResult.of(requests, read, 0, 0, bytesFromCache);
-        }
-
-        Loaded loaded = fetchAndStore(misses);
-        Set<ByteRange> servedByTheFetch = new HashSet<>();
-        for (int i : pending) {
-            RangeRequest request = requests.get(i);
-            read[i] = copyTo(loaded.values().get(request.range()), request.target());
-            if (!servedByTheFetch.add(request.range())) {
-                bytesFromCache += read[i];
-            }
-        }
-        return BatchReadResult.of(requests, read, 0, 0, bytesFromCache).merge(loaded.cost());
-    }
-
-    /** The values the cache holds for the fetched misses, and what fetching them cost. */
-    private record Loaded(Map<ByteRange, ByteBuffer> values, BatchReadResult cost) {}
-
-    /**
-     * Fetches the given misses from the delegate as one batch and stores each sanitized value, returning the value the
-     * cache holds per range (another thread's store wins over ours).
-     */
-    private Loaded fetchAndStore(Map<ByteRange, ByteBuffer> misses) {
-        List<RangeRequest> missRequests = new ArrayList<>(misses.size());
-        misses.forEach((key, buffer) -> missRequests.add(new RangeRequest(key, buffer)));
-        BatchReadResult fetched = delegate.readRanges(missRequests);
-
-        Map<ByteRange, ByteBuffer> loaded = new HashMap<>();
-        for (int j = 0; j < missRequests.size(); j++) {
-            RangeRequest missRequest = missRequests.get(j);
-            ByteBuffer value = RangeReaderCache.sanitize(missRequest.target(), fetched.bytesRead(j));
-            loaded.put(missRequest.range(), cache.getOrStore(missRequest.range(), value));
-        }
-        return new Loaded(loaded, fetched);
-    }
-
-    private static int copyTo(ByteBuffer cached, ByteBuffer target) {
-        ByteBuffer duplicate = cached.duplicate();
-        int bytesRead = duplicate.remaining();
-        target.put(duplicate);
-        return bytesRead;
+        Set<ByteRange> ranges = distinctNonEmptyRanges(requests);
+        BatchLoadOutcome loaded = loader.load(ranges, delegate::readRanges);
+        return copyOut(loaded, requests);
     }
 
     @Override
@@ -173,6 +135,15 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
     }
 
     /**
+     * Gets the cache statistics.
+     *
+     * @return The cache statistics
+     */
+    public CacheStats getCacheStats() {
+        return cache.stats();
+    }
+
+    /**
      * Gets the current number of entries in the cache.
      *
      * @return The number of cached entries
@@ -188,36 +159,6 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
      */
     long getEstimatedCacheSizeBytes() {
         return cache.getEstimatedCacheSizeBytes();
-    }
-
-    /**
-     * Gets the cache statistics.
-     *
-     * @return The cache statistics
-     */
-    public CacheStats getCacheStats() {
-        return cache.stats();
-    }
-
-    /**
-     * Creates a caching reader over {@code delegate} with the default cache manager, equivalent to
-     * {@code builder(delegate).build()}.
-     *
-     * @param delegate the reader whose ranges are cached
-     * @return a new CachingRangeReader instance
-     */
-    public static CachingRangeReader of(RangeReader delegate) {
-        return builder(delegate).build();
-    }
-
-    /**
-     * Creates a new builder for CachingRangeReader with the mandatory delegate parameter.
-     *
-     * @param delegate the delegate RangeReader to wrap with caching
-     * @return a new builder instance with the delegate set
-     */
-    public static Builder builder(RangeReader delegate) {
-        return new Builder(delegate);
     }
 
     /** Builder for CachingRangeReader. */
@@ -240,8 +181,59 @@ public class CachingRangeReader extends AbstractRangeReader implements RangeRead
          * @return a new CachingRangeReader instance
          */
         public CachingRangeReader build() {
-            RangeReaderCache cache = new RangeReaderCache(cacheManager, delegate);
-            return new CachingRangeReader(delegate, cache);
+            String sourceIdentifier = delegate.getSourceIdentifier();
+            ByteRangeCache cache = new ByteRangeCache(cacheManager, sourceIdentifier);
+            return new CachingRangeReader(delegate, cache, new BatchRangeLoader(cache));
         }
+    }
+
+    /** A single read stays a single read on the delegate. */
+    private BatchReadResult fetchSingleRange(List<RangeRequest> singleRequest) {
+        RangeRequest request = singleRequest.get(0);
+        int bytesRead = delegate.readRange(request.range(), request.target());
+        return BatchReadResult.perRange(singleRequest, new int[] {bytesRead});
+    }
+
+    private static Set<ByteRange> distinctNonEmptyRanges(List<RangeRequest> requests) {
+        Set<ByteRange> ranges = new LinkedHashSet<>();
+        for (int i = 0; i < requests.size(); i++) {
+            RangeRequest request = requests.get(i);
+            ByteRange range = request.range();
+            if (range.length() > 0) {
+                ranges.add(range);
+            }
+        }
+        return ranges;
+    }
+
+    private static BatchReadResult copyOut(BatchLoadOutcome loaded, List<RangeRequest> requests) {
+        int[] bytesRead = new int[requests.size()];
+        long bytesFromCache = 0;
+        Set<ByteRange> countedAsFetched = new HashSet<>();
+        for (int i = 0; i < requests.size(); i++) {
+            RangeRequest request = requests.get(i);
+            ByteRange range = request.range();
+            if (range.length() == 0) {
+                continue;
+            }
+            ByteBuffer cached = loaded.cachedValue(range);
+            bytesRead[i] = copyTo(cached, request.target());
+            boolean firstRequestOfAFetchedRange = loaded.fetched(range) && countedAsFetched.add(range);
+            if (!firstRequestOfAFetchedRange) {
+                bytesFromCache += bytesRead[i];
+            }
+        }
+        BatchReadResult ownView =
+                BatchReadResult.of(requests, bytesRead, 0 /*fetches*/, 0 /*bytesTransferred*/, bytesFromCache);
+        return ownView.merge(loaded.cost());
+    }
+
+    private static int copyTo(ByteBuffer cached, ByteBuffer target) {
+        int bytesRead = cached.remaining();
+        int at = target.position();
+        // absolute put, doesn't move the position of either buffer
+        target.put(at, cached, cached.position(), bytesRead);
+        target.position(at + bytesRead);
+        return bytesRead;
     }
 }

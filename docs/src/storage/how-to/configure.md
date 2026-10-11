@@ -29,6 +29,8 @@ The cache stores exactly the `(offset, length)` ranges requested from it. One in
 
 `clearCache()` drops the entries of one reader's source, and closing the reader does the same. `getCacheStats()` reports hits, misses, evictions and the entry count. `CachingRangeReader.builder(reader).cacheManager(CacheManager.newInstance())` gives a reader a cache of its own with the same capacity: every extra manager adds another 20% of the heap to the budget.
 
+Concurrent reads through one `CachingRangeReader` fetch a range once. The first read fetches it. The others wait for that fetch and take the cached value. A wait ends after 10 seconds, and the read then fetches the range itself. When the awaited fetch fails and another read is already fetching the range again, the read waits once more: 20 seconds of waiting at most. Readers built separately over the same source share the cache, not the fetches in progress.
+
 To cache every reader opened by a `Storage` without composing the decorator by hand, set `storage.caching.enabled=true` on the configuration passed to `StorageFactory.open`. It is off by default.
 
 ## Read Optimization

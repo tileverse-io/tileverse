@@ -180,9 +180,7 @@ class StorageFactoryIT {
     }
 
     static void setupGCS() throws Exception {
-        String emulatorHost = gcsEmulator.getHost();
-        Integer emulatorPort = gcsEmulator.getFirstMappedPort();
-        String emulatorEndpoint = "http://" + emulatorHost + ":" + emulatorPort;
+        String emulatorEndpoint = gcsEmulator.url();
         Storage storage = StorageOptions.newBuilder()
                 .setProjectId("test-project")
                 .setHost(emulatorEndpoint)

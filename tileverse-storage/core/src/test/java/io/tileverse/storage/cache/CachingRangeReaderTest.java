@@ -35,26 +35,42 @@ import io.tileverse.storage.ByteArrayRangeReader;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
 import io.tileverse.storage.RangeRequest;
+import io.tileverse.storage.StorageException;
+import io.tileverse.storage.TransientStorageException;
+import io.tileverse.storage.cache.PausingRangeReaderCache.Pause;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.Random;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /** Tests for {@link CachingRangeReader}. */
 class CachingRangeReaderTest {
@@ -326,14 +342,14 @@ class CachingRangeReaderTest {
     void testExpireAfterAccess() throws IOException {
         RangeReader delegate = RangeReaderTestSupport.fileReader(testFile);
 
-        assertThat(cacheManager.getCacheNames()).doesNotContain(RangeReaderCache.SHARED_CACHE_NAME);
+        assertThat(cacheManager.getCacheNames()).doesNotContain(ByteRangeCache.SHARED_CACHE_NAME);
 
         // Create a cache with very short expiration
         @SuppressWarnings("unused")
-        Cache<ByteRange, ByteBuffer> cache = cacheManager.getCache(RangeReaderCache.SHARED_CACHE_NAME, () -> {
+        Cache<ByteRange, ByteBuffer> cache = cacheManager.getCache(ByteRangeCache.SHARED_CACHE_NAME, () -> {
             return CaffeineCache.<ByteRange, ByteBuffer>newBuilder()
                     .expireAfterAccess(Duration.ofMillis(100))
-                    .maxHeapPercent(10, RangeReaderCache::weigh)
+                    .maxHeapPercent(10, ByteRangeCache::weigh)
                     .averageWeight(64 * 1024)
                     // run eviction tasks when idle to return memory without waiting for cache usage
                     .scheduler(Scheduler.systemScheduler())
@@ -452,6 +468,591 @@ class CachingRangeReaderTest {
                     counts(reader.readRanges(List.of(RangeRequest.of(FILE_SIZE - 30, 100, ByteBuffer.allocate(100)))));
             assertThat(again).containsExactly(30);
             assertThat(delegate.batchReads()).isEmpty();
+        }
+    }
+
+    @Test
+    void statsCountARangeOncePerRead() throws IOException {
+        ByteArrayRangeReader delegate = new ByteArrayRangeReader(TEST_DATA);
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
+
+            reader.readRanges(List.of(
+                    RangeRequest.of(0, 100, ByteBuffer.allocate(100)),
+                    RangeRequest.of(1000, 50, ByteBuffer.allocate(50)),
+                    RangeRequest.of(0, 100, ByteBuffer.allocate(100)))); // repeats the first range
+            CacheStats cold = reader.getCacheStats();
+
+            reader.readRanges(List.of(
+                    RangeRequest.of(0, 100, ByteBuffer.allocate(100)),
+                    RangeRequest.of(1000, 50, ByteBuffer.allocate(50))));
+            reader.readRange(0, 100);
+            CacheStats warm = reader.getCacheStats();
+
+            assertThat(cold.missCount()).isEqualTo(2);
+            assertThat(cold.hitCount()).isZero();
+            assertThat(cold.loadCount()).isEqualTo(2);
+            assertThat(warm.missCount()).isEqualTo(2);
+            assertThat(warm.hitCount()).isEqualTo(3);
+        }
+    }
+
+    @Test
+    void singleReadStaysSingle() throws IOException {
+        ByteArrayRangeReader delegate = new ByteArrayRangeReader(TEST_DATA);
+        try (CachingRangeReader reader =
+                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
+
+            reader.readRange(1000, 50);
+
+            assertThat(delegate.singleReads()).containsExactly(new ByteRange(1000, 50));
+            assertThat(delegate.batchReads()).isEmpty();
+        }
+    }
+
+    /** Reads through one reader needing the same ranges at the same time. */
+    @Nested
+    class ConcurrentReads {
+
+        private static final ByteRange A = new ByteRange(0, 100);
+        private static final ByteRange B = new ByteRange(1_000, 50);
+        private static final ByteRange C = new ByteRange(5_000, 200);
+        private static final ByteRange STRADDLING_THE_END = new ByteRange(FILE_SIZE - 30, 100);
+
+        private ScriptedRangeReader delegate;
+        private PausingRangeReaderCache cache;
+        private BatchRangeLoader loader;
+        private CachingRangeReader reader;
+
+        @BeforeEach
+        void openReader() {
+            delegate = new ScriptedRangeReader(TEST_DATA);
+            cache = new PausingRangeReaderCache(cacheManager, delegate.getSourceIdentifier());
+            // a wait far longer than the caps of the helpers: a read of a scripted scenario never gives up on another
+            // read
+            loader = new BatchRangeLoader(cache, Duration.ofMinutes(1));
+            reader = new CachingRangeReader(delegate, cache, loader);
+        }
+
+        @AfterEach
+        void checkNothingLeftClaimed() {
+            assertThat(loader.pendingLoads())
+                    .as("ranges left claimed by the scenario")
+                    .isZero();
+        }
+
+        @Test
+        void overlappingBatchesShareAFetch() throws Exception {
+            List<RangeRequest> firstBatch = requests(A, B);
+            List<RangeRequest> secondBatch = requests(B, C, B, new ByteRange(7_000, 0));
+            delegate.hold(1);
+
+            RunningRead<BatchReadResult> first = RunningRead.start(() -> reader.readRanges(firstBatch));
+            delegate.awaitCall(1);
+            RunningRead<BatchReadResult> second = RunningRead.start(() -> reader.readRanges(secondBatch));
+            second.awaitWaitingForAnotherRead(); // it fetched C and waits for B
+            delegate.release(1);
+            BatchReadResult firstResult = first.result();
+            BatchReadResult secondResult = second.result();
+
+            assertThat(delegate.calls()).containsExactly(List.of(A, B), List.of(C));
+            assertThat(counts(firstResult)).containsExactly(100, 50);
+            assertThat(counts(secondResult)).containsExactly(50, 200, 50, 0);
+            assertHoldsTheBytesOfItsRange(firstBatch);
+            assertHoldsTheBytesOfItsRange(secondBatch);
+            assertThat(firstResult.bytesFromCache()).isZero();
+            assertThat(firstResult.fetches()).isEqualTo(2);
+            assertThat(secondResult.bytesFromCache()).isEqualTo(100);
+            assertThat(secondResult.fetches()).isEqualTo(1);
+            assertThat(secondResult.bytesTransferred()).isEqualTo(200);
+            CacheStats stats = reader.getCacheStats();
+            assertThat(stats.missCount()).isEqualTo(3);
+            assertThat(stats.hitCount()).isEqualTo(1);
+        }
+
+        @Test
+        void singleReadWaitsForBatch() throws Exception {
+            delegate.hold(1);
+
+            RunningRead<BatchReadResult> batch = RunningRead.start(() -> reader.readRanges(requests(A, B)));
+            delegate.awaitCall(1);
+            RunningRead<ByteBuffer> single = RunningRead.start(() -> reader.readRange(B.offset(), B.length()));
+            single.awaitWaitingForAnotherRead();
+            delegate.release(1);
+            batch.result();
+            ByteBuffer read = single.result();
+
+            assertThat(read.flip()).isEqualTo(bytesOf(B));
+            assertThat(delegate.calls()).containsExactly(List.of(A, B));
+        }
+
+        @Test
+        void batchWaitsForSingleRead() throws Exception {
+            List<RangeRequest> batchRequests = requests(A, C);
+            delegate.hold(1);
+
+            RunningRead<ByteBuffer> single = RunningRead.start(() -> reader.readRange(A.offset(), A.length()));
+            delegate.awaitCall(1);
+            RunningRead<BatchReadResult> batch = RunningRead.start(() -> reader.readRanges(batchRequests));
+            batch.awaitWaitingForAnotherRead(); // it fetched C and waits for A
+            delegate.release(1);
+            single.result();
+            BatchReadResult batchResult = batch.result();
+
+            assertThat(delegate.calls()).containsExactly(List.of(A), List.of(C));
+            assertThat(counts(batchResult)).containsExactly(100, 200);
+            assertHoldsTheBytesOfItsRange(batchRequests);
+            assertThat(batchResult.bytesFromCache()).isEqualTo(100);
+        }
+
+        @ParameterizedTest
+        @MethodSource("io.tileverse.storage.cache.CachingRangeReaderTest#failuresOfTheFirstFetch")
+        void waiterRetriesAfterFailedFetch(Throwable firstFailure) throws Exception {
+            List<RangeRequest> waiterRequests = requests(A);
+            delegate.hold(1);
+            delegate.fail(1, firstFailure);
+
+            RunningRead<BatchReadResult> failing = RunningRead.start(() -> reader.readRanges(requests(A)));
+            delegate.awaitCall(1);
+            RunningRead<BatchReadResult> waiter = RunningRead.start(() -> reader.readRanges(waiterRequests));
+            waiter.awaitWaitingForAnotherRead();
+            delegate.release(1);
+
+            assertThat(failing.failure()).isSameAs(firstFailure);
+            assertThat(counts(waiter.result())).containsExactly(100);
+            assertHoldsTheBytesOfItsRange(waiterRequests);
+            assertThat(delegate.calls()).containsExactly(List.of(A), List.of(A));
+        }
+
+        /**
+         * The waiter loses its first fetch, retries, and finds the range claimed by a newcomer. The fetch of the
+         * newcomer fails too: the waiter fails with that failure.
+         */
+        @ParameterizedTest
+        @MethodSource("io.tileverse.storage.cache.CachingRangeReaderTest#failuresOfTheNewerFetch")
+        void waiterFailsWithNewerFailure(Throwable secondFailure) throws Exception {
+            StorageException firstFailure = new StorageException("first failure");
+            delegate.hold(1);
+            delegate.fail(1, firstFailure);
+            delegate.hold(2);
+            delegate.fail(2, secondFailure);
+
+            RunningRead<BatchReadResult> failing = RunningRead.start(() -> reader.readRanges(requests(A)));
+            delegate.awaitCall(1);
+            RunningRead<BatchReadResult> waiter = RunningRead.start(() -> reader.readRanges(requests(A)));
+            waiter.awaitWaitingForAnotherRead();
+            Pause beforeTheWaiterRetries = cache.pauseNextLookupBy(waiter.thread());
+            delegate.release(1);
+            beforeTheWaiterRetries.awaitReached();
+            RunningRead<BatchReadResult> newcomer = RunningRead.start(() -> reader.readRanges(requests(A)));
+            delegate.awaitCall(2); // the newcomer claimed A
+            beforeTheWaiterRetries.resume();
+            waiter.awaitWaitingForAnotherRead();
+            delegate.release(2);
+
+            assertThat(failing.failure()).isSameAs(firstFailure);
+            assertThat(newcomer.failure()).isSameAs(secondFailure);
+            assertThat(waiter.failure()).isSameAs(secondFailure);
+            assertThat(delegate.calls()).containsExactly(List.of(A), List.of(A));
+        }
+
+        /**
+         * The waiter loses its first fetch, retries, and finds the range claimed by a newcomer. It waits a second time
+         * and takes the value fetched by the newcomer.
+         */
+        @Test
+        void waiterTakesTheNewerFetch() throws Exception {
+            StorageException firstFailure = new StorageException("first failure");
+            List<RangeRequest> waiterRequests = requests(A);
+            delegate.hold(1);
+            delegate.fail(1, firstFailure);
+            delegate.hold(2);
+
+            RunningRead<BatchReadResult> failing = RunningRead.start(() -> reader.readRanges(requests(A)));
+            delegate.awaitCall(1);
+            RunningRead<BatchReadResult> waiter = RunningRead.start(() -> reader.readRanges(waiterRequests));
+            waiter.awaitWaitingForAnotherRead();
+            Pause beforeTheWaiterRetries = cache.pauseNextLookupBy(waiter.thread());
+            delegate.release(1);
+            beforeTheWaiterRetries.awaitReached();
+            RunningRead<BatchReadResult> newcomer = RunningRead.start(() -> reader.readRanges(requests(A)));
+            delegate.awaitCall(2); // the newcomer claimed A
+            beforeTheWaiterRetries.resume();
+            waiter.awaitWaitingForAnotherRead();
+            delegate.release(2);
+            BatchReadResult waiterResult = waiter.result();
+
+            assertThat(failing.failure()).isSameAs(firstFailure);
+            assertThat(counts(newcomer.result())).containsExactly(100);
+            assertThat(counts(waiterResult)).containsExactly(100);
+            assertHoldsTheBytesOfItsRange(waiterRequests);
+            assertThat(waiterResult.fetches()).isZero();
+            assertThat(waiterResult.bytesFromCache()).isEqualTo(100);
+            assertThat(delegate.calls()).containsExactly(List.of(A), List.of(A));
+        }
+
+        @Test
+        void errorInFetchReleasesWaiters() throws Exception {
+            Error crash = new SimulatedError();
+            delegate.hold(1);
+            delegate.fail(1, crash);
+
+            RunningRead<BatchReadResult> crashing = RunningRead.start(() -> reader.readRanges(requests(A)));
+            delegate.awaitCall(1);
+            RunningRead<BatchReadResult> waiter = RunningRead.start(() -> reader.readRanges(requests(A)));
+            waiter.awaitWaitingForAnotherRead();
+            delegate.release(1);
+
+            assertThat(crashing.failure()).isSameAs(crash);
+            assertThat(counts(waiter.result())).containsExactly(100);
+        }
+
+        // the fetch keeps running
+        @Test
+        void interruptedWaiterGivesUp() throws Exception {
+            delegate.hold(1);
+
+            RunningRead<BatchReadResult> fetching = RunningRead.start(() -> reader.readRanges(requests(A)));
+            delegate.awaitCall(1);
+            RunningRead<String> waiter = RunningRead.start(() -> outcomeOfReading(A));
+            waiter.awaitWaitingForAnotherRead();
+            waiter.interrupt();
+
+            assertThat(waiter.result()).isEqualTo("gave up, interrupt flag set");
+            delegate.release(1);
+            assertThat(counts(fetching.result())).containsExactly(100);
+        }
+
+        @Test
+        void interruptedReadDoesNotWait() throws Exception {
+            delegate.hold(1);
+
+            RunningRead<BatchReadResult> fetching = RunningRead.start(() -> reader.readRanges(requests(A)));
+            delegate.awaitCall(1);
+            RunningRead<String> arrivingInterrupted = RunningRead.start(() -> {
+                Thread.currentThread().interrupt();
+                return outcomeOfReading(A);
+            });
+
+            assertThat(arrivingInterrupted.result()).isEqualTo("gave up, interrupt flag set");
+            delegate.release(1);
+            assertThat(counts(fetching.result())).containsExactly(100);
+        }
+
+        private String outcomeOfReading(ByteRange range) {
+            try {
+                reader.readRanges(requests(range));
+                return "returned";
+            } catch (TransientStorageException gaveUp) {
+                boolean flagSet = Thread.currentThread().isInterrupted();
+                return flagSet ? "gave up, interrupt flag set" : "gave up, interrupt flag lost";
+            }
+        }
+
+        @Test
+        void waiterFetchesPastDeadline() throws Exception {
+            BatchRangeLoader impatient = new BatchRangeLoader(cache, Duration.ofMillis(50));
+            CachingRangeReader impatientReader = new CachingRangeReader(delegate, cache, impatient);
+            List<RangeRequest> waiterRequests = requests(A);
+            delegate.hold(1);
+
+            RunningRead<BatchReadResult> stalled = RunningRead.start(() -> impatientReader.readRanges(requests(A)));
+            delegate.awaitCall(1);
+            BatchReadResult waiterResult = impatientReader.readRanges(waiterRequests);
+
+            assertThat(counts(waiterResult)).containsExactly(100);
+            assertHoldsTheBytesOfItsRange(waiterRequests);
+            assertThat(waiterResult.fetches()).isEqualTo(1);
+            assertThat(waiterResult.bytesFromCache()).isZero();
+            assertThat(impatient.pendingLoads()).isZero(); // the waiter freed the range of the stalled fetch
+            delegate.release(1);
+            assertThat(counts(stalled.result())).containsExactly(100);
+            assertThat(delegate.calls()).containsExactly(List.of(A), List.of(A));
+            assertThat(impatient.pendingLoads()).isZero();
+        }
+
+        // the reads served meanwhile keep their bytes
+        @Test
+        void lateFailureOfStalledFetch() throws Exception {
+            BatchRangeLoader impatient = new BatchRangeLoader(cache, Duration.ofMillis(50));
+            CachingRangeReader impatientReader = new CachingRangeReader(delegate, cache, impatient);
+            StorageException lateFailure = new StorageException("late failure");
+            List<RangeRequest> waiterRequests = requests(A);
+            List<RangeRequest> laterRequests = requests(A);
+            delegate.hold(1);
+            delegate.fail(1, lateFailure);
+
+            RunningRead<BatchReadResult> stalled = RunningRead.start(() -> impatientReader.readRanges(requests(A)));
+            delegate.awaitCall(1);
+            impatientReader.readRanges(waiterRequests);
+            int loadsLeftByTheWaiter = impatient.pendingLoads();
+            delegate.release(1);
+            Throwable failureOfTheStalledRead = stalled.failure();
+            impatientReader.readRanges(laterRequests);
+
+            assertThat(loadsLeftByTheWaiter).isZero();
+            assertThat(failureOfTheStalledRead).isSameAs(lateFailure);
+            assertHoldsTheBytesOfItsRange(waiterRequests);
+            assertHoldsTheBytesOfItsRange(laterRequests);
+            assertThat(delegate.calls()).containsExactly(List.of(A), List.of(A));
+            assertThat(impatient.pendingLoads()).isZero();
+        }
+
+        @Test
+        void failedFetchPastDeadline() throws Exception {
+            BatchRangeLoader impatient = new BatchRangeLoader(cache, Duration.ofMillis(50));
+            CachingRangeReader impatientReader = new CachingRangeReader(delegate, cache, impatient);
+            StorageException backendDown = new StorageException("backend down");
+            List<RangeRequest> waiterRequests = requests(A);
+            delegate.hold(1);
+            delegate.fail(2, backendDown);
+
+            RunningRead<BatchReadResult> stalled = RunningRead.start(() -> impatientReader.readRanges(requests(A)));
+            delegate.awaitCall(1);
+
+            assertThatThrownBy(() -> impatientReader.readRanges(waiterRequests)).isSameAs(backendDown);
+
+            assertThat(impatient.pendingLoads()).isEqualTo(1); // the stalled fetch keeps its claim
+            delegate.release(1);
+            assertThat(counts(stalled.result())).containsExactly(100);
+            assertThat(delegate.calls()).containsExactly(List.of(A), List.of(A));
+            assertThat(impatient.pendingLoads()).isZero();
+        }
+
+        @Test
+        void waiterGetsShortReadAtEnd() throws Exception {
+            List<RangeRequest> batchRequests = requests(STRADDLING_THE_END);
+            delegate.hold(1);
+
+            RunningRead<BatchReadResult> batch = RunningRead.start(() -> reader.readRanges(batchRequests));
+            delegate.awaitCall(1);
+            RunningRead<ByteBuffer> single =
+                    RunningRead.start(() -> reader.readRange(STRADDLING_THE_END.offset(), STRADDLING_THE_END.length()));
+            single.awaitWaitingForAnotherRead();
+            delegate.release(1);
+            BatchReadResult batchResult = batch.result();
+            ByteBuffer read = single.result().flip();
+
+            assertThat(counts(batchResult)).containsExactly(30);
+            assertHoldsTheBytesOfItsRange(batchRequests);
+            assertThat(read.remaining()).isEqualTo(30);
+            assertThat(read).isEqualTo(bytesOf(STRADDLING_THE_END));
+            assertThat(delegate.calls()).hasSize(1);
+        }
+
+        // the reads in progress keep their bytes
+        @Test
+        void clearingCacheUnderReads() throws Exception {
+            List<RangeRequest> fetchingRequests = requests(A);
+            List<RangeRequest> waiterRequests = requests(A);
+            delegate.hold(1);
+
+            RunningRead<BatchReadResult> fetching = RunningRead.start(() -> reader.readRanges(fetchingRequests));
+            delegate.awaitCall(1);
+            RunningRead<BatchReadResult> waiter = RunningRead.start(() -> reader.readRanges(waiterRequests));
+            waiter.awaitWaitingForAnotherRead();
+            reader.clearCache();
+            delegate.release(1);
+            fetching.result();
+            waiter.result();
+
+            assertHoldsTheBytesOfItsRange(fetchingRequests);
+            assertHoldsTheBytesOfItsRange(waiterRequests);
+            assertThat(delegate.calls()).containsExactly(List.of(A));
+        }
+
+        /**
+         * The entry leaves the cache between the store of the fetching read and the lookup of the waiter, as with an
+         * eviction. The waiter keeps the bytes handed over by the fetching read and stores nothing. Its lookup is
+         * recorded as a miss.
+         */
+        @Test
+        void waiterKeepsBytesOfLostEntry() throws Exception {
+            ByteRangeCache cacheLosingItsFirstStore =
+                    new CacheLosingItsFirstStore(cacheManager, delegate.getSourceIdentifier());
+            BatchRangeLoader itsLoader = new BatchRangeLoader(cacheLosingItsFirstStore);
+            CachingRangeReader itsReader = new CachingRangeReader(delegate, cacheLosingItsFirstStore, itsLoader);
+            List<RangeRequest> fetchingRequests = requests(A);
+            List<RangeRequest> waiterRequests = requests(A);
+            delegate.hold(1);
+
+            RunningRead<BatchReadResult> fetching = RunningRead.start(() -> itsReader.readRanges(fetchingRequests));
+            delegate.awaitCall(1);
+            RunningRead<BatchReadResult> waiter = RunningRead.start(() -> itsReader.readRanges(waiterRequests));
+            waiter.awaitWaitingForAnotherRead();
+            delegate.release(1);
+            fetching.result();
+            waiter.result();
+
+            assertHoldsTheBytesOfItsRange(fetchingRequests);
+            assertHoldsTheBytesOfItsRange(waiterRequests);
+            assertThat(delegate.calls()).containsExactly(List.of(A));
+            CacheStats stats = itsReader.getCacheStats();
+            assertThat(stats.missCount()).isEqualTo(2);
+            assertThat(stats.loadCount()).isEqualTo(1);
+            assertThat(stats.hitCount()).isZero();
+            assertThat(cacheLosingItsFirstStore.getIfPresentQuietly(A)).isNull();
+            assertThat(itsLoader.pendingLoads()).isZero();
+        }
+
+        /**
+         * The other reader waits up to a minute for a fetch in progress, longer than {@link RunningRead#result()} waits
+         * for a read. A read of the other reader waiting for the held one would fail the test.
+         */
+        @Test
+        void separateReadersEachFetch() throws Exception {
+            ByteRangeCache samePartition = new ByteRangeCache(cacheManager, delegate.getSourceIdentifier());
+            BatchRangeLoader patient = new BatchRangeLoader(samePartition, Duration.ofMinutes(1));
+            CachingRangeReader otherReader = new CachingRangeReader(delegate, samePartition, patient);
+            List<RangeRequest> otherRequests = requests(A);
+            delegate.hold(1);
+
+            RunningRead<BatchReadResult> held = RunningRead.start(() -> reader.readRanges(requests(A)));
+            delegate.awaitCall(1);
+            RunningRead<BatchReadResult> other = RunningRead.start(() -> otherReader.readRanges(otherRequests));
+            BatchReadResult otherResult = other.result(); // taken while the first read is held
+            delegate.release(1);
+            held.result();
+
+            assertThat(counts(otherResult)).containsExactly(100);
+            assertHoldsTheBytesOfItsRange(otherRequests);
+            assertThat(otherResult.fetches()).isEqualTo(1);
+            assertThat(delegate.calls()).containsExactly(List.of(A), List.of(A));
+            assertThat(reader.getCacheEntryCount()).isEqualTo(1);
+            assertThat(patient.pendingLoads()).isZero();
+        }
+
+        @Test
+        void concurrentReadsFetchOnce() throws Exception {
+            List<ByteRange> pool = rangePool(64);
+            int threads = 8;
+            ExecutorService readers = Executors.newFixedThreadPool(threads);
+            try {
+                List<Future<Void>> running = new ArrayList<>();
+                for (int thread = 0; thread < threads; thread++) {
+                    Random random = new Random(thread);
+                    running.add(readers.submit(readingAtRandom(pool, random, 300)));
+                }
+                for (Future<Void> read : running) {
+                    read.get(60, TimeUnit.SECONDS);
+                }
+            } finally {
+                readers.shutdownNow();
+            }
+
+            Map<ByteRange, Long> fetchesPerRange = fetchesPerRange();
+            assertThat(fetchesPerRange.keySet()).containsExactlyInAnyOrderElementsOf(pool);
+            assertThat(fetchesPerRange.values()).containsOnly(1L);
+        }
+
+        private Callable<Void> readingAtRandom(List<ByteRange> pool, Random random, int reads) {
+            return () -> {
+                for (int read = 0; read < reads; read++) {
+                    if (random.nextInt(4) == 0) {
+                        readSingle(pool.get(random.nextInt(pool.size())));
+                    } else {
+                        readBatch(randomRanges(pool, random));
+                    }
+                }
+                return null;
+            };
+        }
+
+        private void readSingle(ByteRange range) {
+            ByteBuffer read = reader.readRange(range.offset(), range.length());
+            assertThat(read.flip()).isEqualTo(bytesOf(range));
+        }
+
+        private void readBatch(List<ByteRange> ranges) {
+            List<RangeRequest> batch = requests(ranges.toArray(ByteRange[]::new));
+            reader.readRanges(batch);
+            assertHoldsTheBytesOfItsRange(batch);
+        }
+
+        private static List<ByteRange> randomRanges(List<ByteRange> pool, Random random) {
+            int size = 1 + random.nextInt(6);
+            List<ByteRange> ranges = new ArrayList<>(size);
+            for (int i = 0; i < size; i++) {
+                ranges.add(pool.get(random.nextInt(pool.size())));
+            }
+            return ranges;
+        }
+
+        private static List<ByteRange> rangePool(int size) {
+            List<ByteRange> pool = new ArrayList<>(size);
+            for (int i = 0; i < size; i++) {
+                pool.add(new ByteRange(i * 1_000L, 100 + i));
+            }
+            return pool;
+        }
+
+        private Map<ByteRange, Long> fetchesPerRange() {
+            Map<ByteRange, Long> fetches = new HashMap<>();
+            for (List<ByteRange> call : delegate.calls()) {
+                for (ByteRange range : call) {
+                    fetches.merge(range, 1L, Long::sum);
+                }
+            }
+            return fetches;
+        }
+    }
+
+    static Stream<Arguments> failuresOfTheFirstFetch() {
+        IOException connectionReset = new IOException("connection reset");
+        return Stream.of(
+                Arguments.argumentSet("a storage exception", new StorageException("backend down")),
+                Arguments.argumentSet("a cancellation", new CancellationException("fetch cancelled")),
+                Arguments.argumentSet("a completion exception with a cause", new CompletionException(connectionReset)));
+    }
+
+    static Stream<Arguments> failuresOfTheNewerFetch() {
+        return Stream.of(
+                Arguments.argumentSet("an exception", new StorageException("second failure")),
+                Arguments.argumentSet("an error", new SimulatedError()));
+    }
+
+    private static List<RangeRequest> requests(ByteRange... ranges) {
+        List<RangeRequest> requests = new ArrayList<>(ranges.length);
+        for (ByteRange range : ranges) {
+            requests.add(new RangeRequest(range, ByteBuffer.allocate(range.length())));
+        }
+        return requests;
+    }
+
+    private static void assertHoldsTheBytesOfItsRange(List<RangeRequest> filled) {
+        for (RangeRequest request : filled) {
+            ByteBuffer read = request.target().duplicate().flip();
+            assertThat(read).isEqualTo(bytesOf(request.range()));
+        }
+    }
+
+    /** The bytes of {@code range} in the source, cut at its end. */
+    private static ByteBuffer bytesOf(ByteRange range) {
+        int offset = Math.toIntExact(range.offset());
+        int available = Math.min(range.length(), TEST_DATA.length - offset);
+        return ByteBuffer.wrap(TEST_DATA, offset, available).slice();
+    }
+
+    private static final class SimulatedError extends Error {
+        private static final long serialVersionUID = 1L;
+    }
+
+    /** A cache losing the first value stored in it right after the store, as with an eviction. */
+    private static final class CacheLosingItsFirstStore extends ByteRangeCache {
+        private final AtomicBoolean lost = new AtomicBoolean();
+
+        CacheLosingItsFirstStore(CacheManager cacheManager, String sourceIdentifier) {
+            super(cacheManager, sourceIdentifier);
+        }
+
+        @Override
+        public ByteBuffer getOrStore(ByteRange key, ByteBuffer value) {
+            ByteBuffer stored = super.getOrStore(key, value);
+            boolean firstStore = lost.compareAndSet(false, true);
+            if (firstStore) {
+                invalidateAll();
+            }
+            return stored;
         }
     }
 

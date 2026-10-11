@@ -22,14 +22,13 @@ import io.tileverse.cache.CacheManager;
 import io.tileverse.cache.CacheStats;
 import io.tileverse.cache.CaffeineCache;
 import io.tileverse.io.ByteRange;
-import io.tileverse.storage.RangeReader;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-class RangeReaderCache {
+class ByteRangeCache {
 
     static final String SHARED_CACHE_NAME = "tileverse-storage-cache";
 
@@ -40,19 +39,16 @@ class RangeReaderCache {
     private int maxHeapPercent = DEFAULT_MAX_HEAP_PERCENT;
     private static final Duration expireAfterAccess = DEFAULT_EXPIRE_AFTER_ACCESS;
 
-    private RangeReader delegate;
     private Cache<ByteRange, ByteBuffer> cache;
 
-    public RangeReaderCache(CacheManager cacheManager, RangeReader delegate) {
-        this.delegate = delegate;
-        String sourceIdentifier = delegate.getSourceIdentifier();
+    public ByteRangeCache(CacheManager cacheManager, String sourceIdentifier) {
         this.cache =
                 cacheManager.getCache(SHARED_CACHE_NAME, this::buildSharedCache).subCache(sourceIdentifier);
     }
 
     private Cache<ByteRange, ByteBuffer> buildSharedCache() {
         return CaffeineCache.<ByteRange, ByteBuffer>newBuilder()
-                .maxHeapPercent(maxHeapPercent, RangeReaderCache::weigh)
+                .maxHeapPercent(maxHeapPercent, ByteRangeCache::weigh)
                 .averageWeight(64 * 1024)
                 .expireAfterAccess(expireAfterAccess)
                 // run eviction tasks when idle to return memory without waiting for cache usage
@@ -62,17 +58,22 @@ class RangeReaderCache {
                 .build();
     }
 
-    public ByteBuffer get(ByteRange range) {
-        return cache.get(range, this::loadRange);
-    }
-
+    /**
+     * Returns the cached value of {@code range}, or null, recording the lookup: a hit and an access when the cache
+     * holds the value, a miss otherwise. It stores nothing.
+     */
     public ByteBuffer getIfPresent(ByteRange range) {
         return cache.getIfPresent(range);
     }
 
+    /** Returns the cached value of {@code range}, or null, recording neither a hit nor a miss nor an access. */
+    public ByteBuffer getIfPresentQuietly(ByteRange range) {
+        return cache.getIfPresentQuietly(range);
+    }
+
     /**
-     * Stores {@code value} for {@code key} unless another thread already stored one, returning whichever value the
-     * cache holds afterwards.
+     * Stores {@code value} for {@code key} unless the cache holds one, returning the value held by the cache
+     * afterwards. It records a hit when the cache held a value, a miss and a load when it stored this one.
      */
     public ByteBuffer getOrStore(ByteRange key, ByteBuffer value) {
         return cache.get(key, k -> value);
@@ -92,33 +93,6 @@ class RangeReaderCache {
         int valueWeight = 16 + value.capacity();
 
         return keyWeight + valueWeight;
-    }
-
-    ByteBuffer loadRange(ByteRange key) {
-        ByteBuffer blockData = ByteBuffer.allocate(key.length());
-        int bytesRead = delegate.readRange(key, blockData);
-        return sanitize(blockData, bytesRead);
-    }
-
-    /**
-     * Trims a freshly filled buffer down to the bytes actually read, flips it for reading, and returns it read-only.
-     * Relies on {@code filled}'s position being at {@code bytesRead}, exactly as left by a preceding read that advanced
-     * the position by that count.
-     *
-     * @param filled the buffer written to by the read, positioned at {@code bytesRead}
-     * @param bytesRead the number of bytes actually read, at most {@code filled.capacity()}
-     * @return a read-only, right-sized, flipped buffer holding exactly the bytes read
-     */
-    static ByteBuffer sanitize(ByteBuffer filled, int bytesRead) {
-        if (bytesRead < filled.capacity() && bytesRead > 0) {
-            ByteBuffer actualData = ByteBuffer.allocate(bytesRead);
-            filled.flip();
-            actualData.put(filled);
-            actualData.flip();
-            return actualData.asReadOnlyBuffer();
-        }
-        filled.flip();
-        return filled.asReadOnlyBuffer();
     }
 
     public void invalidateAll() {

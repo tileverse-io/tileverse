@@ -54,7 +54,7 @@ class GoogleCloudStorageEmulatorIT extends StorageTCK {
     }
 
     private SdkStorageCache.Key keyFor() {
-        String emulatorEndpoint = "http://" + gcsEmulator.getHost() + ":" + gcsEmulator.getFirstMappedPort();
+        String emulatorEndpoint = gcsEmulator.url();
         return new SdkStorageCache.Key(
                 Optional.of(emulatorEndpoint),
                 Optional.of("test-project"),

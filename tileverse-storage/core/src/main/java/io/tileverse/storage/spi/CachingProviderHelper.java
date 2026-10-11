@@ -46,8 +46,8 @@ public final class CachingProviderHelper {
             .title("Enable memory cache for raw byte data")
             .description("""
                     Enables in-memory caching of raw byte ranges. A cached range is served again \
-                    without touching the source, and concurrent requests for the same range share \
-                    one fetch. Off by default.
+                    without touching the source, and concurrent requests for the same range through \
+                    one reader share one fetch. Off by default.
                     """)
             .type(Boolean.class)
             .group(GROUP_CACHING)

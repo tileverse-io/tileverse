@@ -81,6 +81,10 @@ public class S3StorageProvider extends AbstractStorageProvider {
      * addressing (e.g., {@code https://s3.amazonaws.com/bucket/key}). When disabled, virtual-hosted-style addressing
      * will be used instead (e.g., {@code https://bucket.s3.amazonaws.com/key}). This can be useful for compatibility
      * with S3-compatible storage systems that do not support virtual-hosted-style requests.
+     *
+     * <p>Without a value, requests use path style when an endpoint override is in effect, and virtual-hosted style on
+     * AWS. The parameter must not declare a default value: {@code StorageFactory} merges declared defaults into the
+     * config before the provider reads it, and the default would replace that choice.
      */
     public static final StorageParameter<Boolean> S3_FORCE_PATH_STYLE = StorageParameter.builder()
             .key("storage.s3.force-path-style")
@@ -94,13 +98,12 @@ public class S3StorageProvider extends AbstractStorageProvider {
                 This can be useful for compatibility with S3-compatible storage systems that do not \
                 support virtual-hosted-style requests.
 
-                Note: When a complete S3 URL is provided, path style is automatically detected and enabled \
-                for non-AWS endpoints (MinIO, Google Cloud Storage, etc.). This parameter allows explicit \
-                override of the automatic detection behavior.
+                Without a value, path style is used when a custom endpoint is in effect (storage.s3.endpoint, \
+                or the host of an http(s) URL of an S3-compatible service such as MinIO), and virtual-hosted \
+                style on AWS. Set this parameter to override that choice.
                 """)
             .type(Boolean.class)
             .group(ID)
-            .defaultValue(true)
             .build();
 
     /**

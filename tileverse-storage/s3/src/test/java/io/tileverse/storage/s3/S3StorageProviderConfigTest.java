@@ -17,10 +17,18 @@ package io.tileverse.storage.s3;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageConfig;
+import io.tileverse.storage.StorageFactory;
+import java.io.IOException;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * Verifies {@link S3StorageProvider#keyFor(StorageConfig)} resolution precedence: region, endpoint override, and
@@ -29,6 +37,12 @@ import org.junit.jupiter.api.Test;
  * {@code S3RangeReader.Builder}.
  */
 class S3StorageProviderConfigTest {
+
+    /** The path of a path-style URL of {@code data/file.txt} in {@code my-bucket}: the bucket comes first. */
+    private static final String PATH_STYLE = "/my-bucket/data/file.txt";
+
+    /** The path of its virtual-hosted-style URL: the bucket is in the host name. */
+    private static final String VIRTUAL_HOSTED_STYLE = "/data/file.txt";
 
     @Test
     void regionResolution_explicitParameterWins() {
@@ -130,43 +144,56 @@ class S3StorageProviderConfigTest {
         assertThat(key.profile()).isEmpty();
     }
 
-    @Test
-    void forcePathStyle_defaultsToFalse() {
-        StorageConfig config = new StorageConfig("s3://my-bucket/file.txt");
+    // Opened like a caller does: StorageFactory merges the declared defaults of the provider into the config first.
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("addressingStyles")
+    void addressingStyle(String scenario, StorageConfig config, String objectUrlPath) throws IOException {
+        try (Storage storage = StorageFactory.open(config)) {
+            URI objectUrl = storage.presignGet("file.txt", Duration.ofMinutes(1));
 
-        assertThat(S3StorageProvider.keyFor(config).forcePathStyle()).isFalse();
+            assertThat(objectUrl.getPath()).as(scenario).isEqualTo(objectUrlPath);
+        }
     }
 
-    @Test
-    void forcePathStyle_explicitTrue() {
-        StorageConfig config = new StorageConfig("https://minio.example.com/my-bucket/file.txt")
-                .setParameter(S3StorageProvider.S3_FORCE_PATH_STYLE, true);
-
-        assertThat(S3StorageProvider.keyFor(config).forcePathStyle()).isTrue();
+    static Stream<Arguments> addressingStyles() {
+        return Stream.of(
+                Arguments.of("AWS bucket", awsBucket(), VIRTUAL_HOSTED_STYLE),
+                Arguments.of("AWS bucket, path style on", pathStyle(awsBucket(), true), PATH_STYLE),
+                Arguments.of("AWS bucket, path style off", pathStyle(awsBucket(), false), VIRTUAL_HOSTED_STYLE),
+                Arguments.of("endpoint parameter", endpointParameter(), PATH_STYLE),
+                Arguments.of("endpoint parameter, path style on", pathStyle(endpointParameter(), true), PATH_STYLE),
+                Arguments.of(
+                        "endpoint parameter, path style off",
+                        pathStyle(endpointParameter(), false),
+                        VIRTUAL_HOSTED_STYLE),
+                Arguments.of("endpoint URL", endpointUrl(), PATH_STYLE),
+                Arguments.of("endpoint URL, path style on", pathStyle(endpointUrl(), true), PATH_STYLE),
+                Arguments.of("endpoint URL, path style off", pathStyle(endpointUrl(), false), VIRTUAL_HOSTED_STYLE));
     }
 
-    @Test
-    void forcePathStyle_defaultsToTrueWhenExplicitEndpointParamSet() {
-        StorageConfig config = new StorageConfig("s3://my-bucket/file.txt")
-                .setParameter(S3StorageProvider.S3_ENDPOINT, URI.create("http://localhost:9000"));
-
-        assertThat(S3StorageProvider.keyFor(config).forcePathStyle()).isTrue();
+    private static StorageConfig awsBucket() {
+        StorageConfig config = new StorageConfig("s3://my-bucket/data/");
+        return withStaticCredentials(config);
     }
 
-    @Test
-    void forcePathStyle_defaultsToTrueForUriDerivedCustomEndpoint() {
-        StorageConfig config = new StorageConfig("http://localhost:9000/my-bucket/file.txt");
-
-        assertThat(S3StorageProvider.keyFor(config).forcePathStyle()).isTrue();
+    private static StorageConfig endpointParameter() {
+        return awsBucket().setParameter(S3StorageProvider.S3_ENDPOINT, URI.create("http://localhost:9000"));
     }
 
-    @Test
-    void forcePathStyle_explicitFalseOverridesEndpointDefault() {
-        StorageConfig config = new StorageConfig("s3://my-bucket/file.txt")
-                .setParameter(S3StorageProvider.S3_ENDPOINT, URI.create("http://localhost:9000"))
-                .setParameter(S3StorageProvider.S3_FORCE_PATH_STYLE, false);
+    private static StorageConfig endpointUrl() {
+        StorageConfig config = new StorageConfig("http://localhost:9000/my-bucket/data/");
+        config.providerId(S3StorageProvider.ID);
+        return withStaticCredentials(config);
+    }
 
-        assertThat(S3StorageProvider.keyFor(config).forcePathStyle()).isFalse();
+    private static StorageConfig pathStyle(StorageConfig config, boolean forced) {
+        return config.setParameter(S3StorageProvider.S3_FORCE_PATH_STYLE, forced);
+    }
+
+    // Presigning needs credentials, and static keys resolve without reading the environment.
+    private static StorageConfig withStaticCredentials(StorageConfig config) {
+        return config.setParameter(S3StorageProvider.S3_AWS_ACCESS_KEY_ID, "AKIA-static")
+                .setParameter(S3StorageProvider.S3_AWS_SECRET_ACCESS_KEY, "secret");
     }
 
     @Test

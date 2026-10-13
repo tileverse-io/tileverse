@@ -23,18 +23,20 @@ import io.tileverse.storage.StorageFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import software.amazon.awssdk.regions.Region;
 
 /**
- * Verifies {@link S3StorageProvider#keyFor(StorageConfig)} resolution precedence: region, endpoint override, and
- * credential parameters. Replaces the reflection-based {@code testResolveCredentialsProviderPrecedence} /
- * {@code testResolveRegionUsesExplicitAndParsedValues} cases that lived in the now-removed
- * {@code S3RangeReader.Builder}.
+ * Verifies {@link S3StorageProvider#keyFor(StorageConfig, EnvironmentEndpoint, EnvironmentRegion)} resolution
+ * precedence: region, endpoint override, and credential parameters. Replaces the reflection-based
+ * {@code testResolveCredentialsProviderPrecedence} / {@code testResolveRegionUsesExplicitAndParsedValues} cases that
+ * lived in the now-removed {@code S3RangeReader.Builder}.
  */
 class S3StorageProviderConfigTest {
 
@@ -44,26 +46,157 @@ class S3StorageProviderConfigTest {
     /** The path of its virtual-hosted-style URL: the bucket is in the host name. */
     private static final String VIRTUAL_HOSTED_STYLE = "/data/file.txt";
 
+    private static final URI MINIO = URI.create("http://minio.lan:9000");
+
+    private static final EnvironmentEndpoint NO_ENVIRONMENT_ENDPOINT = new EnvironmentEndpoint(Optional::empty);
+
+    private static final EnvironmentEndpoint MINIO_IN_ENVIRONMENT = new EnvironmentEndpoint(() -> Optional.of(MINIO));
+
+    private static final Map<String, String> NO_PROFILE_REGIONS = Map.of();
+
+    private static final EnvironmentRegion EMPTY_ENVIRONMENT =
+            EnvironmentRegionTest.environment(null, NO_PROFILE_REGIONS, null);
+
+    private static final EnvironmentRegion FAILING_WHEN_ASKED = new EnvironmentRegion(
+            S3StorageProviderConfigTest::failWhenAsked,
+            profile -> S3StorageProviderConfigTest::failWhenAsked,
+            S3StorageProviderConfigTest::failWhenAsked);
+
+    private static final EnvironmentRegion IN_EU_WEST_1 =
+            EnvironmentRegionTest.environment("eu-west-1", NO_PROFILE_REGIONS, null);
+
+    private static final EnvironmentRegion ON_EC2_IN_EU_WEST_3 =
+            EnvironmentRegionTest.environment(null, NO_PROFILE_REGIONS, "eu-west-3");
+
     @Test
     void regionResolution_explicitParameterWins() {
         StorageConfig config = new StorageConfig("https://my-bucket.s3.us-west-2.amazonaws.com/file.txt")
                 .setParameter(S3StorageProvider.S3_REGION, "us-east-1");
 
-        assertThat(S3StorageProvider.keyFor(config).region()).isEqualTo("us-east-1");
+        assertThat(keyFor(config).region()).isEqualTo("us-east-1");
     }
 
     @Test
     void regionResolution_fallsBackToUriParsedRegion() {
         StorageConfig config = new StorageConfig("https://my-bucket.s3.us-west-2.amazonaws.com/file.txt");
 
-        assertThat(S3StorageProvider.keyFor(config).region()).isEqualTo("us-west-2");
+        assertThat(keyFor(config).region()).isEqualTo("us-west-2");
     }
 
-    @Test
-    void regionResolution_fallsBackToUsEast1WhenAbsent() {
-        StorageConfig config = new StorageConfig("s3://my-bucket/file.txt");
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("regions")
+    void regionOrder(String scenario, StorageConfig config, EnvironmentRegion environment, String expected) {
+        S3ClientCache.Key key = S3StorageProvider.keyFor(config, NO_ENVIRONMENT_ENDPOINT, environment);
 
-        assertThat(S3StorageProvider.keyFor(config).region()).isEqualTo("us-east-1");
+        assertThat(key.region()).as(scenario).isEqualTo(expected);
+    }
+
+    static Stream<Arguments> regions() {
+        String bucket = "s3://my-bucket/file.txt";
+        String bucketInUsWest2 = "https://my-bucket.s3.us-west-2.amazonaws.com/file.txt";
+        EnvironmentRegion analyticsInApSouth1 = EnvironmentRegionTest.environment(
+                null, Map.of("default", "eu-west-2", "analytics", "ap-south-1"), null);
+        return Stream.of(
+                Arguments.of(
+                        "region parameter, environment",
+                        new StorageConfig(bucket).setParameter(S3StorageProvider.S3_REGION, "us-west-2"),
+                        IN_EU_WEST_1,
+                        "us-west-2"),
+                Arguments.of(
+                        "region in the URL, environment",
+                        new StorageConfig(bucketInUsWest2),
+                        IN_EU_WEST_1,
+                        "us-west-2"),
+                Arguments.of("environment", new StorageConfig(bucket), IN_EU_WEST_1, "eu-west-1"),
+                Arguments.of("nothing names a region", new StorageConfig(bucket), EMPTY_ENVIRONMENT, "us-east-1"),
+                Arguments.of(
+                        "profile of the store",
+                        new StorageConfig(bucket)
+                                .setParameter(S3StorageProvider.S3_DEFAULT_CREDENTIALS_PROFILE, "analytics"),
+                        analyticsInApSouth1,
+                        "ap-south-1"),
+                Arguments.of(
+                        "default credentials chain on EC2",
+                        new StorageConfig(bucket),
+                        ON_EC2_IN_EU_WEST_3,
+                        "eu-west-3"),
+                Arguments.of(
+                        "anonymous store on EC2",
+                        new StorageConfig(bucket).setParameter(S3StorageProvider.S3_ANONYMOUS, true),
+                        ON_EC2_IN_EU_WEST_3,
+                        "us-east-1"),
+                Arguments.of(
+                        "store with access keys on EC2",
+                        withStaticCredentials(new StorageConfig(bucket)),
+                        ON_EC2_IN_EU_WEST_3,
+                        "us-east-1"));
+    }
+
+    // EC2 metadata takes seconds to give up outside EC2: a store on MinIO, R2 or another service must never ask.
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("endpointOverrides")
+    void endpointOverrideSkipsEnvironment(String scenario, StorageConfig config, EnvironmentEndpoint endpoint) {
+        S3ClientCache.Key key = S3StorageProvider.keyFor(config, endpoint, FAILING_WHEN_ASKED);
+
+        assertThat(key.region()).as(scenario).isEqualTo("us-east-1");
+    }
+
+    static Stream<Arguments> endpointOverrides() {
+        URI minio = URI.create("http://localhost:9000");
+        StorageConfig endpointParameter =
+                new StorageConfig("s3://my-bucket/file.txt").setParameter(S3StorageProvider.S3_ENDPOINT, minio);
+        StorageConfig endpointUrl = new StorageConfig("http://localhost:9000/my-bucket/file.txt");
+        StorageConfig bucket = new StorageConfig("s3://my-bucket/file.txt");
+        return Stream.of(
+                Arguments.of("endpoint parameter", endpointParameter, NO_ENVIRONMENT_ENDPOINT),
+                Arguments.of("endpoint URL", endpointUrl, NO_ENVIRONMENT_ENDPOINT),
+                Arguments.of("endpoint of the environment", bucket, MINIO_IN_ENVIRONMENT));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("endpoints")
+    void endpointOrder(String scenario, StorageConfig config, EnvironmentEndpoint endpoint, Optional<URI> expected) {
+        S3ClientCache.Key key = S3StorageProvider.keyFor(config, endpoint, EMPTY_ENVIRONMENT);
+
+        assertThat(key.endpointOverride()).as(scenario).isEqualTo(expected);
+    }
+
+    static Stream<Arguments> endpoints() {
+        URI garage = URI.create("http://garage.lan:3900");
+        StorageConfig endpointParameter =
+                new StorageConfig("s3://my-bucket/file.txt").setParameter(S3StorageProvider.S3_ENDPOINT, garage);
+        StorageConfig endpointUrl = new StorageConfig("http://garage.lan:3900/my-bucket/file.txt");
+        StorageConfig bucket = new StorageConfig("s3://my-bucket/file.txt");
+        return Stream.of(
+                Arguments.of(
+                        "endpoint parameter, environment",
+                        endpointParameter,
+                        MINIO_IN_ENVIRONMENT,
+                        Optional.of(garage)),
+                Arguments.of("endpoint URL, environment", endpointUrl, MINIO_IN_ENVIRONMENT, Optional.of(garage)),
+                Arguments.of("environment", bucket, MINIO_IN_ENVIRONMENT, Optional.of(MINIO)),
+                Arguments.of("no endpoint", bucket, NO_ENVIRONMENT_ENDPOINT, Optional.empty()));
+    }
+
+    // An endpoint set by AWS_ENDPOINT_URL or a profile is a custom endpoint, like storage.s3.endpoint.
+    @Test
+    void environmentEndpointAsOverride() {
+        S3ClientCache.Key key = S3StorageProvider.keyFor(awsBucket(), MINIO_IN_ENVIRONMENT, FAILING_WHEN_ASKED);
+
+        assertThat(key.forcePathStyle()).isTrue();
+        assertThat(key.crossRegionAccess()).isFalse();
+    }
+
+    // The host of a presigned URL names the region of the client.
+    @Test
+    void storageOpensInEnvironmentRegion() throws IOException {
+        S3StorageProvider provider = new S3StorageProvider(new S3ClientCache(), NO_ENVIRONMENT_ENDPOINT, IN_EU_WEST_1);
+
+        try (Storage storage = provider.createStorage(awsBucket())) {
+            URI objectUrl = storage.presignGet("file.txt", Duration.ofMinutes(1));
+
+            assertThat(objectUrl.getHost()).isEqualTo("my-bucket.s3.eu-west-1.amazonaws.com");
+        }
     }
 
     @Test
@@ -71,21 +204,21 @@ class S3StorageProviderConfigTest {
         StorageConfig config = new StorageConfig("https://my-bucket.s3.us-west-2.amazonaws.com/file.txt")
                 .setParameter(S3StorageProvider.S3_REGION, "   ");
 
-        assertThat(S3StorageProvider.keyFor(config).region()).isEqualTo("us-west-2");
+        assertThat(keyFor(config).region()).isEqualTo("us-west-2");
     }
 
     @Test
     void endpointOverride_extractedFromCustomHost() {
         StorageConfig config = new StorageConfig("http://localhost:9000/my-bucket/file.txt");
 
-        assertThat(S3StorageProvider.keyFor(config).endpointOverride()).hasValue(URI.create("http://localhost:9000"));
+        assertThat(keyFor(config).endpointOverride()).hasValue(URI.create("http://localhost:9000"));
     }
 
     @Test
     void endpointOverride_emptyForCanonicalAwsUri() {
         StorageConfig config = new StorageConfig("s3://my-bucket/file.txt");
 
-        assertThat(S3StorageProvider.keyFor(config).endpointOverride()).isEmpty();
+        assertThat(keyFor(config).endpointOverride()).isEmpty();
     }
 
     @Test
@@ -93,7 +226,7 @@ class S3StorageProviderConfigTest {
         StorageConfig config = new StorageConfig("s3://my-bucket/file.txt")
                 .setParameter(S3StorageProvider.S3_ENDPOINT, URI.create("http://localhost:9000"));
 
-        assertThat(S3StorageProvider.keyFor(config).endpointOverride()).hasValue(URI.create("http://localhost:9000"));
+        assertThat(keyFor(config).endpointOverride()).hasValue(URI.create("http://localhost:9000"));
     }
 
     @Test
@@ -101,8 +234,7 @@ class S3StorageProviderConfigTest {
         StorageConfig config = new StorageConfig("http://localhost:9000/my-bucket/file.txt")
                 .setParameter(S3StorageProvider.S3_ENDPOINT, URI.create("https://minio.example.com"));
 
-        assertThat(S3StorageProvider.keyFor(config).endpointOverride())
-                .hasValue(URI.create("https://minio.example.com"));
+        assertThat(keyFor(config).endpointOverride()).hasValue(URI.create("https://minio.example.com"));
     }
 
     @Test
@@ -112,7 +244,7 @@ class S3StorageProviderConfigTest {
         StorageConfig b = new StorageConfig("s3://my-bucket/file.txt")
                 .setParameter(S3StorageProvider.S3_ENDPOINT, URI.create("http://localhost:9001"));
 
-        assertThat(S3StorageProvider.keyFor(a)).isNotEqualTo(S3StorageProvider.keyFor(b));
+        assertThat(keyFor(a)).isNotEqualTo(keyFor(b));
     }
 
     @Test
@@ -121,7 +253,7 @@ class S3StorageProviderConfigTest {
                 .setParameter(S3StorageProvider.S3_AWS_ACCESS_KEY_ID, "AKIA-static")
                 .setParameter(S3StorageProvider.S3_AWS_SECRET_ACCESS_KEY, "secret");
 
-        S3ClientCache.Key key = S3StorageProvider.keyFor(config);
+        S3ClientCache.Key key = keyFor(config);
         assertThat(key.accessKeyId()).hasValue("AKIA-static");
         assertThat(key.secretAccessKey()).hasValue("secret");
     }
@@ -131,14 +263,14 @@ class S3StorageProviderConfigTest {
         StorageConfig config = new StorageConfig("s3://my-bucket/file.txt")
                 .setParameter(S3StorageProvider.S3_DEFAULT_CREDENTIALS_PROFILE, "production");
 
-        assertThat(S3StorageProvider.keyFor(config).profile()).hasValue("production");
+        assertThat(keyFor(config).profile()).hasValue("production");
     }
 
     @Test
     void credentials_emptyWhenNoCredentialsConfigured() {
         StorageConfig config = new StorageConfig("s3://my-bucket/file.txt");
 
-        S3ClientCache.Key key = S3StorageProvider.keyFor(config);
+        S3ClientCache.Key key = keyFor(config);
         assertThat(key.accessKeyId()).isEmpty();
         assertThat(key.secretAccessKey()).isEmpty();
         assertThat(key.profile()).isEmpty();
@@ -209,7 +341,7 @@ class S3StorageProviderConfigTest {
 
         // Cache discriminator is independent of the per-object key (different files in same bucket
         // share the same SDK client, by design).
-        assertThat(S3StorageProvider.keyFor(a)).isEqualTo(S3StorageProvider.keyFor(b));
+        assertThat(keyFor(a)).isEqualTo(keyFor(b));
     }
 
     @Test
@@ -219,7 +351,7 @@ class S3StorageProviderConfigTest {
         StorageConfig b =
                 new StorageConfig("s3://my-bucket/file.txt").setParameter(S3StorageProvider.S3_REGION, "eu-central-1");
 
-        assertThat(S3StorageProvider.keyFor(a)).isNotEqualTo(S3StorageProvider.keyFor(b));
+        assertThat(keyFor(a)).isNotEqualTo(keyFor(b));
     }
 
     @Test
@@ -232,10 +364,19 @@ class S3StorageProviderConfigTest {
                 .setParameter(S3StorageProvider.S3_AWS_ACCESS_KEY_ID, "AKIA-B")
                 .setParameter(S3StorageProvider.S3_AWS_SECRET_ACCESS_KEY, "s");
 
-        S3ClientCache.Key keyA = S3StorageProvider.keyFor(a);
-        S3ClientCache.Key keyB = S3StorageProvider.keyFor(b);
+        S3ClientCache.Key keyA = keyFor(a);
+        S3ClientCache.Key keyB = keyFor(b);
         assertThat(keyA.accessKeyId()).isEqualTo(Optional.of("AKIA-A"));
         assertThat(keyB.accessKeyId()).isEqualTo(Optional.of("AKIA-B"));
         assertThat(keyA).isNotEqualTo(keyB);
+    }
+
+    private static Region failWhenAsked() {
+        throw new AssertionError("the environment was asked for a region");
+    }
+
+    /** The key of a store in an environment naming no endpoint and no region. */
+    private static S3ClientCache.Key keyFor(StorageConfig config) {
+        return S3StorageProvider.keyFor(config, NO_ENVIRONMENT_ENDPOINT, EMPTY_ENVIRONMENT);
     }
 }

@@ -23,6 +23,7 @@ import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
 import io.tileverse.storage.batch.BatchProviderHelper;
 import io.tileverse.storage.batch.BatchSettings;
+import io.tileverse.storage.s3.S3ClientCache.CredentialsSource;
 import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
@@ -63,7 +64,16 @@ import software.amazon.awssdk.services.s3.S3AsyncClient;
 @Slf4j
 public class S3StorageProvider extends AbstractStorageProvider {
 
+    /**
+     * The region of a store when nothing names one. Its endpoint routes a virtual-hosted request to the bucket by name,
+     * in any region: unsigned reads of public buckets need no region. It is also the signing region expected by MinIO
+     * and other S3-compatible services unless configured otherwise.
+     */
+    private static final String FALLBACK_REGION = "us-east-1";
+
     private final S3ClientCache clientCache;
+    private final EnvironmentEndpoint environmentEndpoint;
+    private final EnvironmentRegion environmentRegion;
 
     /**
      * Key used as environment variable name to disable this range reader provider
@@ -99,8 +109,9 @@ public class S3StorageProvider extends AbstractStorageProvider {
                 support virtual-hosted-style requests.
 
                 Without a value, path style is used when a custom endpoint is in effect (storage.s3.endpoint, \
-                or the host of an http(s) URL of an S3-compatible service such as MinIO), and virtual-hosted \
-                style on AWS. Set this parameter to override that choice.
+                the host of an http(s) URL of an S3-compatible service such as MinIO, or an endpoint named by \
+                the AWS environment such as AWS_ENDPOINT_URL), and virtual-hosted style on AWS. Set this \
+                parameter to override that choice.
                 """)
             .type(Boolean.class)
             .group(ID)
@@ -145,9 +156,10 @@ public class S3StorageProvider extends AbstractStorageProvider {
      * target a non-AWS S3-compatible service (MinIO, Ceph, Cloudflare R2, DigitalOcean Spaces, Wasabi, LocalStack)
      * without encoding the service host into the URI.
      *
-     * <p>When set, this takes precedence over any endpoint inferred from an {@code http(s)://host/bucket/key} base URI.
-     * Because custom endpoints almost always require path-style addressing, setting an endpoint defaults
-     * {@link #S3_FORCE_PATH_STYLE} to {@code true}; set {@code storage.s3.force-path-style} explicitly to override.
+     * <p>When set, this takes precedence over any endpoint inferred from an {@code http(s)://host/bucket/key} base URI,
+     * and over an endpoint named by the AWS environment ({@code AWS_ENDPOINT_URL} and the like). Because custom
+     * endpoints almost always require path-style addressing, a custom endpoint defaults {@link #S3_FORCE_PATH_STYLE} to
+     * {@code true}; set {@code storage.s3.force-path-style} explicitly to override.
      */
     public static final StorageParameter<URI> S3_ENDPOINT = StorageParameter.builder()
             .key("storage.s3.endpoint")
@@ -161,10 +173,14 @@ public class S3StorageProvider extends AbstractStorageProvider {
                     for example http://localhost:9000.
 
                     When set, it takes precedence over any endpoint inferred from an http(s)://host/bucket/key base URI. \
-                    Leave it unset to use the default AWS endpoints for the configured region.
+                    Without either, the store takes the endpoint named by the AWS environment: the 'aws.endpointUrlS3' \
+                    or 'aws.endpointUrl' system property, the 'AWS_ENDPOINT_URL_S3' or 'AWS_ENDPOINT_URL' environment \
+                    variable, then 'endpoint_url' in the AWS profile files. With none of them, the store uses the \
+                    default AWS endpoints for its region.
 
-                    Because custom endpoints almost always require path-style addressing, setting an endpoint \
-                    defaults storage.s3.force-path-style to true. Set storage.s3.force-path-style explicitly to override.
+                    Because custom endpoints almost always require path-style addressing, a custom endpoint from any \
+                    of these sources defaults storage.s3.force-path-style to true. Set storage.s3.force-path-style \
+                    explicitly to override.
                     """)
             .type(URI.class)
             .group(ID)
@@ -175,21 +191,23 @@ public class S3StorageProvider extends AbstractStorageProvider {
             .key("storage.s3.region")
             .title("Region")
             .description("""
-                    Configure the region with which the SDK should communicate.
+                    The AWS region of the bucket, for example us-west-2.
 
-                    If this is not specified, the SDK will attempt to identify the endpoint automatically using the following logic:
+                    Without it, a store on AWS takes the region from the first of:
 
-                    * Check the 'aws.region' system property for the region.
-                    * Check the 'AWS_REGION' environment variable for the region.
-                    * Check the {user.home}/.aws/credentials and {user.home}/.aws/config files for the region.
-                    * If running in EC2, check the EC2 metadata service for the region.
+                    * the URL, when its host or bucket name holds a region;
+                    * the 'aws.region' system property, then the 'AWS_REGION' environment variable;
+                    * the AWS profile files: the credentials profile of the store, else the profile named by \
+                    'AWS_PROFILE' or 'default';
+                    * the EC2 metadata service, for a store on the AWS default credentials provider chain;
+                    * us-east-1.
 
-                    If the region is not found, an exception will be thrown.
+                    A request reaching the wrong region is sent again to the region of the bucket. Presigned URLs \
+                    are not corrected: they need the right region.
 
-                    Each AWS region corresponds to a separate geographical location where a set of Amazon services is deployed. These \
-                    regions (except for the special `aws-global` and `aws-cn-global` regions) are separate from each other, \
-                    with their own set of resources. This means a resource created in one region (eg. an SQS queue) is not available in \
-                    another region.
+                    A store with a service endpoint (see storage.s3.endpoint) ignores the region of the environment: \
+                    its region only signs the requests, and is us-east-1 unless the URL or this parameter names one. \
+                    Cloudflare R2 expects 'auto'.
                     """)
             .type(String.class)
             .group(ID)
@@ -293,13 +311,20 @@ public class S3StorageProvider extends AbstractStorageProvider {
      * @see AbstractStorageProvider#MEMORY_CACHE_ENABLED
      */
     public S3StorageProvider() {
-        this(S3ClientCache.INSTANCE);
+        this(S3ClientCache.INSTANCE, EnvironmentEndpoint.INSTANCE, EnvironmentRegion.INSTANCE);
     }
 
-    /** Creates a provider leasing its clients from {@code clientCache}; tests inspect the cache after an open. */
-    S3StorageProvider(S3ClientCache clientCache) {
+    /**
+     * Creates a provider leasing its clients from {@code clientCache}, and reading the endpoint and the region of the
+     * environment from {@code environmentEndpoint} and {@code environmentRegion}. Tests inspect the cache after an
+     * open, and pass an environment of their own.
+     */
+    S3StorageProvider(
+            S3ClientCache clientCache, EnvironmentEndpoint environmentEndpoint, EnvironmentRegion environmentRegion) {
         super(true);
         this.clientCache = Objects.requireNonNull(clientCache, "clientCache");
+        this.environmentEndpoint = Objects.requireNonNull(environmentEndpoint, "environmentEndpoint");
+        this.environmentRegion = Objects.requireNonNull(environmentRegion, "environmentRegion");
     }
 
     /** Returns the cache leasing the clients of the storages created by this provider. */
@@ -403,7 +428,7 @@ public class S3StorageProvider extends AbstractStorageProvider {
         boolean requesterPays = config.getParameter(S3_REQUESTER_PAYS).orElse(false);
         BatchSettings batchSettings = BatchProviderHelper.objectStoreSettings(config);
         // acquired after resolving the settings: an invalid one must fail the open before a client set is leased
-        S3ClientCache.Lease lease = clientCache.acquire(keyFor(config));
+        S3ClientCache.Lease lease = clientCache.acquire(keyFor(config, environmentEndpoint, environmentRegion));
         return new S3Storage(uri, ref, lease, requesterPays, batchSettings);
     }
 
@@ -417,6 +442,7 @@ public class S3StorageProvider extends AbstractStorageProvider {
      * <ol>
      *   <li>explicit {@code storage.s3.region} in {@code StorageConfig}
      *   <li>region parsed from the URI itself (e.g. {@code *.s3.us-west-2.amazonaws.com})
+     *   <li>without an endpoint override, the region found by {@code environmentRegion}
      *   <li>fallback to {@code us-east-1}
      * </ol>
      *
@@ -425,25 +451,56 @@ public class S3StorageProvider extends AbstractStorageProvider {
      * <ol>
      *   <li>explicit {@code storage.s3.endpoint} in {@code StorageConfig}
      *   <li>endpoint parsed from an {@code http(s)://host/bucket/key} base URI
+     *   <li>the endpoint found by {@code environmentEndpoint}
      *   <li>none (default AWS endpoints for the resolved region)
      * </ol>
      *
      * <p>{@code storage.s3.force-path-style} defaults to {@code true} whenever an endpoint override is in effect (from
-     * either source) and {@code false} for canonical AWS URIs; an explicit value always wins.
+     * any source) and {@code false} for canonical AWS URIs; an explicit value always wins.
      */
-    static S3ClientCache.Key keyFor(StorageConfig config) {
+    static S3ClientCache.Key keyFor(
+            StorageConfig config, EnvironmentEndpoint environmentEndpoint, EnvironmentRegion environmentRegion) {
         URI uri = config.baseUri();
         S3Reference s3Ref = S3CompatibleUrlParser.parseS3Url(uri);
-        String region = config.getParameter(S3_REGION)
-                .filter(s -> !s.isBlank())
-                .orElseGet(() -> s3Ref.region() != null && !s3Ref.region().isBlank() ? s3Ref.region() : "us-east-1");
         boolean anonymous = config.getParameter(S3_ANONYMOUS).orElse(false);
         Optional<String> accessKey = config.getParameter(S3_AWS_ACCESS_KEY_ID);
         Optional<String> secretKey = config.getParameter(S3_AWS_SECRET_ACCESS_KEY);
         Optional<String> profile = config.getParameter(S3_DEFAULT_CREDENTIALS_PROFILE);
-        Optional<URI> endpointOverride = config.getParameter(S3_ENDPOINT).or(s3Ref::endpointOverride);
+        Optional<URI> endpointOverride = endpointOverride(config, s3Ref, environmentEndpoint);
         boolean forcePathStyle = config.getParameter(S3_FORCE_PATH_STYLE).orElse(endpointOverride.isPresent());
+        CredentialsSource credentials = CredentialsSource.of(anonymous, accessKey, secretKey, profile);
+        Optional<String> named = namedRegion(config, s3Ref);
+        String region = named.orElseGet(() -> unnamedRegion(endpointOverride, profile, credentials, environmentRegion));
         return new S3ClientCache.Key(
                 region, endpointOverride, anonymous, accessKey, secretKey, profile, forcePathStyle);
+    }
+
+    /** The endpoint of the {@code storage.s3.endpoint} parameter, else of the URI, else of the environment. */
+    private static Optional<URI> endpointOverride(
+            StorageConfig config, S3Reference s3Ref, EnvironmentEndpoint environment) {
+        Optional<URI> parameter = config.getParameter(S3_ENDPOINT);
+        return parameter.or(s3Ref::endpointOverride).or(environment::find);
+    }
+
+    /** The region of the {@code storage.s3.region} parameter, else the region parsed from the URI. */
+    private static Optional<String> namedRegion(StorageConfig config, S3Reference s3Ref) {
+        Optional<String> parameter = config.getParameter(S3_REGION).filter(not(String::isBlank));
+        Optional<String> parsed = Optional.ofNullable(s3Ref.region()).filter(not(String::isBlank));
+        return parameter.or(() -> parsed);
+    }
+
+    /**
+     * The region of a store naming none. The environment names a region of AWS: a store on another endpoint ignores it.
+     */
+    private static String unnamedRegion(
+            Optional<URI> endpointOverride,
+            Optional<String> profile,
+            CredentialsSource credentials,
+            EnvironmentRegion environment) {
+        if (endpointOverride.isPresent()) {
+            return FALLBACK_REGION;
+        }
+        Optional<String> ofEnvironment = environment.find(profile, credentials);
+        return ofEnvironment.orElse(FALLBACK_REGION);
     }
 }

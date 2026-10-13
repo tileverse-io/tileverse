@@ -125,6 +125,11 @@ response headers or the host.
   interrupt and completes its batch.
 - A wrong region, a missing bucket or a denied listing fails `Storage.list` itself. 2.0 failed
   while the stream was consumed.
+- A `Storage` on AWS without `storage.s3.region` takes the region of the environment: the
+  `aws.region` system property, `AWS_REGION`, the AWS profile files, then EC2 metadata on the
+  default credentials chain. 2.0 used `us-east-1`. On AWS, a request reaching the wrong region
+  is sent again to the region of the bucket. A `Storage` with an endpoint override keeps
+  `us-east-1`, also when the endpoint comes from `AWS_ENDPOINT_URL` or a profile.
 - An S3-compatible endpoint answering without an `ETag` header reads like any other. A
   CRT-based client passed by the caller rejects such answers.
 

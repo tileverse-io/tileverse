@@ -68,7 +68,52 @@ final class S3ClientCache {
             Optional<String> accessKeyId,
             Optional<String> secretAccessKey,
             Optional<String> profile,
-            boolean forcePathStyle) {}
+            boolean forcePathStyle) {
+
+        CredentialsSource credentialsSource() {
+            return CredentialsSource.of(anonymous, accessKeyId, secretAccessKey, profile);
+        }
+
+        /**
+         * Whether a request reaching the wrong region is sent again to the region of the bucket. AWS names that region
+         * in its answer. Behind an endpoint override there is no other region to reach.
+         */
+        boolean crossRegionAccess() {
+            return endpointOverride.isEmpty();
+        }
+    }
+
+    /** The source of the credentials of a store. A store setting several uses the first of them, in this order. */
+    enum CredentialsSource {
+        /** No credentials: requests are unsigned, for public buckets. */
+        ANONYMOUS,
+        /** The access key and its secret. Either alone is ignored. */
+        ACCESS_KEYS,
+        /** The profile named by the store. */
+        NAMED_PROFILE,
+        /**
+         * The AWS default chain: system properties, environment variables, web identity, the AWS profile files,
+         * container and EC2 instance roles.
+         */
+        DEFAULT_CHAIN;
+
+        static CredentialsSource of(
+                boolean anonymous,
+                Optional<String> accessKeyId,
+                Optional<String> secretAccessKey,
+                Optional<String> profile) {
+            if (anonymous) {
+                return ANONYMOUS;
+            }
+            if (accessKeyId.isPresent() && secretAccessKey.isPresent()) {
+                return ACCESS_KEYS;
+            }
+            if (profile.isPresent()) {
+                return NAMED_PROFILE;
+            }
+            return DEFAULT_CHAIN;
+        }
+    }
 
     /**
      * Convenience factory that wraps each nullable argument with {@link Optional#ofNullable}. Prefer this over the
@@ -271,6 +316,7 @@ final class S3ClientCache {
                     .region(Region.of(key.region()))
                     .serviceConfiguration(serviceConfiguration())
                     .credentialsProvider(credentials)
+                    .crossRegionAccessEnabled(key.crossRegionAccess())
                     .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
                     .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED);
             key.endpointOverride().ifPresent(builder::endpointOverride);
@@ -354,25 +400,25 @@ final class S3ClientCache {
         return new ClientFactory(key, credentialsFor(key), httpClientLease.client(), uploadPartsInFlight);
     }
 
-    /**
-     * The credentials of a key, by precedence: anonymous access, for public buckets; the access key and secret; the
-     * named profile; the AWS default chain (system properties, environment variables, web identity, ~/.aws files,
-     * container and EC2 instance roles), failing with a pointer to the anonymous flag.
-     */
+    /** The credentials of a key. The default chain fails with a pointer to the anonymous flag. */
     private static AwsCredentialsProvider credentialsFor(Key key) {
-        if (key.anonymous()) {
-            return AnonymousCredentialsProvider.create();
-        }
-        if (key.accessKeyId().isPresent() && key.secretAccessKey().isPresent()) {
-            String accessKeyId = key.accessKeyId().orElseThrow();
-            String secretAccessKey = key.secretAccessKey().orElseThrow();
-            AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKeyId, secretAccessKey);
-            return StaticCredentialsProvider.create(credentials);
-        }
-        if (key.profile().isPresent()) {
-            String profileName = key.profile().orElseThrow();
-            return ProfileCredentialsProvider.create(profileName);
-        }
-        return new DefaultCredentialsChain();
+        return switch (key.credentialsSource()) {
+            case ANONYMOUS -> AnonymousCredentialsProvider.create();
+            case ACCESS_KEYS -> accessKeyCredentials(key);
+            case NAMED_PROFILE -> profileCredentials(key);
+            case DEFAULT_CHAIN -> new DefaultCredentialsChain();
+        };
+    }
+
+    private static AwsCredentialsProvider accessKeyCredentials(Key key) {
+        String accessKeyId = key.accessKeyId().orElseThrow();
+        String secretAccessKey = key.secretAccessKey().orElseThrow();
+        AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKeyId, secretAccessKey);
+        return StaticCredentialsProvider.create(credentials);
+    }
+
+    private static AwsCredentialsProvider profileCredentials(Key key) {
+        String profileName = key.profile().orElseThrow();
+        return ProfileCredentialsProvider.create(profileName);
     }
 }

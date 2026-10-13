@@ -53,7 +53,8 @@ class S3StorageBatchSettingsTest {
     @Test
     void anInvalidParameterFailsTheOpenWithoutKeepingAClientSet() {
         S3ClientCache clientCache = new S3ClientCache();
-        S3StorageProvider leasingProvider = new S3StorageProvider(clientCache);
+        S3StorageProvider leasingProvider =
+                new S3StorageProvider(clientCache, EnvironmentEndpoint.INSTANCE, EnvironmentRegion.INSTANCE);
         StorageConfig config = anonymousConfig().setParameter(BatchProviderHelper.BATCH_MAX_FETCH, 0);
 
         assertThatThrownBy(() -> leasingProvider.createStorage(config))

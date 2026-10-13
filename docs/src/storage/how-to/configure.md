@@ -71,6 +71,19 @@ try (Storage storage = S3StorageProvider.open(bucket, s3Client);
 }
 ```
 
+#### Region
+
+A `Storage` on AWS takes its region from the first of:
+
+1. `storage.s3.region`;
+2. the URI, when its host or bucket name holds a region;
+3. the `aws.region` system property, then the `AWS_REGION` environment variable;
+4. the AWS profile files: the profile of `storage.s3.default-credentials-profile`, else the profile named by `AWS_PROFILE` or `default`;
+5. EC2 metadata, for a `Storage` on the default credentials chain;
+6. `us-east-1`.
+
+A request reaching the wrong region is sent again to the region of the bucket, at the cost of one failed request. Presigned URLs are not corrected: they need the right region.
+
 #### Custom endpoint (MinIO and other S3-compatible services)
 
 To target a non-AWS S3-compatible service (MinIO, Ceph RGW, Cloudflare R2, DigitalOcean Spaces, Wasabi, LocalStack) you can either keep the service URL (`http(s)://host/bucket/key`) and name the provider with `storage.provider=s3`, or keep a canonical `s3://bucket/key` URI and set the endpoint out of band with `storage.s3.endpoint`:
@@ -80,7 +93,7 @@ Properties props = new Properties();
 props.setProperty("storage.s3.endpoint", "http://localhost:9000"); // MinIO
 props.setProperty("storage.s3.aws-access-key-id", "minioadmin");
 props.setProperty("storage.s3.aws-secret-access-key", "minioadmin");
-props.setProperty("storage.s3.region", "us-east-1"); // any valid region; the SDK requires one
+props.setProperty("storage.s3.region", "us-east-1"); // the region of the service; us-east-1 when left out
 
 URI bucket = URI.create("s3://my-bucket/");
 URI leaf = URI.create("s3://my-bucket/planet.pmtiles");
@@ -92,9 +105,9 @@ try (Storage storage = StorageFactory.open(bucket, props);
 
 How `storage.s3.endpoint` interacts with the other S3 parameters:
 
-- **Precedence**: an explicit `storage.s3.endpoint` wins over the endpoint of an `http(s)://host/bucket/key` URI opened with `storage.provider=s3`. Leave it unset to use the default AWS endpoints for the region.
-- **`storage.s3.force-path-style`**: defaults to `true` whenever an endpoint override is in effect (from either the parameter or the URI), and `false` for canonical AWS URIs. Most S3-compatible services require path-style. Set `storage.s3.force-path-style` explicitly to override the default.
-- **`storage.s3.region`**: still required by the SDK even for services that ignore it (e.g. MinIO). It falls back to `us-east-1` when neither the parameter nor the URI specifies one. For Cloudflare R2, use `storage.s3.region=auto`.
+- **Precedence**: `storage.s3.endpoint` first, then the endpoint of an `http(s)://host/bucket/key` URI opened with `storage.provider=s3`, then the endpoint named by the AWS environment: the `aws.endpointUrlS3` or `aws.endpointUrl` system property, the `AWS_ENDPOINT_URL_S3` or `AWS_ENDPOINT_URL` environment variable, then `endpoint_url` in the AWS profile files (the profile named by `AWS_PROFILE`, or `default`). With none of them, the `Storage` uses the default AWS endpoints for the region.
+- **`storage.s3.force-path-style`**: defaults to `true` whenever an endpoint override is in effect (from any of these sources), and `false` for canonical AWS URIs. Most S3-compatible services require path-style. Set `storage.s3.force-path-style` explicitly to override the default.
+- **`storage.s3.region`**: with an endpoint override the region only signs the requests, and the service may reject a region other than its own (MinIO does). It falls back to `us-east-1` when neither the parameter nor the URI names one: the region of the environment is not read. For Cloudflare R2, use `storage.s3.region=auto`.
 - **Credentials** (`storage.s3.anonymous`, `storage.s3.aws-access-key-id` / `storage.s3.aws-secret-access-key`, `storage.s3.default-credentials-profile`, the default chain): fully orthogonal to the endpoint. The endpoint selects the service; credentials select the identity. Static access-key + secret is the usual pairing for self-hosted services.
 
 ### HTTP / HTTPS

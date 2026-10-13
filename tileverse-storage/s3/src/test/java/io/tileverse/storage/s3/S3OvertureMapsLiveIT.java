@@ -39,6 +39,8 @@ import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * Live IT exercising recursive glob listing against Overture Maps' public {@code overturemaps-us-west-2} S3 bucket. The
@@ -112,15 +114,18 @@ class S3OvertureMapsLiveIT {
         }
     }
 
-    @Test
-    void listBadRegion() throws IOException {
+    // us-east-2 answers with a 301 naming the region of the bucket, and the request is sent again there.
+    @ParameterizedTest(name = "path style: {0}")
+    @ValueSource(booleans = {false, true})
+    void listWithWrongRegion(boolean pathStyle) throws IOException {
         Properties props = anonymous();
         props.setProperty(S3StorageProvider.S3_REGION.key(), "us-east-2");
-        try (Storage storage = StorageFactory.open(baseUri, props)) {
-            assertThatThrownBy(() -> storage.list("theme=addresses/**/*.parquet"))
-                    .isInstanceOf(io.tileverse.storage.StorageException.class)
-                    .hasCauseInstanceOf(software.amazon.awssdk.services.s3.model.S3Exception.class)
-                    .hasMessageContaining("Service: S3, Status Code: 301");
+        props.setProperty(S3StorageProvider.S3_FORCE_PATH_STYLE.key(), String.valueOf(pathStyle));
+        try (Storage storage = StorageFactory.open(baseUri, props);
+                Stream<StorageEntry> stream = storage.list("theme=addresses/**/*.parquet")) {
+            List<StorageEntry> first = stream.limit(5).toList();
+
+            assertThat(first).hasSize(5);
         }
     }
 

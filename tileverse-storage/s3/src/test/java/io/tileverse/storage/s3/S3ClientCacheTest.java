@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -36,8 +37,15 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.async.AsyncResponseTransformer;
 import software.amazon.awssdk.http.SdkHttpMethod;
 import software.amazon.awssdk.http.SdkHttpRequest;
@@ -82,6 +90,62 @@ class S3ClientCacheTest {
             assertThat(lease.client().serviceClientConfiguration().credentialsProvider())
                     .isInstanceOf(DefaultCredentialsChain.class);
         }
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("credentialsSettings")
+    void credentialsByPrecedence(String scenario, S3ClientCache.Key key, Class<?> expectedProvider) {
+        S3ClientCache cache = cacheCountingHttpClients();
+        try (S3ClientCache.Lease lease = cache.acquire(key)) {
+            assertThat(lease.client().serviceClientConfiguration().credentialsProvider())
+                    .as(scenario)
+                    .isInstanceOf(expectedProvider);
+        }
+    }
+
+    static Stream<Arguments> credentialsSettings() {
+        return Stream.of(
+                Arguments.of(
+                        "anonymous access, keys and profile",
+                        S3ClientCache.key("us-east-1", null, true, "id", "secret", "analytics", false),
+                        AnonymousCredentialsProvider.class),
+                Arguments.of(
+                        "keys and profile",
+                        S3ClientCache.key("us-east-1", null, false, "id", "secret", "analytics", false),
+                        StaticCredentialsProvider.class),
+                Arguments.of(
+                        "access key without its secret, and profile",
+                        S3ClientCache.key("us-east-1", null, false, "id", null, "analytics", false),
+                        ProfileCredentialsProvider.class),
+                Arguments.of(
+                        "profile",
+                        S3ClientCache.key("us-east-1", null, false, null, null, "analytics", false),
+                        ProfileCredentialsProvider.class),
+                Arguments.of(
+                        "secret without its access key",
+                        S3ClientCache.key("us-east-1", null, false, null, "secret", null, false),
+                        DefaultCredentialsChain.class));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("endpoints")
+    void crossRegionAccess(String scenario, S3ClientCache.Key key, boolean expected) {
+        S3ClientCache cache = cacheCountingHttpClients();
+        try (S3ClientCache.Lease lease = cache.acquire(key)) {
+            assertThat(lease.client().serviceClientConfiguration().crossRegionAccessEnabled())
+                    .as(scenario)
+                    .isEqualTo(expected);
+        }
+    }
+
+    static Stream<Arguments> endpoints() {
+        URI minio = URI.create("http://localhost:9000");
+        return Stream.of(
+                Arguments.of("AWS", EAST, true),
+                Arguments.of(
+                        "endpoint override",
+                        S3ClientCache.key("us-east-1", minio, true, null, null, null, true),
+                        false));
     }
 
     @Test

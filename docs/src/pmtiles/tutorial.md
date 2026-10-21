@@ -13,12 +13,12 @@ First, add the dependencies:
       <dependency>
         <groupId>io.tileverse.pmtiles</groupId>
         <artifactId>tileverse-pmtiles</artifactId>
-        <version>2.0.0</version>
+        <version>2.1.0</version>
       </dependency>
       <dependency>
         <groupId>io.tileverse.storage</groupId>
         <artifactId>tileverse-storage-all</artifactId>
-        <version>2.0.0</version>
+        <version>2.1.0</version>
       </dependency>
     </dependencies>
     ```
@@ -27,8 +27,8 @@ First, add the dependencies:
 
     ```gradle
     dependencies {
-        implementation 'io.tileverse.pmtiles:tileverse-pmtiles:2.0.0'
-        implementation 'io.tileverse.storage:tileverse-storage-all:2.0.0'
+        implementation 'io.tileverse.pmtiles:tileverse-pmtiles:2.1.0'
+        implementation 'io.tileverse.storage:tileverse-storage-all:2.1.0'
     }
     ```
 

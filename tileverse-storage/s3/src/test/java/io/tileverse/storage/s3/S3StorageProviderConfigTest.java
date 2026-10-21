@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.util.ReadsSystemProperty;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -38,6 +39,8 @@ import software.amazon.awssdk.regions.Region;
  * {@code testResolveCredentialsProviderPrecedence} / {@code testResolveRegionUsesExplicitAndParsedValues} cases that
  * lived in the now-removed {@code S3RangeReader.Builder}.
  */
+// Opening a store reads the system property that disables the S3 provider, set by S3StorageProviderTest
+@ReadsSystemProperty
 class S3StorageProviderConfigTest {
 
     /** The path of a path-style URL of {@code data/file.txt} in {@code my-bucket}: the bucket comes first. */

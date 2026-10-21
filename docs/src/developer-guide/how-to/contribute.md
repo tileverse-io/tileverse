@@ -11,6 +11,8 @@ Thank you for your interest in contributing to Tileverse! We welcome contributio
 5.  **Format**: Run `make format` to ensure code style compliance.
 6.  **PR**: Submit a Pull Request to the `main` branch.
 
+If you use AI tools, read the [AI policy](../../ai.md) first.
+
 ## Coding Standards
 
 *   **Java Version**: Target Java 17 compatibility, but build with Java 21+.

@@ -14,7 +14,7 @@ The project provides a Bill of Materials (BOM) to manage dependency versions:
         <dependency>
             <groupId>io.tileverse</groupId>
             <artifactId>tileverse-bom</artifactId>
-            <version>2.0.0</version>
+            <version>2.1.0</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
@@ -43,7 +43,7 @@ Include all functionality with a single dependency:
 <dependency>
     <groupId>io.tileverse.storage</groupId>
     <artifactId>tileverse-storage-all</artifactId>
-    <version>2.0.0</version>
+    <version>2.1.0</version>
 </dependency>
 ```
 
@@ -62,7 +62,7 @@ If you prefer not to use the BOM, specify versions explicitly:
 <dependency>
     <groupId>io.tileverse.storage</groupId>
     <artifactId>tileverse-storage-core</artifactId>
-    <version>2.0.0</version>
+    <version>2.1.0</version>
 </dependency>
 ```
 
@@ -74,7 +74,7 @@ If you prefer not to use the BOM, specify versions explicitly:
     <dependency>
         <groupId>io.tileverse.storage</groupId>
         <artifactId>tileverse-storage-s3</artifactId>
-        <version>2.0.0</version>
+        <version>2.1.0</version>
     </dependency>
     ```
 
@@ -84,7 +84,7 @@ If you prefer not to use the BOM, specify versions explicitly:
     <dependency>
         <groupId>io.tileverse.storage</groupId>
         <artifactId>tileverse-storage-azure</artifactId>
-        <version>2.0.0</version>
+        <version>2.1.0</version>
     </dependency>
     ```
 
@@ -94,7 +94,7 @@ If you prefer not to use the BOM, specify versions explicitly:
     <dependency>
         <groupId>io.tileverse.storage</groupId>
         <artifactId>tileverse-storage-gcs</artifactId>
-        <version>2.0.0</version>
+        <version>2.1.0</version>
     </dependency>
     ```
 
@@ -105,7 +105,7 @@ If you prefer not to use the BOM, specify versions explicitly:
 ```gradle
 dependencyManagement {
     imports {
-        mavenBom 'io.tileverse:tileverse-bom:2.0.0'
+        mavenBom 'io.tileverse:tileverse-bom:2.1.0'
     }
 }
 
@@ -119,19 +119,19 @@ dependencies {
 ### All Modules
 
 ```gradle
-implementation 'io.tileverse.storage:tileverse-storage-all:2.0.0'
+implementation 'io.tileverse.storage:tileverse-storage-all:2.1.0'
 ```
 
 ### Individual Modules
 
 ```gradle
 // Core module (required)
-implementation 'io.tileverse.storage:tileverse-storage-core:2.0.0'
+implementation 'io.tileverse.storage:tileverse-storage-core:2.1.0'
 
 // Cloud provider modules (optional)
-implementation 'io.tileverse.storage:tileverse-storage-s3:2.0.0'
-implementation 'io.tileverse.storage:tileverse-storage-azure:2.0.0'
-implementation 'io.tileverse.storage:tileverse-storage-gcs:2.0.0'
+implementation 'io.tileverse.storage:tileverse-storage-s3:2.1.0'
+implementation 'io.tileverse.storage:tileverse-storage-azure:2.1.0'
+implementation 'io.tileverse.storage:tileverse-storage-gcs:2.1.0'
 ```
 
 ## Verify Installation

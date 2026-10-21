@@ -137,6 +137,7 @@ nav:
       - OGC compliance and encodings: tilematrixset/reference/ogc-compliance.md
   - Developer Guide:
     - Overview: developer-guide/index.md
+    - AI policy: ai.md
     - How-to guides:
       - Build from source: developer-guide/how-to/build.md
       - Run tests: developer-guide/how-to/test.md

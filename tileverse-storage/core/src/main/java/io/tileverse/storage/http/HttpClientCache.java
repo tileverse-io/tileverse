@@ -29,6 +29,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -126,6 +127,12 @@ final class HttpClientCache {
     }
 
     private static final class Entry {
+        /**
+         * {@code HttpClient.shutdownNow()}, or {@code null} before Java 21. It is found by reflection because the
+         * sources target Java 17.
+         */
+        private static final @Nullable Method SHUTDOWN_NOW = findShutdownNow();
+
         final HttpClient client;
         final AtomicInteger refCount = new AtomicInteger();
 
@@ -133,22 +140,31 @@ final class HttpClientCache {
             this.client = client;
         }
 
+        /**
+         * Stops the client and drops its ongoing requests. A Java 17 client has no shutdown method. It stops its
+         * threads and closes its connections once garbage collected.
+         */
         void shutdown() {
-            // HttpClient implements AutoCloseable starting with Java 21 and gets shutdownNow() to immediately
-            // discard ongoing requests. Reflective access keeps the source compatible with Java 17.
-            try {
-                Method shutdownNow = client.getClass().getMethod("shutdownNow");
-                shutdownNow.invoke(client);
+            if (SHUTDOWN_NOW == null) {
                 return;
-            } catch (Exception e) {
-                log.warn("Error calling shutdownNow on HttpClient", e);
             }
-            if (client instanceof AutoCloseable closeable) {
-                try {
-                    closeable.close();
-                } catch (Exception e) {
-                    log.warn("Error closing HttpClient", e);
-                }
+            try {
+                SHUTDOWN_NOW.invoke(client);
+            } catch (ReflectiveOperationException e) {
+                log.warn("Error shutting down HttpClient", e);
+            }
+        }
+
+        /**
+         * Looks the method up on the public {@link HttpClient} type. The runtime class of a client belongs to a package
+         * not exported by {@code java.net.http}, and invoking its methods by reflection fails with an
+         * {@link IllegalAccessException}.
+         */
+        private static @Nullable Method findShutdownNow() {
+            try {
+                return HttpClient.class.getMethod("shutdownNow");
+            } catch (NoSuchMethodException beforeJava21) {
+                return null;
             }
         }
     }

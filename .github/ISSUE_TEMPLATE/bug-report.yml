@@ -1,0 +1,20 @@
+name: Bug report
+description: Something does not work as expected
+type: Bug
+body:
+  - type: textarea
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: What did you expect?
+  - type: textarea
+    attributes:
+      label: How can we reproduce it?
+      description: A code snippet or the steps. Paste the stack trace if there is one.
+  - type: input
+    attributes:
+      label: Versions
+      placeholder: tileverse 2.1.0, Java 21

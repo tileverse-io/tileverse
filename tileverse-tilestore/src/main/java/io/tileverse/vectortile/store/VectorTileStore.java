@@ -23,7 +23,9 @@ import io.tileverse.tiling.store.TileData;
 import io.tileverse.vectortile.model.VectorTile;
 import io.tileverse.vectortile.model.VectorTile.Layer.Feature;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.stream.Stream;
 
 /**
@@ -127,10 +129,15 @@ public abstract class VectorTileStore extends AbstractTileStore<VectorTile> {
         if (query.strategy() == Strategy.SPEED) {
             return matrixSet().minZoomLevel();
         }
+        return highestLayerMinZoom().orElseGet(matrixSet()::minZoomLevel);
+    }
 
+    /** Skips the layers without a {@code minZoom}, an optional field in TileJSON. */
+    private OptionalInt highestLayerMinZoom() {
         return getVectorLayersMetadata().stream()
-                .mapToInt(VectorLayer::minZoom)
-                .max()
-                .orElseGet(matrixSet()::minZoomLevel);
+                .map(VectorLayer::minZoom)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .max();
     }
 }

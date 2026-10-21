@@ -2,10 +2,7 @@ blank_issues_enabled: false
 contact_links:
   - name: Documentation
     url: https://tileverse.io/
-    about: Usage guides, examples, and API reference
-  - name: Discussions
-    url: https://github.com/tileverse-io/tileverse/discussions
-    about: Ask questions and discuss ideas with the community
-  - name: Security Vulnerability
+    about: Guides and API reference
+  - name: Security issue
     url: https://github.com/tileverse-io/tileverse/security/advisories/new
-    about: Report security vulnerabilities privately
+    about: Report it privately, not in a public issue

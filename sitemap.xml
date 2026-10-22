@@ -21,14 +21,6 @@
          <lastmod>2026-10-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/developer-guide/explanation/dependencies/</loc>
-         <lastmod>2026-10-22</lastmod>
-    </url>
-    <url>
-         <loc>https://tileverse.io/developer-guide/explanation/system-design/</loc>
-         <lastmod>2026-10-22</lastmod>
-    </url>
-    <url>
          <loc>https://tileverse.io/developer-guide/how-to/build/</loc>
          <lastmod>2026-10-22</lastmod>
     </url>
@@ -37,19 +29,7 @@
          <lastmod>2026-10-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/developer-guide/how-to/test/</loc>
-         <lastmod>2026-10-22</lastmod>
-    </url>
-    <url>
          <loc>https://tileverse.io/pmtiles/</loc>
-         <lastmod>2026-10-22</lastmod>
-    </url>
-    <url>
-         <loc>https://tileverse.io/pmtiles/tutorial/</loc>
-         <lastmod>2026-10-22</lastmod>
-    </url>
-    <url>
-         <loc>https://tileverse.io/pmtiles/how-to/cloud-storage/</loc>
          <lastmod>2026-10-22</lastmod>
     </url>
     <url>
@@ -69,10 +49,6 @@
          <lastmod>2026-10-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/explanation/performance/</loc>
-         <lastmod>2026-10-22</lastmod>
-    </url>
-    <url>
          <loc>https://tileverse.io/storage/explanation/why/</loc>
          <lastmod>2026-10-22</lastmod>
     </url>
@@ -85,10 +61,6 @@
          <lastmod>2026-10-22</lastmod>
     </url>
     <url>
-         <loc>https://tileverse.io/storage/how-to/install/</loc>
-         <lastmod>2026-10-22</lastmod>
-    </url>
-    <url>
          <loc>https://tileverse.io/storage/how-to/migrate-from-1.4/</loc>
          <lastmod>2026-10-22</lastmod>
     </url>
@@ -97,23 +69,15 @@
          <lastmod>2026-10-22</lastmod>
     </url>
     <url>
+         <loc>https://tileverse.io/storage/how-to/read-byte-ranges/</loc>
+         <lastmod>2026-10-22</lastmod>
+    </url>
+    <url>
          <loc>https://tileverse.io/storage/how-to/troubleshoot/</loc>
          <lastmod>2026-10-22</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/storage/how-to/use-each-backend/</loc>
-         <lastmod>2026-10-22</lastmod>
-    </url>
-    <url>
-         <loc>https://tileverse.io/storage/reference/rangereader-quick-start/</loc>
-         <lastmod>2026-10-22</lastmod>
-    </url>
-    <url>
-         <loc>https://tileverse.io/storage/reference/rangereader-recipes/</loc>
-         <lastmod>2026-10-22</lastmod>
-    </url>
-    <url>
-         <loc>https://tileverse.io/storage/reference/rangereader/</loc>
          <lastmod>2026-10-22</lastmod>
     </url>
     <url>
@@ -138,10 +102,6 @@
     </url>
     <url>
          <loc>https://tileverse.io/vectortiles/</loc>
-         <lastmod>2026-10-22</lastmod>
-    </url>
-    <url>
-         <loc>https://tileverse.io/vectortiles/tutorial/</loc>
          <lastmod>2026-10-22</lastmod>
     </url>
     <url>

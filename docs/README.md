@@ -1,6 +1,6 @@
 # Tileverse Documentation
 
-This directory contains the documentation for the entire Tileverse toolkit: `tileverse-storage` (with the `RangeReader` byte-range API), `tileverse-pmtiles`, `tileverse-vectortiles`, `tileverse-tilematrixset`, and the format-agnostic `tileverse-tilestore` abstraction. The site is built with MkDocs Material and includes C4 architectural diagrams generated from a Structurizr DSL.
+This directory contains the documentation for the entire Tileverse toolkit: `tileverse-storage` (with the `RangeReader` byte-range API), `tileverse-pmtiles`, `tileverse-versatiles`, `tileverse-vectortiles`, `tileverse-tilematrixset`, and the format-agnostic `tileverse-tilestore` abstraction. The site is built with MkDocs Material and includes C4 architectural diagrams generated from a Structurizr DSL.
 
 The published site is [tileverse.io](https://tileverse.io).
 
@@ -42,24 +42,24 @@ docs/
 │   └── ignored-contributors.txt
 │
 ├── src/                  # Markdown sources (docs_dir in mkdocs.yml). Each library
-│   │                     # section follows the same Diataxis layout: tutorial.md
-│   │                     # at the top, plus how-to/, reference/, and explanation/
-│   │                     # subdirectories as needed.
+│   │                     # section has an index.md overview, plus tutorial.md,
+│   │                     # how-to/, reference/, and explanation/ as needed.
 │   ├── index.md          # Site homepage
 │   ├── getting-started.md
 │   ├── storage/
 │   │   ├── index.md
-│   │   ├── how-to/       # install, use-each-backend, configure, authenticate, ...
-│   │   ├── reference/    # rangereader API, recipes, quick-start
-│   │   └── explanation/  # why, internals (architecture + performance)
+│   │   ├── how-to/       # use-each-backend, read-byte-ranges, configure, authenticate, ...
+│   │   └── explanation/  # why, internals
 │   ├── pmtiles/
 │   │   ├── index.md
-│   │   ├── tutorial.md
-│   │   ├── how-to/       # read-pmtiles, cloud-storage
+│   │   ├── how-to/       # read-pmtiles
 │   │   └── reference/    # tile-stores
+│   ├── versatiles/
+│   │   ├── index.md
+│   │   ├── how-to/       # read-versatiles
+│   │   └── reference/    # format-support
 │   ├── vectortiles/
 │   │   ├── index.md
-│   │   ├── tutorial.md
 │   │   └── how-to/       # encode, decode
 │   ├── tilematrixset/
 │   │   ├── index.md
@@ -68,8 +68,8 @@ docs/
 │   │   └── reference/    # ogc-compliance
 │   ├── developer-guide/
 │   │   ├── index.md
-│   │   ├── how-to/       # build, test, contribute
-│   │   └── explanation/  # architecture, system-design, dependencies
+│   │   ├── how-to/       # build (and test), contribute
+│   │   └── explanation/  # architecture
 │   └── assets/
 │       └── images/
 │           ├── storage/  # Generated Structurizr C4 SVGs (consumed by .md pages)
@@ -88,17 +88,18 @@ docs/
 
 ## C4 diagrams
 
-`structurizr/workspace.dsl` models the whole `Tileverse` software system, with one container per Maven module and component views for each. `build.sh` runs the Structurizr Docker image to export PlantUML, then converts to SVG and drops the files in `src/assets/images/storage/` for the Markdown pages to reference.
+`structurizr/workspace.dsl` models the whole `Tileverse` software system, with one container per library module and component views for each. `build.sh` runs the Structurizr Docker image to export PlantUML, then converts to SVG and drops the files in `src/assets/images/storage/` for the Markdown pages to reference.
 
 Defined views:
 
 | View key | What it shows |
 | :--- | :--- |
 | `SystemContext` | Tileverse in context of external storage systems and consumers |
-| `Containers` | All six Maven modules and how they depend on each other |
+| `Containers` | The library modules and how they depend on each other |
 | `CoreComponents` | `tileverse-storage-core` internals (Storage, RangeReader, decorators, SPI) |
 | `AllModuleComponents` | The `tileverse-storage-all` aggregator |
 | `PMTilesComponents` | `tileverse-pmtiles` internals (reader, header, Hilbert, store wrappers) |
+| `VersatilesComponents` | `tileverse-versatiles` internals (reader, block index, tile index cache, store wrappers) |
 | `VectorTilesComponents` | `tileverse-vectortiles` (codec, builder, model) |
 | `TileMatrixSetComponents` | `tileverse-tilematrixset` (TMS, TilePyramid, IO) |
 | `TileStoreComponents` | `tileverse-tilestore` (TileStore<T>, VectorTileStore, RasterTileStore, TileJSON) |
@@ -127,7 +128,9 @@ Documentation in this repository follows a few non-negotiable conventions. Apply
 
 ### Diataxis structure
 
-The site is organised by the [Diataxis framework](https://diataxis.fr/): each library section groups its pages under **Tutorial** (learning-oriented), **How-to guides** (problem-oriented), **Reference** (information-oriented), and **Explanation** (understanding-oriented). Keep each page single-quadrant. If a page mixes a walkthrough with reference tables, split it.
+The site is organised by the [Diataxis framework](https://diataxis.fr/): each library section groups its pages under **Tutorial** (learning-oriented), **How-to guides** (problem-oriented), **Reference** (information-oriented), and **Explanation** (understanding-oriented), as needed. The overview of a section shows its first program, and a small library needs no separate tutorial. Keep each page single-quadrant. If a page mixes a walkthrough with reference tables, split it.
+
+Each fact lives on one page. Other pages link to it instead of repeating it.
 
 ### Accuracy over fluency
 

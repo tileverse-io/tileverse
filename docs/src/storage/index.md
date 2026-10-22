@@ -1,8 +1,8 @@
 # Storage
 
-The `Storage` API is the broader I/O abstraction over object storage in tileverse-storage. It exposes the full set of container operations - listing, range and streaming reads, atomic writes, deletes, server-side copy, and presigned URLs - with an honest capability model so callers can adapt to what each backend supports.
+`tileverse-storage` gives one Java API over local files, HTTP, Amazon S3 and S3-compatible services, Azure Blob Storage and Data Lake Storage, and Google Cloud Storage. A `Storage` covers a container: a directory, a bucket, or a prefix. It lists, reads, writes, deletes, copies and presigns the objects under it, and declares which of these operations its backend supports.
 
-The `Storage` API is the recommended entrypoint when you need anything beyond byte-range reads of a single known file. For pure range-read use cases (PMTiles, COG, single-file Parquet) the existing `RangeReader` API remains a perfectly good choice; both APIs ship in the same module and `Storage.openRangeReader(key)` returns a `RangeReader` so you can mix them freely.
+Format readers that need byte ranges of one file, such as PMTiles, Cloud Optimized GeoTIFF or Parquet readers, get a `RangeReader` from `Storage.openRangeReader(key)`. See [Read byte ranges](how-to/read-byte-ranges.md).
 
 ## Supported backends
 
@@ -17,64 +17,7 @@ The `Storage` API is the recommended entrypoint when you need anything beyond by
 
 The URI scheme alone selects the backend, and no request is sent to choose it. An `http(s)` URL opens the HTTP backend, the URL of an object in a cloud service included: a public object reads without credentials, and a private one is refused (401 or 403; Azure Blob answers 404 or 409). To reach a cloud backend through an `http(s)` URL, name the provider with `storage.provider` (`s3`, `azure`, `azure-datalake` or `gcs`), or use the native scheme.
 
-## S3-compatible endpoints
-
-The S3 backend serves **any S3-compatible service**, not just AWS. Address the service in one of two forms:
-
-- Keep the service URL and name the provider: `http(s)://endpoint/bucket/key` with `storage.provider=s3`. The endpoint comes from the URL.
-- Keep a canonical `s3://bucket/key` URI and point it at the service with `storage.s3.endpoint` (e.g. `http://localhost:9000` for MinIO). This separates *where the object lives* (the URI) from *where the service is* (the endpoint), and auto-enables path-style addressing. See [Configure - Amazon S3](how-to/configure.md#amazon-s3).
-
-```java
-Properties props = new Properties();
-props.setProperty("storage.provider", "s3");
-
-try (Storage storage = StorageFactory.open(URI.create("http://minio:9000/my-bucket/datasets/"), props)) {
-    // ... use the Storage ...
-}
-```
-
-With no provider named, the same URL opens the read-only HTTP backend.
-
-Tested or known to work:
-
-| Service | Service URL | Notes |
-| :--- | :--- | :--- |
-| **MinIO** | `http://host:9000/bucket/key` | Self-hosted; the `force-path-style` parameter is auto-enabled for non-AWS hosts. |
-| **Ceph RADOS Gateway (RGW)** | `https://rgw.example.com/bucket/key` | The dominant S3-compatible backend in modern OpenStack and on-prem deployments. |
-| **OpenStack Swift (via `s3api` middleware)** | `https://swift.example.com/bucket/key` | Most Swift deployments enable `s3api`; native Swift API is intentionally not supported (see below). |
-| **Cloudflare R2** | `https://<account>.r2.cloudflarestorage.com/bucket/key` | Set `storage.s3.region=auto`. |
-| **Backblaze B2** | `https://s3.<region>.backblazeb2.com/bucket/key` | Standard S3 SDK auth. |
-| **Wasabi** | `https://s3.<region>.wasabisys.com/bucket/key` | |
-| **DigitalOcean Spaces** | `https://<region>.digitaloceanspaces.com/bucket/key` | |
-| **IBM Cloud Object Storage** | `https://s3.<region>.cloud-object-storage.appdomain.cloud/bucket/key` | Use the public S3 endpoint, not the legacy Swift one. |
-| **Linode Object Storage** | `https://<region>.linodeobjects.com/bucket/key` | |
-| **OVHcloud Object Storage (S3 endpoint)** | `https://s3.<region>.cloud.ovh.net/bucket/key` | OVH offers both S3 and Swift endpoints; use the S3 one. |
-| **Custom / enterprise** | `https://s3.company.internal/bucket/key` | Any service speaking the S3 API. |
-
-Credentials and region come from the same parameters as AWS S3 (`storage.s3.aws-access-key-id`, `storage.s3.aws-secret-access-key`, `storage.s3.region`); the SDK's default credential chain is used when none are set.
-
-!!! info "Native protocols for OpenStack Swift, Azure Files, FTP, etc. are intentionally not supported"
-    `tileverse-storage`'s scope is *cloud-optimized object storage for the GeoTools/GeoServer ecosystem*. Native OpenStack Swift, Azure Files (SMB), HDFS-via-WebHDFS, FTP, and similar are out of scope: the audience is overwhelmingly served by S3-compatible endpoints (which all of the above offer), and adding alternate-protocol backends would multiply the maintenance burden without serving a real user. See [Why tileverse-storage?](explanation/why.md#when-not-to-use-this-library) for the broader scope rationale.
-
-## Capability matrix
-
-Every backend declares its capabilities at open time via `Storage.capabilities()`. The matrix below summarizes the most common flags; see the JavaDoc on `StorageCapabilities` for the full set.
-
-| Capability | local | http | S3 GP | S3 Express | Azure Blob | DataLake Gen2 | GCS Flat | GCS HNS |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Range read | Y | Y | Y | Y | Y | Y | Y | Y |
-| Streaming read from offset | Y | Y | Y | Y | Y | Y | Y | Y |
-| List (flat + hierarchical) | Y | N | Y | Y | Y | Y | Y | Y |
-| Real directories | Y | N | N | ~ | N | Y | N | Y |
-| Single + multipart writes | Y | N | Y | Y | Y | Y | Y | Y |
-| Bulk delete | Y | N | Y (1000) | Y (1000) | Y (256) | Y | Y (100) | Y (100) |
-| Server-side copy | N/A | N | Y | Y | Y | Y | Y | Y |
-| Atomic move | Y | N | N | N | N | Y | N | Y |
-| Conditional ops (`If-Match`, `If-None-Match: *`) | ~ | Y | Y | Y | Y | Y | Y | Y |
-| Presigned URLs | N | N | Y (7d) | Y (5min) | Y (SAS, 7d) | N (use blob endpoint) | Y (7d) | Y (7d) |
-| Versioning | N | N | Y | N | Y | Y | Y | Y |
-
-A user-metadata map (`Map<String, String>`) is exposed by all object-store backends; local FS and HTTP return an empty map.
+S3-compatible services, such as MinIO, Ceph, Garage or Cloudflare R2, work through the S3 backend. See [Use each backend](how-to/use-each-backend.md#s3-compatible-services).
 
 ## Open a Storage
 
@@ -88,14 +31,13 @@ try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/datasets/v
 }
 ```
 
-`StorageFactory.open(URI)` opens the backend of the URI scheme. The overloads taking `Properties` or a `StorageConfig` open the provider named by `storage.provider` when one is set. Authentication uses the SDK's default credential chain unless you provide a `StorageConfig` with explicit credentials.
+`StorageFactory.open(URI)` opens the backend of the URI scheme. The overloads taking `Properties` or a `StorageConfig` also open the provider named by `storage.provider` when one is set. With no credential parameter, the cloud backends use the default credential chain of their SDK; [Authenticate](how-to/authenticate.md) lists the alternatives.
 
 ## What can you do with it?
 
 ```java
 import io.tileverse.storage.CopyOptions;
 import io.tileverse.storage.DeleteResult;
-import io.tileverse.storage.ListOptions;
 import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.WriteOptions;
 import io.tileverse.storage.RangeReader;
@@ -109,13 +51,10 @@ try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/datasets/v
 
     // Stat (HEAD)
     storage.stat("year=2024/file.parquet").ifPresent(entry -> {
-        System.out.println("size=" + entry.size() + " etag=" + entry.etag());
+        System.out.println("size=" + entry.size() + " etag=" + entry.etag().orElse("none"));
     });
 
-    // List with glob, recursively. The pattern is a shell-style glob:
-    //   "year=2024/"             -> immediate children of year=2024/
-    //   "year=2024/**"           -> walk all descendants
-    //   "year=2024/**\/*.parquet" -> walk + filter
+    // List with a glob; "**" walks the descendants
     try (Stream<StorageEntry> entries = storage.list("year=2024/**/*.parquet")) {
         entries.filter(e -> e instanceof StorageEntry.File)
                 .forEach(e -> System.out.println(e.key()));
@@ -129,7 +68,7 @@ try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/datasets/v
             "node-1".getBytes(StandardCharsets.UTF_8),
             WriteOptions.builder().ifNotExists(true).build());
 
-    // Range read via the existing RangeReader API
+    // Range read
     try (RangeReader reader = storage.openRangeReader("year=2024/file.parquet")) {
         ByteBuffer buf = reader.readRange(0, 4096);
         // ...
@@ -152,89 +91,37 @@ try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/datasets/v
 }
 ```
 
-## Discoverability vs. fail-fast
+[Use each backend](how-to/use-each-backend.md#pattern-syntax) describes the glob syntax of `list`.
 
-Two equivalent ways to handle backend differences:
+## Capability matrix
 
-```java
-// 1. Interrogate capabilities up front
-StorageCapabilities caps = storage.capabilities();
-if (caps.atomicMove()) {
-    storage.move(src, dst);
-} else {
-    // copy + delete fallback (Storage.move does this automatically on flat backends too)
-    storage.move(src, dst);
-}
+Each backend declares its capabilities at open time, in `Storage.capabilities()`. An operation that a backend does not support throws `UnsupportedCapabilityException`. The matrix below summarizes the most common capabilities; the javadoc of `StorageCapabilities` lists them all.
 
-// 2. Or just call - unsupported operations throw UnsupportedCapabilityException
-try {
-    storage.presignGet("file.parquet", Duration.ofMinutes(15));
-} catch (UnsupportedCapabilityException e) {
-    // backend doesn't support presigned URLs
-}
-```
+| Capability | local | http | S3 GP | S3 Express | Azure Blob | DataLake Gen2 | GCS Flat | GCS HNS |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| Range read | Y | Y | Y | Y | Y | Y | Y | Y |
+| Streaming read from offset | Y | Y | Y | Y | Y | Y | Y | Y |
+| List (flat + hierarchical) | Y | N | Y | Y | Y | Y | Y | Y |
+| Real directories | Y | N | N | N | N | Y | N | Y |
+| Single + multipart writes | Y (single only) | N | Y | Y | Y | Y | Y | Y |
+| Bulk delete | Y | N | Y (1000) | Y (1000) | Y (256) | Y | Y (100) | Y (100) |
+| Server-side copy | Y | N | Y | Y | Y | Y | Y | Y |
+| Atomic move | Y | N | N | N | N | Y | N | Y |
+| Conditional ops (`If-Match`, `If-None-Match: *`) | ~ | ~ | Y | Y | Y | Y | Y | Y |
+| Presigned URLs | N | N | Y (7d) | Y (5min) | Y, with an account key (SAS, 7d) | N (use blob endpoint) | Y (7d) | Y (7d) |
+| Versioning | N | N | Y | N | Y | N | Y | Y |
 
-## Storage and RangeReader
-
-`Storage.openRangeReader(key)` returns a `RangeReader` for the named blob. The decorator stack (`CachingRangeReader`, `BlockAlignedRangeReader`) still works, composed explicitly with the aligner above the cache:
-
-```java
-import io.tileverse.storage.RangeReader;
-import io.tileverse.storage.block.BlockAlignedRangeReader;
-import io.tileverse.storage.cache.CachingRangeReader;
-
-try (Storage storage = StorageFactory.open(URI.create("s3://bucket/data/"))) {
-    RangeReader reader = storage.openRangeReader("file.pmtiles");
-    RangeReader cached = CachingRangeReader.builder(reader).build();
-    RangeReader aligned = BlockAlignedRangeReader.builder(cached)
-            .alignWholeFile()
-            .build();
-    // use `aligned` for block-grain caching, or `cached` directly for exact-range caching
-}
-```
-
-`RangeReader.close()` releases only that blob's per-reader state; the parent `Storage` remains open. Closing the `Storage` releases the SDK client (refcounted internally so multiple `Storage` instances against the same account share one client). A local reader's per-reader state is one file channel, opened by the file's real path on the first read and closed after `storage.file.idle-timeout` with no read in progress; closing a `FileStorage` leaves the readers obtained from it usable.
+A user-metadata map (`Map<String, String>`) is exposed by all object-store backends; local FS and HTTP return an empty map.
 
 ## Resource lifecycle
 
-- `Storage` instances should be closed when no longer needed (try-with-resources).
-- The underlying SDK clients (`S3AsyncClient`, `BlobServiceClient`, GCS `Storage`) are reference-counted by the provider's internal cache - opening many `Storage` instances against the same account does not multiply client cost.
-- Streams returned by `list(...)` and `ReadHandle`s returned by `read(...)` must be closed by the caller.
-- Local readers hold a file descriptor only while a channel is open: from the first read until the idle timeout elapses with no read in progress. A closed reader never reopens one.
-
-## Documented gotchas
-
-A handful of backend-specific quirks are documented in the JavaDoc of each provider. The most load-bearing:
-
-- **Local range reads are interruptible, and an interrupt closes the channel for every reader of the file**: a read that starts on a thread whose interrupt flag is already set fails at once, without touching the channel, with a `StorageException` caused by an `InterruptedIOException`, and the flag stays set. A read interrupted midway fails with `ClosedByInterruptException` as the cause and is never retried, while the other readers resume on a fresh channel. Streaming reads and writes through `FileStorage` are not interruptible at all: the JDK marks their channels uninterruptible.
-- **S3 Express ETags are random alphanumeric**, not MD5; presigned URLs cap at 5 minutes.
-- **S3 Express list results are not lexicographically ordered** (general S3 GP buckets are).
-- **GCS HNS** detection happens at open via `bucket.getHierarchicalNamespace()`; capabilities adjust accordingly.
-
-## Configuration keys
-
-Per-backend configuration uses the `storage.*` flat namespace, e.g.:
-
-| Key | Backend |
-|---|---|
-| `storage.s3.region` | S3 |
-| `storage.s3.aws-access-key-id`, `storage.s3.aws-secret-access-key` | S3 |
-| `storage.s3.endpoint` | S3 |
-| `storage.s3.force-path-style` | S3 |
-| `storage.azure.account-key`, `storage.azure.sas-token` | Azure Blob |
-| `storage.azure.connection-string` | Azure Blob (Azurite, dev) |
-| `storage.azure.endpoint` | Azure Blob (redirect `az://` to an emulator, sovereign cloud, or custom domain) |
-| `storage.azure.anonymous=true` | Azure Blob (public containers, no credentials) |
-| `storage.gcs.project-id`, `storage.gcs.quota-project-id` | GCS |
-| `storage.gcs.anonymous=true` | GCS (public buckets and emulators, no credentials) |
-| `storage.gcs.endpoint` | GCS (fake-gcs-server / emulators; full URL, not a hostname) |
-| `storage.http.timeout-millis`, `storage.http.auth-bearer-token` | HTTP |
-
-Legacy `io.tileverse.rangereader.*` keys are still accepted with a one-time WARN per distinct key; migrate to `storage.*` at your convenience.
+- Close a `Storage` when you no longer need it, for example with try-with-resources. The `Storage` instances of one account share one SDK client, counted by references: closing one `Storage` leaves the others working.
+- Close the streams returned by `list(...)` and `openOutputStream(...)`, and the `ReadHandle`s returned by `read(...)`.
+- Closing a `RangeReader` releases only that reader. The `Storage` stays open.
 
 ## See also
 
-- [Why tileverse-storage?](explanation/why.md) - the rationale for this library and how it compares to alternatives (Hadoop FS, jclouds, Micronaut, Spring Resource, NIO providers)
-- [Use each backend](how-to/use-each-backend.md) - hands-on examples for each backend
-- [Range Reader](reference/rangereader.md) - the byte-range read API used by PMTiles / COG / single-file Parquet
-- [PMTiles](../pmtiles/index.md) - the canonical consumer of the Storage / RangeReader stack
+- [Use each backend](how-to/use-each-backend.md): the smallest example for each backend, and their particularities.
+- [Read byte ranges](how-to/read-byte-ranges.md): the `RangeReader` API, batch reads, caching, and block alignment.
+- [Configure for performance](how-to/configure.md) and [Authenticate](how-to/authenticate.md): the configuration parameters.
+- [Why tileverse-storage?](explanation/why.md): the scope of the library, and how it compares to other storage abstractions.

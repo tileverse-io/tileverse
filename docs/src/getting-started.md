@@ -1,12 +1,10 @@
 # Getting Started
 
+Tileverse is published on Maven Central. Import the BOM to manage the versions, then add the modules you need.
+
 ## Installation
 
-Tileverse is available on Maven Central. You can use the Bill of Materials (BOM) to manage versions across all modules.
-
 === "Maven"
-
-    Add the BOM to your `dependencyManagement` to ensure version consistency:
 
     ```xml
     <dependencyManagement>
@@ -20,19 +18,12 @@ Tileverse is available on Maven Central. You can use the Bill of Materials (BOM)
             </dependency>
         </dependencies>
     </dependencyManagement>
-    ```
 
-    Then add specific modules to your `dependencies` block:
-
-    ```xml
     <dependencies>
-        <!-- Efficient data access (File, HTTP, S3, etc.) -->
         <dependency>
             <groupId>io.tileverse.storage</groupId>
             <artifactId>tileverse-storage-all</artifactId>
         </dependency>
-
-        <!-- PMTiles support -->
         <dependency>
             <groupId>io.tileverse.pmtiles</groupId>
             <artifactId>tileverse-pmtiles</artifactId>
@@ -45,79 +36,33 @@ Tileverse is available on Maven Central. You can use the Bill of Materials (BOM)
     ```kotlin
     dependencies {
         implementation(platform("io.tileverse:tileverse-bom:2.1.0"))
-        
+
         implementation("io.tileverse.storage:tileverse-storage-all")
         implementation("io.tileverse.pmtiles:tileverse-pmtiles")
     }
     ```
 
-## Version Compatibility
+Without the BOM, give each dependency its version, `2.1.0`. Tileverse needs Java 17 or later, and Maven 3.9 or Gradle 7 or later.
 
-| Library Version | Java Version | Maven Version |
-|----------------|--------------|---------------|
-| 2.1.x | 17+ | 3.9+ |
-| 2.0.x | 17+ | 3.9+ |
+## Modules
 
-## Basic Usage
+| Group | Artifact | Contents |
+| :--- | :--- | :--- |
+| `io.tileverse.storage` | `tileverse-storage-core` | The `Storage` and `RangeReader` APIs, with the local file and HTTP backends |
+| `io.tileverse.storage` | `tileverse-storage-s3` | Amazon S3 and S3-compatible services |
+| `io.tileverse.storage` | `tileverse-storage-azure` | Azure Blob Storage and Data Lake Storage Gen2 |
+| `io.tileverse.storage` | `tileverse-storage-gcs` | Google Cloud Storage |
+| `io.tileverse.storage` | `tileverse-storage-all` | The four storage modules above |
+| `io.tileverse.pmtiles` | `tileverse-pmtiles` | The PMTiles reader and tile stores |
+| `io.tileverse.versatiles` | `tileverse-versatiles` | The VersaTiles reader and tile stores |
+| `io.tileverse.vectortiles` | `tileverse-vectortiles` | The Mapbox Vector Tiles codec |
+| `io.tileverse.tilematrixset` | `tileverse-tilematrixset` | The OGC Tile Matrix Set model |
+| `io.tileverse.tilestore` | `tileverse-tilestore` | The tile store API shared by the archive readers |
 
-### Reading a PMTiles Archive
+One application can combine the cloud storage modules: none of them depends on Netty, and their SDK versions come from one curated set.
 
-The simplest form is `PMTilesReader.open(URI)`, which splits the leaf URI
-into parent + key, opens the underlying `Storage`, gets the `RangeReader`,
-and bundles them all so closing the reader releases everything.
+## Next steps
 
-```java
-import io.tileverse.pmtiles.PMTilesReader;
-import io.tileverse.tiling.pyramid.TileIndex;
-import java.net.URI;
-import java.nio.ByteBuffer;
-import java.nio.file.Path;
-import java.util.Optional;
-
-public class Example {
-    public void readTile() throws Exception {
-        URI leaf = Path.of("data/planet.pmtiles").toUri();
-
-        try (PMTilesReader reader = PMTilesReader.open(leaf)) {
-
-            // Fetch a specific tile (z=0, x=0, y=0); the buffer is ready to read
-            Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(0, 0, 0));
-            tile.ifPresent(buffer ->
-                System.out.println("Found tile: " + buffer.remaining() + " bytes"));
-        }
-    }
-}
-```
-
-### Cloud Storage Access
-
-To access files on S3, point `StorageFactory.open` at an `s3://` URI for the bucket (or bucket+prefix), then read the leaf URI through the Storage. The upper-level `PMTilesReader` API remains unchanged.
-
-```java
-import io.tileverse.storage.RangeReader;
-import io.tileverse.storage.Storage;
-import io.tileverse.storage.StorageFactory;
-import io.tileverse.storage.cache.CachingRangeReader;
-import java.net.URI;
-import java.util.Properties;
-
-Properties props = new Properties();
-props.setProperty("storage.s3.region", "us-east-1");
-
-URI bucket = URI.create("s3://my-bucket/maps/");
-URI leaf = URI.create("s3://my-bucket/maps/planet.pmtiles");
-
-try (Storage storage = StorageFactory.open(bucket, props);
-        RangeReader s3Source = storage.openRangeReader(leaf);
-
-        // Wrap with the shared in-memory range cache
-        RangeReader cachedSource = CachingRangeReader.of(s3Source);
-        PMTilesReader reader = new PMTilesReader(cachedSource)) {
-    // ...
-}
-```
-
-## Requirements
-
-- **Java 17** or later.
-- Maven 3.9+ or Gradle 7+.
+- [Why tileverse-storage?](storage/explanation/why.md): who the storage library is built for, how it compares with other Java storage libraries, and when to use another one.
+- [Read PMTiles](pmtiles/how-to/read-pmtiles.md): open an archive on a local disk, a web server or a cloud bucket, then read and decode its tiles.
+- [Read Versatiles](versatiles/how-to/read-versatiles.md): the same for VersaTiles containers.

@@ -1,6 +1,6 @@
-# Quick Start
+# Use each backend
 
-This page shows the smallest end-to-end snippet for each supported backend. All snippets use the same `Storage` API; only the URI changes.
+This page shows the smallest end-to-end snippet for each supported backend, and what is particular to each. All snippets use the same `Storage` API; only the URI changes.
 
 ## Local filesystem
 
@@ -24,6 +24,10 @@ try (Storage storage = StorageFactory.open(URI.create("file:///data/cache/"))) {
 }
 ```
 
+A local reader opens a file channel on its first read and closes it after `storage.file.idle-timeout` (default 60 seconds) with no read in progress. It holds a file descriptor only while the channel is open, and a closed reader never reopens one. Closing a `FileStorage` leaves the readers obtained from it usable.
+
+Range reads of local files respond to thread interrupts. A read on an interrupted thread fails with a `StorageException`, and the interrupt flag stays set. An interrupt during a read closes the file channel shared by the readers of that file; the other readers continue on a new channel. Streaming reads and writes do not respond to interrupts.
+
 ## HTTP / HTTPS (read-only)
 
 ```java
@@ -44,6 +48,8 @@ try (Storage storage = StorageFactory.open(URI.create("https://example.com/data/
     // Listing and writes throw UnsupportedCapabilityException
 }
 ```
+
+The HTTP backend does not follow redirects: a 3xx answer fails the read with `Redirect not followed`. Object stores and CDNs often answer a presigned or edge URL with a 302; open the final URL instead.
 
 ## AWS S3
 
@@ -70,9 +76,18 @@ try (Storage storage = StorageFactory.open(
 }
 ```
 
-Authentication uses the AWS default credential chain unless you provide `storage.s3.aws-access-key-id` / `storage.s3.aws-secret-access-key` in a `StorageConfig`.
+Authentication uses the AWS default credential chain unless you set `storage.s3.anonymous=true`, the `storage.s3.aws-access-key-id` / `storage.s3.aws-secret-access-key` pair, or `storage.s3.default-credentials-profile`. Public buckets need `storage.s3.anonymous=true`.
 
-To target an S3-compatible service (MinIO, Ceph, Cloudflare R2, DigitalOcean Spaces, ...) while keeping a canonical `s3://bucket/key` URI, set `storage.s3.endpoint`; path-style addressing is auto-enabled:
+S3 Express One Zone differs from general-purpose buckets in three ways: its ETags are random strings rather than MD5 digests, its presigned URLs last at most 5 minutes, and its listings are not in lexicographic order.
+
+### S3-compatible services
+
+The S3 backend serves any service speaking the S3 API. Address the service in one of two forms:
+
+- Keep the URL of the service and name the provider: `http(s)://endpoint/bucket/key` with `storage.provider=s3`. The endpoint comes from the URL. With no provider named, the same URL opens the read-only HTTP backend.
+- Keep a canonical `s3://bucket/key` URI and point it at the service with `storage.s3.endpoint`, as below. Path-style addressing is enabled automatically.
+
+Credentials and region come from the same parameters as for AWS:
 
 ```java
 import java.util.Properties;
@@ -90,6 +105,24 @@ try (Storage storage = StorageFactory.open(URI.create("s3://my-bucket/datasets/"
 
 See [Configure - Custom endpoint](configure.md#custom-endpoint-minio-and-other-s3-compatible-services) for how `storage.s3.endpoint` interacts with `force-path-style`, `region`, and credentials.
 
+Tested or known to work:
+
+| Service | Service URL | Notes |
+| :--- | :--- | :--- |
+| **MinIO** | `http://host:9000/bucket/key` | Self-hosted. |
+| **Garage** | `http://host:3900/bucket/key` | Self-hosted; the test suite runs against it. |
+| **Ceph RADOS Gateway (RGW)** | `https://rgw.example.com/bucket/key` | Common in OpenStack and on-premises deployments. |
+| **OpenStack Swift (via `s3api` middleware)** | `https://swift.example.com/bucket/key` | The native Swift API is not supported. |
+| **Cloudflare R2** | `https://<account>.r2.cloudflarestorage.com/bucket/key` | Set `storage.s3.region=auto`. |
+| **Backblaze B2** | `https://s3.<region>.backblazeb2.com/bucket/key` | |
+| **Wasabi** | `https://s3.<region>.wasabisys.com/bucket/key` | |
+| **DigitalOcean Spaces** | `https://<region>.digitaloceanspaces.com/bucket/key` | |
+| **IBM Cloud Object Storage** | `https://s3.<region>.cloud-object-storage.appdomain.cloud/bucket/key` | Use the public S3 endpoint, not the legacy Swift one. |
+| **Linode Object Storage** | `https://<region>.linodeobjects.com/bucket/key` | |
+| **OVHcloud Object Storage (S3 endpoint)** | `https://s3.<region>.cloud.ovh.net/bucket/key` | OVH offers both S3 and Swift endpoints; use the S3 one. |
+
+Native protocols such as OpenStack Swift, Azure Files (SMB), HDFS or FTP are out of scope; [Why tileverse-storage?](../explanation/why.md#when-not-to-use-this-library) explains why.
+
 ## Azure Blob Storage
 
 ```java
@@ -104,7 +137,7 @@ try (Storage storage = StorageFactory.open(URI.create("az://myaccount/my-contain
 }
 ```
 
-Authentication uses `DefaultAzureCredential` by default (env vars, managed identity, Azure CLI). Provide `storage.azure.account-key` or `storage.azure.sas-token` in `StorageConfig` for explicit credentials.
+Authentication uses `DefaultAzureCredential` by default (env vars, managed identity, Azure CLI). Provide `storage.azure.connection-string`, `storage.azure.account-key` or `storage.azure.sas-token` for explicit credentials, or `storage.azure.anonymous=true` for a public container.
 
 `az://account/container` resolves to the public `https://<account>.blob.core.windows.net` endpoint. The `https://` URL of a container opens this backend when `storage.provider=azure` is set; the endpoint then comes from the URL. Set `storage.azure.endpoint` to redirect an `az://` URI to an emulator, a sovereign cloud (Azure Government, Azure China), or a custom domain. The value is the full Blob service endpoint, including the account where the service expects it in the path (the Azurite emulator embeds the account in the path):
 
@@ -117,6 +150,8 @@ try (Storage storage = StorageFactory.open(URI.create("az://devstoreaccount1/my-
     storage.put("file.bin", new byte[100]);
 }
 ```
+
+A connection string naming `BlobEndpoint` or `EndpointSuffix` sets the endpoint itself, and overrides `storage.azure.endpoint`.
 
 ## Azure Data Lake Storage Gen2 (HNS)
 
@@ -157,11 +192,10 @@ try (Storage storage = StorageFactory.open(URI.create("gs://my-bucket/datasets/"
 }
 ```
 
-Authentication uses Google application default credentials (`GOOGLE_APPLICATION_CREDENTIALS` env var, `gcloud auth application-default login`, GCE/GKE/Cloud Run metadata).
-
+Authentication uses Google application default credentials (`GOOGLE_APPLICATION_CREDENTIALS` env var, `gcloud auth application-default login`, GCE/GKE/Cloud Run metadata). Opening fails when none is found. Public buckets need `storage.gcs.anonymous=true`.
 ## Pattern syntax
 
-The single argument to `Storage.list(String pattern)` is a shell-style glob (or a plain prefix). The longest non-glob prefix seeds the listing; `**` (or any `/` in the glob portion) makes the walk recursive; the glob portion filters results client-side via the JDK matcher (`FileSystem.getPathMatcher("glob:...")`).
+The single argument to `Storage.list(String pattern)` is a shell-style glob (or a plain prefix). The longest non-glob prefix seeds the listing; `**` (or any `/` in the glob portion) makes the walk recursive; the pattern filters results client-side with DuckDB-style glob rules: `*` and `?` stay within one path segment, `**` crosses `/`, and `**/` also matches zero directories.
 
 ```java
 // Pure prefix: immediate children of the prefix
@@ -209,16 +243,5 @@ try {
             WriteOptions.builder().ifMatchEtag(currentEtag).build());
 } catch (PreconditionFailedException e) {
     // Someone else updated the object since we read it
-}
-```
-
-## Resource cleanup
-
-Always close `Storage`, the listing `Stream`, and any `InputStream` / `OutputStream` returned by Storage methods. Because the internal SDK client cache is reference-counted, closing one `Storage` instance does not affect siblings against the same account.
-
-```java
-try (Storage storage = StorageFactory.open(uri);
-        Stream<StorageEntry> listing = storage.list("**")) {
-    listing.forEach(entry -> /* ... */);
 }
 ```

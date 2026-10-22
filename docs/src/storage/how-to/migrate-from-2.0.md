@@ -27,13 +27,16 @@ an absolute grid; every other read is passed through untouched.
 | `CachingRangeReader.Builder.blockSize(int)` | `BlockAlignedRangeReader` above the cache |
 | `CachingRangeReader.Builder.withBlockAlignment()` / `withoutBlockAlignment()` | same |
 | `CachingRangeReader.Builder.headerSize(int)` / `withHeaderBuffer()` / `withoutHeaderBuffer()` | declare a region over the header; hot header blocks stay cached |
-| `storage.caching.blockaligned` config key | compose the aligner in code |
-| `storage.caching.blocksize` config key | `BlockAlignedRangeReader.Builder.blockSize(int)` |
+| `storage.caching.blockaligned` config key and `CachingProviderHelper.MEMORY_CACHE_BLOCK_ALIGNED` | compose the aligner in code |
+| `storage.caching.blocksize` config key and `CachingProviderHelper.MEMORY_CACHE_BLOCK_SIZE` | `BlockAlignedRangeReader.Builder.blockSize(int)` |
 | `storage.s3.use-default-credentials-provider` config key and `S3StorageProvider.S3_USE_DEFAULT_CREDENTIALS_PROVIDER` | none: with no anonymous access, access keys, or profile set, S3 uses the AWS default credentials provider chain, as it did in 2.0 |
 | `storage.gcs.default-credentials-chain` config key and `GoogleCloudStorageProvider.GCS_USE_DEFAULT_APPLICTION_CREDENTIALS` | `storage.gcs.anonymous`; a saved `storage.gcs.default-credentials-chain=false` still reads as `storage.gcs.anonymous=true` |
 | `S3StorageProvider.open(URI, S3Client)` | `S3StorageProvider.open(URI, S3AsyncClient)` |
 | `S3StorageProvider.open(URI, S3ClientBundle)` and `S3ClientBundle` | `S3StorageProvider.open(URI, S3AsyncClient)`; presigned URLs need a `Storage` opened from a URI or a `StorageConfig` |
 | `StorageProvider.canProcessHeaders(URI, Map)` | none: provider selection sends no request; a provider overriding it drops the override |
+| `ReadOptions.timeout()`, `WriteOptions.timeout()` and `WriteOptions.Builder.timeout(Duration)` | none: no backend honored them. `ReadOptions` also rejects a zero length |
+| `io.tileverse.io.ReadableByteChannelDataInput`, `SeekableByteChannelDataInput`, `SeekableByteChannelImageInputStream` | the same classes in `io.tileverse.storage.adapters` |
+| `OutputStream Storage.openOutputStream(String, WriteOptions)` | returns `StorageOutputStream`, an `OutputStream` with `abort()`; a `Storage` implementation changes its return type |
 
 The removed keys are ignored like any unknown parameter; `storage.caching.enabled` keeps
 working but now defaults to `false`; pass `storage.caching.enabled=true` to keep the previous
@@ -55,16 +58,15 @@ each, with a per-fetch fallback). If you maintain a delegating RangeReader decor
 readRanges to forward the batch to the delegate; a wrapper that does not forward it silently
 degrades batches to the sequential per-range default.
 
-`readRanges` now returns a `BatchReadResult` instead of an `int[]`: `bytesRead(i)` holds what
-the array entry held, and `fetches()`, `bytesTransferred()` and `bytesFromCache()` report what
-the call cost. A decorator builds its own result and folds the delegate's numbers into it with
+`readRanges` returns a `BatchReadResult`: `bytesRead(i)` holds the bytes read for request `i`,
+and `fetches()`, `bytesTransferred()` and `bytesFromCache()` report what the call cost. A decorator builds its own result and folds the delegate's numbers into it with
 `merge`. Once the call returns or throws, no implementation thread is still writing to any
 target, and a caller may reuse or release every target at that point.
 
 ```java
 BatchReadResult result = reader.readRanges(requests);
 for (int i = 0; i < result.requests(); i++) {
-    int bytesRead = result.bytesRead(i); // what read[i] used to hold
+    int bytesRead = result.bytesRead(i); // bytes read into requests.get(i).target()
 }
 ```
 
@@ -73,8 +75,7 @@ object-store and HTTP providers, resolved once per `Storage`: `storage.batch.max
 `storage.batch.max-fetch` and `storage.batch.max-in-flight-fetches`. The
 `io.tileverse.storage.batch.objectstore.maxgap`, `io.tileverse.storage.batch.http.maxgap` and
 `io.tileverse.storage.batch.maxfetch` system properties of the 2.1 milestones are gone; set
-the parameters instead. The S3 async path, which used to start every planned fetch at once, now
-honors the in-flight bound too.
+the parameters instead.
 
 ## Provider selection
 

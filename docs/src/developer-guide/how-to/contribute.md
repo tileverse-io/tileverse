@@ -1,43 +1,43 @@
-# Contributing
+# Contribute
 
-Thank you for your interest in contributing to Tileverse! We welcome contributions from the community to help build the best Java ecosystem for cloud-native geospatial data.
+Contributions are welcome. If you use AI tools, read the [AI policy](../../ai.md) first.
 
-## Code Contribution Process
+## Process
 
-1.  **Fork & Clone**: Fork the repo and clone it locally.
-2.  **Branch**: Create a feature branch (`feat/my-feature` or `fix/my-bug`).
-3.  **Code**: Implement your changes.
-4.  **Test**: Add unit tests for new logic and ensure existing tests pass.
-5.  **Format**: Run `make format` to ensure code style compliance.
-6.  **PR**: Submit a Pull Request to the `main` branch.
+1. Fork the repository and clone it.
+2. Create a branch, for example `feat/my-feature` or `fix/my-bug`.
+3. Make the change, with unit tests for new logic. Changes to the cloud backends also need integration tests.
+4. Build with `./mvnw verify`. The build formats the code.
+5. Open a pull request against `main`.
 
-If you use AI tools, read the [AI policy](../../ai.md) first.
+The [pull request template](https://github.com/tileverse-io/tileverse/blob/main/.github/PULL_REQUEST_TEMPLATE.md) lists what a pull request needs before the merge:
 
-## Coding Standards
+- New unit tests cover the change.
+- The documentation is updated, if users can see the change.
+- A GitHub issue describes the change, unless users see no difference.
+- A bug fix or a small feature is a single commit, and each commit has a single goal.
 
-*   **Java Version**: Target Java 17 compatibility, but build with Java 21+.
-*   **Style**: We use the [Palantir Java Style](https://github.com/palantir/palantir-java-format).
-*   **Javadoc**: Public APIs must be documented.
-*   **Null Safety**: Use `Optional<T>` for return types that might be missing. Avoid returning `null`.
+The pull request is merged when the build checks are green, a maintainer has reviewed it, and the checklist is complete.
 
-## Testing Requirements
+## Coding standards
 
-*   **Unit Tests**: Required for all new logic.
-*   **Integration Tests**: Required for cloud provider interactions (S3, Azure, GCS).
-*   **Performance Tests**: Required if modifying critical I/O paths.
+- Target Java 17. The build runs on Java 17 and later.
+- Follow the [Palantir Java Format](https://github.com/palantir/palantir-java-format). The build applies it.
+- Document the public API with javadoc.
+- Return `Optional<T>` for a value that may be missing. Avoid returning `null`.
 
-## Commit Messages
+## Commit messages
 
-We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+Commit titles follow [Conventional Commits](https://www.conventionalcommits.org/):
 
-*   `feat: add GCS support`
-*   `fix: handle EOF correctly in range reader`
-*   `docs: update usage examples`
-*   `chore: bump dependencies`
+- `feat: add GCS support`
+- `fix: handle EOF correctly in range reader`
+- `docs: update usage examples`
+- `chore: bump dependencies`
 
-## Release Process
+## Releases
 
-Releases are automated via GitHub Actions.
+GitHub Actions publishes the artifacts:
 
-*   **Snapshots**: Published on every merge to `main`.
-*   **Releases**: Published when a new tag (e.g., `v1.0.0`) is pushed.
+- Snapshots, on each push to `main` or to a release branch (`*.x`), except for changes to the documentation only.
+- Releases, when a version tag such as `v2.1.0` is pushed.

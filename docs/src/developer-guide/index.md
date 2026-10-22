@@ -1,17 +1,8 @@
 # Developer Guide
 
-Welcome to the Tileverse Developer Guide. This section provides everything you need to contribute to the project, build from source, and understand the testing infrastructure.
+This section is for contributors: how to build and test the project, how to contribute, and how the modules fit together.
 
-## Contents
-
-*   **[Build from source](how-to/build.md)**: How to compile and package the project.
-*   **[Run tests](how-to/test.md)**: Running unit, integration, and performance tests.
-*   **[Contribute](how-to/contribute.md)**: Code style, pull request process, and contribution guidelines.
-*   **[System architecture](explanation/architecture.md)**: High-level system design and module relationships.
-
-## Core Principles
-
-*   **Modularity**: Libraries are designed to work independently.
-*   **Cloud-Native**: First-class support for S3, Azure, GCS, and HTTP.
-*   **Performance**: Heavy focus on zero-copy I/O and efficient memory usage.
-*   **Standards**: Strict adherence to OGC and Mapbox specifications.
+- [Build and test](how-to/build.md): build the project, and run the unit and integration tests.
+- [Contribute](how-to/contribute.md): the pull request process, the coding standards, and the commit messages.
+- [AI policy](../ai.md): the rules for contributions made with AI tools.
+- [Architecture](explanation/architecture.md): the modules, their dependencies, and how a tile read flows through them.

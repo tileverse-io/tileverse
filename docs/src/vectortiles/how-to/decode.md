@@ -11,7 +11,7 @@ VectorTileCodec codec = new VectorTileCodec();
 
 VectorTile fromBytes  = codec.decode(byte[] data);
 VectorTile fromBuffer = codec.decode(ByteBuffer data);  // reads from data.position() to data.limit()
-VectorTile fromStream = codec.decode(InputStream in);   // reads to EOF; closes? no - caller closes
+VectorTile fromStream = codec.decode(InputStream in);   // reads to the end; the caller closes the stream
 ```
 
 Prefer `decode(InputStream)` when the source is already a stream (HTTP body, channel-backed input). It avoids materializing the encoded bytes in a transient array.
@@ -25,11 +25,11 @@ for (VectorTile.Layer layer : tile.getLayers()) {
     System.out.println("Layer: " + layer.getName());
     System.out.println("Extent: " + layer.getExtent());  // tile coordinate extent, usually 4096
 
-    for (VectorTile.Layer.Feature feature : layer.getFeatures()) {
+    layer.getFeatures().forEach(feature -> {
         long id = feature.getId();
         Geometry geom = feature.getGeometry();          // JTS Geometry in tile coordinates
         Map<String, Object> props = feature.getAttributes();
-    }
+    });
 }
 ```
 
@@ -37,7 +37,7 @@ for (VectorTile.Layer layer : tile.getLayers()) {
 
 ## Filter features without materializing geometries
 
-Geometry decoding is the expensive step in MVT parsing. When you only need a subset of features, push a predicate into the layer so geometry decoding only runs for the matches:
+Geometry decoding is the expensive step in MVT parsing. A feature decodes its geometry on the first call to `getGeometry()`. A predicate reading only attributes leaves the geometries of rejected features undecoded:
 
 ```java
 import java.util.function.Predicate;
@@ -49,7 +49,7 @@ tile.getFeatures("roads", roadsOnly, VectorTileCodec.newGeometryReader())
         .forEach(f -> process(f.getGeometry()));
 ```
 
-The two-arg `Layer.getFeatures(Predicate)` and three-arg `Layer.getFeatures(Predicate, GeometryReader)` overloads let you skip the geometry decode for features that don't match.
+The `Layer.getFeatures(Predicate)` and `Layer.getFeatures(Predicate, GeometryReader)` overloads do the same on a layer you already hold.
 
 ## Cross-layer queries
 
@@ -63,7 +63,7 @@ tile.getLayer("buildings").ifPresent(layer -> ...);       // null-safe layer loo
 
 ## Error handling
 
-`decode(...)` throws `IOException` on malformed input. The codec validates the protobuf envelope and the MVT geometry command stream; corrupt tiles surface as a wrapped exception rather than silent partial decoding.
+`decode(...)` throws `IOException` when the bytes are not a valid MVT protobuf message. Geometry commands are decoded later, on the first call to `getGeometry()`. A corrupt command stream makes that call throw an `IllegalArgumentException` or `IllegalStateException`.
 
 ```java
 try {
@@ -76,4 +76,4 @@ try {
 ## See also
 
 - [Encoding Vector Tiles](encode.md) for the reverse direction.
-- [Tile Stores Reference](../../pmtiles/reference/tile-stores.md) for `VectorTileStore`, which decodes tiles served from a PMTiles archive and gives you `VectorTile` directly.
+- [Tile Stores Reference](../../pmtiles/reference/tile-stores.md) for `PMTilesVectorTileStore`, which decodes tiles served from a PMTiles archive and gives you `VectorTile` directly.

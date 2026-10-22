@@ -1,27 +1,28 @@
 # Tileverse
 
-Tileverse provides a toolkit of independent Java libraries for building cloud-native geospatial applications. 
-
-These libraries are designed to be **composable**: pick the ones you need for your specific problem—whether that's reading from cloud storage, handling vector tiles, or calculating tile grids—without pulling in a monolithic framework.
+Tileverse is a set of Java libraries for cloud-native geospatial applications. Each library solves one problem: object storage, tile archives, vector tile encoding, or tile grids. Use the ones you need, alone or together.
 
 ## Libraries
 
-| Library | Artifact | Role |
+| Library | Artifact | Use it to |
 | :--- | :--- | :--- |
-| **[Storage](storage/index.md)** | `tileverse-storage-all` | **Object Storage Abstraction**: Full container API (list, range/streaming reads, atomic writes, deletes, server-side copy, presigned URLs) across local files, HTTP, S3 (GP + Express), Azure (Blob + Data Lake Gen2), and GCS (flat + HNS). Includes the byte-range [`RangeReader`](storage/reference/rangereader.md) API used by PMTiles, COG, and single-file Parquet. |
-| **[PMTiles](pmtiles/index.md)** | `tileverse-pmtiles` | **Archive Format**: Read PMTiles v3 archives over Storage / RangeReader. Returns raw tile bytes via `PMTilesReader`, decoded `VectorTile`s via `PMTilesVectorTileStore`, and decoded `RenderedImage`s (PNG / JPEG / WebP) via `PMTilesRasterTileStore`. |
-| **[Versatiles](versatiles/index.md)** | `tileverse-versatiles` | **Archive Format**: Read VersaTiles 2 containers over Storage / RangeReader. Returns tile bytes via `VersatilesReader`, decoded `VectorTile`s via `VersatilesVectorTileStore`, and decoded `RenderedImage`s (PNG / JPEG / WebP) via `VersatilesRasterTileStore`. |
-| **[Vector Tiles](vectortiles/index.md)** | `tileverse-vectortiles` | **Codec**: High-performance encoding and decoding of Mapbox Vector Tiles (MVT) to/from JTS Geometries. |
-| **[Tile Matrix Set](tilematrixset/index.md)** | `tileverse-tilematrixset` | **Math & Logic**: Implementation of the OGC Tile Matrix Set standard for calculating tile pyramids and grids. |
+| **[Storage](storage/index.md)** | `tileverse-storage-all` | List, read, write and presign objects on local disks, HTTP, S3, Azure and GCS through one API, and read byte ranges of single files. |
+| **[PMTiles](pmtiles/index.md)** | `tileverse-pmtiles` | Read PMTiles archives, as tile bytes or as decoded vector and raster tiles. |
+| **[Versatiles](versatiles/index.md)** | `tileverse-versatiles` | Read VersaTiles containers, as tile bytes or as decoded vector and raster tiles. |
+| **[Vector Tiles](vectortiles/index.md)** | `tileverse-vectortiles` | Encode and decode Mapbox Vector Tiles with JTS geometries. |
+| **[Tile Matrix Set](tilematrixset/index.md)** | `tileverse-tilematrixset` | Map coordinates to tiles with the OGC Tile Matrix Set model. |
+| **[Tile Store](pmtiles/reference/tile-stores.md)** | `tileverse-tilestore` | Read tiles through one API, whatever the archive format. |
 
-## Ecosystem
+[Getting Started](getting-started.md) shows how to add them to a project.
 
-While `tileverse-pmtiles` and `tileverse-versatiles` naturally use the other libraries, **Storage**, **Vector Tiles**, and **Tile Matrix Set** are completely standalone.
+## How they fit together
 
-*   Building a GeoParquet datastore that needs to list and read partitioned files in S3 / Azure / GCS? Use **Storage**.
-*   Reading COGs (Cloud Optimized GeoTIFFs) with byte-range requests? Use **Storage** (its `RangeReader` API) directly.
-*   Building a tile server from PostGIS? Use **Vector Tiles** and **Tile Matrix Set**.
-*   Need a standard grid definition? Use **Tile Matrix Set**.
+The archive readers build on the other libraries. **Storage**, **Vector Tiles** and **Tile Matrix Set** are independent of each other:
+
+- Building a GeoParquet datastore that lists and reads partitioned files in S3, Azure or GCS? Use **Storage**.
+- Reading Cloud Optimized GeoTIFFs with byte-range requests? Use the `RangeReader` API of **Storage**.
+- Building a tile server from PostGIS? Use **Vector Tiles** and **Tile Matrix Set**.
+- Need a standard grid definition? Use **Tile Matrix Set**.
 
 ```mermaid
 graph TD
@@ -41,6 +42,8 @@ graph TD
         TMS[Tile Matrix Set]
     end
 
+    TS[Tile Store]
+
     App --> ST
     App --> VT
     App --> PMT
@@ -50,8 +53,13 @@ graph TD
     PMT -.-> ST
     PMT -.-> VT
     PMT -.-> TMS
+    PMT -.-> TS
 
     VER -.-> ST
     VER -.-> VT
     VER -.-> TMS
+    VER -.-> TS
+
+    TS -.-> VT
+    TS -.-> TMS
 ```

@@ -7,7 +7,7 @@
 A pyramid is a collection of `TileRange` levels sharing a single `CornerOfOrigin`. Construct one through `TilePyramid.builder()` or with the `TilePyramid.of(...)` factories.
 
 ```java
-import io.tileverse.tiling.common.CornerOfOrigin;
+import io.tileverse.tiling.pyramid.CornerOfOrigin;
 import io.tileverse.tiling.pyramid.TilePyramid;
 import io.tileverse.tiling.pyramid.TileRange;
 
@@ -27,7 +27,7 @@ TilePyramid trimmed = pyramid.subset(1, 2); // keeps levels 1 and 2 only
 
 ## TileRange
 
-`TileRange` describes a rectangular region of tiles at a single zoom level. It only stores the corner indices, so it is cheap to create even for large pyramids.
+`TileRange` describes a rectangular region of tiles at a single zoom level. It stores only the corner indices and is cheap to create, even for large pyramids.
 
 ```java
 TileRange range = TileRange.of(0, 0, 1, 1, 10, CornerOfOrigin.TOP_LEFT);
@@ -42,16 +42,16 @@ Ranges support set-style operations: `intersection`, `union`, `contains`, and tr
 
 ### Sparse ranges
 
-When a region's tile footprint is not rectangular (for example a TileMatrixSet narrowed by a `TileMatrixSetLimits` or a coverage clipped to a polygon), the implementation uses a sparse range internally. The public API of `TileMatrix` already takes care of this; user code interacts with it through `TileMatrix.intersection(bbox)` or `extentToRange(bbox)`.
+When `TileRange.union` or `TileMatrix.union` combines ranges into a shape that is not rectangular, the result is a sparse range. Code uses it through the same `TileRange` and `TileMatrix` methods as a rectangular range.
 
 ## CornerOfOrigin
 
-Tile pyramids can index tiles from either the top-left (the OGC default and the convention used by most web maps and PMTiles) or the bottom-left (the older TMS/WMS-C convention).
+Tile pyramids can index tiles from either the top-left (the OGC default and the convention used by most web maps and PMTiles) or the bottom-left (the older TMS/WMS-C convention). `TilePyramid.builder()`, `TilePyramid.of(...)` and `TileRange.of(...)` use `BOTTOM_LEFT` unless a corner is given.
 
 ```java
-import io.tileverse.tiling.common.CornerOfOrigin;
+import io.tileverse.tiling.pyramid.CornerOfOrigin;
 
 CornerOfOrigin origin = pyramid.cornerOfOrigin();
 ```
 
-`TileMatrix` honours the pyramid's origin when converting between CRS coordinates and tile indices, so callers do not need to flip Y axes themselves.
+`TileMatrix` honours the origin of the pyramid when it converts between CRS coordinates and tile indices. Callers do not flip the Y axis themselves.

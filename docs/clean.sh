@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Clean build script for Tileverse Range Reader Documentation
+# Clean build script for the Tileverse documentation
 # This script removes all generated files and build artifacts
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Change to the directory where the script is located
 cd "${SCRIPT_DIR}"
 
-echo "🧹 Cleaning Tileverse Range Reader Documentation"
+echo "🧹 Cleaning Tileverse Documentation"
 echo "=============================================="
 
 # Remove built site
@@ -31,9 +31,9 @@ else
 fi
 
 # Remove SVG files from src/assets
-if [ -d "src/assets/images/rangereader" ]; then
+if [ -d "src/assets/images/storage" ]; then
     echo "🗑️  Removing SVG diagrams from src/assets..."
-    rm -f src/assets/images/rangereader/*.svg
+    rm -f src/assets/images/storage/structurizr-*.svg
     echo "✅ Src assets SVG files removed"
 else
     echo "ℹ️  No src assets SVG files to remove"

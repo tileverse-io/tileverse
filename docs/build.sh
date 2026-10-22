@@ -3,7 +3,7 @@ set -e
 
 # Documentation build script for Tileverse
 # This script sets up a virtual environment and builds the complete documentation
-# for all Tileverse modules: Range Reader, PMTiles, Vector Tiles, and Tile Matrix Set
+# for all Tileverse modules: Storage, PMTiles, Vector Tiles, Tile Matrix Set and Tile Store
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="${SCRIPT_DIR}/.venv"

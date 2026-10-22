@@ -67,16 +67,16 @@ etc.).
 <dependency>
     <groupId>io.tileverse.storage</groupId>
     <artifactId>tileverse-storage-all</artifactId>
-    <version>2.0-SNAPSHOT</version>
+    <version>2.1.0</version>
 </dependency>
 ```
 
 **Gradle:**
 ```gradle
-implementation 'io.tileverse.storage:tileverse-storage-all:2.0-SNAPSHOT'
+implementation 'io.tileverse.storage:tileverse-storage-all:2.1.0'
 ```
 
-For modular installations (per-backend dependencies only), see the [Installation Guide](https://tileverse.io/storage/how-to/install/).
+For modular installations (per-backend dependencies only), see [Getting Started](https://tileverse.io/getting-started/).
 
 ## Module layout
 

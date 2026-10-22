@@ -1,22 +1,26 @@
-# Authentication Setup
+# Authenticate
 
-This guide details how to configure credentials for cloud storage and secure HTTP endpoints in `tileverse-storage` 2.0.
+This guide details how to configure credentials for cloud storage and secure HTTP endpoints in `tileverse-storage`.
 
 ## Two configuration paths
 
 For every backend you have a choice of two paths:
 
-- **Properties-driven**: pass a `Properties` map (or a `StorageConfig`) to `StorageFactory.open(URI, Properties)` and
-  call `Storage.openRangeReader` (or any other `Storage` method) on the returned handle. This is what GeoTools,
+- **Properties-driven**: pass a `Properties` map to `StorageFactory.open(URI, Properties)`, or a `StorageConfig` to
+  `StorageFactory.open(StorageConfig)`, and call `Storage.openRangeReader` (or any other `Storage` method) on the
+  returned handle. This is what GeoTools,
   GeoServer, and Spring property-binding setups use.
 - **SDK-injection**: build your own SDK client (`HttpClient`, `S3AsyncClient`, `BlobServiceClient`, GCS `Storage`) and pass it
   through `XxxStorageProvider.open(URI, sdkClient)`. The returned `Storage` *borrows* the client; closing the `Storage`
-  does NOT close the client. Use this when you need configuration that the Properties surface can't express
+  does NOT close the client. Use this when you need configuration that Properties can't express
   (custom retry policies, application-managed credential providers, custom HTTP transports, test fakes).
 
 The patterns below show both paths for each authentication mode.
 
 ## HTTP
+
+When several credentials are set, the HTTP backend uses the first of: a username with a password, a bearer token, an
+API key. A username without a password is ignored.
 
 ### Basic Auth
 
@@ -94,6 +98,9 @@ The patterns below show both paths for each authentication mode.
     try (Storage storage = HttpStorageProvider.open(uri, HttpClient.newHttpClient(), auth);
             RangeReader reader = storage.openRangeReader("data.bin")) { /* ... */ }
     ```
+
+`DigestAuthentication` (username and password) and `CustomHeaderAuthentication` (a map of headers) are further
+`HttpAuthentication` implementations, available through SDK-injection.
 
 ### Self-signed certificates
 
@@ -181,8 +188,9 @@ per environment, leave `storage.s3.default-credentials-profile` unset and set `A
 
 ### Assume Role (STS) and other custom credential providers
 
-The Properties surface only carries scalar values, so custom credential providers (STS assume-role chains,
-SAML/SSO, AWS IAM Identity Center) go through SDK-injection:
+Properties hold only scalar values. A profile of the AWS config files that assumes a role (`role_arn` with
+`source_profile`) works through `storage.s3.default-credentials-profile` or `AWS_PROFILE`. Other credential providers,
+such as an assume-role provider built in code, go through SDK-injection:
 
 ```java
 StsAssumeRoleCredentialsProvider roleProvider = StsAssumeRoleCredentialsProvider.builder()
@@ -209,6 +217,14 @@ A `Storage` over a caller-supplied `S3AsyncClient` reads and writes; presigned U
 `UnsupportedCapabilityException`. Open the `Storage` from a URI or a `StorageConfig` to presign.
 
 ## Azure Blob Storage
+
+The Azure backend takes the first credentials configured in this order:
+
+1. `storage.azure.anonymous=true`: unsigned requests, for public containers.
+2. `storage.azure.connection-string`.
+3. `storage.azure.account-key`.
+4. `storage.azure.sas-token`.
+5. Nothing set: `DefaultAzureCredential`.
 
 ### SAS token (recommended for limited access)
 
@@ -262,7 +278,7 @@ A `Storage` over a caller-supplied `S3AsyncClient` reads and writes; presigned U
     Properties props = new Properties();
     props.setProperty("storage.azure.account-key", System.getenv("AZURE_ACCOUNT_KEY"));
     ```
-    The account name comes from the URI host; the key is paired with it server-side.
+    The account name comes from the URI; the client signs each request with the account name and key.
 
 === "SDK-injection"
     ```java
@@ -276,8 +292,9 @@ A `Storage` over a caller-supplied `S3AsyncClient` reads and writes; presigned U
 
 ### Managed Identity / DefaultAzureCredential
 
-For applications running on Azure infrastructure (VMs, App Service, AKS) — or anywhere the Azure default credential
-chain works — there's no scalar property to carry; use SDK-injection:
+On Azure infrastructure (VMs, App Service, AKS), or anywhere the Azure default credential chain works, no parameter is
+needed: a `Storage` opened with no credential parameter authenticates with `DefaultAzureCredential`. To configure the
+credential yourself, use SDK-injection:
 
 ```java
 TokenCredential credential = new DefaultAzureCredentialBuilder().build();
@@ -323,8 +340,8 @@ Opening a `Storage` fails when none is found; the credentials never fall back to
 
 ```java
 Properties props = new Properties();
-// optional — disambiguates billing when multiple projects are accessible:
-// props.setProperty("storage.gcs.project-id", "my-project");
+// optional: the project charged for the quota and billing of API calls
+// props.setProperty("storage.gcs.quota-project-id", "my-project");
 
 try (Storage storage = StorageFactory.open(URI.create("gs://my-bucket/"), props);
         RangeReader reader = storage.openRangeReader("data.bin")) {
@@ -366,7 +383,7 @@ try (Storage storage = StorageFactory.open(URI.create("gs://gcp-public-data-land
 
 ### fake-gcs-server (emulators)
 
-Set `storage.gcs.endpoint`, or open the emulator URL (`http(s)://host/storage/v1/b/...`) with `storage.provider=gcs`. The value of `storage.gcs.endpoint` is a full endpoint URL with scheme, not a bare hostname:
+Set `storage.gcs.endpoint`, or open the emulator URL (`http(s)://host/storage/v1/b/...`) with `storage.provider=gcs`. The Java SDK does not read `STORAGE_EMULATOR_HOST`. The value of `storage.gcs.endpoint` is a full endpoint URL with scheme, not a bare hostname:
 
 ```java
 Properties props = new Properties();
@@ -417,7 +434,7 @@ try (Storage storage = StorageFactory.open(uri, props)) {
 }
 ```
 
-The flag is silently ignored by regular buckets, so it is safe to set unconditionally for callers that may target both.
+Regular buckets ignore the flag. Callers that may target both kinds of bucket can always set it.
 
 ### GCS
 
@@ -439,11 +456,11 @@ Azure has no equivalent billing model and is not affected.
 
 ## Sensitive parameters
 
-Parameters carrying secrets are flagged with `password=true` on their `StorageParameter` declaration. Tools that render
+Parameters holding secrets are flagged with `password=true` on their `StorageParameter` declaration. Tools that render
 configuration UIs (GeoServer, datastore wizards) use this flag to mask the input. Currently flagged:
 
 - `storage.http.password`, `storage.http.bearer-token`, `storage.http.api-key`
 - `storage.s3.aws-secret-access-key`
 - `storage.azure.account-key`, `storage.azure.sas-token`, `storage.azure.connection-string`
 
-There is no equivalent flag for SDK-injected credentials — the caller controls what gets logged.
+There is no equivalent flag for SDK-injected credentials: the caller controls what gets logged.

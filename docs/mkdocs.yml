@@ -14,10 +14,8 @@ theme:
   features:
     - navigation.tabs
     - navigation.sections
-    - navigation.expand
     - navigation.indexes
     - navigation.top
-    - toc.integrate
     - search.suggest
     - search.highlight
     - content.code.copy
@@ -89,6 +87,20 @@ markdown_extensions:
 plugins:
   - search:
       separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - redirects:
+      # Pages merged into others keep their old URLs working
+      redirect_maps:
+        pmtiles/tutorial.md: pmtiles/how-to/read-pmtiles.md
+        pmtiles/how-to/cloud-storage.md: pmtiles/how-to/read-pmtiles.md
+        vectortiles/tutorial.md: vectortiles/index.md
+        storage/how-to/install.md: getting-started.md
+        storage/reference/rangereader.md: storage/how-to/read-byte-ranges.md
+        storage/reference/rangereader-quick-start.md: storage/how-to/read-byte-ranges.md
+        storage/reference/rangereader-recipes.md: storage/how-to/read-byte-ranges.md
+        storage/explanation/performance.md: storage/explanation/internals.md
+        developer-guide/how-to/test.md: developer-guide/how-to/build.md
+        developer-guide/explanation/system-design.md: developer-guide/explanation/architecture.md
+        developer-guide/explanation/dependencies.md: developer-guide/explanation/architecture.md
   - minify:
       minify_html: true
 
@@ -98,27 +110,20 @@ nav:
   - Storage:
     - Overview: storage/index.md
     - How-to guides:
-      - Install: storage/how-to/install.md
       - Use each backend: storage/how-to/use-each-backend.md
+      - Read byte ranges: storage/how-to/read-byte-ranges.md
       - Configure for performance: storage/how-to/configure.md
       - Authenticate: storage/how-to/authenticate.md
       - Troubleshoot: storage/how-to/troubleshoot.md
-      - Migrate from 1.4.x: storage/how-to/migrate-from-1.4.md
       - Migrate from 2.0: storage/how-to/migrate-from-2.0.md
-    - Reference:
-      - Range Reader API: storage/reference/rangereader.md
-      - Range Reader recipes: storage/reference/rangereader-recipes.md
-      - Range Reader quick start: storage/reference/rangereader-quick-start.md
+      - Migrate from 1.4.x: storage/how-to/migrate-from-1.4.md
     - Explanation:
       - Why tileverse-storage?: storage/explanation/why.md
-      - Internals - architecture: storage/explanation/internals.md
-      - Internals - performance: storage/explanation/performance.md
+      - How it works: storage/explanation/internals.md
   - PMTiles:
     - Overview: pmtiles/index.md
-    - Tutorial: pmtiles/tutorial.md
     - How-to guides:
       - Read PMTiles: pmtiles/how-to/read-pmtiles.md
-      - Use PMTiles in cloud storage: pmtiles/how-to/cloud-storage.md
     - Reference:
       - Tile Stores: pmtiles/reference/tile-stores.md
   - Versatiles:
@@ -129,7 +134,6 @@ nav:
       - Format support: versatiles/reference/format-support.md
   - Vector Tiles:
     - Overview: vectortiles/index.md
-    - Tutorial: vectortiles/tutorial.md
     - How-to guides:
       - Encode vector tiles: vectortiles/how-to/encode.md
       - Decode vector tiles: vectortiles/how-to/decode.md
@@ -145,13 +149,10 @@ nav:
     - Overview: developer-guide/index.md
     - AI policy: ai.md
     - How-to guides:
-      - Build from source: developer-guide/how-to/build.md
-      - Run tests: developer-guide/how-to/test.md
+      - Build and test: developer-guide/how-to/build.md
       - Contribute: developer-guide/how-to/contribute.md
     - Explanation:
-      - System architecture: developer-guide/explanation/architecture.md
-      - System design and data flow: developer-guide/explanation/system-design.md
-      - Module dependencies: developer-guide/explanation/dependencies.md
+      - Architecture: developer-guide/explanation/architecture.md
 
 extra:
   analytics:

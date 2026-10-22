@@ -12,7 +12,7 @@
 | `TileMatrixSetLimits` | `io.tileverse.tiling.matrix.TileMatrixSetLimits` | clause 7.3 |
 | `TileMatrixSetLink` | `io.tileverse.tiling.matrix.TileMatrixSetLink` | clause 7.4 |
 | `VariableMatrixWidth` | `io.tileverse.tiling.matrix.VariableMatrixWidth` | clause 7.2 |
-| `BoundingBox` | `io.tileverse.tiling.common.BoundingBox2D` | |
+| `BoundingBox` | `io.tileverse.geom.BoundingBox2D` | |
 
 ### TileMatrixSet fields
 
@@ -37,7 +37,7 @@
 | cellSize / resolution | `resolution()` | map units per pixel |
 | tileWidth, tileHeight | `tileWidth()`, `tileHeight()` | |
 | matrixWidth, matrixHeight | `matrixWidth()`, `matrixHeight()` | |
-| cornerOfOrigin | `cornerOfOrigin()` | `TOP_LEFT` by default |
+| cornerOfOrigin | `cornerOfOrigin()` | `TOP_LEFT` when absent from JSON; `TilePyramid.builder()` defaults to `BOTTOM_LEFT` |
 
 ### Scale algebra
 
@@ -101,6 +101,7 @@ The reader accepts JSON that declares either `cellSize`, `scaleDenominator`, or 
 XML support uses StAX, requiring no extra dependencies:
 
 ```java
+import io.tileverse.tiling.matrix.TileMatrixSet;
 import io.tileverse.tiling.matrix.TileMatrixSetIO;
 
 TileMatrixSet tms = TileMatrixSetIO.readXML(inputStream);

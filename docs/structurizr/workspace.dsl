@@ -133,7 +133,7 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
                 }
             }
 
-            tilematrixsetModule = container "tileverse-tilematrixset" "OGC Two Dimensional Tile Matrix Set (17-083r2) data model and JSON/XML encodings" "Java 17, JTS, Jackson" {
+            tilematrixsetModule = container "tileverse-tilematrixset" "OGC Two Dimensional Tile Matrix Set (17-083r2) data model and JSON/XML encodings" "Java 17, Jackson" {
                 tags "Module,Math"
 
                 tileMatrixSet = component "TileMatrixSet" "Top-level OGC TMS: identifier, CRS, extent, list of TileMatrix levels" "Java Interface" {
@@ -343,7 +343,7 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
             include *
             autoLayout
             title "Container View - Tileverse Modules"
-            description "The Tileverse modules and their dependencies on each other and on external storage systems."
+            description "The Tileverse library modules and their dependencies on each other and on external storage systems."
         }
 
         component coreModule "CoreComponents" {

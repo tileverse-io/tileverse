@@ -29,11 +29,10 @@ VectorTile tile = builder.build();
 
 ## Shorthand for many features
 
-When you have a stream of `(properties, geometry)` pairs (e.g. iterating a `SimpleFeatureCollection`), the `LayerBuilder.feature(Map, Geometry [, long id])` overloads skip the inner builder:
+When you have a stream of `(properties, geometry)` pairs (e.g. rows read from another source), the `LayerBuilder.feature(Map, Geometry [, long id])` overloads skip the inner builder:
 
 ```java
-features.forEach(simpleFeature ->
-        roadsLayer.feature(simpleFeature.getProperties(), simpleFeature.getGeometry()));
+rows.forEach(row -> roadsLayer.feature(row.attributes(), row.geometry()));
 ```
 
 ## Encode to bytes
@@ -48,19 +47,20 @@ codec.encode(tile, OutputStream sink);                   // streaming
 codec.encode(tile, ByteBuffer sink);                     // pre-sized buffer
 ```
 
-The `OutputStream` overload is the right choice when you're piping straight to an HTTP response or writing into a PMTiles writer's tile slot: no intermediate heap copy.
+The `OutputStream` overload is the right choice when you're piping straight to an HTTP response: no intermediate heap copy.
+
+`encode` accepts the tiles built by `VectorTileBuilder` and the tiles returned by `decode`. Another `VectorTile` implementation fails with `UnsupportedOperationException`.
 
 ## Configure encoding
 
-`VectorTileBuilder` has tile-wide knobs that take effect at `build()` time:
+`VectorTileBuilder` has tile-wide settings. Set them before adding features: each feature is clipped, simplified and encoded when its `FeatureBuilder.build()` runs, with the settings in effect at that moment.
 
 ```java
 builder
     .setExtent(4096)                          // tile coordinate extent (default 4096)
-    .setClipBuffer(64)                        // pixels of buffer around the tile bbox
+    .setClipBuffer(64)                        // tile units of buffer around the tile bbox (default 32)
     .setAutoIncrementIds(true)                // assign ids automatically when features omit them
-    .setSimplificationDistanceTolerance(1.0)  // Douglas-Peucker tolerance in tile units
-    .setUsePrecisionModelSnapping(true);      // snap to integer coordinates before encoding
+    .setSimplificationDistanceTolerance(1.0); // Douglas-Peucker tolerance in tile units
 ```
 
 These are tile-wide, not per-layer. Tune them once for the output dataset.

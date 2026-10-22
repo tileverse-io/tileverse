@@ -34,7 +34,7 @@ TileMatrixSet tms512 = DefaultTileMatrixSets.WORLD_CRS84_QUADx2; // 512 px tiles
 
 ## Legacy GeoWebCache-style sets
 
-These match the GeoWebCache resolution arrays used by older deployments. They share the underlying CRS with the OGC sets above but do not carry a well-known scale set URI.
+These match the GeoWebCache resolution arrays used by older deployments. They share the underlying CRS with the OGC sets above. `WORLD_EPSG3857` and `WORLD_EPSG3857x2` declare the `GoogleMapsCompatible` well-known scale set, and the EPSG:4326 sets declare none.
 
 | Constant | Identifier | CRS | Tile size |
 |----------|------------|-----|-----------|
@@ -49,6 +49,6 @@ Every standard set is thread-safe and immutable, and exposes:
 
 - the canonical `identifier()` (mandatory in OGC TMS 2D),
 - a `supportedCRS()` URI suitable for OGC API - Tiles consumption,
-- precomputed `resolution(int z)` and matching `scaleDenominator()` values calculated from the standard 0.28 mm rendering pixel size,
+- `resolution(int z)` values, with the matching scale denominator given by `getTileMatrix(z).scaleDenominator()` and calculated from the standard 0.28 mm rendering pixel size,
 - a `boundingBox()` covering the full CRS extent,
 - a `tilePyramid()` exposing the per-level tile ranges.

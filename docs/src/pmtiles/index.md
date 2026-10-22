@@ -1,27 +1,21 @@
 # PMTiles
 
-This module provides a pure Java implementation of the [PMTiles v3 specification](https://github.com/protomaps/PMTiles), a single-file archive format for cloud-optimized tiled data.
+This module reads [PMTiles](https://github.com/protomaps/PMTiles) version 3 archives, a single-file format for map tiles. The reader fetches only the bytes it needs, with range requests. This suits archives served from object storage or HTTP.
 
-This library is focused on efficient, cloud-optimized reading of PMTiles archives. For creating archives, use one of the existing tools such as [`pmtiles`](https://github.com/protomaps/go-pmtiles) or [Tippecanoe](https://github.com/felt/tippecanoe).
-
-## Features
-
-- **Cloud-Optimized Reads**: Range-based access tuned for archives served from object storage.
-- **Storage Agnostic**: Works with any [`RangeReader`](../storage/reference/rangereader.md) backend from `tileverse-storage` (S3, HTTP, Local File, Azure Blob, GCS).
-- **Spatial Indexing**: Implements Hilbert curve indexing for O(log N) tile lookups.
-- **Vector and Raster Tiles**: `PMTilesReader` returns the raw tile bytes for any tile type (MVT, PNG, JPEG, WebP, AVIF). For decoded results, the higher-level `PMTilesVectorTileStore` returns parsed `VectorTile` objects and `PMTilesRasterTileStore` returns decoded `java.awt.image.RenderedImage`s. WebP decoding is enabled by default through a bundled `ImageIO` plugin.
+The module reads archives and does not write them. To create an archive, use a tool such as [`pmtiles`](https://github.com/protomaps/go-pmtiles) or [Tippecanoe](https://github.com/felt/tippecanoe).
 
 ## Core concepts
 
-A PMTiles archive contains three regions:
+A PMTiles archive has four parts:
 
-1. **Header**: tileset metadata (bounds, zoom levels, tile format, compression).
-2. **Directory**: spatial index built on the Hilbert space-filling curve.
-3. **Tiles**: the compressed tile bodies.
+1. **Header**: 127 bytes at the start of the file. It records the tile type, the compression of the tiles and of the directories, the zoom range, the bounds, and the location of the other parts.
+2. **Directories**: the index of the tiles. A root directory sits near the start of the file, and large archives add leaf directories.
+3. **Metadata**: a JSON document.
+4. **Tile data**: the tile bodies.
 
-Tiles are addressed with the standard XYZ scheme: zoom level, column (west to east), and row (top to bottom in PMTiles' XYZ-with-top-left convention). The `tileType` byte in the header tells you whether the bodies are MVT, PNG, JPEG, WebP, or AVIF; `PMTilesHeader.tileMimeType()` and `isRasterTileType()` give a convenient view of the same.
+To read a tile, the reader turns its position into a tile id along a Hilbert curve, finds the id in the directories, and reads the tile body. Parsed directories stay in a cache.
 
-PMTiles archives can hold either Mapbox Vector Tiles or raster tiles in any of those formats. `PMTilesReader.getTile(...)` returns raw bytes for either case; the high-level `PMTilesVectorTileStore` and `PMTilesRasterTileStore` wrappers decode on the fly to `VectorTile` and `RenderedImage` respectively. WebP decoding is bundled - no extra ImageIO plugin needed. See the [Tile Stores Reference](reference/tile-stores.md) for the API.
+Tiles are addressed with the XYZ scheme: zoom level, column from west to east, and row from north to south. The header records the tile type: MVT, PNG, JPEG, WebP, AVIF, MLT, or unknown. The reader returns the tiles of any type, after removing the tile compression of the archive. The tile stores decode MVT tiles to `VectorTile` objects, and PNG, JPEG, WebP and AVIF tiles to `RenderedImage` objects.
 
 ## Installation
 
@@ -32,30 +26,37 @@ PMTiles archives can hold either Mapbox Vector Tiles or raster tiles in any of t
 </dependency>
 ```
 
-## Usage
+The version comes from `tileverse-bom`, as described in [Getting Started](../getting-started.md). Local files and HTTP work out of the box. S3, Azure and GCS URIs need `tileverse-storage-all`, or the matching `tileverse-storage-s3`, `tileverse-storage-azure` or `tileverse-storage-gcs` module, next to `tileverse-pmtiles`.
 
-`PMTilesReader` wraps a `RangeReader`. `PMTilesReader.open(URI)` obtains one from the `Storage` of the URI and closes both together, and `new PMTilesReader(rangeReader)` takes a reader opened by the caller.
+## Usage
 
 ```java
 import io.tileverse.pmtiles.PMTilesHeader;
 import io.tileverse.pmtiles.PMTilesReader;
 import io.tileverse.tiling.pyramid.TileIndex;
+import java.nio.ByteBuffer;
 import java.nio.file.Path;
+import java.util.Optional;
 
 try (PMTilesReader reader = PMTilesReader.open(Path.of("data/map.pmtiles").toUri())) {
-    // Get metadata
     PMTilesHeader header = reader.getHeader();
-    System.out.println("Min Zoom: " + header.minZoom());
+    System.out.println("Tile type: " + header.tileMimeType());
+    System.out.println("Zoom levels: " + header.minZoom() + " to " + header.maxZoom());
 
-    // Fetch tile (z, x, y); the buffer is ready to read, do not flip it
-    reader.getTile(TileIndex.zxy(0, 0, 0)).ifPresent(buffer -> {
-        // Process tile bytes...
-    });
+    // The buffer is ready to read, do not flip it
+    Optional<ByteBuffer> tile = reader.getTile(TileIndex.zxy(0, 0, 0));
 }
 ```
+
+`PMTilesReader.open(URI)` accepts the URIs supported by `tileverse-storage`, such as `s3://bucket/map.pmtiles` or `https://example.com/map.pmtiles`.
 
 ## Component view
 
 ![tileverse-pmtiles components](../assets/images/storage/structurizr-PMTilesComponents.svg)
 
-`PMTilesReader` is the low-level type: it reads the header, walks the directory using `HilbertCurve` for index lookup, and returns raw tile bytes (or streams them through a caller-supplied `IOFunction`). `PMTilesVectorTileStore` and `PMTilesRasterTileStore` are higher-level wrappers built on `PMTilesReader` that decode tiles to `VectorTile` and `RenderedImage` respectively. See the [Tile Stores Reference](reference/tile-stores.md) for the full API.
+`PMTilesReader` is the low-level type. It reads the header, finds a tile in the directories through the `HilbertCurve`, and returns the tile bytes. It can also stream them through an `IOFunction` supplied by the caller. `PMTilesVectorTileStore` and `PMTilesRasterTileStore` wrap a `PMTilesReader` and decode tiles to `VectorTile` and `RenderedImage` objects.
+
+## Next steps
+
+- [Read PMTiles archives](how-to/read-pmtiles.md): open archives in cloud storage, read tiles, and decode them with the tile stores.
+- [Tile stores](reference/tile-stores.md): the `TileStore` API, the PMTiles stores, and the TileJSON model.

@@ -1,14 +1,12 @@
-# Performance Configuration
+# Configure for performance
 
 This guide covers how to tune the `RangeReader` for different workloads, such as random access (tiles), sequential processing (ETL), or high-latency environments.
 
 ## Caching Layers
 
-Caching is critical when reading from remote sources (S3, HTTP) to minimize latency and cost.
+Caching helps random access to remote sources, such as a tile server that reads the same headers and tiles again. A job that reads a file once, front to back, gains nothing from it: use the reader returned by `Storage.openRangeReader` directly.
 
 ### Memory Cache (`CachingRangeReader`)
-
-Best for: **Random access**, **Tile servers**, **Metadata headers**.
 
 ```java
 URI bucket = URI.create("s3://bucket/");
@@ -29,9 +27,9 @@ The cache stores exactly the `(offset, length)` ranges requested from it. One in
 
 `clearCache()` drops the entries of one reader's source, and closing the reader does the same. `getCacheStats()` reports hits, misses, evictions and the entry count. `CachingRangeReader.builder(reader).cacheManager(CacheManager.newInstance())` gives a reader a cache of its own with the same capacity: every extra manager adds another 20% of the heap to the budget.
 
-Concurrent reads through one `CachingRangeReader` fetch a range once. The first read fetches it. The others wait for that fetch and take the cached value. A wait ends after 10 seconds, and the read then fetches the range itself. When the awaited fetch fails and another read is already fetching the range again, the read waits once more: 20 seconds of waiting at most. Readers built separately over the same source share the cache, not the fetches in progress.
+Concurrent reads of one range through one `CachingRangeReader` fetch it once: the other reads wait for that fetch, and a read that waited 10 seconds fetches the range itself. Readers built separately over the same source share the cache, not the fetches in progress.
 
-To cache every reader opened by a `Storage` without composing the decorator by hand, set `storage.caching.enabled=true` on the configuration passed to `StorageFactory.open`. It is off by default.
+To cache every reader opened by a `Storage` without composing the decorator by hand, set `storage.caching.enabled=true` on the configuration passed to `StorageFactory.open`. It is off by default. The file backend ignores it.
 
 ## Read Optimization
 
@@ -50,13 +48,13 @@ RangeReader alignedReader = BlockAlignedRangeReader.builder(cache)
 
 The aligner expands a request inside a declared region into whole blocks before the call reaches the cache, which then stores block-grain data for that region. Reads outside every declared region pass straight through to the cache, which stores them under their own exact keys.
 
-**Impact:** If you request bytes `100-200` inside a declared region, the reader fetches the whole `0-65536` block through the cache. A later request for `200-300` inside the same block is served from the memory cache immediately.
+For example, a request for bytes `100-200` inside a declared region fetches the whole `0-65535` block through the cache. A later request for `200-300` is served from the cached block.
 
 ## Provider-Specific Tuning
 
 ### Amazon S3
 
-For deep AWS SDK customization (retry policy, credentials provider, execution interceptors), build the `S3AsyncClient` yourself and pass it through `S3StorageProvider.open(URI, S3AsyncClient)`. The returned `Storage` borrows the client; closing the `Storage` does NOT close the client. Presigned URLs need a `Storage` opened from a URI or a `StorageConfig`.
+For deep AWS SDK customization (retry policy, credentials provider, execution interceptors), build the `S3AsyncClient` yourself and pass it through `S3StorageProvider.open(URI, S3AsyncClient)`. The returned `Storage` borrows the client; closing the `Storage` does NOT close the client. Presigned URLs need a `Storage` opened from a URI or a `StorageConfig`. A client built with `S3AsyncClient.crtBuilder()` fails on S3-compatible endpoints answering without an `ETag` header; a `Storage` opened from a URI reads them.
 
 ```java
 S3AsyncClient s3Client = S3AsyncClient.builder()
@@ -103,9 +101,16 @@ try (Storage storage = StorageFactory.open(bucket, props);
 }
 ```
 
-How `storage.s3.endpoint` interacts with the other S3 parameters:
+The endpoint comes from the first of:
 
-- **Precedence**: `storage.s3.endpoint` first, then the endpoint of an `http(s)://host/bucket/key` URI opened with `storage.provider=s3`, then the endpoint named by the AWS environment: the `aws.endpointUrlS3` or `aws.endpointUrl` system property, the `AWS_ENDPOINT_URL_S3` or `AWS_ENDPOINT_URL` environment variable, then `endpoint_url` in the AWS profile files (the profile named by `AWS_PROFILE`, or `default`). With none of them, the `Storage` uses the default AWS endpoints for the region.
+1. `storage.s3.endpoint`;
+2. the URL of an `http(s)://host/bucket/key` URI opened with `storage.provider=s3`;
+3. the `aws.endpointUrlS3` or `aws.endpointUrl` system property;
+4. the `AWS_ENDPOINT_URL_S3` or `AWS_ENDPOINT_URL` environment variable;
+5. `endpoint_url` in the AWS profile files, for the profile named by `AWS_PROFILE`, else `default`.
+
+With none of them, the `Storage` uses the AWS endpoints of the region. How the endpoint interacts with the other S3 parameters:
+
 - **`storage.s3.force-path-style`**: defaults to `true` whenever an endpoint override is in effect (from any of these sources), and `false` for canonical AWS URIs. Most S3-compatible services require path-style. Set `storage.s3.force-path-style` explicitly to override the default.
 - **`storage.s3.region`**: with an endpoint override the region only signs the requests, and the service may reject a region other than its own (MinIO does). It falls back to `us-east-1` when neither the parameter nor the URI names one: the region of the environment is not read. For Cloudflare R2, use `storage.s3.region=auto`.
 - **Credentials** (`storage.s3.anonymous`, `storage.s3.aws-access-key-id` / `storage.s3.aws-secret-access-key`, `storage.s3.default-credentials-profile`, the default chain): fully orthogonal to the endpoint. The endpoint selects the service; credentials select the identity. Static access-key + secret is the usual pairing for self-hosted services.
@@ -128,7 +133,7 @@ try (Storage storage = StorageFactory.open(parent, props);
 }
 ```
 
-For full `HttpClient` customization (custom proxy, executor, SSL context), build the `HttpClient` yourself and pass it through `HttpStorageProvider.open(URI, HttpClient[, HttpAuthentication])`. The returned `Storage` **borrows** the client; closing the `Storage` does NOT close it. The Properties path (`StorageFactory.open(uri, props)`) instead acquires a refcounted lease from `HttpClientCache`, which lets identical configs across multiple `Storage` instances share one underlying client.
+For full `HttpClient` customization (custom proxy, executor, SSL context), build the `HttpClient` yourself and pass it through `HttpStorageProvider.open(URI, HttpClient[, HttpAuthentication])`. The returned `Storage` **borrows** the client; closing the `Storage` does NOT close it. The Properties path (`StorageFactory.open(uri, props)`) instead shares one client among the `Storage` instances with the same connect timeout and trust-all setting.
 
 ### Local files
 
@@ -184,31 +189,3 @@ The connection pool of the S3 clients takes three settings, each read from its s
 A duration reads as ISO-8601 (`PT30S`) or as a number and a unit (`30s`, `500ms`).
 
 A multipart upload keeps at most an eighth of the pool in flight, 6 connections of 50; the rest serves single reads, batches and other uploads.
-
-## Stack Recommendations
-
-### For Tile Servers
-A tile server needs low latency. Keep hot tiles in a memory cache.
-
-```java
-// 1. Base S3 Reader via Storage
-URI bucket = URI.create("s3://bucket/");
-URI leaf = URI.create("s3://bucket/tiles.pmtiles");
-try (Storage storage = StorageFactory.open(bucket);
-        RangeReader base = storage.openRangeReader(leaf);
-
-        // 2. Memory Cache: hot tiles stay in the shared cache for 60 seconds after their last read
-        RangeReader reader = CachingRangeReader.of(base)) {
-    // serve tiles from `reader`
-}
-```
-
-### For Data Pipelines (ETL)
-ETL jobs often read large chunks sequentially. Memory caching is less useful; read large ranges directly from the base reader and focus on throughput.
-
-```java
-try (Storage storage = StorageFactory.open(bucket);
-        RangeReader reader = storage.openRangeReader(leaf)) {
-    // issue large sequential readRange calls
-}
-```

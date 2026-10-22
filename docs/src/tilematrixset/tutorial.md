@@ -1,10 +1,10 @@
-# Quick Start
+# Tutorial
 
 This guide walks through the everyday operations of `tileverse-tilematrixset`: selecting a tile matrix set, mapping coordinates to tiles, iterating over a region, and building a custom set.
 
 ## 1. Pick a standard set
 
-Standard sets are available as static constants on `DefaultTileMatrixSets`. Each one carries an OGC `identifier`, a `supportedCRS` URI, and (where applicable) a `wellKnownScaleSet` URI.
+Standard sets are available as static constants on `DefaultTileMatrixSets`. Each one has an OGC `identifier`, a `supportedCRS` URI, and, where applicable, a `wellKnownScaleSet` URI.
 
 ```java
 import io.tileverse.tiling.matrix.DefaultTileMatrixSets;
@@ -22,7 +22,7 @@ System.out.println(tms.wellKnownScaleSet()); // Optional[http://...GoogleMapsCom
 `coordinateToTile` accepts a coordinate in the CRS of the matrix set and returns the tile that contains it. Inputs must already be in the target CRS; use a projection library if you need to convert from longitude/latitude.
 
 ```java
-import io.tileverse.tiling.common.Coordinate;
+import io.tileverse.geom.Coordinate;
 import io.tileverse.tiling.matrix.DefaultTileMatrixSets;
 import io.tileverse.tiling.matrix.TileMatrixSet;
 import io.tileverse.tiling.pyramid.TileIndex;
@@ -37,10 +37,10 @@ System.out.printf("Tile z=%d x=%d y=%d%n", tile.z(), tile.x(), tile.y());
 
 ## 3. Iterate tiles intersecting an area
 
-`TileMatrix.intersection(bbox)` returns a new (sparse) matrix whose `tiles()` stream only emits tiles overlapping the bounding box. `extentToRange(bbox)` returns the raw tile-index range when the matrix is fully populated.
+`TileMatrix.intersection(bbox)` returns a matrix restricted to the tiles overlapping the bounding box, and its `tiles()` stream emits only those tiles. `extentToRange(bbox)` returns the same tiles as a `TileRange` of tile indices.
 
 ```java
-import io.tileverse.tiling.common.BoundingBox2D;
+import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.tiling.matrix.TileMatrix;
 
 TileMatrix matrixZ12 = tms.getTileMatrix(12);
@@ -56,8 +56,8 @@ matrixZ12.intersection(area).ifPresent(view ->
 The builder requires identifier, CRS, tile pyramid, extent, and resolutions. Optional OGC metadata (title, abstract, keywords, well-known scale set) goes through fluent setters.
 
 ```java
-import io.tileverse.tiling.common.BoundingBox2D;
-import io.tileverse.tiling.common.CornerOfOrigin;
+import io.tileverse.geom.BoundingBox2D;
+import io.tileverse.tiling.pyramid.CornerOfOrigin;
 import io.tileverse.tiling.matrix.TileMatrixSet;
 import io.tileverse.tiling.pyramid.TilePyramid;
 import io.tileverse.tiling.pyramid.TileRange;

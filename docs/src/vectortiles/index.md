@@ -1,12 +1,12 @@
 # Vector Tiles
 
-A high-performance library for encoding and decoding [Mapbox Vector Tiles (MVT)](https://github.com/mapbox/vector-tile-spec) in Java. It bridges the gap between raw Protocol Buffers data and usable Java objects (JTS Geometries).
+This module encodes and decodes [Mapbox Vector Tiles](https://github.com/mapbox/vector-tile-spec) (MVT), version 2.1. It converts between the protobuf encoding and a `VectorTile` model with JTS geometries.
 
-## Capabilities
+## Core concepts
 
-- **MVT v2.1 Compliance**: Full support for layers, features, and values.
-- **JTS Integration**: Direct conversion between MVT geometry commands and JTS `Geometry` objects.
-- **Zero-Copy Decoding**: Optimized parsing strategies to minimize object allocation during reads.
+A vector tile holds named layers, and a layer holds features. A feature has an optional id, attributes, and a geometry. Geometries are in tile coordinates: the origin is the top-left corner of the tile, y grows downward, and the extent of the layer, usually 4096, spans the tile.
+
+Decoding is lazy. A feature decodes its geometry and its attributes on first access.
 
 ## Installation
 
@@ -17,35 +17,31 @@ A high-performance library for encoding and decoding [Mapbox Vector Tiles (MVT)]
 </dependency>
 ```
 
+The version comes from `tileverse-bom`, as described in [Getting Started](../getting-started.md).
+
 ## Usage
 
-### Decoding
-
-Convert raw MVT bytes (e.g., from a PMTiles archive or network request) into a structured Java object.
+Decode MVT bytes, for example a tile read from a PMTiles archive:
 
 ```java
 import io.tileverse.vectortile.model.VectorTile;
 import io.tileverse.vectortile.mvt.VectorTileCodec;
-
-byte[] rawBytes = ...; // your MVT data
+import java.util.Map;
+import org.locationtech.jts.geom.Geometry;
 
 VectorTileCodec codec = new VectorTileCodec();
-VectorTile tile = codec.decode(rawBytes);
+VectorTile tile = codec.decode(mvtBytes);
 
 for (VectorTile.Layer layer : tile.getLayers()) {
     System.out.println("Layer: " + layer.getName());
-
-    for (VectorTile.Layer.Feature feature : layer.getFeatures()) {
-        // Access JTS Geometry directly
-        org.locationtech.jts.geom.Geometry geom = feature.getGeometry();
-        Map<String, Object> props = feature.getAttributes();
-    }
+    layer.getFeatures().forEach(feature -> {
+        Geometry geometry = feature.getGeometry();
+        Map<String, Object> attributes = feature.getAttributes();
+    });
 }
 ```
 
-### Encoding
-
-Create MVTs from scratch using JTS geometries.
+Build a tile from JTS geometries and encode it:
 
 ```java
 import io.tileverse.vectortile.mvt.VectorTileBuilder;
@@ -55,10 +51,10 @@ builder.layer()
         .name("buildings")
         .feature()
             .id(123)
-            .geometry(jtsPolygon)
+            .geometry(polygon)       // in tile coordinates
             .attribute("height", 50)
-            .attribute("type", "residential")
-            .build();
+            .build()                 // returns the LayerBuilder
+        .build();                    // adds the layer, returns the VectorTileBuilder
 
 byte[] encoded = codec.encode(builder.build());
 ```
@@ -67,4 +63,9 @@ byte[] encoded = codec.encode(builder.build());
 
 ![tileverse-vectortiles components](../assets/images/storage/structurizr-VectorTilesComponents.svg)
 
-`VectorTileCodec` handles both encoding and decoding (between MVT bytes and the `VectorTile` model). `VectorTileBuilder` is the fluent constructor for `VectorTile` instances with JTS `Geometry` payloads.
+`VectorTileCodec` encodes and decodes between MVT bytes and the `VectorTile` model. `VectorTileBuilder` builds `VectorTile` instances from JTS geometries.
+
+## Next steps
+
+- [Encode vector tiles](how-to/encode.md): build tiles, configure clipping and simplification, and write the bytes.
+- [Decode vector tiles](how-to/decode.md): read layers and features, and filter features without decoding their geometries.

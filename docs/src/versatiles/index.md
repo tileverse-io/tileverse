@@ -7,7 +7,7 @@ The module reads archives and does not write them. To create an archive, use the
 ## Features
 
 - **Cloud-optimized reads**: a tile costs one range request once the index of its block is cached.
-- **Storage agnostic**: works with the [`RangeReader`](../storage/reference/rangereader.md) backends of `tileverse-storage`: local file, HTTP, S3, Azure Blob, and GCS.
+- **Storage agnostic**: works with the [`RangeReader`](../storage/how-to/read-byte-ranges.md) backends of `tileverse-storage`: local file, HTTP, S3, Azure Blob, and GCS.
 - **Vector and raster tiles**: `VersatilesReader` returns the decompressed bytes of tiles, whatever their format. `VersatilesVectorTileStore` decodes Mapbox Vector Tiles to `VectorTile` objects, and `VersatilesRasterTileStore` decodes PNG, JPEG, and WebP tiles to `RenderedImage` objects.
 - **Compression**: reads uncompressed, gzip, Brotli, and Zstandard archives.
 

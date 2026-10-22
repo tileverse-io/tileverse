@@ -1,73 +1,51 @@
-# Building
-
-Instructions for building the Tileverse monorepo from source.
+# Build and test
 
 ## Prerequisites
 
-*   **Java 21+**: For development (the runtime requirement is Java 17+).
-*   **Maven 3.9+**: Build tool and dependency management.
-*   **Git**: Version control.
-*   **Docker**: Required for running integration tests (Testcontainers).
+- Java 17 or later, to build and to run. CI also builds on Java 21 and 25.
+- Maven 3.9 or later. The repository includes the Maven wrapper, `./mvnw`.
+- Docker, for the integration tests.
 
-## Quick Start
+## Build
 
-### Using the Makefile (Recommended)
-
-The project includes a `Makefile` to simplify common tasks:
+The `Makefile` wraps the common tasks:
 
 ```bash
-# Build everything (compile + test)
-make
-
-# Clean build artifacts
-make clean
-
-# Compile only
-make compile
-
-# Run all tests
-make test
-
-# Format code (Spotless + SortPOM)
-make format
+make            # install the modules into the local Maven repository, then run the tests
+make compile    # compile only
+make test       # run the tests
+make format     # format the Java sources and sort the POMs
+make lint       # check the formatting, as CI does
+make clean      # remove the build output
 ```
 
-### Using Maven Directly
+With Maven directly:
 
 ```bash
-# Build and package
-./mvnw clean package
-
-# Skip tests for faster build
-./mvnw clean package -DskipTests
+./mvnw clean package                              # build and test
+./mvnw clean package -DskipTests                  # build without the tests
+./mvnw clean package -pl :tileverse-pmtiles -am   # one module and the modules it needs
 ```
 
-## Build Targets
+Select modules by artifact id (`-pl :artifactId`), and add `-am` to also build the modules they depend on.
 
-### Module Specific Builds
+Each Maven build formats the Java sources with Spotless, in the Palantir style, and sorts the POMs with SortPOM. `-Dqa` switches both to check mode, as in CI. `-Dcoverage` adds JaCoCo and the aggregate coverage report.
 
-You can build specific modules to save time:
+## Test
+
+Unit tests (`*Test.java`) use JUnit 5 and Mockito. Integration tests (`*IT.java`) run against real services in Docker containers, through [Testcontainers](https://testcontainers.com/).
 
 ```bash
-# Build Range Reader only
-./mvnw clean package -pl tileverse-storage
-
-# Build PMTiles only
-./mvnw clean package -pl tileverse-pmtiles
+./mvnw test                                   # unit tests, or make test-unit
+./mvnw verify                                 # unit and integration tests, or make test-it
+./mvnw verify -pl :tileverse-storage-s3 -am   # the tests of one module
 ```
 
-## Code Quality
+The integration tests use these images:
 
-We enforce strict code quality standards using:
-
-*   **Spotless**: For Java code formatting (Palantir style).
-*   **SortPOM**: For consistent `pom.xml` ordering.
-*   **License Maven Plugin**: To ensure file headers are present.
-
-```bash
-# Check code quality
-make lint
-
-# Apply fixes automatically
-make format
-```
+| Backend | Images |
+| :--- | :--- |
+| S3 | `localstack/localstack`, and the S3-compatible servers `dxflrs/garage` and `andrewgaul/s3proxy` |
+| Azure Blob | `mcr.microsoft.com/azure-storage/azurite` |
+| GCS | `fsouza/fake-gcs-server` |
+| HTTP | `httpd:alpine` |

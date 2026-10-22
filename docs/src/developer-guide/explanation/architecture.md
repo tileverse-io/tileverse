@@ -1,6 +1,6 @@
-# System Architecture
+# Architecture
 
-Tileverse is designed as a collection of **loosely coupled, composable libraries**. While they work seamlessly together, each module acts as a standalone tool for its specific domain (I/O, Tiling, Encodings).
+Tileverse is a set of loosely coupled libraries. Each module works on its own, for one domain: I/O, tile grids, or tile encodings.
 
 ## Module map
 
@@ -52,13 +52,13 @@ graph TD
 
 ![Tileverse System Context](../../assets/images/storage/structurizr-SystemContext.svg)
 
-The Tileverse system sits between consumer applications and the four external storage families it speaks to (local FS, HTTP, S3-compatible object stores, Azure, GCS).
+The Tileverse system sits between consumer applications and five external storage families: local FS, HTTP, S3-compatible object stores, Azure and GCS.
 
 ## Container view
 
 ![Tileverse Container View](../../assets/images/storage/structurizr-Containers.svg)
 
-The monorepo modules plus their dependencies on each other and on the external storage systems. `tileverse-pmtiles` and `tileverse-versatiles` depend on every other Tileverse module; `tileverse-tilestore` brings the format-agnostic `TileStore<T>` abstraction; the four storage containers (`-core`, `-s3`, `-azure`, `-gcs`) compose under `-all` for callers that want every backend at once.
+The library modules, their dependencies on each other, and their dependencies on the external storage systems. `tileverse-pmtiles` and `tileverse-versatiles` depend on every other Tileverse module; `tileverse-tilestore` brings the format-agnostic `TileStore<T>` abstraction; the four storage containers (`-core`, `-s3`, `-azure`, `-gcs`) compose under `-all` for callers that want every backend at once.
 
 Per-module C4 component views are embedded in each library's section:
 
@@ -69,41 +69,52 @@ Per-module C4 component views are embedded in each library's section:
 - [Tile Matrix Set internals](../../tilematrixset/index.md#component-view)
 - [Tile Stores internals](../../pmtiles/reference/tile-stores.md#component-view)
 
-All C4 diagrams are generated from `docs/structurizr/workspace.dsl` via `docs/build.sh` (Docker required). Edit the DSL and rerun the build to regenerate.
+All C4 diagrams are generated from `docs/structurizr/workspace.dsl` and `docs/structurizr/dynamic-views.dsl` via `docs/build.sh` (Docker required). Edit the DSL and rerun the build to regenerate.
 
-## Design Philosophy
+## Design principles
 
-### 1. I/O Independence (`tileverse-storage`)
-We treat data access as a distinct problem from data format.
+- **I/O stays separate from formats.** A format library, such as a GeoTIFF reader, should not implement its own S3 client. `Storage` provides the container API, and its `RangeReader` the byte-range reads of single files.
+- **Grid math needs no GIS library.** `tileverse-tilematrixset` computes tile coordinates and bounding boxes with no GIS or I/O library; it depends on Jackson for its JSON encoding. A tile server can use it whatever its data source.
+- **Codecs do no I/O.** `tileverse-vectortiles` converts between the protobuf encoding and JTS geometries.
+- **Archive readers compose the rest.** `tileverse-pmtiles` and `tileverse-versatiles` read through a `RangeReader`, use the tile matrix set for the grid, and decode tiles with the vector tile codec or `javax.imageio`.
 
-*   **Goal:** Read (and write, list, copy, presign) bytes from anywhere (S3, HTTP, Azure, GCS, File) efficiently.
-*   **Anti-Pattern:** Format libraries (like a GeoTIFF reader) implementing their own S3 clients.
-*   **Solution:** `Storage` provides a unified container API; its `RangeReader` API exposes the byte-range read surface used by single-file consumers (PMTiles, COG, single-file Parquet).
+## Reading a tile
 
-### 2. Pure Mathematical Models (`tilematrixset`)
-Spatial reference systems and grid logic are kept separate from data storage.
+When a `PMTilesReader` reads the tile `(z, x, y)`:
 
-*   **Goal:** Calculate tile coordinates and bounding boxes without external dependencies.
-*   **Benefit:** Can be used by a tile server to calculate grids even if the data source isn't Java-based or uses a different I/O library.
+1. It computes the tile id of the tile along the Hilbert curve.
+2. It looks the id up in the directories. A directory missing from its cache costs one range request.
+3. It reads the tile body with one range request, and removes the tile compression of the archive.
+4. A tile store decodes the bytes: `PMTilesVectorTileStore` with `VectorTileCodec`, and `PMTilesRasterTileStore` with `javax.imageio.ImageIO`. The decoder reads from a stream over a pooled buffer holding the tile bytes.
 
-### 3. Format Specificity (`vectortiles`, `pmtiles`)
-These libraries handle the parsing and encoding logic for specific file specs.
+`PMTilesReader` keeps parsed directories in its own cache, and block-aligns its reads of the header, the directories and the metadata. Tile bytes are cached only when the reader passed to `PMTilesReader` is a `CachingRangeReader`.
 
-*   **Vector Tiles:** Pure Protocol Buffers / JTS transcoding. No I/O logic.
-*   **PMTiles:** Orchestrates `RangeReader` to fetch specific directory bytes, uses `VectorTiles` to parse the result, and `TileMatrixSet` to understand the grid.
+## Extension points
 
-## Integration Patterns
+- Implement `StorageProvider`, registered through `ServiceLoader`, to add a storage backend: for example an internal content-addressed store, a store with its own URI scheme, or a test harness. Native protocols like OpenStack Swift, Azure Files (SMB), or HDFS through WebHDFS are out of scope; see [Why tileverse-storage?](../../storage/explanation/why.md#when-not-to-use-this-library).
+- Subclass `AbstractTileStore<T>` to expose a different archive format under the same `TileStore<T>` contract, as `tileverse-versatiles` does for VersaTiles containers. MBTiles would fit the same way.
+- Implement `TileMatrixSet` to support non-Earth or custom grids while reusing the rest of the stack unchanged.
 
-### Direct Usage
-Applications often use modules directly:
+## Third-party dependencies
 
-*   **ETL Pipelines:** Use `vectortiles` to convert PostGIS geometry to MVT bytes.
-*   **Tile Servers:** Use `tilematrixset` to calculate which tiles cover a viewport.
-*   **Data Access:** Use `tileverse-storage` (its `RangeReader` API) to fetch partial content from Cloud Optimized GeoTIFFs (COGs) stored on S3.
+The Module column names the modules declaring each dependency.
 
-### Composed Usage
-The `pmtiles` library demonstrates the power of composition:
+| Library | Usage | Module |
+| :--- | :--- | :--- |
+| **[JTS Topology Suite](https://github.com/locationtech/jts)** | Geometry model (Points, Polygons, etc.) | `vectortiles`, `tilestore` |
+| **[Caffeine](https://github.com/ben-manes/caffeine)** | High-performance in-memory caching | `storage-core`, `tilestore`, `pmtiles`, `versatiles` |
+| **[Jackson](https://github.com/FasterXML/jackson)** 3 | JSON encodings (OGC TMS, TileJSON, PMTiles and Versatiles metadata) | `tilematrixset`, `tilestore`, `pmtiles`, `versatiles` |
+| **[Google Protocol Buffers](https://github.com/protocolbuffers/protobuf)** | MVT binary encoding/decoding | `vectortiles` |
+| **[webp-imageio](https://github.com/usefulness/webp-imageio)** | `ImageIO` plugin for WebP-encoded raster tiles (registered via JDK SPI; ships native libs for Linux and macOS on x86_64 and arm64, and for Windows on x86 and x86_64) | `pmtiles`, `versatiles` |
+| **[Apache Commons Compress](https://commons.apache.org/proper/commons-compress/)** | Gzip, Zstandard and Brotli decompression of tiles, directories and indexes | `pmtiles`, `versatiles` |
+| **[zstd-jni](https://github.com/luben/zstd-jni)** | Native Zstandard codec used by Commons Compress | `pmtiles`, `versatiles` |
+| **[Brotli decoder](https://github.com/google/brotli)** | Brotli decompression of Versatiles indexes, metadata, and tiles | `versatiles` |
+| **[SLF4J](https://www.slf4j.org/)** | Logging abstraction | All |
 
-1.  Accepts a `RangeReader` interface (polymorphic backend).
-2.  Uses `HilbertCurve` (internal) for index lookup.
-3.  Returns raw bytes at the reader level; high-level `*TileStore` wrappers decode on the fly: `PMTilesVectorTileStore` uses `vectortiles` to return parsed `VectorTile` objects, `PMTilesRasterTileStore` uses `javax.imageio.ImageIO` to return decoded `RenderedImage` objects. Both run their decoder against the streaming `InputStream` overload so no intermediate `ByteBuffer` is allocated per tile.
+The cloud SDKs come only with the storage module of their backend:
+
+| Library | Usage | Module |
+| :--- | :--- | :--- |
+| **[AWS SDK for Java v2](https://github.com/aws/aws-sdk-java-v2)** | S3 storage backend | `storage-s3` |
+| **[Azure SDK for Java](https://github.com/Azure/azure-sdk-for-java)** | Azure Blob and Data Lake Gen2 storage backend | `storage-azure` |
+| **[Google Cloud Java](https://github.com/googleapis/google-cloud-java)** | GCS storage backend | `storage-gcs` |

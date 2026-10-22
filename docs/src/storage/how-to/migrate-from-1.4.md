@@ -1,10 +1,13 @@
-# Migration guide: 1.4.x → 2.0.x
+# Migrating from 1.4.x
 
 The 2.0 release renames the entire library from `tileverse-rangereader` to
 `tileverse-storage` and adds a new container-rooted `Storage` API alongside
 the existing single-object `RangeReader`. Maven coordinates, package names,
-and the SPI surface all change. This is a breaking release; consumers must
+and the SPI all change. This is a breaking release; consumers must
 update.
+
+This guide stops at 2.0. To upgrade to 2.1, apply it first, then follow
+[Migrating from 2.0](migrate-from-2.0.md).
 
 The motivation: the project grew from "byte-range reads of one file" into a
 broader I/O abstraction over object storage, with directory listing, writes,
@@ -41,7 +44,7 @@ Update every Java import:
 | `io.tileverse.rangereader.azure.*` | `io.tileverse.storage.azure.*` |
 | `io.tileverse.rangereader.gcs.*` | `io.tileverse.storage.gcs.*` |
 | `io.tileverse.rangereader.spi.*` | `io.tileverse.storage.spi.*` (provider extension points only; see note below) |
-| `io.tileverse.io.*` | unchanged |
+| `io.tileverse.io.*` | unchanged in 2.0; 2.1 moves the channel adapters to `io.tileverse.storage.adapters` |
 | `io.tileverse.cache.*` | unchanged |
 
 Generic utilities (`ByteRange`, `ByteBufferPool`, `IOFunction`, the
@@ -119,10 +122,10 @@ Mapping for reference:
 | 1.4.x | 2.0.x |
 |---|---|
 | `io.tileverse.rangereader.uri` | `storage.uri` |
-| `io.tileverse.rangereader.provider-id` | `storage.provider-id` |
+| `io.tileverse.rangereader.provider` | `storage.provider` |
 | `io.tileverse.rangereader.s3.region` | `storage.s3.region` |
-| `io.tileverse.rangereader.s3.access-key-id` | `storage.s3.aws-access-key-id` |
-| `io.tileverse.rangereader.s3.secret-access-key` | `storage.s3.aws-secret-access-key` |
+| `io.tileverse.rangereader.s3.aws-access-key-id` | `storage.s3.aws-access-key-id` |
+| `io.tileverse.rangereader.s3.aws-secret-access-key` | `storage.s3.aws-secret-access-key` |
 | `io.tileverse.rangereader.azure.account-key` | `storage.azure.account-key` |
 | `io.tileverse.rangereader.azure.sas-token` | `storage.azure.sas-token` |
 | `io.tileverse.rangereader.gcs.project-id` | `storage.gcs.project-id` |
@@ -196,8 +199,7 @@ configuration binding, etc.) that pass configuration as a flat map.
 `StorageProvider` no longer exposes `create(URI)` / `create(StorageConfig)`,
 and `AbstractStorageProvider.createInternal(StorageConfig)` is gone. Custom
 backends now implement only `createStorage(StorageConfig)` (returning a raw
-`Storage` rooted at `config.baseUri()`) and `declaredCapabilities()`, in addition
-to the existing `getId`, `getDescription`, `isAvailable`, `canProcess`, and
+`Storage` rooted at `config.baseUri()`), in addition to the existing `getId`, `getDescription`, `isAvailable`, `canProcess`, and
 `buildParameters` hooks.
 
 Caching auto-decoration is no longer the provider's responsibility — it's
@@ -235,7 +237,7 @@ try (Storage storage = StorageFactory.open(bucket, props);
 
 For SDK-injection use cases (fake or mock SDK objects in tests, client
 configuration with no parameter yet), each provider exposes a public
-`open(URI, sdkClient)` static factory that returns a {@code Storage} backed by
+`open(URI, sdkClient)` static factory that returns a `Storage` backed by
 the supplied client. The returned Storage **borrows** the client; closing the
 Storage does NOT close the client.
 
@@ -258,9 +260,9 @@ Over `S3StorageProvider.open(URI, S3AsyncClient)`, presigned URLs throw
 - `stat(key)`, `exists(key)` — metadata without fetching the body
 - `list(pattern, options)` — directory-style listing with shell-style globs
 - `read(key, options)` — sequential reads with optional offset, returns `ReadHandle`
-- `put(key, bytes/Path/OutputStream, options)` — atomic writes (capability-gated)
+- `put(key, bytes, options)`, `put(key, path, options)`, `openOutputStream(key, options)`: writes, on backends supporting them
 - `delete(key)`, `deleteAll(keys)` — single and bulk deletes
-- `copy(srcKey, dstKey)`, `copy(srcKey, dstStorage, dstKey)`, `move(srcKey, dstKey)`
+- `copy(srcKey, dstKey, options)`, `copy(srcKey, dstStorage, dstKey, options)`, `move(srcKey, dstKey)`
 - `presignGet(key, ttl)`, `presignPut(key, ttl, options)`
 
 Not every backend supports every method. Inspect
@@ -328,11 +330,11 @@ percent-encoded path contains a traversal segment (e.g. `%2E%2E`),
 because some HTTP servers decode mid-path and would honor it as
 traversal. The URI overload also drops fragments silently (RFC 3986
 fragments are client-only) and preserves query strings into the derived
-key (load-bearing for HTTP signed URLs and SAS tokens on the leaf).
+key (needed for HTTP signed URLs and SAS tokens on the leaf).
 
 ## Quick checklist
 
-1. Bump `tileverse-bom` (or pin) to `2.0.0`.
+1. Bump `tileverse-bom` (or pin) to `2.1.0`, and apply [Migrating from 2.0](migrate-from-2.0.md) after this list.
 2. Update every Maven dependency `groupId` from `io.tileverse.rangereader`
    to `io.tileverse.storage`.
 3. Run a search-and-replace on imports

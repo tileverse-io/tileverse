@@ -117,7 +117,7 @@ try (Storage storage = StorageFactory.open(URI.create("https://example.com/"), p
 For more detailed information, see the documentation:
 
 - [PMTiles guide](https://tileverse.io/pmtiles/) - reading archives and the decoded tile stores
-- [Cloud storage](https://tileverse.io/pmtiles/how-to/cloud-storage/) - PMTiles on S3, Azure, GCS and HTTP
+- [Reading PMTiles archives](https://tileverse.io/pmtiles/how-to/read-pmtiles/) - opening archives on S3, Azure, GCS and HTTP, reading and decoding tiles
 
 ## Related Modules
 

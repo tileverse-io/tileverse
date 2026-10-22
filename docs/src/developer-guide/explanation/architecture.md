@@ -4,7 +4,7 @@ Tileverse is designed as a collection of **loosely coupled, composable libraries
 
 ## Module map
 
-The Tileverse monorepo ships six modules. Four are independent of each other; `tileverse-tilestore` builds on the format and grid libraries; `tileverse-pmtiles` is the only module that strictly depends on all the others (`tileverse-storage` for I/O, `tileverse-vectortiles` for MVT decoding, `tileverse-tilematrixset` for grid math, `tileverse-tilestore` for the high-level tile-store wrappers).
+The Tileverse monorepo ships six library modules and a BOM. Three are independent of each other: `tileverse-storage`, `tileverse-vectortiles` and `tileverse-tilematrixset`. `tileverse-tilestore` builds on the format and grid libraries. The archive readers `tileverse-pmtiles` and `tileverse-versatiles` depend on all the others (`tileverse-storage` for I/O, `tileverse-vectortiles` for MVT decoding, `tileverse-tilematrixset` for grid math, `tileverse-tilestore` for the high-level tile-store wrappers).
 
 ```mermaid
 graph TD
@@ -24,6 +24,7 @@ graph TD
 
     subgraph "Composed Modules"
         PMT[tileverse-pmtiles]
+        VER[tileverse-versatiles]
     end
 
     App --> ST
@@ -31,6 +32,7 @@ graph TD
     App --> TMS
     App --> TS
     App --> PMT
+    App --> VER
 
     TS --> VT
     TS --> TMS
@@ -39,6 +41,11 @@ graph TD
     PMT --> VT
     PMT --> TMS
     PMT --> TS
+
+    VER --> ST
+    VER --> VT
+    VER --> TMS
+    VER --> TS
 ```
 
 ## System context
@@ -51,12 +58,13 @@ The Tileverse system sits between consumer applications and the four external st
 
 ![Tileverse Container View](../../assets/images/storage/structurizr-Containers.svg)
 
-All six monorepo modules plus their dependencies on each other and on the external storage systems. `tileverse-pmtiles` is the only module that depends on every other Tileverse module; `tileverse-tilestore` brings the format-agnostic `TileStore<T>` abstraction; the four storage containers (`-core`, `-s3`, `-azure`, `-gcs`) compose under `-all` for callers that want every backend at once.
+The monorepo modules plus their dependencies on each other and on the external storage systems. `tileverse-pmtiles` and `tileverse-versatiles` depend on every other Tileverse module; `tileverse-tilestore` brings the format-agnostic `TileStore<T>` abstraction; the four storage containers (`-core`, `-s3`, `-azure`, `-gcs`) compose under `-all` for callers that want every backend at once.
 
 Per-module C4 component views are embedded in each library's section:
 
 - [Storage core internals](../../storage/explanation/internals.md)
 - [PMTiles internals](../../pmtiles/index.md#component-view)
+- [Versatiles internals](../../versatiles/index.md#component-view)
 - [Vector Tiles internals](../../vectortiles/index.md#component-view)
 - [Tile Matrix Set internals](../../tilematrixset/index.md#component-view)
 - [Tile Stores internals](../../pmtiles/reference/tile-stores.md#component-view)

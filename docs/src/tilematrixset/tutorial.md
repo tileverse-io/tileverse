@@ -29,7 +29,7 @@ import io.tileverse.tiling.pyramid.TileIndex;
 
 TileMatrixSet tms = DefaultTileMatrixSets.WORLD_CRS84_QUAD;
 
-Coordinate london = new Coordinate(-0.1276, 51.5074); // lon/lat in EPSG:4326
+Coordinate london = new Coordinate(-0.1276, 51.5074); // lon/lat in CRS84
 TileIndex tile = tms.coordinateToTile(london, 10);
 
 System.out.printf("Tile z=%d x=%d y=%d%n", tile.z(), tile.x(), tile.y());

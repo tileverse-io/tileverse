@@ -35,6 +35,7 @@ Unlike monolithic GIS frameworks, Tileverse modules are designed to be **composa
 | :--- | :--- | :--- |
 | **[Storage](tileverse-storage/)** | Unified I/O | Abstract byte-range access across **S3**, **Azure**, **GCS**, **HTTP**, and local files. Includes an in-memory range cache and region-scoped block alignment as decorators. Range readers live under `io.tileverse.storage`. |
 | **[PMTiles](tileverse-pmtiles/)** | Archive Format | Read support for the **[PMTiles v3](https://github.com/protomaps/PMTiles)** specification. Leverages `RangeReader` for cloud-optimized random access. |
+| **[Versatiles](tileverse-versatiles/)** | Archive Format | Read support for **[VersaTiles 2](https://docs.versatiles.org/compendium/specification_container.html)** containers. Leverages `RangeReader` for cloud-optimized random access. |
 | **[Vector Tiles](tileverse-vectortiles/)** | Data Encoding | High-performance encoding and decoding of **Mapbox Vector Tiles (MVT)** to/from JTS Geometries using Protocol Buffers. |
 | **[Tile Matrix Set](tileverse-tilematrixset/)** | Spatial Logic | Implementation of the **OGC Tile Matrix Set** standard. Handles coordinate transforms, bounding box logic, and tile pyramid definitions. |
 

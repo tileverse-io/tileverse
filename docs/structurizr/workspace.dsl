@@ -1,4 +1,4 @@
-workspace "Tileverse" "Architecture documentation for the Tileverse Java libraries (cloud-native geospatial I/O, PMTiles, Vector Tiles, Tile Matrix Set, Tile Stores)" {
+workspace "Tileverse" "Architecture documentation for the Tileverse Java libraries (cloud-native geospatial I/O, PMTiles, Versatiles, Vector Tiles, Tile Matrix Set, Tile Stores)" {
 
     model {
         properties {
@@ -36,7 +36,7 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
         }
 
         # The whole Tileverse software system
-        tileverse = softwareSystem "Tileverse" "Java toolkit for cloud-native geospatial data access: object-storage I/O abstraction, PMTiles archive reader, Mapbox Vector Tiles codec, OGC Tile Matrix Set model, and format-agnostic tile stores." {
+        tileverse = softwareSystem "Tileverse" "Java toolkit for cloud-native geospatial data access: object-storage I/O abstraction, PMTiles and Versatiles archive readers, Mapbox Vector Tiles codec, OGC Tile Matrix Set model, and format-agnostic tile stores." {
             tags "TileverseSystem"
 
             # === Storage modules ===
@@ -200,6 +200,34 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
                     tags "Internal"
                 }
             }
+
+            versatilesModule = container "tileverse-versatiles" "VersaTiles 2 container reader: low-level VersatilesReader plus VersatilesVectorTileStore and VersatilesRasterTileStore wrappers" "Java 17" {
+                tags "Module,Format"
+
+                versatilesReader = component "VersatilesReader" "Low-level reader: header, metadata, raw tile bytes; streaming IOFunction overload" "Java Class" {
+                    tags "Reader"
+                }
+
+                versatilesHeader = component "VersatilesHeader" "Archive metadata: tile format, compression, zoom range, bounds, metadata and block index locations" "Java Record" {
+                    tags "Model"
+                }
+
+                versatilesBlockIndex = component "BlockIndex" "Blocks of up to 256 x 256 tiles of one zoom level; read once when the archive opens" "Java Class" {
+                    tags "Internal"
+                }
+
+                versatilesTileIndexCache = component "TileIndexCache" "Tile indexes of recently read blocks, kept in a CacheManager cache" "Java Class" {
+                    tags "Internal"
+                }
+
+                versatilesVectorStore = component "VersatilesVectorTileStore" "VectorTileStore over a Versatiles archive (validates tile format == PBF)" "Java Class" {
+                    tags "Implementation"
+                }
+
+                versatilesRasterStore = component "VersatilesRasterTileStore" "RasterTileStore over a Versatiles archive (PNG/JPEG/WebP/AVIF); decodes via ImageIO from the streaming InputStream" "Java Class" {
+                    tags "Implementation"
+                }
+            }
         }
 
         # === External relationships ===
@@ -228,6 +256,11 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
         pmtilesModule -> tilematrixsetModule "Uses for WebMercatorQuad math"
         pmtilesModule -> vectortilesModule "Decodes MVT tiles with"
         pmtilesModule -> tilestoreModule "Implements TileStore<T> via VectorTileStore / RasterTileStore"
+
+        versatilesModule -> coreModule "Reads tile bytes through RangeReader"
+        versatilesModule -> tilematrixsetModule "Uses for WebMercatorQuad math"
+        versatilesModule -> vectortilesModule "Decodes MVT tiles with"
+        versatilesModule -> tilestoreModule "Implements TileStore<T> via VectorTileStore / RasterTileStore"
 
         tilestoreModule -> tilematrixsetModule "Builds on TileMatrixSet"
         tilestoreModule -> vectortilesModule "Returns VectorTile from VectorTileStore"
@@ -284,6 +317,18 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
         pmtilesVectorStore -> vectorTileCodec "Decodes tiles with"
         pmtilesVectorStore -> vectorTileStore "Extends"
         pmtilesRasterStore -> rasterTileStore "Extends"
+
+        # === Component relationships - Versatiles ===
+        versatilesReader -> versatilesHeader "Returns"
+        versatilesReader -> versatilesBlockIndex "Finds the block of a tile in"
+        versatilesReader -> versatilesTileIndexCache "Finds a tile inside its block with"
+        versatilesReader -> rangeReaderInterface "Reads bytes through"
+        versatilesTileIndexCache -> rangeReaderInterface "Loads tile indexes through"
+        versatilesVectorStore -> versatilesReader "Streams tile bytes from"
+        versatilesRasterStore -> versatilesReader "Streams tile bytes from"
+        versatilesVectorStore -> vectorTileCodec "Decodes tiles with"
+        versatilesVectorStore -> vectorTileStore "Extends"
+        versatilesRasterStore -> rasterTileStore "Extends"
     }
 
     views {
@@ -298,7 +343,7 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
             include *
             autoLayout
             title "Container View - Tileverse Modules"
-            description "All six Tileverse modules and their dependencies on each other and on external storage systems."
+            description "The Tileverse modules and their dependencies on each other and on external storage systems."
         }
 
         component coreModule "CoreComponents" {
@@ -320,6 +365,13 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
             autoLayout
             title "Component View - tileverse-pmtiles"
             description "PMTiles internals: PMTilesReader, header, Hilbert indexing, and the vector/raster tile-store wrappers."
+        }
+
+        component versatilesModule "VersatilesComponents" {
+            include *
+            autoLayout
+            title "Component View - tileverse-versatiles"
+            description "Versatiles internals: VersatilesReader, header, block index, tile index cache, and the vector/raster tile-store wrappers."
         }
 
         component vectortilesModule "VectorTilesComponents" {

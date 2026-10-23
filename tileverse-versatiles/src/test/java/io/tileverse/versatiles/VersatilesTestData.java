@@ -17,11 +17,16 @@ package io.tileverse.versatiles;
 
 import static java.util.Objects.requireNonNull;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import javax.imageio.ImageIO;
+import javax.imageio.stream.ImageOutputStream;
+import javax.imageio.stream.MemoryCacheImageOutputStream;
 
 /**
  * Shared test fixtures for the Versatiles module. The Andorra fixture is the Shortbread tileset of
@@ -41,6 +46,18 @@ public class VersatilesTestData {
      */
     public static Path flowers(Path tmpFolder) throws IOException {
         return copyFixture("flowers.versatiles", tmpFolder);
+    }
+
+    /** Encodes a black PNG image of {@code width} x {@code height} pixels. */
+    public static byte[] png(int width, int height) throws IOException {
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        // ImageIO.write(image, "png", bytes) would write a temporary file, and a test makes the cache directory
+        // read-only
+        try (ImageOutputStream out = new MemoryCacheImageOutputStream(bytes)) {
+            ImageIO.write(image, "png", out);
+        }
+        return bytes.toByteArray();
     }
 
     /** The 21 vector layer ids present in the Andorra Shortbread fixture. */

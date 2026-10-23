@@ -16,6 +16,7 @@
 package io.tileverse.versatiles;
 
 import io.tileverse.io.ByteRange;
+import io.tileverse.tiling.pyramid.TileIndex;
 
 /**
  * An entry of the block index: a block of up to 256 x 256 tiles at a single zoom level.
@@ -101,6 +102,14 @@ record BlockIndexEntry(
     /** Returns the number of slots in the tile index of this block. */
     int slotCount() {
         return (colMax - colMin + 1) * (rowMax - rowMin + 1);
+    }
+
+    /** Returns the position of the tile in slot {@code slotIndex}, the reverse of {@link #slotIndex}. */
+    TileIndex tileAt(int slotIndex) {
+        int width = colMax - colMin + 1;
+        long x = blockCol * BLOCK_SIZE + colMin + slotIndex % width;
+        long y = blockRow * BLOCK_SIZE + rowMin + slotIndex / width;
+        return TileIndex.zxy(level, x, y);
     }
 
     /** Returns the location of the tile index in the file. It follows the tile bodies of the block. */

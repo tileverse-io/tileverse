@@ -5,9 +5,11 @@ on:
   # triggers this workflow and republishes the snapshot on every merge to
   # main or a major.minor.x release series. push fires only for this
   # repository's own branches, never for a fork pull request, keeping the
-  # publishing secrets away from untrusted code.
+  # publishing secrets away from untrusted code. The release pattern is not
+  # '*.x': that also matched the backport-<pr>-to-<branch> branches of the
+  # backport bot, and published their snapshots before review.
   push:
-    branches: [ main, '*.x' ]
+    branches: [ main, '[0-9]+.[0-9]+.x' ]
     paths-ignore:
       - 'docs/**'
       - '**.md'

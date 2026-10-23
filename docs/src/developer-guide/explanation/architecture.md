@@ -108,7 +108,7 @@ The Module column names the modules declaring each dependency.
 | **[webp-imageio](https://github.com/usefulness/webp-imageio)** | `ImageIO` plugin for WebP-encoded raster tiles (registered via JDK SPI; ships native libs for Linux and macOS on x86_64 and arm64, and for Windows on x86 and x86_64) | `pmtiles`, `versatiles` |
 | **[Apache Commons Compress](https://commons.apache.org/proper/commons-compress/)** | Gzip, Zstandard and Brotli decompression of tiles, directories and indexes | `pmtiles`, `versatiles` |
 | **[zstd-jni](https://github.com/luben/zstd-jni)** | Native Zstandard codec used by Commons Compress | `pmtiles`, `versatiles` |
-| **[Brotli decoder](https://github.com/google/brotli)** | Brotli decompression of Versatiles indexes, metadata, and tiles | `versatiles` |
+| **[Brotli decoder](https://github.com/google/brotli)** | Brotli decoder used by Commons Compress | `pmtiles`, `versatiles` |
 | **[SLF4J](https://www.slf4j.org/)** | Logging abstraction | All |
 
 The cloud SDKs come only with the storage module of their backend:

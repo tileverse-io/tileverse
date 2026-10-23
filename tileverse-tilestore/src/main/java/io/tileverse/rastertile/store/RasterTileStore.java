@@ -18,7 +18,16 @@ package io.tileverse.rastertile.store;
 import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.tiling.matrix.TileMatrixSet;
 import io.tileverse.tiling.store.AbstractTileStore;
+import java.awt.Dimension;
 import java.awt.image.RenderedImage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Iterator;
+import javax.imageio.IIOException;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 
 /**
  * Abstract base class for {@link io.tileverse.tiling.store.TileStore} implementations that provide raster image tiles
@@ -61,4 +70,38 @@ public abstract class RasterTileStore extends AbstractTileStore<RenderedImage> {
      * @return the extent in the {@link TileMatrixSet#crsId() TileMatrixSet CRS}
      */
     public abstract BoundingBox2D getExtent();
+
+    /** Whether an {@link ImageIO} reader decodes images of {@code mimeType}. */
+    protected static boolean hasImageReader(String mimeType) {
+        Iterator<ImageReader> readers = ImageIO.getImageReadersByMIMEType(mimeType);
+        return readers.hasNext();
+    }
+
+    /**
+     * Reads the width and height of an encoded image from its header, without decoding its pixels. A store can learn
+     * its tile size this way when the archive does not record it. The image stream stays in memory:
+     * {@link ImageIO#createImageInputStream} would copy the image to a temporary file.
+     *
+     * @throws IOException if no {@link ImageIO} reader decodes {@code mimeType}, or if the header cannot be read
+     */
+    protected static Dimension readImageSize(InputStream encoded, String mimeType) throws IOException {
+        ImageReader imageReader = newImageReader(mimeType);
+        try (ImageInputStream imageStream = new MemoryCacheImageInputStream(encoded)) {
+            imageReader.setInput(imageStream, true, true);
+            return new Dimension(imageReader.getWidth(0), imageReader.getHeight(0));
+        } catch (RuntimeException e) {
+            // some decoders fail on corrupt bytes with an unchecked exception
+            throw new IIOException("Failed to read the size of a " + mimeType + " image", e);
+        } finally {
+            imageReader.dispose();
+        }
+    }
+
+    private static ImageReader newImageReader(String mimeType) throws IOException {
+        Iterator<ImageReader> readers = ImageIO.getImageReadersByMIMEType(mimeType);
+        if (!readers.hasNext()) {
+            throw new IOException("No ImageIO reader decodes " + mimeType);
+        }
+        return readers.next();
+    }
 }

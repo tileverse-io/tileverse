@@ -21,14 +21,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.tileverse.pmtiles.PMTilesHeader;
 import io.tileverse.pmtiles.PMTilesReader;
 import io.tileverse.pmtiles.PMTilesTestData;
+import io.tileverse.pmtiles.TestArchiveWriter;
 import io.tileverse.pmtiles.UnsupportedTileTypeException;
 import io.tileverse.tiling.matrix.Tile;
 import io.tileverse.tiling.matrix.TileMatrix;
 import io.tileverse.tiling.matrix.TileMatrixSet;
 import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.store.TileData;
+import io.tileverse.tiling.store.TileStore.Strategy;
 import java.awt.image.RenderedImage;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -88,6 +91,68 @@ class PMTilesRasterTileStoreTest {
         assertThat(flowersStore.getExtent()).isNotNull();
     }
 
+    @Test
+    void matrixSetHasTileSize() {
+        TileMatrixSet matrixSet = flowersStore.matrixSet();
+        assertThat(matrixSet.tileWidth()).isEqualTo(512);
+        assertThat(matrixSet.tileHeight()).isEqualTo(512);
+    }
+
+    // 9783.94 m/px is the resolution of zoom 3 with 512 px tiles, and of zoom 4 with 256 px tiles
+    @Test
+    void zoomMatchesTileSize() {
+        assertThat(flowersStore.findBestZoomLevel(9783.94, Strategy.QUALITY)).isEqualTo(3);
+    }
+
+    @Test
+    void keeps256pxTiles() throws IOException {
+        Path file = new TestArchiveWriter(PMTilesTestData.png(256, 256)).write(tmpFolder.resolve("png256.pmtiles"));
+
+        try (PMTilesReader reader = PMTilesReader.open(file.toUri())) {
+            PMTilesRasterTileStore store = new PMTilesRasterTileStore(reader);
+
+            assertThat(store.matrixSet().tileWidth()).isEqualTo(256);
+        }
+    }
+
+    @Test
+    void findsTileInLeafDirectory() throws IOException {
+        Path file = new TestArchiveWriter(PMTilesTestData.png(512, 512))
+                .inLeafDirectory()
+                .write(tmpFolder.resolve("leaf.pmtiles"));
+
+        try (PMTilesReader reader = PMTilesReader.open(file.toUri())) {
+            PMTilesRasterTileStore store = new PMTilesRasterTileStore(reader);
+
+            assertThat(store.matrixSet().tileWidth()).isEqualTo(512);
+        }
+    }
+
+    // The store reads the first tile to find the tile size
+    @Test
+    void corruptFirstTileFailsToOpen() throws IOException {
+        Path file = new TestArchiveWriter("not an image").write(tmpFolder.resolve("corrupt.pmtiles"));
+
+        try (PMTilesReader reader = PMTilesReader.open(file.toUri())) {
+            assertThatThrownBy(() -> new PMTilesRasterTileStore(reader))
+                    .isInstanceOf(UncheckedIOException.class)
+                    .hasCauseInstanceOf(IOException.class);
+        }
+    }
+
+    // The JDK has no AVIF decoder, and this module brings none.
+    @Test
+    void rejectsAvifWithoutDecoder() throws IOException {
+        Path file = new TestArchiveWriter("not an image")
+                .tileType(PMTilesHeader.TILETYPE_AVIF)
+                .write(tmpFolder.resolve("avif.pmtiles"));
+
+        try (PMTilesReader reader = PMTilesReader.open(file.toUri())) {
+            assertThatThrownBy(() -> new PMTilesRasterTileStore(reader))
+                    .isInstanceOf(UnsupportedTileTypeException.class);
+        }
+    }
+
     /** The root tile is always populated for archives whose zoom range starts at 0. */
     @Test
     void loadRootTileReturnsDecodedImage() {
@@ -104,7 +169,7 @@ class PMTilesRasterTileStoreTest {
     }
 
     /**
-     * Every tile the archive reports as present must decode to a 256x256 {@link RenderedImage}. Confirms the streaming
+     * Every tile the archive reports as present must decode to a 512x512 {@link RenderedImage}. Confirms the streaming
      * decode path works end-to-end with the bundled webp-imageio plugin.
      */
     @Test
@@ -120,6 +185,16 @@ class PMTilesRasterTileStoreTest {
                 assertThat(img.getWidth()).isEqualTo(512);
                 assertThat(img.getHeight()).isEqualTo(512);
             });
+        }
+    }
+
+    @Test
+    void rejectsVectorArchive() throws IOException {
+        try (PMTilesReader andorra =
+                PMTilesReader.open(PMTilesTestData.andorra(tmpFolder).toUri())) {
+            assertThatThrownBy(() -> new PMTilesRasterTileStore(andorra))
+                    .isInstanceOf(UnsupportedTileTypeException.class)
+                    .hasMessageContaining("vnd.mapbox-vector-tile");
         }
     }
 

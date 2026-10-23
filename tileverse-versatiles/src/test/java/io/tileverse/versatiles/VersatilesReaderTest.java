@@ -248,6 +248,28 @@ class VersatilesReaderTest {
         }
     }
 
+    // The block of column 300 starts at column 256, and its tile range starts at (300, 5), where there is no tile
+    @Test
+    void firstTileSkipsEmptySlots() throws IOException {
+        Path file = new TestArchiveWriter()
+                .tile(9, 301, 5, "first")
+                .tile(9, 300, 6, "second")
+                .write(tmp.resolve("first.versatiles"));
+
+        try (VersatilesReader r = VersatilesReader.open(file)) {
+            assertThat(r.firstTileIndex()).hasValue(TileIndex.zxy(9, 301, 5));
+        }
+    }
+
+    @Test
+    void noFirstTileWithoutTiles() throws IOException {
+        Path file = new TestArchiveWriter().write(tmp.resolve("empty.versatiles"));
+
+        try (VersatilesReader r = VersatilesReader.open(file)) {
+            assertThat(r.firstTileIndex()).isEmpty();
+        }
+    }
+
     @ParameterizedTest
     @MethodSource("compressions")
     void readsEachCompression(Compression compression) throws IOException {

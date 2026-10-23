@@ -90,7 +90,7 @@ class PMTilesTileMatrixSetTest {
         TileMatrixSet tms = PMTilesTileMatrixSet.fromCRS84(header);
 
         assertNotNull(tms);
-        assertEquals("EPSG:4326", tms.crsId());
+        assertEquals("CRS:84", tms.crsId());
         assertEquals(256, tms.tileWidth());
         assertEquals(256, tms.tileHeight());
 

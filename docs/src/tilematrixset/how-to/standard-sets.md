@@ -22,7 +22,7 @@ TileMatrixSet tms512 = DefaultTileMatrixSets.WEB_MERCATOR_QUADx2; // 512 px tile
 OGC standard set for geographic (longitude/latitude) tile pyramids. Useful when you want to avoid reprojection to Web Mercator.
 
 - **identifier**: `WorldCRS84Quad`
-- **CRS**: EPSG:4326 (WGS84 lon/lat)
+- **CRS**: CRS:84 (WGS84 lon/lat)
 - **wellKnownScaleSet**: `http://www.opengis.net/def/wkss/OGC/1.0/GoogleCRS84Quad`
 - **Origin**: top-left
 - **Structure**: 2x1 tiles at zoom 0 covering `[-180, -90, 180, 90]`

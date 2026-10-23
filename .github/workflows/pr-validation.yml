@@ -2,12 +2,14 @@ name: Pull Request Validation
 
 on:
   pull_request:
-    branches: [ main, develop, '*.x' ]
+    branches: [ main, develop, '[0-9]+.[0-9]+.x' ]
     paths-ignore:
       - 'docs/**'
       - '**.md'
   push:
-    branches: [ main, develop, '*.x' ]
+    # Release branches only: '*.x' also matched the backport-<pr>-to-<branch>
+    # branches of the backport bot, and each backport ran this workflow twice.
+    branches: [ main, develop, '[0-9]+.[0-9]+.x' ]
     paths-ignore:
       - 'docs/**'
       - '**.md'

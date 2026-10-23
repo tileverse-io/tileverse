@@ -84,10 +84,14 @@
       <groupId>com.github.ben-manes.caffeine</groupId>
       <artifactId>caffeine</artifactId>
     </dependency>
-    <!-- Compression -->
+    <!-- Compression: gzip via commons-compress, Brotli via org.brotli:dec, Zstandard via zstd-jni -->
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-compress</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.brotli</groupId>
+      <artifactId>dec</artifactId>
     </dependency>
     <dependency>
       <groupId>com.github.luben</groupId>

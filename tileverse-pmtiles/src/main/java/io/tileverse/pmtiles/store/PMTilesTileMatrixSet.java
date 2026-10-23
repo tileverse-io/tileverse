@@ -93,7 +93,7 @@ public final class PMTilesTileMatrixSet {
     }
 
     /**
-     * Creates a geographic (EPSG:4326) tile matrix set from a {@link PMTilesHeader}.
+     * Creates a geographic (CRS84) tile matrix set from a {@link PMTilesHeader}.
      *
      * <p>Uses the standard WorldCRS84Quad as the base.
      *
@@ -114,7 +114,7 @@ public final class PMTilesTileMatrixSet {
     }
 
     /**
-     * Creates a geographic (EPSG:4326) tile matrix set from a {@link PMTilesReader}.
+     * Creates a geographic (CRS84) tile matrix set from a {@link PMTilesReader}.
      *
      * @param pmtilesReader the reader for the PMTiles archive
      * @return a geographic tile matrix set matching the archive's extent

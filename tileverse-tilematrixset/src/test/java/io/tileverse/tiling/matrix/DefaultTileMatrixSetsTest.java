@@ -20,19 +20,28 @@ import static io.tileverse.tiling.pyramid.TileIndex.xyz;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
+import static org.assertj.core.api.Assertions.withinPercentage;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Named.named;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.geom.Coordinate;
 import io.tileverse.tiling.pyramid.CornerOfOrigin;
 import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.pyramid.TileRange;
+import java.net.URI;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.assertj.core.data.Offset;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class DefaultTileMatrixSetsTest {
 
@@ -224,14 +233,63 @@ class DefaultTileMatrixSetsTest {
 
         assertNotNull(tms);
         assertEquals(CornerOfOrigin.TOP_LEFT, tms.tilePyramid().cornerOfOrigin());
-        assertEquals("EPSG:4326", tms.crsId());
+        assertEquals("CRS:84", tms.crsId());
+        assertEquals(URI.create("http://www.opengis.net/def/crs/OGC/1.3/CRS84"), tms.supportedCRS());
         assertEquals(256, tms.tileWidth());
         assertEquals(256, tms.tileHeight());
 
-        // Should have 18 zoom levels (0-17) based on CRS84_QUAD_SCALES
+        // Should have 18 zoom levels (0-17), as in the OGC definition
         assertEquals(0, tms.tilePyramid().minZoomLevel());
         assertEquals(17, tms.tilePyramid().maxZoomLevel());
         assertEquals(18, tms.tilePyramid().levels().size());
+    }
+
+    // matrix width x tile width x resolution must equal the width of the extent, and likewise for the height
+    @ParameterizedTest
+    @MethodSource("bundledSets")
+    void levelsSpanTheExtent(TileMatrixSet matrixSet) {
+        BoundingBox2D extent = matrixSet.boundingBox();
+        for (TileMatrix matrix : matrixSet.tileMatrices()) {
+            BoundingBox2D levelExtent = matrix.boundingBox();
+            assertThat(levelExtent.width())
+                    .as("width of level %d", matrix.zoomLevel())
+                    .isCloseTo(extent.width(), within(1e-6));
+            assertThat(levelExtent.height())
+                    .as("height of level %d", matrix.zoomLevel())
+                    .isCloseTo(extent.height(), within(1e-6));
+        }
+    }
+
+    static Stream<Arguments> bundledSets() {
+        List<TileMatrixSet> matrixSets = List.of(
+                DefaultTileMatrixSets.WORLD_EPSG4326,
+                DefaultTileMatrixSets.WORLD_EPSG4326x2,
+                DefaultTileMatrixSets.WORLD_EPSG3857,
+                DefaultTileMatrixSets.WORLD_EPSG3857x2,
+                DefaultTileMatrixSets.WEB_MERCATOR_QUAD,
+                DefaultTileMatrixSets.WEB_MERCATOR_QUADx2,
+                DefaultTileMatrixSets.WORLD_CRS84_QUAD,
+                DefaultTileMatrixSets.WORLD_CRS84_QUADx2);
+        return matrixSets.stream().map(matrixSet -> arguments(named(matrixSet.identifier(), matrixSet)));
+    }
+
+    // Cell size and scale denominator of level 0 in OGC 17-083r2, Annex D
+    @ParameterizedTest
+    @MethodSource("ogcLevelZero")
+    void levelZeroMatchesOgc(TileMatrixSet matrixSet, double cellSize, double scaleDenominator) {
+        TileMatrix levelZero = matrixSet.getTileMatrix(0);
+        assertThat(levelZero.resolution()).isCloseTo(cellSize, withinPercentage(1e-9));
+        assertThat(levelZero.scaleDenominator()).isCloseTo(scaleDenominator, withinPercentage(1e-9));
+    }
+
+    static Stream<Arguments> ogcLevelZero() {
+        return Stream.of(
+                arguments(
+                        named("WebMercatorQuad", DefaultTileMatrixSets.WEB_MERCATOR_QUAD),
+                        156543.0339280410,
+                        559082264.0287178),
+                arguments(
+                        named("WorldCRS84Quad", DefaultTileMatrixSets.WORLD_CRS84_QUAD), 0.703125, 279541132.0143589));
     }
 
     @Test

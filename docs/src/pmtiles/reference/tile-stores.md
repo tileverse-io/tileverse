@@ -42,7 +42,7 @@ public interface TileStore<T> {
 }
 ```
 
-- `matrixSet()` returns the store's grid model. For PMTiles this is `WebMercatorQuad` limited to the archive's zoom range and bounds: `findTile` returns empty for a tile outside them, and `getTileMatrix(z)` throws for a zoom outside the range.
+- `matrixSet()` returns the store's grid model. For PMTiles this is `WebMercatorQuad`, or `WebMercatorQuadx2` for a raster archive of 512 px tiles, limited to the archive's zoom range and bounds: `findTile` returns empty for a tile outside them, and `getTileMatrix(z)` throws for a zoom outside the range.
 - `loadTile(Tile)` is the single primitive every subclass implements. Default methods compose it.
 - `findTile(TileIndex)` resolves the index through the matrix set and loads that tile.
 - `findTiles` resolves a list of extents to the intersecting tile range and streams decoded payloads.
@@ -84,9 +84,9 @@ public abstract class RasterTileStore extends AbstractTileStore<RenderedImage> {
 - `mimeType()` returns the on-disk MIME type of the encoded tiles (`image/png`, `image/jpeg`, `image/webp`, `image/avif`). Useful for HTTP `Content-Type` headers when proxying raw bytes, or for selecting an `ImageWriter` when re-encoding.
 - The payload type is the `RenderedImage` interface (not the concrete `BufferedImage` that `ImageIO.read` produces). The result flows directly into APIs like `GridCoverageFactory.create(String, RenderedImage, ReferencedEnvelope)` without intermediate copies.
 
-`PMTilesRasterTileStore` implements this on top of a `PMTilesReader`. It decodes each tile by passing `ImageIO.read` as the mapper of `PMTilesReader.getTile(long, IOFunction<InputStream, D>)`. The tile bytes are read into a buffer borrowed from a pool.
+`PMTilesRasterTileStore` implements this on top of a `PMTilesReader`. It decodes each tile by passing `ImageIO.read` as the mapper of `PMTilesReader.getTile(long, IOFunction<InputStream, D>)`. The tile bytes are read into a buffer borrowed from a pool. The PMTiles header does not record the tile size: the store reads the size of the first tile when it is created.
 
-WebP decoding is enabled out of the box by a bundled `ImageIO` plugin (`com.github.usefulness:webp-imageio`) registered via the JDK `ServiceLoader`. PNG and JPEG decoders ship with the JDK. AVIF is not bundled; add a JDK ImageIO plugin for AVIF if you need it.
+WebP decoding is enabled out of the box by a bundled `ImageIO` plugin (`com.github.usefulness:webp-imageio`) registered via the JDK `ServiceLoader`. PNG and JPEG decoders ship with the JDK. AVIF is not bundled; add a JDK ImageIO plugin for AVIF if you need it. Without one, the raster store refuses AVIF archives with `UnsupportedTileTypeException`.
 
 ## `PMTilesVectorTileStore` / `PMTilesRasterTileStore`
 

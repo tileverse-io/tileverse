@@ -42,6 +42,8 @@ Tiles use the XYZ scheme of web maps, in the `WebMercatorQuad` tile matrix set: 
 
 The tile matrix set of a store ends at zoom level 24, the last level of `WebMercatorQuad`. `getTile` reads deeper levels too.
 
+The header does not record the tile size. The raster store reads the size of the first tile when it is created, and an archive of 512 px tiles gets the `WebMercatorQuadx2` tile matrix set.
+
 ## Archives written by the versatiles tool
 
 The `versatiles` tool writes two kinds of files outside the specification. The reader accepts both:

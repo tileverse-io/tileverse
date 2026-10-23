@@ -291,6 +291,31 @@ public class VersatilesReader implements AutoCloseable {
         return Optional.ofNullable(tile);
     }
 
+    /**
+     * Returns the position of the first tile of the archive, or empty if the archive has no tiles. The search follows
+     * the order of the block index, and the tiles of a block row by row. It reads the tile index of a block when the
+     * cache does not hold it.
+     */
+    public Optional<TileIndex> firstTileIndex() throws IOException {
+        for (BlockIndexEntry block : blockIndex.entries()) {
+            Optional<TileIndex> firstInBlock = firstTileIndex(block);
+            if (firstInBlock.isPresent()) {
+                return firstInBlock;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<TileIndex> firstTileIndex(BlockIndexEntry block) throws IOException {
+        TileIndexBlob tileIndexBlob = tileIndexCache.getTileIndex(block);
+        for (int slotIndex = 0; slotIndex < block.slotCount(); slotIndex++) {
+            if (tileIndexBlob.slot(slotIndex).isPresent()) {
+                return Optional.of(block.tileAt(slotIndex));
+            }
+        }
+        return Optional.empty();
+    }
+
     private Optional<ByteRange> findTile(TileIndex tileIndex) throws IOException {
         Optional<BlockIndexEntry> block = blockIndex.findBlock(tileIndex.z(), tileIndex.x(), tileIndex.y());
         if (block.isEmpty()) {

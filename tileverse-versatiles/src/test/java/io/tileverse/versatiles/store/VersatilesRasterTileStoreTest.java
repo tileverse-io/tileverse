@@ -23,6 +23,7 @@ import io.tileverse.tiling.matrix.TileMatrix;
 import io.tileverse.tiling.matrix.TileMatrixSet;
 import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.store.TileData;
+import io.tileverse.tiling.store.TileStore.Strategy;
 import io.tileverse.versatiles.TestArchiveWriter;
 import io.tileverse.versatiles.TileFormat;
 import io.tileverse.versatiles.UnsupportedTileFormatException;
@@ -99,6 +100,44 @@ class VersatilesRasterTileStoreTest {
     }
 
     @Test
+    void matrixSetHasTileSize() {
+        TileMatrixSet matrixSet = flowersStore.matrixSet();
+        assertThat(matrixSet.tileWidth()).isEqualTo(512);
+        assertThat(matrixSet.tileHeight()).isEqualTo(512);
+    }
+
+    // 9783.94 m/px is the resolution of zoom 3 with 512 px tiles, and of zoom 4 with 256 px tiles
+    @Test
+    void zoomMatchesTileSize() {
+        assertThat(flowersStore.findBestZoomLevel(9783.94, Strategy.QUALITY)).isEqualTo(3);
+    }
+
+    @Test
+    void keeps256pxTiles() throws IOException {
+        Path file = new TestArchiveWriter()
+                .tileFormat(TileFormat.PNG)
+                .tile(0, 0, 0, VersatilesTestData.png(256, 256))
+                .write(tmpFolder.resolve("png256.versatiles"));
+
+        try (VersatilesReader reader = VersatilesReader.open(file)) {
+            VersatilesRasterTileStore store = new VersatilesRasterTileStore(reader);
+
+            assertThat(store.matrixSet().tileWidth()).isEqualTo(256);
+        }
+    }
+
+    @Test
+    void archiveWithoutTiles() throws IOException {
+        Path file = new TestArchiveWriter().tileFormat(TileFormat.PNG).write(tmpFolder.resolve("empty.versatiles"));
+
+        try (VersatilesReader reader = VersatilesReader.open(file)) {
+            VersatilesRasterTileStore store = new VersatilesRasterTileStore(reader);
+
+            assertThat(store.matrixSet().tileWidth()).isEqualTo(256);
+        }
+    }
+
+    @Test
     @ResourceLock(value = IMAGEIO_CACHE, mode = ResourceAccessMode.READ)
     void loadRootTileReturnsDecodedImage() {
         TileMatrix root = flowersStore.matrixSet().getTileMatrix(0);
@@ -143,17 +182,33 @@ class VersatilesRasterTileStoreTest {
     void corruptTileFailsToDecode() throws IOException {
         Path file = new TestArchiveWriter()
                 .tileFormat(TileFormat.PNG)
-                .tile(0, 0, 0, "not an image")
+                .tile(0, 0, 0, VersatilesTestData.png(256, 256))
+                .tile(1, 0, 0, "not an image")
                 .write(tmpFolder.resolve("corrupt.versatiles"));
 
         try (VersatilesReader corrupt = VersatilesReader.open(file)) {
             VersatilesRasterTileStore store = new VersatilesRasterTileStore(corrupt);
-            Tile rootTile = store.matrixSet()
-                    .getTileMatrix(0)
-                    .tile(TileIndex.xyz(0, 0, 0))
+            Tile corruptTile = store.matrixSet()
+                    .getTileMatrix(1)
+                    .tile(TileIndex.xyz(0, 0, 1))
                     .orElseThrow();
 
-            assertThatThrownBy(() -> store.loadTile(rootTile))
+            assertThatThrownBy(() -> store.loadTile(corruptTile))
+                    .isInstanceOf(UncheckedIOException.class)
+                    .hasCauseInstanceOf(IOException.class);
+        }
+    }
+
+    // The store reads the first tile to find the tile size
+    @Test
+    void corruptFirstTileFailsToOpen() throws IOException {
+        Path file = new TestArchiveWriter()
+                .tileFormat(TileFormat.PNG)
+                .tile(0, 0, 0, "not an image")
+                .write(tmpFolder.resolve("corrupt.versatiles"));
+
+        try (VersatilesReader corrupt = VersatilesReader.open(file)) {
+            assertThatThrownBy(() -> new VersatilesRasterTileStore(corrupt))
                     .isInstanceOf(UncheckedIOException.class)
                     .hasCauseInstanceOf(IOException.class);
         }

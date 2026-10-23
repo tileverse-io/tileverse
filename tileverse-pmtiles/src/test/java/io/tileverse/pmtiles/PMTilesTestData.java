@@ -24,6 +24,8 @@ import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageFactory;
 import io.tileverse.tiling.pyramid.TileIndex;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -36,6 +38,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.imageio.ImageIO;
+import javax.imageio.stream.ImageOutputStream;
+import javax.imageio.stream.MemoryCacheImageOutputStream;
 
 public class PMTilesTestData {
 
@@ -63,6 +68,17 @@ public class PMTilesTestData {
             }
         }
         return target;
+    }
+
+    /** Encodes a black PNG image of {@code width} x {@code height} pixels. */
+    public static byte[] png(int width, int height) throws IOException {
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        // ImageIO.write(image, "png", bytes) would write a temporary file
+        try (ImageOutputStream out = new MemoryCacheImageOutputStream(bytes)) {
+            ImageIO.write(image, "png", out);
+        }
+        return bytes.toByteArray();
     }
 
     public static RangeReader andorraFileRangeReader(Path tmpFolder) throws IOException {

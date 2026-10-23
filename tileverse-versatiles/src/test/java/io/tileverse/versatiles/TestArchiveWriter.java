@@ -74,8 +74,12 @@ public final class TestArchiveWriter {
     }
 
     public TestArchiveWriter tile(int z, long x, long y, String body) {
+        return tile(z, x, y, body.getBytes(StandardCharsets.UTF_8));
+    }
+
+    public TestArchiveWriter tile(int z, long x, long y, byte[] body) {
         BlockKey key = new BlockKey(z, x / 256, y / 256);
-        TestTile tile = new TestTile(z, x, y, body.getBytes(StandardCharsets.UTF_8));
+        TestTile tile = new TestTile(z, x, y, body);
         blocks.computeIfAbsent(key, k -> new ArrayList<>()).add(tile);
         return this;
     }

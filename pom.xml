@@ -406,7 +406,7 @@
               <configuration>
                 <rules>
                   <requireJavaVersion>
-                    <version>[${maven.compiler.release}},)</version>
+                    <version>[${maven.compiler.release},)</version>
                     <message>Java ${maven.compiler.release} or newer is required to build this project</message>
                   </requireJavaVersion>
                   <requireMavenVersion>
@@ -684,6 +684,29 @@
             <trimTrailingWhitespace></trimTrailingWhitespace>
             <endWithNewline></endWithNewline>
           </java>
+          <!-- License headers have their own format: the excluded files keep their original notice
+               (code derived from the Electronic Chart Centre, generated protobuf code), and the java
+               format above still formats them. Spotless never checks package-info.java files. -->
+          <formats>
+            <format>
+              <includes>
+                <include>src/main/java/**/*.java</include>
+                <include>src/test/java/**/*.java</include>
+              </includes>
+              <excludes>
+                <exclude>src/main/java/io/tileverse/vectortile/mvt/GeometryCommand.java</exclude>
+                <exclude>src/main/java/io/tileverse/vectortile/mvt/GeometryEncoder.java</exclude>
+                <exclude>src/main/java/io/tileverse/vectortile/mvt/VectorTileBuilder.java</exclude>
+                <exclude>src/main/java/io/tileverse/vectortile/mvt/VectorTileProto.java</exclude>
+                <exclude>src/test/java/io/tileverse/vectortile/mvt/VectorTileBuilderTest.java</exclude>
+                <exclude>src/test/java/io/tileverse/vectortile/mvt/VectorTileCodecTest.java</exclude>
+              </excludes>
+              <licenseHeader>
+                <file>${maven.multiModuleProjectDirectory}/license_header.txt</file>
+                <delimiter>package</delimiter>
+              </licenseHeader>
+            </format>
+          </formats>
           <upToDateChecking>
             <enabled>true</enabled>
             <indexFile>${project.basedir}/.spotless-index</indexFile>

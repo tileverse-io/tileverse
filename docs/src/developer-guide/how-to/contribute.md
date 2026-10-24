@@ -23,6 +23,7 @@ The pull request is merged when the build checks are green, a maintainer has rev
 
 - Target Java 17. The build runs on Java 17 and later.
 - Follow the [Palantir Java Format](https://github.com/palantir/palantir-java-format). The build applies it.
+- Start each Java file with the license header from `license_header.txt`. The build adds it, except to `package-info.java` files.
 - Document the public API with javadoc.
 - Return `Optional<T>` for a value that may be missing. Avoid returning `null`.
 

@@ -15,7 +15,7 @@ make            # install the modules into the local Maven repository, then run 
 make compile    # compile only
 make test       # run the tests
 make format     # format the Java sources and sort the POMs
-make lint       # check the formatting, as CI does
+make lint       # check the formatting and the license headers, as CI does
 make clean      # remove the build output
 ```
 
@@ -30,6 +30,8 @@ With Maven directly:
 Select modules by artifact id (`-pl :artifactId`), and add `-am` to also build the modules they depend on.
 
 Each Maven build formats the Java sources with Spotless, in the Palantir style, and sorts the POMs with SortPOM. `-Dqa` switches both to check mode, as in CI. `-Dcoverage` adds JaCoCo and the aggregate coverage report.
+
+Spotless also adds the license header from `license_header.txt` to new Java files, and `-Dqa` fails on a file without it. Spotless skips `package-info.java` files: copy the header into them by hand.
 
 ## Test
 

@@ -32,7 +32,6 @@ help:
 	@echo ""
 	@echo "Development targets:"
 	@echo "  verify        - Run full verification (compile + test + format check)"
-	@echo "  quick-build   - Fast build without tests"
 	@echo "  dev-setup     - Setup development environment"
 
 .PHONY: clean
@@ -46,9 +45,6 @@ compile:
 .PHONY: package
 package:
 	./mvnw package -DskipTests -ntp -T1C
-
-.PHONY: quick-build
-quick-build: package
 
 .PHONY: install
 install:

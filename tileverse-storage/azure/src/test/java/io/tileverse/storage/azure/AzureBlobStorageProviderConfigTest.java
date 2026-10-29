@@ -45,6 +45,40 @@ class AzureBlobStorageProviderConfigTest {
     }
 
     @Test
+    void sasTokenInTheUrlQuery() {
+        URI uri = URI.create("https://devstoreaccount1.blob.core.windows.net/my-container/?sv=2020-08-04&sig=abc%3D");
+        StorageConfig config = new StorageConfig(uri);
+
+        assertThat(AzureBlobStorageProvider.keyFor(config, locationOf(uri)).sasToken())
+                .hasValue("sv=2020-08-04&sig=abc%3D");
+
+        StorageConfig shortForm = new StorageConfig("az://devstoreaccount1/my-container/?sv=2020-08-04&sig=abc");
+        assertThat(AzureBlobStorageProvider.keyFor(shortForm, AzureBlobStorageProvider.locationFor(shortForm))
+                        .sasToken())
+                .hasValue("sv=2020-08-04&sig=abc");
+    }
+
+    @Test
+    void sasTokenParameterWinsOverQuery() {
+        URI uri = URI.create("https://devstoreaccount1.blob.core.windows.net/my-container/?sv=2020-08-04&sig=abc");
+        StorageConfig config =
+                new StorageConfig(uri).setParameter(AzureBlobStorageProvider.AZURE_SAS_TOKEN, "sv=2021-01-01&sig=xyz");
+
+        assertThat(AzureBlobStorageProvider.keyFor(config, locationOf(uri)).sasToken())
+                .hasValue("sv=2021-01-01&sig=xyz");
+    }
+
+    // a SAS token is recognized by its signature
+    @Test
+    void unsignedQueryIsNoSasToken() {
+        URI uri = URI.create("https://devstoreaccount1.blob.core.windows.net/my-container/?comp=list");
+        StorageConfig config = new StorageConfig(uri);
+
+        assertThat(AzureBlobStorageProvider.keyFor(config, locationOf(uri)).sasToken())
+                .isEmpty();
+    }
+
+    @Test
     void connectionString_carriedOnTheKey() {
         StorageConfig config = new StorageConfig(BLOB_URI)
                 .setParameter(

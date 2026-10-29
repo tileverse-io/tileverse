@@ -5,17 +5,30 @@
  */
 package io.tileverse.storage.azure;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.azure.core.util.BinaryData;
+import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.sas.BlobContainerSasPermission;
+import com.azure.storage.blob.sas.BlobServiceSasSignatureValues;
+import io.tileverse.storage.ReadHandle;
 import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageEntry;
+import io.tileverse.storage.StorageException;
 import io.tileverse.storage.tck.StorageTCK;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.testcontainers.azure.AzuriteContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -77,6 +90,42 @@ class AzureBlobStorageAzuriteIT extends StorageTCK {
         AzureBlobLocation location = AzureBlobLocation.parse(baseUri);
         AzureClientCache.Lease lease = cache.acquire(keyFor());
         return new AzureBlobStorage(baseUri, location, lease);
+    }
+
+    @Test
+    void sasTokenInTheUrlAuthenticates() throws IOException {
+        String privateContainer = "sas-" + UUID.randomUUID().toString().substring(0, 12);
+        try (AzureClientCache.Lease setup = cache.acquire(keyFor())) {
+            BlobContainerClient containerClient =
+                    setup.blobServiceClient().getBlobContainerClient(privateContainer);
+            containerClient.create();
+            containerClient.getBlobClient("blob.bin").upload(BinaryData.fromBytes(new byte[] {1, 2, 3}));
+            BlobContainerSasPermission readOnly = new BlobContainerSasPermission().setReadPermission(true);
+            OffsetDateTime expiry = OffsetDateTime.now(ZoneOffset.UTC).plusHours(1);
+            String sas = containerClient.generateSas(new BlobServiceSasSignatureValues(expiry, readOnly));
+            try {
+                assertSasInUrlReadsAndAnonymousFails(privateContainer, sas);
+            } finally {
+                containerClient.delete();
+            }
+        }
+    }
+
+    private void assertSasInUrlReadsAndAnonymousFails(String privateContainer, String sas) throws IOException {
+        AzureBlobStorageProvider provider = new AzureBlobStorageProvider(cache);
+        URI containerUri = URI.create(blobEndpoint() + "/" + privateContainer + "/");
+        StorageConfig anonymous = new StorageConfig(containerUri)
+                .providerId(AzureBlobStorageProvider.ID)
+                .setParameter(AzureBlobStorageProvider.AZURE_ANONYMOUS, true);
+        try (Storage storage = provider.createStorage(anonymous)) {
+            assertThatThrownBy(() -> storage.read("blob.bin")).isInstanceOf(StorageException.class);
+        }
+        StorageConfig withSas =
+                new StorageConfig(URI.create(containerUri + "?" + sas)).providerId(AzureBlobStorageProvider.ID);
+        try (Storage storage = provider.createStorage(withSas);
+                ReadHandle handle = storage.read("blob.bin")) {
+            assertThat(handle.content().readAllBytes()).containsExactly(1, 2, 3);
+        }
     }
 
     @Override

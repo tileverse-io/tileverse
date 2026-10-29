@@ -7,7 +7,6 @@ package io.tileverse.storage.azure;
 
 import static io.tileverse.storage.StorageParameter.SUBGROUP_AUTHENTICATION;
 
-import com.azure.storage.blob.BlobClientBuilder;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobUrlParts;
 import com.azure.storage.common.StorageSharedKeyCredential;
@@ -62,22 +61,20 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
     public static final String ID = "azure";
 
     /**
-     * Set the blob name if the endpoint points to the account url
+     * Has no effect. A {@link Storage} takes its container and prefix from the URI, and its keys name the blobs. Blobs
+     * of the root container are reached through the {@code $root} container, as in
+     * {@code https://account.blob.core.windows.net/$root/}.
      *
-     * @see BlobClientBuilder#blobName(String)
+     * @deprecated ignored since its introduction in 2.0, and no longer declared by the provider
      */
+    @Deprecated(since = "2.1.1", forRemoval = true)
     public static final StorageParameter<String> AZURE_BLOB_NAME = StorageParameter.builder()
             .key("storage.azure.blob-name")
-            .title("Set the blob name if the endpoint points to the account url")
+            .title("Blob name (ignored)")
             .description("""
-                    Sets the blob path (e.g. /path/to/file.pmtiles).
-
-                    If the endpoint URL is to a blob in the root container, parsing will fail as it will interpret the blob name \
-                    as the container name. With only one path element, it is impossible to distinguish between a container name and \
-                    a blob in the root container, so it is assumed to be the container name as this is much more common
-
-                    When working with blobs in the root container, it is best to set the endpoint to the account url and specify the \
-                    blob name separately using this parameter.
+                    Has no effect. The URI names the container and prefix of the storage, and its keys name the blobs. \
+                    Blobs of the root container are reached through the $root container, as in \
+                    https://account.blob.core.windows.net/$root/
                     """)
             .type(String.class)
             .group(ID)
@@ -233,7 +230,6 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
             .build();
 
     private static final List<StorageParameter<?>> PARAMS = List.of(
-            AZURE_BLOB_NAME,
             AZURE_ANONYMOUS,
             AZURE_ACCOUNT_KEY,
             AZURE_SAS_TOKEN,

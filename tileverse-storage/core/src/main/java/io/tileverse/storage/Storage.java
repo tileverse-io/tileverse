@@ -478,7 +478,7 @@ public interface Storage extends Closeable {
      * @param ttl how long the URL remains valid; must not exceed {@link StorageCapabilities#maxPresignTtl()}
      * @return a presigned GET URL valid for {@code ttl}
      * @throws UnsupportedCapabilityException if the backend does not support presigned URLs (local FS, HTTP, Azure
-     *     DataLake Gen2)
+     *     DataLake Gen2, Azure Blob without an account key)
      * @throws IllegalArgumentException if {@code ttl} exceeds the backend's maximum
      * @throws StorageException on transport or authorization failures
      */
@@ -495,7 +495,7 @@ public interface Storage extends Closeable {
      * @param options write constraints to embed in the presigned URL signature; see {@link PresignWriteOptions}
      * @return a presigned PUT URL valid for {@code ttl}
      * @throws UnsupportedCapabilityException if the backend does not support presigned URLs (local FS, HTTP, Azure
-     *     DataLake Gen2)
+     *     DataLake Gen2, Azure Blob without an account key)
      * @throws IllegalArgumentException if {@code ttl} exceeds the backend's maximum
      * @throws StorageException on transport or authorization failures
      */

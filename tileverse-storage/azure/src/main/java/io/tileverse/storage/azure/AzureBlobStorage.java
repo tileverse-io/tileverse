@@ -6,6 +6,7 @@
 package io.tileverse.storage.azure;
 
 import com.azure.core.exception.HttpResponseException;
+import com.azure.core.http.HttpPipeline;
 import com.azure.core.http.rest.PagedIterable;
 import com.azure.core.http.rest.Response;
 import com.azure.core.util.BinaryData;
@@ -32,6 +33,7 @@ import com.azure.storage.blob.options.BlobUploadFromFileOptions;
 import com.azure.storage.blob.sas.BlobSasPermission;
 import com.azure.storage.blob.sas.BlobServiceSasSignatureValues;
 import com.azure.storage.blob.specialized.BlobInputStream;
+import com.azure.storage.common.StorageSharedKeyCredential;
 import io.tileverse.storage.CopyOptions;
 import io.tileverse.storage.DeleteResult;
 import io.tileverse.storage.ListOptions;
@@ -116,6 +118,7 @@ final class AzureBlobStorage implements Storage {
         this.handle = handle;
         this.batchSettings = Objects.requireNonNull(batchSettings, "batchSettings cannot be null");
         this.containerClient = handle.blobServiceClient().getBlobContainerClient(location.container());
+        boolean presigns = signsWithAccountKey(handle.blobServiceClient());
         this.capabilities = StorageCapabilities.builder()
                 .rangeReads(true)
                 .streamingReads(true)
@@ -133,11 +136,17 @@ final class AzureBlobStorage implements Storage {
                 .deleteReportsExistence(true)
                 .serverSideCopy(true)
                 .atomicMove(false)
-                .presignedUrls(true)
-                .maxPresignTtl(Optional.of(Duration.ofDays(7)))
+                .presignedUrls(presigns)
+                .maxPresignTtl(presigns ? Optional.of(Duration.ofDays(7)) : Optional.empty())
                 .versioning(true)
                 .strongReadAfterWrite(true)
                 .build();
+    }
+
+    /** The SDK generates a SAS from an account key only, found in the request pipeline of the client. */
+    private static boolean signsWithAccountKey(BlobServiceClient client) {
+        HttpPipeline pipeline = client.getHttpPipeline();
+        return StorageSharedKeyCredential.getSharedKeyCredentialFromPipeline(pipeline) != null;
     }
 
     @Override
@@ -628,9 +637,17 @@ final class AzureBlobStorage implements Storage {
 
     // --- presign (SAS)
 
+    private void requireAccountKey() {
+        if (!capabilities.presignedUrls()) {
+            throw new UnsupportedCapabilityException("presigned URLs need a storage opened with an account key, "
+                    + "from storage.azure.account-key or a connection string with an AccountKey");
+        }
+    }
+
     @Override
     public URI presignGet(String key, Duration ttl) {
         requireOpen();
+        requireAccountKey();
         BlobClient client = blobClient(key);
         OffsetDateTime expiry = OffsetDateTime.now(ZoneOffset.UTC).plus(ttl);
         BlobSasPermission perm = new BlobSasPermission().setReadPermission(true);
@@ -646,6 +663,7 @@ final class AzureBlobStorage implements Storage {
     @Override
     public URI presignPut(String key, Duration ttl, PresignWriteOptions options) {
         requireOpen();
+        requireAccountKey();
         BlobClient client = blobClient(key);
         OffsetDateTime expiry = OffsetDateTime.now(ZoneOffset.UTC).plus(ttl);
         BlobSasPermission perm =

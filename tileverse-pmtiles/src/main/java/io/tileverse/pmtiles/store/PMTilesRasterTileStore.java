@@ -18,10 +18,8 @@ import io.tileverse.tiling.matrix.TileMatrixSet;
 import io.tileverse.tiling.store.TileData;
 import io.tileverse.vectortile.store.WebMercatorTransform;
 import java.awt.Dimension;
-import java.awt.image.BufferedImage;
 import java.awt.image.RenderedImage;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.Objects;
 import java.util.Optional;
@@ -31,11 +29,9 @@ import org.jspecify.annotations.NullMarked;
 /**
  * A {@link RasterTileStore} backed by a PMTiles archive holding image tiles (PNG/JPEG/WebP/AVIF).
  *
- * <p>Tile bytes are decoded straight from the underlying channel: {@link PMTilesReader#getTile(long,
- * io.tileverse.io.IOFunction)} hands an {@link InputStream} to {@link ImageIO#read(InputStream)}, so the encoded
- * payload never sits in a separately allocated {@code ByteBuffer}. No in-memory decode cache is layered on top because
- * the bytes are already in their final form and the {@code PMTilesReader}'s directory cache plus the
- * {@code RangeReader}'s own caching already minimize I/O.
+ * <p>Tiles are decoded in memory, with the {@link ImageIO} reader for the tile format of the archive. No in-memory
+ * decode cache is layered on top because the bytes are already in their final form and the {@code PMTilesReader}'s
+ * directory cache plus the {@code RangeReader}'s own caching already minimize I/O.
  *
  * <p>Construction fails fast with {@link UnsupportedTileTypeException} if the archive does not contain a raster tile
  * type, or if no {@link ImageIO} decoder reads its tiles. A misconfigured PMTiles URI never feeds image bytes to a
@@ -135,19 +131,10 @@ public class PMTilesRasterTileStore extends RasterTileStore {
     public Optional<TileData<RenderedImage>> loadTile(Tile tile) {
         try {
             long tileId = reader.getTileId(tile.tileIndex());
-            Optional<RenderedImage> img = reader.getTile(tileId, this::decode);
+            Optional<RenderedImage> img = reader.getTile(tileId, encoded -> readImage(encoded, mimeType));
             return img.map(i -> new TileData<>(tile, i));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-    }
-
-    private RenderedImage decode(InputStream in) throws IOException {
-        BufferedImage img = ImageIO.read(in);
-        if (img == null) {
-            throw new IOException("No ImageIO reader available for tile MIME type " + mimeType
-                    + " (missing JDK ImageIO plugin for this format)");
-        }
-        return img;
     }
 }

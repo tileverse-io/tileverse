@@ -20,15 +20,20 @@ import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.tiling.store.TileData;
 import io.tileverse.tiling.store.TileStore.Strategy;
 import java.awt.image.RenderedImage;
+import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceAccessMode;
+import org.junit.jupiter.api.parallel.ResourceLock;
 
 /**
  * Exercises {@link PMTilesRasterTileStore} against the {@code flowers.pmtiles} fixture, a small WebP raster pyramid
@@ -36,6 +41,9 @@ import org.junit.jupiter.api.io.TempDir;
  * flowers.pmtiles}.
  */
 class PMTilesRasterTileStoreTest {
+
+    /** Guards the process-wide cache settings of {@link ImageIO} against tests running in parallel. */
+    private static final String IMAGEIO_CACHE = "javax.imageio.ImageIO.cache";
 
     @TempDir
     private Path tmpFolder;
@@ -176,6 +184,31 @@ class PMTilesRasterTileStoreTest {
                 assertThat(img.getHeight()).isEqualTo(512);
             });
         }
+    }
+
+    // A decode through a temporary file fails when the ImageIO cache directory is missing.
+    @Test
+    @ResourceLock(value = IMAGEIO_CACHE, mode = ResourceAccessMode.READ_WRITE)
+    void decodesWithoutTemporaryFiles() throws IOException {
+        boolean useCache = ImageIO.getUseCache();
+        File cacheDirectory = ImageIO.getCacheDirectory();
+        try {
+            useMissingCacheDirectory();
+            Tile rootTile = flowersStore.matrixSet().getTileMatrix(0).tile(TileIndex.xyz(0, 0, 0)).orElseThrow();
+
+            assertThat(flowersStore.loadTile(rootTile)).isPresent();
+        } finally {
+            ImageIO.setUseCache(useCache);
+            ImageIO.setCacheDirectory(cacheDirectory);
+        }
+    }
+
+    /** Turns the ImageIO cache on, in a directory deleted right after. */
+    private void useMissingCacheDirectory() throws IOException {
+        Path directory = Files.createDirectory(tmpFolder.resolve("imageio-cache"));
+        ImageIO.setUseCache(true);
+        ImageIO.setCacheDirectory(directory.toFile());
+        Files.delete(directory);
     }
 
     @Test

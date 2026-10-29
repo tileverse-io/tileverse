@@ -22,17 +22,11 @@ import io.tileverse.versatiles.VersatilesReader;
 import java.awt.Dimension;
 import java.awt.image.RenderedImage;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.EnumSet;
-import java.util.Iterator;
 import java.util.Optional;
 import java.util.Set;
-import javax.imageio.IIOException;
 import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.ImageInputStream;
-import javax.imageio.stream.MemoryCacheImageInputStream;
 import org.jspecify.annotations.NullMarked;
 
 /**
@@ -146,7 +140,7 @@ public class VersatilesRasterTileStore extends RasterTileStore {
     @Override
     public Optional<TileData<RenderedImage>> loadTile(Tile tile) {
         try {
-            Optional<RenderedImage> image = reader.getTile(tile.tileIndex(), this::decode);
+            Optional<RenderedImage> image = reader.getTile(tile.tileIndex(), encoded -> readImage(encoded, mimeType()));
             return image.map(decoded -> new TileData<>(tile, decoded));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -156,32 +150,5 @@ public class VersatilesRasterTileStore extends RasterTileStore {
     /** Returns the tile format of the archive: PNG, JPEG, WebP, or AVIF. */
     public TileFormat getTileFormat() {
         return reader.getTileFormat();
-    }
-
-    /**
-     * Decodes through an in-memory image stream, with a reader for the tile format of the archive.
-     * {@link ImageIO#read(InputStream)} would copy the tile to a temporary file first, and fail on a read-only file
-     * system. {@link ImageIO#read(ImageInputStream)} would leave the stream open when no reader recognizes the tile.
-     */
-    private RenderedImage decode(InputStream in) throws IOException {
-        ImageReader imageReader = newImageReader();
-        try (ImageInputStream imageStream = new MemoryCacheImageInputStream(in)) {
-            imageReader.setInput(imageStream, true, true);
-            return imageReader.read(0);
-        } catch (RuntimeException e) {
-            // some decoders fail on corrupt bytes with an unchecked exception
-            throw new IIOException("Failed to decode a " + mimeType() + " tile", e);
-        } finally {
-            imageReader.dispose();
-        }
-    }
-
-    private ImageReader newImageReader() throws IOException {
-        Iterator<ImageReader> readers = ImageIO.getImageReadersByMIMEType(mimeType());
-        if (!readers.hasNext()) {
-            throw new IOException("No ImageIO reader available for tile MIME type " + mimeType()
-                    + " (missing JDK ImageIO plugin for this format)");
-        }
-        return readers.next();
     }
 }

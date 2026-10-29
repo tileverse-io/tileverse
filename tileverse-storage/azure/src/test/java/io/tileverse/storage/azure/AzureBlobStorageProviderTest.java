@@ -74,7 +74,6 @@ class AzureBlobStorageProviderTest {
         List<StorageParameter<?>> parameters = provider.buildParameters();
         assertThat(parameters)
                 .containsExactly(
-                        AzureBlobStorageProvider.AZURE_BLOB_NAME,
                         AzureBlobStorageProvider.AZURE_ANONYMOUS,
                         AzureBlobStorageProvider.AZURE_ACCOUNT_KEY,
                         AzureBlobStorageProvider.AZURE_SAS_TOKEN,
@@ -100,12 +99,7 @@ class AzureBlobStorageProviderTest {
         assertThat(provider.canProcess(config.baseUri("http://127.0.0.1:10000/account/container/blob.pmtiles")))
                 .isTrue();
 
-        // Container-only URIs on real Azure blob hosts are now accepted (Storage use case).
-        // The AZURE_BLOB_NAME parameter is no longer required to claim these URIs.
         assertThat(provider.canProcess(config.baseUri("https://account.blob.core.windows.net/container")))
-                .isTrue();
-        assertThat(provider.canProcess(config.baseUri("https://account.blob.core.windows.net/container")
-                        .setParameter(AzureBlobStorageProvider.AZURE_BLOB_NAME.key(), "root-blob.pmtiles")))
                 .isTrue();
 
         assertThat(provider.canProcess(config.baseUri("ftp://account.blob.core.windows.net/container/blob.pmtiles")))
@@ -154,6 +148,19 @@ class AzureBlobStorageProviderTest {
         assertThat(loc.container()).isEqualTo("release");
         assertThat(loc.prefix()).isEqualTo("2026-03-18.0/");
         assertThat(loc.endpoint()).isEqualTo("https://overturemapswestus2.blob.core.windows.net");
+    }
+
+    @Test
+    void rootContainerIsNamedInTheUrl() {
+        URI uri = URI.create("https://account.blob.core.windows.net/$root/");
+        AzureBlobLocation location = AzureBlobLocation.parse(uri);
+
+        assertThat(location.container()).isEqualTo("$root");
+        assertThat(location.prefix()).isEmpty();
+        assertThat(location.resolve("file.pmtiles")).isEqualTo("file.pmtiles");
+        assertThat(provider.canProcess(configNamingTheProvider(uri.toString()))).isTrue();
+        assertThat(AzureBlobLocation.parse(URI.create("az://account/$root/")).container())
+                .isEqualTo("$root");
     }
 
     @Test

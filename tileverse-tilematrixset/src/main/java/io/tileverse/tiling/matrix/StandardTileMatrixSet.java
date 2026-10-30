@@ -63,14 +63,14 @@ public record StandardTileMatrixSet(
         Optional<URI> wellKnownScaleSet)
         implements TileMatrixSet {
 
-    /** Compact constructor: validates required fields and defensively copies the keywords list. */
+    /** Compact constructor: validates required fields and defensively copies the keywords list and the resolutions. */
     public StandardTileMatrixSet {
         requireNonNull(identifier, "identifier");
         requireNonNull(tilePyramid, "tilePyramid");
         requireNonNull(crsId, "crsId");
         requireNonNull(supportedCRS, "supportedCRS");
         requireNonNull(extent, "extent");
-        requireNonNull(resolutions, "resolutions");
+        resolutions = requireNonNull(resolutions, "resolutions").clone();
         requireNonNull(title, "title");
         requireNonNull(abstractDescription, "abstractDescription");
         requireNonNull(wellKnownScaleSet, "wellKnownScaleSet");
@@ -142,6 +142,14 @@ public record StandardTileMatrixSet(
 
     static Coordinate origin(BoundingBox2D extent, CornerOfOrigin cornerOfOrigin) {
         return cornerOfOrigin.pointOfOrigin(extent);
+    }
+
+    /**
+     * Returns a copy of the resolution of each zoom level. The predefined sets of {@link DefaultTileMatrixSets} are
+     * shared by the whole JVM, and a caller must not be able to change them.
+     */
+    public double[] resolutions() {
+        return resolutions.clone();
     }
 
     @Override

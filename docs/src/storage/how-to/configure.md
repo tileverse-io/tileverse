@@ -107,7 +107,7 @@ The endpoint comes from the first of:
 2. the URL of an `http(s)://host/bucket/key` URI opened with `storage.provider=s3`;
 3. the `aws.endpointUrlS3` or `aws.endpointUrl` system property;
 4. the `AWS_ENDPOINT_URL_S3` or `AWS_ENDPOINT_URL` environment variable;
-5. `endpoint_url` in the AWS profile files, for the profile named by `AWS_PROFILE`, else `default`.
+5. `endpoint_url` in the AWS profile files, for the profile of `storage.s3.default-credentials-profile`, else the profile named by `AWS_PROFILE` or `default`.
 
 With none of them, the `Storage` uses the AWS endpoints of the region. How the endpoint interacts with the other S3 parameters:
 

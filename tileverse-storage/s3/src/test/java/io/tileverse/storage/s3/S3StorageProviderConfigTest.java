@@ -41,9 +41,14 @@ class S3StorageProviderConfigTest {
 
     private static final URI MINIO = URI.create("http://minio.lan:9000");
 
-    private static final EnvironmentEndpoint NO_ENVIRONMENT_ENDPOINT = new EnvironmentEndpoint(Optional::empty);
+    private static final EnvironmentEndpoint NO_ENVIRONMENT_ENDPOINT =
+            new EnvironmentEndpoint(profile -> Optional.empty());
 
-    private static final EnvironmentEndpoint MINIO_IN_ENVIRONMENT = new EnvironmentEndpoint(() -> Optional.of(MINIO));
+    private static final EnvironmentEndpoint MINIO_IN_ENVIRONMENT =
+            new EnvironmentEndpoint(profile -> Optional.of(MINIO));
+
+    private static final EnvironmentEndpoint MINIO_IN_PROFILE =
+            new EnvironmentEndpoint(profile -> profile.filter("minio"::equals).map(name -> MINIO));
 
     private static final Map<String, String> NO_PROFILE_REGIONS = Map.of();
 
@@ -160,6 +165,8 @@ class S3StorageProviderConfigTest {
                 new StorageConfig("s3://my-bucket/file.txt").setParameter(S3StorageProvider.S3_ENDPOINT, garage);
         StorageConfig endpointUrl = new StorageConfig("http://garage.lan:3900/my-bucket/file.txt");
         StorageConfig bucket = new StorageConfig("s3://my-bucket/file.txt");
+        StorageConfig bucketOfProfile = new StorageConfig("s3://my-bucket/file.txt")
+                .setParameter(S3StorageProvider.S3_DEFAULT_CREDENTIALS_PROFILE, "minio");
         return Stream.of(
                 Arguments.of(
                         "endpoint parameter, environment",
@@ -168,6 +175,8 @@ class S3StorageProviderConfigTest {
                         Optional.of(garage)),
                 Arguments.of("endpoint URL, environment", endpointUrl, MINIO_IN_ENVIRONMENT, Optional.of(garage)),
                 Arguments.of("environment", bucket, MINIO_IN_ENVIRONMENT, Optional.of(MINIO)),
+                Arguments.of("profile of the store", bucketOfProfile, MINIO_IN_PROFILE, Optional.of(MINIO)),
+                Arguments.of("store naming no profile", bucket, MINIO_IN_PROFILE, Optional.empty()),
                 Arguments.of("no endpoint", bucket, NO_ENVIRONMENT_ENDPOINT, Optional.empty()));
     }
 

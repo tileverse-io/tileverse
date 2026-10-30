@@ -27,15 +27,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.tileverse.vectortile.model.GeometryReader;
 import io.tileverse.vectortile.model.VectorTile;
 import io.tileverse.vectortile.model.VectorTile.Layer.Feature;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
@@ -304,6 +311,78 @@ class VectorTileCodecTest {
             assertNotNull(g);
             assertFalse(g.isEmpty());
         }
+    }
+
+    // Tiles written by VersaTiles hold features with a zero-length packed geometry field
+    @ParameterizedTest
+    @MethodSource("decodePaths")
+    void testEmptyGeometry(TileDecoder decoder) throws IOException {
+        // id 1, type POLYGON, zero-length geometry
+        byte[] feature = {0x08, 0x01, 0x18, 0x03, 0x22, 0x00};
+
+        VectorTile tile = decoder.decode(codec, tileWithFeature(feature));
+
+        Feature decoded = tile.getFeatures("x").findFirst().orElseThrow();
+        assertThat(decoded.getId()).isEqualTo(1L);
+        GeometryAssertions.assertThat(decoded.getGeometry()).isPolygon().isEmpty();
+    }
+
+    @ParameterizedTest
+    @MethodSource("decodePaths")
+    void testEmptyTags(TileDecoder decoder) throws IOException {
+        // id 1, zero-length tags, type POINT, MoveTo(2, 3)
+        byte[] feature = {0x08, 0x01, 0x12, 0x00, 0x18, 0x01, 0x22, 0x03, 0x09, 0x04, 0x06};
+
+        VectorTile tile = decoder.decode(codec, tileWithFeature(feature));
+
+        Feature decoded = tile.getFeatures("x").findFirst().orElseThrow();
+        assertThat(decoded.getAttributes()).isEmpty();
+        GeometryAssertions.assertThat(decoded.getGeometry()).equalsExact("POINT (2 3)");
+    }
+
+    @FunctionalInterface
+    interface TileDecoder {
+        VectorTile decode(VectorTileCodec codec, byte[] tile) throws IOException;
+    }
+
+    static Stream<Named<TileDecoder>> decodePaths() {
+        return Stream.of(
+                Named.of("byte[]", VectorTileCodec::decode),
+                Named.of("heap buffer", (codec, tile) -> codec.decode(sliceAtOffset(tile))),
+                Named.of(
+                        "read-only buffer",
+                        (codec, tile) -> codec.decode(ByteBuffer.wrap(tile).asReadOnlyBuffer())),
+                Named.of("direct buffer", (codec, tile) -> codec.decode(direct(tile))),
+                Named.of("InputStream", (codec, tile) -> codec.decode(new ByteArrayInputStream(tile))));
+    }
+
+    // The tile starts past both the array offset and the position of the buffer
+    private static ByteBuffer sliceAtOffset(byte[] tile) {
+        byte[] padded = new byte[tile.length + 3];
+        System.arraycopy(tile, 0, padded, 3, tile.length);
+        return ByteBuffer.wrap(padded).position(1).slice().position(2);
+    }
+
+    private static ByteBuffer direct(byte[] tile) {
+        ByteBuffer buffer = ByteBuffer.allocateDirect(tile.length);
+        buffer.put(tile).flip();
+        return buffer;
+    }
+
+    /** Wraps the feature in layer "x", of version 2 and extent 4096, and the layer in a tile. */
+    private static byte[] tileWithFeature(byte[] feature) {
+        ByteArrayOutputStream layer = new ByteArrayOutputStream();
+        layer.writeBytes(new byte[] {0x78, 0x02}); // version 2
+        layer.writeBytes(new byte[] {0x0A, 0x01, 'x'}); // name "x"
+        layer.write(0x12); // feature, then its length
+        layer.write(feature.length);
+        layer.writeBytes(feature);
+        layer.writeBytes(new byte[] {0x28, (byte) 0x80, 0x20}); // extent 4096
+        ByteArrayOutputStream tile = new ByteArrayOutputStream();
+        tile.write(0x1A); // layer, then its length
+        tile.write(layer.size());
+        tile.writeBytes(layer.toByteArray());
+        return tile.toByteArray();
     }
 
     private void assertCoordEquals(Coordinate expected, Coordinate actual) {

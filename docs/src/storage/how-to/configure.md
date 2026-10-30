@@ -175,7 +175,7 @@ The executor behind batched fetches is shared by the whole JVM and picked once, 
 
 | Property | Description | Default |
 | :--- | :--- | :--- |
-| `io.tileverse.storage.batch.executor` | Executor for batched fetches: `auto`, `virtual` or `pool` | `auto` |
+| `io.tileverse.storage.batch.executor` | Executor for batched fetches: `auto` (virtual threads on Java 24+, `pool` before), `virtual` or `pool` | `auto` |
 | `io.tileverse.storage.batch.pool.size` | Size of the `pool` executor | the larger of 8 and the processor count |
 
 The connection pool of the S3 clients takes three settings, each read from its system property first and from its environment variable second:

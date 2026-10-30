@@ -40,14 +40,14 @@ public interface VectorTile {
     VectorTile withBoundingBox(Envelope bounds);
 
     /**
-     * Returns all layer names in this tile.
+     * Returns all layer names in this tile, in the order of the tile.
      *
      * @return set of layer names
      */
     Set<String> getLayerNames();
 
     /**
-     * Returns all layers in this tile.
+     * Returns all layers in this tile, in the order of the tile.
      *
      * @return list of layers
      */

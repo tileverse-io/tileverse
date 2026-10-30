@@ -1,0 +1,14 @@
+{
+  "description": "Has a key property incorrectly encoded as a type std::uint32_t.",
+  "specification_reference": "https://github.com/mapbox/vector-tile-spec/blob/master/2.1/vector_tile.proto#L63",
+  "validity": {
+    "v1": false,
+    "v2": false,
+    "error": "fatal"
+  },
+  "proto": [
+    "2.1",
+    "repeated string keys",
+    "repeated uint32 keys"
+  ]
+}

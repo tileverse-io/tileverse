@@ -19,6 +19,7 @@ import io.tileverse.storage.spi.AbstractStorageProvider;
 import io.tileverse.storage.spi.StorageProvider;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -121,7 +122,9 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
             .password(true)
             .build();
 
-    /** SAS token to use for authenticating requests */
+    /**
+     * SAS token to use for authenticating requests. Without it, a SAS token in the query string of the URI is used.
+     */
     public static final StorageParameter<String> AZURE_SAS_TOKEN = StorageParameter.builder()
             .key("storage.azure.sas-token")
             .title("SAS token to use for authenticating requests")
@@ -129,7 +132,7 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
                     Shared Access Signature, a security token generated on the client side to grant limited, \
                     delegated access to Azure resources.
 
-                    This token can also be in the blob URL query string.
+                    The token can also be the query string of the URI. This parameter wins when both are set.
                     """)
             .type(String.class)
             .group(ID)
@@ -383,10 +386,20 @@ public class AzureBlobStorageProvider extends AbstractStorageProvider {
                 location.endpoint(),
                 location.accountName(),
                 config.getParameter(AZURE_ACCOUNT_KEY),
-                config.getParameter(AZURE_SAS_TOKEN),
+                config.getParameter(AZURE_SAS_TOKEN).or(() -> sasTokenInQuery(config.baseUri())),
                 config.getParameter(AZURE_CONNECTION_STRING),
                 anonymous,
                 retryFromConfig(config));
+    }
+
+    /** Returns the query string of {@code uri} when it is a SAS token, recognized by its signature parameter. */
+    private static Optional<String> sasTokenInQuery(URI uri) {
+        String query = uri.getRawQuery();
+        if (query == null) {
+            return Optional.empty();
+        }
+        boolean signed = Arrays.stream(query.split("&")).anyMatch(parameter -> parameter.startsWith("sig="));
+        return signed ? Optional.of(query) : Optional.empty();
     }
 
     static AzureRetryConfig retryFromConfig(StorageConfig config) {

@@ -456,7 +456,7 @@ public class S3StorageProvider extends AbstractStorageProvider {
         Optional<String> accessKey = config.getParameter(S3_AWS_ACCESS_KEY_ID);
         Optional<String> secretKey = config.getParameter(S3_AWS_SECRET_ACCESS_KEY);
         Optional<String> profile = config.getParameter(S3_DEFAULT_CREDENTIALS_PROFILE);
-        Optional<URI> endpointOverride = endpointOverride(config, s3Ref, environmentEndpoint);
+        Optional<URI> endpointOverride = endpointOverride(config, s3Ref, profile, environmentEndpoint);
         boolean forcePathStyle = config.getParameter(S3_FORCE_PATH_STYLE).orElse(endpointOverride.isPresent());
         CredentialsSource credentials = CredentialsSource.of(anonymous, accessKey, secretKey, profile);
         Optional<String> named = namedRegion(config, s3Ref);
@@ -467,9 +467,9 @@ public class S3StorageProvider extends AbstractStorageProvider {
 
     /** The endpoint of the {@code storage.s3.endpoint} parameter, else of the URI, else of the environment. */
     private static Optional<URI> endpointOverride(
-            StorageConfig config, S3Reference s3Ref, EnvironmentEndpoint environment) {
+            StorageConfig config, S3Reference s3Ref, Optional<String> profile, EnvironmentEndpoint environment) {
         Optional<URI> parameter = config.getParameter(S3_ENDPOINT);
-        return parameter.or(s3Ref::endpointOverride).or(environment::find);
+        return parameter.or(s3Ref::endpointOverride).or(() -> environment.find(profile));
     }
 
     /** The region of the {@code storage.s3.region} parameter, else the region parsed from the URI. */

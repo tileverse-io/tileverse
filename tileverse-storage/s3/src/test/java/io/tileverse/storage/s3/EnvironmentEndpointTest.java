@@ -47,50 +47,65 @@ class EnvironmentEndpointTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("profileFiles")
-    void sameEndpointAsClientBuilder(String scenario, String profileFile, Optional<URI> expected) {
+    void sameEndpointAsClientBuilder(
+            String scenario, String profileFile, Optional<String> profile, Optional<URI> expected) {
         Supplier<ProfileFile> profiles = () -> configFile(profileFile);
 
-        Optional<URI> found = EnvironmentEndpoint.resolve(profiles);
-        Optional<URI> foundByBuilder = clientBuilderEndpoint(profiles);
+        Optional<URI> found = EnvironmentEndpoint.resolve(profiles, profile);
+        Optional<URI> foundByBuilder = clientBuilderEndpoint(profiles, profile);
 
         assertThat(found).as(scenario).isEqualTo(expected).isEqualTo(foundByBuilder);
     }
 
     static Stream<Arguments> profileFiles() {
         Optional<URI> minio = Optional.of(URI.create("http://minio.lan:9000"));
+        Optional<String> defaultProfile = Optional.empty();
+        Optional<String> minioProfile = Optional.of("minio");
         return Stream.of(
                 Arguments.of("no endpoint", """
                         [default]
                         region = eu-west-1
-                        """, Optional.empty()),
+                        """, defaultProfile, Optional.empty()),
                 Arguments.of("endpoint of the profile", """
                         [default]
                         endpoint_url = http://minio.lan:9000
-                        """, minio),
+                        """, defaultProfile, minio),
                 Arguments.of("S3 endpoint of the profile", """
                         [default]
                         s3 =
                           endpoint_url = http://minio.lan:9000
-                        """, minio),
+                        """, defaultProfile, minio),
                 Arguments.of("services section", """
                         [default]
                         services = lab
                         [services lab]
                         s3 =
                           endpoint_url = http://minio.lan:9000
-                        """, minio),
+                        """, defaultProfile, minio),
                 Arguments.of("endpoint of another service", """
                         [default]
                         services = lab
                         [services lab]
                         sqs =
                           endpoint_url = http://minio.lan:9000
-                        """, Optional.empty()),
+                        """, defaultProfile, Optional.empty()),
                 Arguments.of("endpoints ignored", """
                         [default]
                         ignore_configured_endpoint_urls = true
                         endpoint_url = http://minio.lan:9000
-                        """, Optional.empty()));
+                        """, defaultProfile, Optional.empty()),
+                Arguments.of("endpoint of the named profile", """
+                        [default]
+                        region = eu-west-1
+                        [profile minio]
+                        endpoint_url = http://minio.lan:9000
+                        """, minioProfile, minio),
+                Arguments.of("endpoint of the default profile only", """
+                        [default]
+                        endpoint_url = http://minio.lan:9000
+                        [profile minio]
+                        region = eu-west-1
+                        """, minioProfile, Optional.empty()));
     }
 
     private static ProfileFile configFile(String content) {
@@ -100,12 +115,14 @@ class EnvironmentEndpointTest {
                 .build();
     }
 
-    private static Optional<URI> clientBuilderEndpoint(Supplier<ProfileFile> profiles) {
+    private static Optional<URI> clientBuilderEndpoint(Supplier<ProfileFile> profiles, Optional<String> profile) {
+        String profileName = profile.orElse(null);
         S3AsyncClient client = S3AsyncClient.builder()
                 .region(Region.US_EAST_1)
                 .credentialsProvider(AnonymousCredentialsProvider.create())
                 .httpClient(NO_HTTP)
-                .overrideConfiguration(override -> override.defaultProfileFileSupplier(profiles))
+                .overrideConfiguration(
+                        override -> override.defaultProfileFileSupplier(profiles).defaultProfileName(profileName))
                 .build();
         try (client) {
             return client.serviceClientConfiguration().endpointOverride();

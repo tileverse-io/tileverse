@@ -30,6 +30,9 @@ import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.Isolated;
+import org.junit.jupiter.api.util.RestoreSystemProperties;
+import org.junit.jupiter.api.util.SetSystemProperty;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -37,16 +40,19 @@ import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.async.AsyncResponseTransformer;
+import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration;
 import software.amazon.awssdk.http.SdkHttpMethod;
 import software.amazon.awssdk.http.SdkHttpRequest;
 import software.amazon.awssdk.http.async.AsyncExecuteRequest;
 import software.amazon.awssdk.http.async.SdkAsyncHttpClient;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 import software.amazon.awssdk.transfer.s3.S3TransferManager;
 import software.amazon.awssdk.transfer.s3.model.FileUpload;
 import software.amazon.awssdk.transfer.s3.model.UploadFileRequest;
 
+@Isolated("some tests set AWS system properties, read by each S3 client built in this JVM")
 class S3ClientCacheTest {
 
     private static final S3ClientCache.Key EAST = S3ClientCache.key("us-east-1", null, true, null, null, null, false);
@@ -115,6 +121,82 @@ class S3ClientCacheTest {
                         "secret without its access key",
                         S3ClientCache.key("us-east-1", null, false, null, "secret", null, false),
                         DefaultCredentialsChain.class));
+    }
+
+    // The SDK reads the endpoint, retry and FIPS settings of the client from this profile.
+    @Test
+    void clientsReadTheKeyProfile() {
+        S3ClientCache.Key profile = S3ClientCache.key("us-east-1", null, false, null, null, "analytics", false);
+        S3ClientCache cache = cacheCountingHttpClients();
+        try (S3ClientCache.Lease lease = cache.acquire(profile)) {
+            ClientOverrideConfiguration overrides =
+                    lease.client().serviceClientConfiguration().overrideConfiguration();
+
+            assertThat(overrides.defaultProfileName()).hasValue("analytics");
+        }
+    }
+
+    @Test
+    @RestoreSystemProperties
+    void presignerReadsTheKeyProfile(@TempDir Path directory) throws IOException {
+        Path config = directory.resolve("config");
+        Files.writeString(config, """
+                [profile analytics]
+                use_fips_endpoint = true
+                """);
+        S3ClientCache.Key key = S3ClientCache.key("us-east-1", null, false, "access", "secret", "analytics", false);
+        S3ClientCache cache = cacheCountingHttpClients();
+        System.setProperty("aws.configFile", config.toString());
+        try (S3ClientCache.Lease lease = cache.acquire(key)) {
+            PresignedGetObjectRequest presigned = lease.presigner()
+                    .presignGetObject(request -> request.signatureDuration(Duration.ofMinutes(1))
+                            .getObjectRequest(get -> get.bucket("bucket").key("key")));
+
+            assertThat(presigned.url().getHost()).isEqualTo("bucket.s3-fips.us-east-1.amazonaws.com");
+        }
+    }
+
+    // The SDK refuses a custom endpoint combined with FIPS or dualstack, both named here by the environment.
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("storesOnCustomEndpoint")
+    @SetSystemProperty(key = "aws.useFipsEndpoint", value = "true")
+    @SetSystemProperty(key = "aws.useDualstackEndpoint", value = "true")
+    void clientEndpointOverrideWins(String scenario, S3ClientCache.Key key) {
+        S3ClientCache cache = cacheCountingHttpClients();
+        try (S3ClientCache.Lease lease = cache.acquire(key)) {
+            CompletableFuture<?> head = lease.client().headObject(request -> request.bucket("bucket")
+                    .key("key"));
+
+            assertThatThrownBy(() -> head.get(10, TimeUnit.SECONDS)).isInstanceOf(ExecutionException.class);
+            assertThat(httpClients.get(0).sent).first().satisfies(request -> assertThat(request.host())
+                    .isEqualTo("minio.lan"));
+        }
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("storesOnCustomEndpoint")
+    @SetSystemProperty(key = "aws.useFipsEndpoint", value = "true")
+    @SetSystemProperty(key = "aws.useDualstackEndpoint", value = "true")
+    void presignerEndpointOverrideWins(String scenario, S3ClientCache.Key key) {
+        S3ClientCache cache = cacheCountingHttpClients();
+        try (S3ClientCache.Lease lease = cache.acquire(key)) {
+            PresignedGetObjectRequest presigned = lease.presigner()
+                    .presignGetObject(request -> request.signatureDuration(Duration.ofMinutes(1))
+                            .getObjectRequest(get -> get.bucket("bucket").key("key")));
+
+            assertThat(presigned.url().getHost()).isEqualTo("minio.lan");
+        }
+    }
+
+    static Stream<Arguments> storesOnCustomEndpoint() {
+        URI minio = URI.create("http://minio.lan:9000");
+        return Stream.of(
+                Arguments.of(
+                        "store naming a profile",
+                        S3ClientCache.key("us-east-1", minio, false, "access", "secret", "analytics", true)),
+                Arguments.of(
+                        "store naming no profile",
+                        S3ClientCache.key("us-east-1", minio, false, "access", "secret", null, true)));
     }
 
     @ParameterizedTest(name = "{0}")

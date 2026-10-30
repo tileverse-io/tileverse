@@ -62,6 +62,13 @@
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-javalite</artifactId>
     </dependency>
+
+    <!-- reads the expected content of the mvt-fixtures in the tests -->
+    <dependency>
+      <groupId>tools.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

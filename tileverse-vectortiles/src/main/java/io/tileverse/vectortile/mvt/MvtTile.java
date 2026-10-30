@@ -5,12 +5,11 @@
  */
 package io.tileverse.vectortile.mvt;
 
-import static java.util.function.Function.identity;
-import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toCollection;
 
 import io.tileverse.vectortile.model.VectorTile;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
@@ -41,12 +40,14 @@ record MvtTile(VectorTileProto.Tile tileProto, Envelope bounds) implements Vecto
 
     @Override
     public Set<String> getLayerNames() {
-        return layers().keySet();
+        return tileProto.getLayersList().stream()
+                .map(VectorTileProto.Tile.Layer::getName)
+                .collect(toCollection(LinkedHashSet::new));
     }
 
     @Override
     public List<Layer> getLayers() {
-        return layers().values().stream().map(this::newLayer).toList();
+        return tileProto.getLayersList().stream().map(this::newLayer).toList();
     }
 
     @Override
@@ -55,10 +56,6 @@ record MvtTile(VectorTileProto.Tile tileProto, Envelope bounds) implements Vecto
                 .filter(l -> name.equals(l.getName()))
                 .findFirst()
                 .map(this::newLayer);
-    }
-
-    private Map<String, VectorTileProto.Tile.Layer> layers() {
-        return tileProto.getLayersList().stream().collect(toMap(VectorTileProto.Tile.Layer::getName, identity()));
     }
 
     private Layer newLayer(VectorTileProto.Tile.Layer layer) {

@@ -201,6 +201,33 @@ class BatchRunnerTest {
         }
     }
 
+    // The shared pool may be busy with other batches when the calling thread has already run every fetch
+    @Test
+    void queuedHelperIsNotAwaited() throws Exception {
+        List<RangeRequest> batch = requests(new long[][] {{0, 10}, {1_000, 10}});
+        List<PlannedFetch> fetches = BatchPlanner.plan(batch, CoalescingPolicy.NONE);
+        CountDownLatch releasePool = new CountDownLatch(1);
+        ExecutorService busyPool = Executors.newSingleThreadExecutor();
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            busyPool.execute(() -> awaitQuietly(releasePool));
+            Future<BatchReadResult> call = caller.submit(() -> BatchRunner.run(batch, fetches, reader, 2, () -> busyPool));
+
+            assertContents(batch, counts(call.get(2, TimeUnit.SECONDS)));
+
+            releasePool.countDown();
+            busyPool.shutdown();
+            assertThat(busyPool.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(fetchLog)
+                    .as("the helper retired while queued runs no fetch")
+                    .hasSize(2);
+        } finally {
+            releasePool.countDown();
+            caller.shutdownNow();
+            busyPool.shutdownNow();
+        }
+    }
+
     @Test
     void firstFailureIsRethrownAfterTheRestDrain() {
         List<RangeRequest> batch = requests(new long[][] {{0, 10}, {1_000, 10}, {2_000, 10}, {3_000, 10}});

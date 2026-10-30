@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.IntConsumer;
@@ -77,7 +78,11 @@ public final class BatchRunner {
      * {@link CompletionException}.
      *
      * <p>A failure to submit a worker, such as a rejection or an Error raised by a failed thread start, is recorded
-     * like a task failure: the calling thread runs no task and waits for the workers already submitted.
+     * like a task failure: the calling thread runs no task and waits for the workers already started.
+     *
+     * <p>A worker still queued in the executor when the calling thread runs out of tasks is retired: it runs no task
+     * when the executor gets to it, and the call does not wait for it. A busy shared pool then delays no batch beyond
+     * its own fetches.
      *
      * @param taskCount how many tasks to run, indexed 0 to taskCount - 1
      * @param task the work, invoked once per index
@@ -100,29 +105,33 @@ public final class BatchRunner {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Runnable worker = () -> runTasks(taskCount, task, nextTask, failure);
         Executor resolved = executor.get();
-        CompletableFuture<Void> helpers = submitHelpers(workers - 1, worker, resolved, failure);
+        List<Helper> helpers = submitHelpers(workers - 1, worker, resolved, failure);
         worker.run();
-        helpers.join();
+        retireOrAwait(helpers);
         rethrowIfFailed(failure.get());
     }
 
-    /**
-     * Submits up to {@code count} helper workers, records a failure to submit one like a task failure, and returns a
-     * future completing when every submitted worker finished.
-     */
+    /** Submits up to {@code count} helper workers and records a failure to submit one like a task failure. */
     @SuppressWarnings("java:S1181") // an Error must not skip the join on the workers already submitted
-    private static CompletableFuture<Void> submitHelpers(
+    private static List<Helper> submitHelpers(
             int count, Runnable worker, Executor executor, AtomicReference<Throwable> failure) {
-        List<CompletableFuture<Void>> submitted = new ArrayList<>(count);
+        List<Helper> submitted = new ArrayList<>(count);
         try {
             for (int i = 0; i < count; i++) {
-                submitted.add(CompletableFuture.runAsync(worker, executor));
+                Helper helper = new Helper(worker);
+                executor.execute(helper);
+                submitted.add(helper);
             }
         } catch (Throwable submissionFailure) {
             failure.compareAndSet(null, submissionFailure);
         }
-        CompletableFuture<?>[] submittedWorkers = submitted.toArray(new CompletableFuture<?>[0]);
-        return CompletableFuture.allOf(submittedWorkers);
+        return submitted;
+    }
+
+    private static void retireOrAwait(List<Helper> helpers) {
+        for (Helper helper : helpers) {
+            helper.retireOrAwait();
+        }
     }
 
     /** Runs tasks until none is left or the batch failed, and records the first task failure instead of throwing it. */
@@ -167,6 +176,41 @@ public final class BatchRunner {
             int read = reader.read(fetch.range(), scratch);
             fetch.scatter(scratch, read, requests, counts);
             return read;
+        }
+    }
+
+    /**
+     * A worker submitted to the executor. Either the executor starts it or the calling thread retires it, whichever
+     * comes first. A started helper is awaited because it may still be writing a caller target.
+     */
+    private static final class Helper implements Runnable {
+
+        private final Runnable worker;
+        private final AtomicBoolean claimed = new AtomicBoolean();
+        private final CompletableFuture<Void> finished = new CompletableFuture<>();
+
+        Helper(Runnable worker) {
+            this.worker = worker;
+        }
+
+        @Override
+        public void run() {
+            if (!claimed.compareAndSet(false, true)) {
+                return;
+            }
+            try {
+                worker.run();
+            } finally {
+                finished.complete(null);
+            }
+        }
+
+        /** Retires this helper if the executor has not started it, otherwise waits until it finishes. */
+        void retireOrAwait() {
+            boolean retired = claimed.compareAndSet(false, true);
+            if (!retired) {
+                finished.join();
+            }
         }
     }
 }

@@ -16,14 +16,18 @@ import static org.awaitility.Awaitility.await;
 import io.tileverse.cache.CacheManager;
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
 import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
 import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.OptionalLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -364,5 +368,79 @@ class PMTilesReaderTest {
         assertThat(andorra.getTile(TileIndex.zxy(0, 0, 0))).isPresent();
         andorra.close();
         return new WeakReference<>(andorra.alignedReader());
+    }
+
+    @Test
+    void failedOpenClosesRangeReader() throws IOException {
+        Path notPMTiles = notPMTilesFile();
+
+        try (Storage storage = StorageFactory.open(tmpFolder.toUri())) {
+            CloseRecordingRangeReader rangeReader =
+                    new CloseRecordingRangeReader(storage.openRangeReader(notPMTiles.toUri()), null);
+
+            assertThatThrownBy(() -> new PMTilesReader(rangeReader)).isInstanceOf(InvalidHeaderException.class);
+            assertThat(rangeReader.closed()).isTrue();
+        }
+    }
+
+    // The open failure explains the problem; the close failure must not replace it.
+    @Test
+    void closeFailureIsSuppressed() throws IOException {
+        Path notPMTiles = notPMTilesFile();
+        IOException closeFailure = new IOException("close failed");
+
+        try (Storage storage = StorageFactory.open(tmpFolder.toUri())) {
+            CloseRecordingRangeReader rangeReader =
+                    new CloseRecordingRangeReader(storage.openRangeReader(notPMTiles.toUri()), closeFailure);
+
+            assertThatThrownBy(() -> new PMTilesReader(rangeReader))
+                    .isInstanceOf(InvalidHeaderException.class)
+                    .hasSuppressedException(closeFailure);
+        }
+    }
+
+    private Path notPMTilesFile() throws IOException {
+        return Files.writeString(tmpFolder.resolve("not.pmtiles"), "not a PMTiles archive");
+    }
+
+    /** Records the call to close, and fails it with {@code closeFailure} when one is given. */
+    private static final class CloseRecordingRangeReader implements RangeReader {
+
+        private final RangeReader delegate;
+        private final IOException closeFailure;
+        private boolean closed;
+
+        CloseRecordingRangeReader(RangeReader delegate, IOException closeFailure) {
+            this.delegate = delegate;
+            this.closeFailure = closeFailure;
+        }
+
+        boolean closed() {
+            return closed;
+        }
+
+        @Override
+        public int readRange(long offset, int length, ByteBuffer target) {
+            return delegate.readRange(offset, length, target);
+        }
+
+        @Override
+        public OptionalLong size() {
+            return delegate.size();
+        }
+
+        @Override
+        public String getSourceIdentifier() {
+            return delegate.getSourceIdentifier();
+        }
+
+        @Override
+        public void close() throws IOException {
+            closed = true;
+            delegate.close();
+            if (closeFailure != null) {
+                throw closeFailure;
+            }
+        }
     }
 }

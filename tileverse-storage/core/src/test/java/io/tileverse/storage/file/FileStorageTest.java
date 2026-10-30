@@ -9,8 +9,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import io.tileverse.storage.CopyOptions;
 import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.PreconditionFailedException;
+import io.tileverse.storage.ReadHandle;
+import io.tileverse.storage.ReadOptions;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.StorageOutputStream;
@@ -19,11 +22,23 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.OptionalLong;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class FileStorageTest {
 
@@ -113,6 +128,253 @@ class FileStorageTest {
                 assertThat(rootEntries.map(p -> p.getFileName().toString())).containsExactly("dir");
             }
         }
+    }
+
+    @Test
+    void etagChangesOnEachWrite(@TempDir Path tmp) {
+        try (FileStorage s = new FileStorage(tmp)) {
+            StorageEntry.File first = s.put("a.txt", bytes("one"));
+            StorageEntry.File second = s.put("a.txt", bytes("two"));
+
+            assertThat(first.etag()).isPresent();
+            assertThat(second.etag()).isPresent().isNotEqualTo(first.etag());
+            assertThat(s.stat("a.txt").orElseThrow().etag()).isEqualTo(second.etag());
+        }
+    }
+
+    @Test
+    void listReportsTheEtag(@TempDir Path tmp) {
+        try (FileStorage s = new FileStorage(tmp)) {
+            String etag = s.put("a.txt", bytes("one")).etag().orElseThrow();
+
+            try (Stream<StorageEntry> entries = s.list("*.txt")) {
+                Stream<Optional<String>> etags =
+                        entries.map(StorageEntry.File.class::cast).map(StorageEntry.File::etag);
+                assertThat(etags).containsExactly(Optional.of(etag));
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("writes")
+    void writeRejectsAnotherEtag(Write write, @TempDir Path tmp) throws IOException {
+        try (FileStorage s = new FileStorage(tmp)) {
+            s.put("a.txt", bytes("one"));
+            byte[] two = bytes("two");
+            WriteOptions ifMatch = WriteOptions.builder().ifMatchEtag("no-such-etag").build();
+
+            assertThatThrownBy(() -> write.apply(s, "a.txt", two, ifMatch))
+                    .isInstanceOf(PreconditionFailedException.class);
+            assertThat(Files.readString(tmp.resolve("a.txt"))).isEqualTo("one");
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("writes")
+    void writeReplacesTheEtagMatch(Write write, @TempDir Path tmp) throws IOException {
+        try (FileStorage s = new FileStorage(tmp)) {
+            String etag = s.put("a.txt", bytes("one")).etag().orElseThrow();
+            WriteOptions ifMatch = WriteOptions.builder().ifMatchEtag(etag).build();
+
+            write.apply(s, "a.txt", bytes("two"), ifMatch);
+
+            assertThat(Files.readString(tmp.resolve("a.txt"))).isEqualTo("two");
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("writes")
+    void writeIfMatchRejectsMissing(Write write, @TempDir Path tmp) {
+        try (FileStorage s = new FileStorage(tmp)) {
+            byte[] two = bytes("two");
+            WriteOptions ifMatch = WriteOptions.builder().ifMatchEtag("no-such-etag").build();
+
+            assertThatThrownBy(() -> write.apply(s, "a.txt", two, ifMatch))
+                    .isInstanceOf(PreconditionFailedException.class);
+            assertThat(tmp.resolve("a.txt")).doesNotExist();
+        }
+    }
+
+    // Another writer may replace the file while the stream is open
+    @Test
+    void streamChecksEtagAtClose(@TempDir Path tmp) throws IOException {
+        try (FileStorage s = new FileStorage(tmp)) {
+            String etag = s.put("a.txt", bytes("one")).etag().orElseThrow();
+            WriteOptions ifMatch = WriteOptions.builder().ifMatchEtag(etag).build();
+            StorageOutputStream out = s.openOutputStream("a.txt", ifMatch);
+            out.write(bytes("two"));
+            s.put("a.txt", bytes("three"));
+
+            assertThatThrownBy(out::close)
+                    .isInstanceOf(IOException.class)
+                    .hasCauseInstanceOf(PreconditionFailedException.class);
+            assertThat(Files.readString(tmp.resolve("a.txt"))).isEqualTo("three");
+        }
+    }
+
+    // Writers holding the ETag of one version race to replace it: one of them wins
+    @Test
+    void oneWriterWinsAnEtag(@TempDir Path tmp) throws Exception {
+        int writers = 16;
+        try (FileStorage s = new FileStorage(tmp)) {
+            String etag = s.put("a.txt", bytes("zero")).etag().orElseThrow();
+            WriteOptions ifMatch = WriteOptions.builder().ifMatchEtag(etag).build();
+            CyclicBarrier start = new CyclicBarrier(writers);
+            List<Callable<Boolean>> writes = new ArrayList<>();
+            for (int i = 0; i < writers; i++) {
+                byte[] data = bytes("writer " + i);
+                writes.add(() -> tryWrite(s, start, data, ifMatch));
+            }
+
+            ExecutorService executor = Executors.newFixedThreadPool(writers);
+            try {
+                assertThat(wins(executor.invokeAll(writes))).isEqualTo(1);
+            } finally {
+                executor.shutdownNow();
+            }
+            try (Stream<Path> entries = Files.list(tmp)) {
+                assertThat(entries).containsExactly(tmp.resolve("a.txt"));
+            }
+        }
+    }
+
+    private static boolean tryWrite(Storage storage, CyclicBarrier start, byte[] data, WriteOptions options)
+            throws Exception {
+        start.await();
+        try {
+            storage.put("a.txt", data, options);
+            return true;
+        } catch (PreconditionFailedException e) {
+            return false;
+        }
+    }
+
+    private static int wins(List<Future<Boolean>> writes) throws Exception {
+        int wins = 0;
+        for (Future<Boolean> write : writes) {
+            if (write.get()) {
+                wins++;
+            }
+        }
+        return wins;
+    }
+
+    /** One of the three ways of writing a key. */
+    @FunctionalInterface
+    interface Write {
+        void apply(Storage storage, String key, byte[] data, WriteOptions options) throws IOException;
+    }
+
+    static Stream<Named<Write>> writes() {
+        return Stream.of(
+                Named.of("put bytes", Storage::put),
+                Named.of("put file", FileStorageTest::putFile),
+                Named.of("output stream", FileStorageTest::writeStream));
+    }
+
+    private static void putFile(Storage storage, String key, byte[] data, WriteOptions options) throws IOException {
+        Path source = Files.createTempFile("source-", ".bin");
+        try {
+            Files.write(source, data);
+            storage.put(key, source, options);
+        } finally {
+            Files.deleteIfExists(source);
+        }
+    }
+
+    private static void writeStream(Storage storage, String key, byte[] data, WriteOptions options)
+            throws IOException {
+        try (StorageOutputStream out = storage.openOutputStream(key, options)) {
+            out.write(data);
+        }
+    }
+
+    @Test
+    void readRejectsAnotherEtag(@TempDir Path tmp) {
+        try (FileStorage s = new FileStorage(tmp)) {
+            s.put("a.txt", bytes("one"));
+            ReadOptions ifMatch = ifMatch("no-such-etag");
+
+            assertThatThrownBy(() -> s.read("a.txt", ifMatch)).isInstanceOf(PreconditionFailedException.class);
+        }
+    }
+
+    @Test
+    void readReturnsTheEtagMatch(@TempDir Path tmp) throws IOException {
+        try (FileStorage s = new FileStorage(tmp)) {
+            Optional<String> etag = s.put("a.txt", bytes("one")).etag();
+
+            try (ReadHandle read = s.read("a.txt", ifMatch(etag.orElseThrow()))) {
+                assertThat(read.content().readAllBytes()).isEqualTo(bytes("one"));
+                assertThat(read.metadata().etag()).isEqualTo(etag);
+            }
+        }
+    }
+
+    @Test
+    void readRejectsAnUnmodifiedFile(@TempDir Path tmp) throws IOException {
+        try (FileStorage s = new FileStorage(tmp)) {
+            Instant lastModified = s.put("a.txt", bytes("one")).lastModified();
+            ReadOptions unmodified = ifModifiedSince(lastModified);
+
+            assertThatThrownBy(() -> s.read("a.txt", unmodified)).isInstanceOf(PreconditionFailedException.class);
+            try (ReadHandle read = s.read("a.txt", ifModifiedSince(lastModified.minusSeconds(1)))) {
+                assertThat(read.content().readAllBytes()).isEqualTo(bytes("one"));
+            }
+        }
+    }
+
+    private static ReadOptions ifMatch(String etag) {
+        return new ReadOptions(0L, OptionalLong.empty(), Optional.of(etag), Optional.empty(), Optional.empty());
+    }
+
+    private static ReadOptions ifModifiedSince(Instant instant) {
+        return new ReadOptions(0L, OptionalLong.empty(), Optional.empty(), Optional.empty(), Optional.of(instant));
+    }
+
+    @ParameterizedTest
+    @MethodSource("copies")
+    void copyRejectsAnotherEtag(Copy copy, @TempDir Path tmp) {
+        try (FileStorage s = new FileStorage(tmp)) {
+            s.put("a.txt", bytes("one"));
+            CopyOptions ifMatch = CopyOptions.builder().ifMatchSourceEtag("no-such-etag").build();
+
+            assertThatThrownBy(() -> copy.apply(s, "a.txt", "b.txt", ifMatch))
+                    .isInstanceOf(PreconditionFailedException.class);
+            assertThat(tmp.resolve("a.txt")).exists();
+            assertThat(tmp.resolve("b.txt")).doesNotExist();
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("copies")
+    void copyAcceptsTheEtagMatch(Copy copy, @TempDir Path tmp) throws IOException {
+        try (FileStorage s = new FileStorage(tmp)) {
+            String etag = s.put("a.txt", bytes("one")).etag().orElseThrow();
+            CopyOptions ifMatch = CopyOptions.builder().ifMatchSourceEtag(etag).build();
+
+            copy.apply(s, "a.txt", "b.txt", ifMatch);
+
+            assertThat(Files.readString(tmp.resolve("b.txt"))).isEqualTo("one");
+        }
+    }
+
+    /** One of the three ways of copying a key; a move copies before it deletes. */
+    @FunctionalInterface
+    interface Copy {
+        void apply(FileStorage storage, String srcKey, String dstKey, CopyOptions options);
+    }
+
+    // Passing the storage as its own destination takes the path of a copy to another local storage
+    static Stream<Named<Copy>> copies() {
+        return Stream.of(
+                Named.of("copy", FileStorage::copy),
+                Named.of("copy to a storage", (storage, src, dst, options) -> storage.copy(src, storage, dst, options)),
+                Named.of("move", FileStorage::move));
+    }
+
+    private static byte[] bytes(String text) {
+        return text.getBytes(StandardCharsets.UTF_8);
     }
 
     /**

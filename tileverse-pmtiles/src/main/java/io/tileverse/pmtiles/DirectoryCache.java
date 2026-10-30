@@ -36,10 +36,6 @@ class DirectoryCache {
 
     private static final Duration DEFAULT_EXPIRE_AFTER_ACCESS = Duration.ofSeconds(10);
 
-    private int maxHeapPercent = DEFAULT_MAX_HEAP_PERCENT;
-
-    private Duration expireAfterAccess = DEFAULT_EXPIRE_AFTER_ACCESS;
-
     @Nullable
     private CacheManager cacheManager;
 
@@ -81,18 +77,21 @@ class DirectoryCache {
             this.cacheManager = CacheManager.getDefault();
         }
         CacheManager manager = this.cacheManager;
-        return manager.getCache(SHARED_CACHE_NAME, this::buildCache).subCache(pmtilesUniqueUri);
+        return manager.getCache(SHARED_CACHE_NAME, DirectoryCache::buildCache).subCache(pmtilesUniqueUri);
     }
 
-    /** Short-lived (expireAfterAccess) cache of directory entries to account for multiple/concurrent requests */
-    private io.tileverse.cache.Cache<ByteRange, PMTilesDirectory> buildCache() {
+    /**
+     * Short-lived (expireAfterAccess) cache of directory entries to account for multiple/concurrent requests. Static, as
+     * the shared cache outlives this instance and must not reference it.
+     */
+    private static io.tileverse.cache.Cache<ByteRange, PMTilesDirectory> buildCache() {
         return CaffeineCache.<ByteRange, PMTilesDirectory>newBuilder()
-                .maxHeapPercent(maxHeapPercent, DirectoryCache::weigh)
+                .maxHeapPercent(DEFAULT_MAX_HEAP_PERCENT, DirectoryCache::weigh)
                 .averageWeight(1024 * 1024)
-                .expireAfterAccess(expireAfterAccess)
+                .expireAfterAccess(DEFAULT_EXPIRE_AFTER_ACCESS)
                 // run eviction tasks when idle to return memory without waiting for cache usage
                 .scheduler(Scheduler.systemScheduler())
-                .removalListener(this::onRemoval)
+                .removalListener(DirectoryCache::onRemoval)
                 .recordStats()
                 .build();
     }
@@ -122,7 +121,7 @@ class DirectoryCache {
         }
     }
 
-    void onRemoval(ByteRange key, PMTilesDirectory value, RemovalCause cause) {
+    static void onRemoval(ByteRange key, PMTilesDirectory value, RemovalCause cause) {
         if (log.isTraceEnabled()) {
             log.trace("Evicted {}, {}, cause: {}", value, key, cause);
         }

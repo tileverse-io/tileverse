@@ -54,9 +54,6 @@ public class VectorTileCache {
 
     private static final Duration DEFAULT_EXPIRE_AFTER_ACCESS = Duration.ofSeconds(10);
 
-    private int maxHeapPercent = DEFAULT_MAX_HEAP_PERCENT;
-    private static final Duration expireAfterAccess = DEFAULT_EXPIRE_AFTER_ACCESS;
-
     /**
      * Estimated average weight of a cached VectorTile entry in bytes.
      *
@@ -117,17 +114,18 @@ public class VectorTileCache {
             this.cacheManager = CacheManager.getDefault();
         }
         CacheManager manager = this.cacheManager;
-        return manager.getCache(SHARED_CACHE_NAME, this::buildCache).subCache(sourceIdentifier);
+        return manager.getCache(SHARED_CACHE_NAME, VectorTileCache::buildCache).subCache(sourceIdentifier);
     }
 
-    private io.tileverse.cache.Cache<TileIndex, Optional<VectorTile>> buildCache() {
+    // static, as the shared cache outlives this instance and must not reference it
+    private static io.tileverse.cache.Cache<TileIndex, Optional<VectorTile>> buildCache() {
         return CaffeineCache.<TileIndex, Optional<VectorTile>>newBuilder()
-                .maxHeapPercent(maxHeapPercent, VectorTileCache::weigh)
+                .maxHeapPercent(DEFAULT_MAX_HEAP_PERCENT, VectorTileCache::weigh)
                 .averageWeight(AVERAGE_TILE_WEIGHT)
-                .expireAfterAccess(expireAfterAccess)
+                .expireAfterAccess(DEFAULT_EXPIRE_AFTER_ACCESS)
                 // run eviction tasks when idle to return memory without waiting for cache usage
                 .scheduler(Scheduler.systemScheduler())
-                .removalListener(this::onRemoval)
+                .removalListener(VectorTileCache::onRemoval)
                 .recordStats()
                 .build();
     }
@@ -158,7 +156,7 @@ public class VectorTileCache {
         }
     }
 
-    void onRemoval(TileIndex key, Optional<VectorTile> value, RemovalCause cause) {
+    static void onRemoval(TileIndex key, Optional<VectorTile> value, RemovalCause cause) {
         if (log.isTraceEnabled()) {
             log.trace("Evicted {}, {}, cause: {}", value, key, cause);
         }

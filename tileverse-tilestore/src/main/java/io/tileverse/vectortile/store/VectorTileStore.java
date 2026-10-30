@@ -103,7 +103,7 @@ public abstract class VectorTileStore extends AbstractTileStore<VectorTile> {
      *   <li>Best zoom level for the explicit resolution in the query, applying the query's strategy.
      *   <li>If the query's strategy is {@link Strategy#SPEED SPEED}, the store's minimum zoom level.
      *   <li>Otherwise, the maximum {@code minZoom} across all vector layers, falling back to the store's minimum zoom
-     *       level when no layers report a {@code minZoom}.
+     *       level when no layers report a {@code minZoom}, and limited to the zoom levels of the store.
      * </ol>
      *
      * @param query the query parameters
@@ -119,7 +119,8 @@ public abstract class VectorTileStore extends AbstractTileStore<VectorTile> {
         if (query.strategy() == Strategy.SPEED) {
             return matrixSet().minZoomLevel();
         }
-        return highestLayerMinZoom().orElseGet(matrixSet()::minZoomLevel);
+        int layerMinZoom = highestLayerMinZoom().orElseGet(matrixSet()::minZoomLevel);
+        return limitToStoreZooms(layerMinZoom);
     }
 
     /** Skips the layers without a {@code minZoom}, an optional field in TileJSON. */
@@ -129,5 +130,12 @@ public abstract class VectorTileStore extends AbstractTileStore<VectorTile> {
                 .filter(Objects::nonNull)
                 .mapToInt(Integer::intValue)
                 .max();
+    }
+
+    /** The TileJSON of an archive may give a layer zoom levels missing from the archive. */
+    private int limitToStoreZooms(int zoomLevel) {
+        int minZoom = matrixSet().minZoomLevel();
+        int maxZoom = matrixSet().maxZoomLevel();
+        return Math.max(minZoom, Math.min(zoomLevel, maxZoom));
     }
 }

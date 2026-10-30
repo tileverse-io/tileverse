@@ -28,22 +28,31 @@ class VectorTileStoreTest {
 
     private static final TileMatrixSet ZOOMS_2_TO_14 = DefaultTileMatrixSets.WORLD_EPSG3857.subset(2, 14);
 
-    // A layer without a minzoom is valid TileJSON
     @ParameterizedTest
-    @MethodSource("layerMinZooms")
-    void qualityZoomIsHighestMinZoom(List<Integer> minZooms, int expectedZoom) {
+    @MethodSource({"layerMinZooms", "minZoomsOutsideStore"})
+    void qualityZoomFromLayerMinZooms(List<Integer> minZooms, int expectedZoom) {
         VectorTileStore store = new StoreWithLayers(layersWithMinZooms(minZooms));
         VectorTilesQuery query = new VectorTilesQuery().strategy(Strategy.QUALITY);
 
         assertThat(store.determineZoomLevel(query)).isEqualTo(expectedZoom);
     }
 
+    // A layer without a minzoom is valid TileJSON
     static Stream<Arguments> layerMinZooms() {
         return Stream.of(
                 Arguments.of(List.of(3, 5), 5),
                 Arguments.of(Arrays.asList(3, null, 5), 5),
                 Arguments.of(Arrays.asList(null, null), 2),
                 Arguments.of(List.of(), 2));
+    }
+
+    // TileJSON may give a layer zoom levels missing from the archive
+    static Stream<Arguments> minZoomsOutsideStore() {
+        return Stream.of(
+                Arguments.of(List.of(16), 14),
+                Arguments.of(List.of(3, 20), 14),
+                Arguments.of(List.of(0), 2),
+                Arguments.of(List.of(0, 1), 2));
     }
 
     private static List<VectorLayer> layersWithMinZooms(List<Integer> minZooms) {

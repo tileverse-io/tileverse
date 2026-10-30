@@ -28,6 +28,7 @@ import com.azure.storage.blob.models.ListBlobsOptions;
 import com.azure.storage.blob.models.ParallelTransferOptions;
 import com.azure.storage.blob.options.BlobInputStreamOptions;
 import com.azure.storage.blob.options.BlobParallelUploadOptions;
+import com.azure.storage.blob.options.BlobUploadFromFileOptions;
 import com.azure.storage.blob.sas.BlobSasPermission;
 import com.azure.storage.blob.sas.BlobServiceSasSignatureValues;
 import com.azure.storage.blob.specialized.BlobInputStream;
@@ -54,7 +55,6 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -76,10 +76,14 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 
 /** Azure Blob Storage implementation of {@link Storage} (flat keyspace + virtual directories). */
 @Slf4j
 final class AzureBlobStorage implements Storage {
+
+    /** Size of the blocks of a file upload above the single-upload threshold of the SDK. */
+    private static final long UPLOAD_BLOCK_SIZE = 4L * 1024 * 1024;
 
     private final URI baseUri;
     private final AzureBlobLocation location;
@@ -393,31 +397,43 @@ final class AzureBlobStorage implements Storage {
     public StorageEntry.File put(String key, byte[] data, WriteOptions options) {
         requireOpen();
         BlobClient client = blobClient(key);
-        BlobParallelUploadOptions opts = new BlobParallelUploadOptions(BinaryData.fromBytes(data));
-        applyWriteOptions(opts, options);
-        upload(client, opts, key);
+        BlobParallelUploadOptions opts = new BlobParallelUploadOptions(BinaryData.fromBytes(data))
+                .setHeaders(headersOf(options))
+                .setMetadata(metadataOf(options))
+                .setRequestConditions(conditionsOf(options));
+        upload(key, () -> client.uploadWithResponse(opts, null, null));
         return stat(key).orElseThrow(() -> new StorageException("Wrote key but stat failed: " + key));
     }
 
+    /**
+     * Uploads through the file upload of the SDK, reading the file block by block. Given a stream, the SDK would
+     * buffer up to its single-upload threshold (256 MiB) in heap before sending anything.
+     */
     @Override
     public StorageEntry.File put(String key, Path source, WriteOptions options) {
         requireOpen();
+        requireRegularFile(source);
         BlobClient client = blobClient(key);
-        try (InputStream in = Files.newInputStream(source, StandardOpenOption.READ)) {
-            BlobParallelUploadOptions opts = new BlobParallelUploadOptions(in);
-            opts.setParallelTransferOptions(new ParallelTransferOptions().setBlockSizeLong((long) (4 * 1024 * 1024)));
-            applyWriteOptions(opts, options);
-            upload(client, opts, key);
-        } catch (IOException e) {
-            throw new StorageException("Failed to read source file: " + source, e);
-        }
+        ParallelTransferOptions blocks = new ParallelTransferOptions().setBlockSizeLong(UPLOAD_BLOCK_SIZE);
+        BlobUploadFromFileOptions opts = new BlobUploadFromFileOptions(source.toString())
+                .setParallelTransferOptions(blocks)
+                .setHeaders(headersOf(options))
+                .setMetadata(metadataOf(options))
+                .setRequestConditions(conditionsOf(options));
+        upload(key, () -> client.uploadFromFileWithResponse(opts, null, null));
         return stat(key).orElseThrow(() -> new StorageException("Wrote key but stat failed: " + key));
     }
 
+    private static void requireRegularFile(Path source) {
+        if (!Files.isRegularFile(source)) {
+            throw new StorageException("Failed to read source file: " + source + " is not a regular file");
+        }
+    }
+
     /** Only the SDK call runs under the catch-all, leaving a failure of the write options unwrapped. */
-    private void upload(BlobClient client, BlobParallelUploadOptions opts, String key) {
+    private void upload(String key, Runnable sdkCall) {
         try {
-            client.uploadWithResponse(opts, null, null);
+            sdkCall.run();
         } catch (BlobStorageException e) {
             throw mapPreconditionOrFail(e, key);
         } catch (RuntimeException e) {
@@ -432,23 +448,27 @@ final class AzureBlobStorage implements Storage {
         return StorageOutputStream.spoolingInTempDir("azure-storage-", spooled -> put(key, spooled, options));
     }
 
-    private static void applyWriteOptions(BlobParallelUploadOptions opts, WriteOptions options) {
-        if (options.contentType().isPresent()) {
-            BlobHttpHeaders contentType =
-                    new BlobHttpHeaders().setContentType(options.contentType().orElseThrow());
-            opts.setHeaders(contentType);
+    private static @Nullable BlobHttpHeaders headersOf(WriteOptions options) {
+        if (options.contentType().isEmpty()) {
+            return null;
         }
-        if (!options.userMetadata().isEmpty()) {
-            opts.setMetadata(options.userMetadata());
+        return new BlobHttpHeaders().setContentType(options.contentType().orElseThrow());
+    }
+
+    private static @Nullable Map<String, String> metadataOf(WriteOptions options) {
+        return options.userMetadata().isEmpty() ? null : options.userMetadata();
+    }
+
+    private static @Nullable BlobRequestConditions conditionsOf(WriteOptions options) {
+        if (!options.ifNotExists() && options.ifMatchEtag().isEmpty()) {
+            return null;
         }
-        if (options.ifNotExists() || options.ifMatchEtag().isPresent()) {
-            BlobRequestConditions cond = new BlobRequestConditions();
-            if (options.ifNotExists()) {
-                cond.setIfNoneMatch("*");
-            }
-            options.ifMatchEtag().ifPresent(cond::setIfMatch);
-            opts.setRequestConditions(cond);
+        BlobRequestConditions conditions = new BlobRequestConditions();
+        if (options.ifNotExists()) {
+            conditions.setIfNoneMatch("*");
         }
+        options.ifMatchEtag().ifPresent(conditions::setIfMatch);
+        return conditions;
     }
 
     private StorageException mapPreconditionOrFail(BlobStorageException e, String key) {

@@ -117,7 +117,7 @@ public class VectorTilesQuery {
      * <p>The strategy is consulted in two situations: when a {@link #resolution(double) resolution} is set (to break
      * ties between candidate zoom levels), and when neither a zoom level nor a resolution is set ({@link Strategy#SPEED
      * SPEED} picks the store's minimum zoom level, {@link Strategy#QUALITY QUALITY} picks the maximum {@code minZoom}
-     * reported across layers).
+     * reported across layers, limited to the zoom levels of the store).
      *
      * @param strategy the selection strategy
      * @return this query instance for method chaining

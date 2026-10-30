@@ -2,126 +2,126 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://tileverse.io/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/ai/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/getting-started/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/developer-guide/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/developer-guide/explanation/architecture/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/developer-guide/how-to/build/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/developer-guide/how-to/contribute/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/pmtiles/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/pmtiles/how-to/read-pmtiles/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/pmtiles/reference/tile-stores/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/storage/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/storage/explanation/internals/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/storage/explanation/why/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/storage/how-to/authenticate/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/storage/how-to/configure/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/storage/how-to/migrate-from-1.4/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/storage/how-to/migrate-from-2.0/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/storage/how-to/read-byte-ranges/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/storage/how-to/troubleshoot/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/storage/how-to/use-each-backend/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/tilematrixset/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/tilematrixset/tutorial/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/tilematrixset/how-to/standard-sets/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/tilematrixset/how-to/tile-pyramids/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/tilematrixset/reference/ogc-compliance/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/vectortiles/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/vectortiles/how-to/decode/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/vectortiles/how-to/encode/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/versatiles/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/versatiles/how-to/read-versatiles/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
     <url>
          <loc>https://tileverse.io/versatiles/reference/format-support/</loc>
-         <lastmod>2026-10-24</lastmod>
+         <lastmod>2026-10-30</lastmod>
     </url>
 </urlset>

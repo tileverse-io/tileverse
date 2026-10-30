@@ -95,6 +95,8 @@ public record PMTilesHeader(
     private static final byte VERSION = VERSION_3;
     static final int HEADER_SIZE = 127;
 
+    private static final BoundingBox2D WORLD = BoundingBox2D.extent(-180, -90, 180, 90);
+
     /**
      * Returns the PMTiles format version.
      *
@@ -168,10 +170,17 @@ public record PMTilesHeader(
         return centerLatE7 / 10_000_000.0;
     }
 
+    /**
+     * Returns the bounding box of the archive in WGS84 (EPSG:4326) longitude and latitude degrees.
+     *
+     * <p>A header may record an inverted box, with a minimum above its maximum. Such a box gives no usable bounds, and
+     * this method returns the bounds of the world instead.
+     */
     public BoundingBox2D geographicBoundingBox() {
-        return BoundingBox2D.extent(
-                minLon(), minLat(),
-                maxLon(), maxLat());
+        if (minLon() > maxLon() || minLat() > maxLat()) {
+            return WORLD;
+        }
+        return BoundingBox2D.extent(minLon(), minLat(), maxLon(), maxLat());
     }
 
     /**

@@ -20,6 +20,7 @@ import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageFactory;
 import io.tileverse.storage.block.BlockAlignedRangeReader;
 import io.tileverse.tiling.pyramid.TileIndex;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -98,7 +99,8 @@ public class PMTilesReader implements AutoCloseable {
      * local files, HTTP servers, or cloud storage.
      *
      * <p>Note the {@code rangeReader} is owned by this instance and will be {@link RangeReader#close() closed} when
-     * {@link #close()} is called on this instance.
+     * {@link #close()} is called on this instance. If the archive cannot be opened, the constructor closes
+     * {@code rangeReader} before it throws.
      *
      * @param rangeReader range reader to read data from
      * @throws IOException if an I/O error occurs
@@ -110,14 +112,19 @@ public class PMTilesReader implements AutoCloseable {
 
     private PMTilesReader(@Nullable Storage ownedStorage, @NonNull RangeReader rangeReader) throws IOException {
         this.ownedStorage = ownedStorage;
-        this.alignedReader = BlockAlignedRangeReader.builder(rangeReader).build();
-        this.rangeReader = this.alignedReader;
-        this.alignedReader.alignRegion(0, BOOTSTRAP_REGION_BYTES);
-        this.header = PMTilesReader.readHeader(this.rangeReader);
-        declareRegionsFrom(header);
-        this.hilbertCurve = new HilbertCurve();
-        this.directoryCache = new DirectoryCache(this.rangeReader.getSourceIdentifier(), header, this.rangeReader);
-        this.parsedMetadata = parseMetadata();
+        try {
+            this.alignedReader = BlockAlignedRangeReader.builder(rangeReader).build();
+            this.rangeReader = this.alignedReader;
+            this.alignedReader.alignRegion(0, BOOTSTRAP_REGION_BYTES);
+            this.header = PMTilesReader.readHeader(this.rangeReader);
+            declareRegionsFrom(header);
+            this.hilbertCurve = new HilbertCurve();
+            this.directoryCache = new DirectoryCache(this.rangeReader.getSourceIdentifier(), header, this.rangeReader);
+            this.parsedMetadata = parseMetadata();
+        } catch (IOException | RuntimeException e) {
+            closeAfterFailure(rangeReader, e);
+            throw e;
+        }
     }
 
     /**
@@ -180,12 +187,16 @@ public class PMTilesReader implements AutoCloseable {
             RangeReader reader = storage.openRangeReader(pmtilesUri);
             return new PMTilesReader(storage, reader);
         } catch (IOException | RuntimeException e) {
-            try {
-                storage.close();
-            } catch (IOException ignored) {
-                // best-effort
-            }
+            closeAfterFailure(storage, e);
             throw e;
+        }
+    }
+
+    private static void closeAfterFailure(Closeable resource, Exception failure) {
+        try {
+            resource.close();
+        } catch (IOException | RuntimeException e) {
+            failure.addSuppressed(e);
         }
     }
 

@@ -201,18 +201,20 @@ public class PMTilesReader implements AutoCloseable {
     }
 
     /**
-     * Returns the parent (container) URI of a leaf URI: the same scheme/authority with the last path segment stripped
-     * and a trailing slash kept.
+     * Returns the parent location of {@code uri}: the URI up to the last slash of its path, without the query and the
+     * fragment. A signed URL may hold slashes in its query.
      *
-     * @throws IllegalArgumentException if {@code uri} has no key segment to strip
+     * @throws IllegalArgumentException if the path of {@code uri} has no key segment
      */
-    private static URI parentOf(URI uri) {
-        String full = uri.toString();
-        int lastSlash = full.lastIndexOf('/');
-        if (lastSlash < 0 || lastSlash == full.length() - 1) {
+    static URI parentOf(URI uri) {
+        String path = uri.getRawPath();
+        if (path == null || path.isEmpty() || path.endsWith("/")) {
             throw new IllegalArgumentException("PMTiles URI must include a key: " + uri);
         }
-        return URI.create(full.substring(0, lastSlash + 1));
+        String full = uri.toString();
+        String location = full.split("[?#]", 2)[0];
+        int lastSlash = location.lastIndexOf('/');
+        return URI.create(location.substring(0, lastSlash + 1));
     }
 
     static PMTilesHeader readHeader(RangeReader reader) throws InvalidHeaderException {

@@ -28,10 +28,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.OptionalLong;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class PMTilesReaderTest {
 
@@ -368,6 +373,29 @@ class PMTilesReaderTest {
         assertThat(andorra.getTile(TileIndex.zxy(0, 0, 0))).isPresent();
         andorra.close();
         return new WeakReference<>(andorra.alignedReader());
+    }
+
+    // A signed URL may hold slashes in its query; the parent location ends at the path.
+    @ParameterizedTest
+    @MethodSource("parentLocations")
+    void parentKeepsLocation(String uri, String parent) {
+        assertThat(PMTilesReader.parentOf(URI.create(uri))).isEqualTo(URI.create(parent));
+    }
+
+    static Stream<Arguments> parentLocations() {
+        return Stream.of(
+                Arguments.of("https://example.com/tiles/world.pmtiles?token=a/b", "https://example.com/tiles/"),
+                Arguments.of("https://host/tiles.pmtiles#part", "https://host/"),
+                Arguments.of("s3://bucket/dir/tiles.pmtiles", "s3://bucket/dir/"),
+                Arguments.of("file:///data/tiles.pmtiles", "file:///data/"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"s3://bucket", "s3://bucket/dir/", "https://host/?file=/tiles.pmtiles"})
+    void uriWithoutKeyIsRejected(String uri) {
+        URI withoutKey = URI.create(uri);
+
+        assertThatThrownBy(() -> PMTilesReader.parentOf(withoutKey)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

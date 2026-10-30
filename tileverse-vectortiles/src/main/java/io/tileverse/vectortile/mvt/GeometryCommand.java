@@ -53,12 +53,13 @@ final class GeometryCommand {
     /**
      * Extracts the parameter count from an MVT command integer.
      *
-     * <p>MVT commands encode both command type (lower 3 bits) and count (upper bits).
+     * <p>MVT commands encode both command type (lower 3 bits) and count (upper bits). The command integer is an
+     * unsigned 32-bit value, and the count is its upper 29 bits: from 0 to 536,870,911, within the range of an int.
      *
      * @param cmd the packed command integer
      * @return number of coordinate pairs that follow this command
      */
     static int extractCount(int cmd) {
-        return cmd >> 3;
+        return cmd >>> 3;
     }
 }

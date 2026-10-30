@@ -175,6 +175,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
             if (command != GeometryCommand.MoveTo) {
                 throw new IllegalArgumentException("Geometry part must start with MoveTo");
             }
+            requireParameters(count, cmdCount - cmdIndex);
 
             final int partStart = coordIndex;
 
@@ -199,6 +200,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
                 } else if (nextCommand == GeometryCommand.LineTo) {
                     final int nextCount = GeometryCommand.extractCount(nextCmd);
                     cmdIndex++; // Skip command
+                    requireParameters(nextCount, cmdCount - cmdIndex);
                     for (int k = 0; k < nextCount; k++) {
                         int dx = decodeZigZag32(commands.getInt(cmdIndex++));
                         int dy = decodeZigZag32(commands.getInt(cmdIndex++));
@@ -239,6 +241,14 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
                             .formatted(coordIndex, exactCoordCount));
         }
         return allCoords;
+    }
+
+    /** A command announcing more points than the remaining parameters hold belongs to a malformed geometry. */
+    private static void requireParameters(int count, int parametersLeft) {
+        if (count > parametersLeft / 2) {
+            throw new IllegalArgumentException(
+                    "Geometry command announces %d points, %d parameters left".formatted(count, parametersLeft));
+        }
     }
 
     @Nullable
@@ -502,7 +512,8 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
                     .append(count)
                     .append("\n");
             if (commandId == GeometryCommand.MoveTo || commandId == GeometryCommand.LineTo) {
-                for (int k = 0; k < count; k++) {
+                // a malformed command may announce more points than the list holds
+                for (int k = 0; k < count && index + 1 < commands.size(); k++) {
                     int dx = decodeZigZag32(commands.get(index++));
                     int dy = decodeZigZag32(commands.get(index++));
                     cursorX += dx;

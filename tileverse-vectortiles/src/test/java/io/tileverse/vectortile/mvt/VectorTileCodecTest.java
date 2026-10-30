@@ -19,9 +19,11 @@
 package io.tileverse.vectortile.mvt;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.tileverse.vectortile.model.GeometryReader;
@@ -32,6 +34,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -53,6 +56,23 @@ import org.locationtech.jts.util.Stopwatch;
 
 @Slf4j
 class VectorTileCodecTest {
+
+    // Expected outcomes for the fixtures of mapbox/mvt-fixtures. A fixture in none of these sets decodes, and its
+    // features can be read. The fixtures marked invalid that decode anyway are accepted as protobuf accepts them: a
+    // field of the wrong wire type is skipped, and ClosePath counts are not checked.
+
+    /** Layers without their required name or version. */
+    private static final Set<String> FIXTURES_FAILING_TO_DECODE = Set.of("007", "014", "023", "024", "061");
+
+    /** Tags pointing past the keys or the values of the layer, or an odd number of tags. */
+    private static final Set<String> FIXTURES_FAILING_ON_ATTRIBUTES = Set.of("005", "013", "040", "041", "042");
+
+    /** Malformed geometry commands. 057 is marked valid, although its MoveTo announces more points than it holds. */
+    private static final Set<String> FIXTURES_FAILING_ON_GEOMETRY = Set.of("044", "045", "051", "052", "057", "058");
+
+    /** Feature with id 1, type LINESTRING, MoveTo(0, 0), then a LineTo of count 536870911 followed by one pair. */
+    private static final byte[] FEATURE_WITH_COUNT_PAST_END =
+            bytes(0x08, 0x01, 0x18, 0x02, 0x22, 0x0A, 0x09, 0x00, 0x00, 0xFA, 0xFF, 0xFF, 0xFF, 0x0F, 0x0C, 0x14);
 
     private GeometryFactory gf = new GeometryFactory();
     private VectorTileCodec codec = new VectorTileCodec();
@@ -338,6 +358,123 @@ class VectorTileCodecTest {
         Feature decoded = tile.getFeatures("x").findFirst().orElseThrow();
         assertThat(decoded.getAttributes()).isEmpty();
         GeometryAssertions.assertThat(decoded.getGeometry()).equalsExact("POINT (2 3)");
+    }
+
+    @Test
+    void testCommandCountPastEnd() throws IOException {
+        VectorTile tile = codec.decode(tileWithFeature(FEATURE_WITH_COUNT_PAST_END));
+
+        Feature decoded = tile.getFeatures("x").findFirst().orElseThrow();
+        assertTimeoutPreemptively(
+                Duration.ofSeconds(5),
+                () -> assertThatThrownBy(decoded::getGeometry).isInstanceOf(IllegalArgumentException.class));
+    }
+
+    @Test
+    void testToStringOfMalformedFeature() throws IOException {
+        VectorTile tile = codec.decode(tileWithFeature(FEATURE_WITH_COUNT_PAST_END));
+
+        Feature decoded = tile.getFeatures("x").findFirst().orElseThrow();
+        assertThat(decoded.toString()).contains("LineTo, Count: 536870911", "Point 1: (6, 10)");
+    }
+
+    @Test
+    void testLayersInTileOrder() throws IOException {
+        VectorTileBuilder builder = new VectorTileBuilder().setExtent(extent);
+        for (String name : List.of("c", "b", "a")) {
+            builder.layer().name(name).feature(Map.of(), geom("POINT (1 1)")).build();
+        }
+
+        VectorTile tile = codec.decode(codec.encode(builder.build()));
+
+        assertThat(tile.getLayerNames()).containsExactly("c", "b", "a");
+        assertThat(tile.getLayers()).extracting(VectorTile.Layer::getName).containsExactly("c", "b", "a");
+    }
+
+    @Test
+    void testLayersWithSameName() throws IOException {
+        VectorTile tile = codec.decode(MvtFixture.load("015").tile());
+
+        List<VectorTile.Layer> layers = tile.getLayers();
+
+        assertThat(layers).extracting(VectorTile.Layer::getName).containsExactly("hello", "hello");
+        assertThat(firstFeature(layers.get(0)).getAttribute("name")).isEqualTo("layer-one");
+        assertThat(firstFeature(layers.get(1)).getAttribute("name")).isEqualTo("layer-two");
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("mvtFixtures")
+    void conformsToMvtFixtures(MvtFixture fixture) {
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () -> assertOutcome(fixture));
+    }
+
+    static Stream<MvtFixture> mvtFixtures() {
+        return MvtFixture.all();
+    }
+
+    private void assertOutcome(MvtFixture fixture) throws IOException {
+        String id = fixture.id();
+        if (FIXTURES_FAILING_TO_DECODE.contains(id)) {
+            assertThatThrownBy(() -> codec.decode(fixture.tile())).isInstanceOf(IOException.class);
+            return;
+        }
+        VectorTile tile = codec.decode(fixture.tile());
+        if (FIXTURES_FAILING_ON_ATTRIBUTES.contains(id)) {
+            assertThatThrownBy(() -> readAttributes(tile)).isInstanceOf(RuntimeException.class);
+        } else if (FIXTURES_FAILING_ON_GEOMETRY.contains(id)) {
+            assertThatThrownBy(() -> readGeometries(tile)).isInstanceOf(RuntimeException.class);
+        } else if (fixture.valid()) {
+            assertContent(tile, fixture.expectedLayers());
+        } else {
+            readAttributes(tile);
+            readGeometries(tile);
+        }
+    }
+
+    private static void readAttributes(VectorTile tile) {
+        tile.getFeatures().forEach(Feature::getAttributes);
+    }
+
+    private static void readGeometries(VectorTile tile) {
+        tile.getFeatures().forEach(Feature::getGeometry);
+    }
+
+    private static void assertContent(VectorTile tile, List<MvtFixture.ExpectedLayer> expected) {
+        List<VectorTile.Layer> layers = tile.getLayers();
+        assertThat(layers).hasSize(expected.size());
+        for (int i = 0; i < layers.size(); i++) {
+            assertLayer(layers.get(i), expected.get(i));
+        }
+    }
+
+    private static void assertLayer(VectorTile.Layer layer, MvtFixture.ExpectedLayer expected) {
+        assertThat(layer.getName()).isEqualTo(expected.name());
+        assertThat(layer.getExtent()).isEqualTo(expected.extent());
+        List<Feature> features = layer.getFeatures().toList();
+        assertThat(features).hasSize(expected.features().size());
+        for (int i = 0; i < features.size(); i++) {
+            assertFeature(features.get(i), expected.features().get(i));
+        }
+    }
+
+    private static void assertFeature(Feature feature, MvtFixture.ExpectedFeature expected) {
+        assertThat(feature.getId()).isEqualTo(expected.id());
+        assertThat(feature.getAttributes()).isEqualTo(expected.attributes());
+        Geometry geometry = feature.getGeometry();
+        assertThat(geometry.getDimension()).isEqualTo(expected.dimension());
+        assertThat(geometry.getCoordinates()).containsExactlyElementsOf(expected.coordinates());
+    }
+
+    private static Feature firstFeature(VectorTile.Layer layer) {
+        return layer.getFeatures().findFirst().orElseThrow();
+    }
+
+    private static byte[] bytes(int... values) {
+        byte[] bytes = new byte[values.length];
+        for (int i = 0; i < values.length; i++) {
+            bytes[i] = (byte) values[i];
+        }
+        return bytes;
     }
 
     @FunctionalInterface

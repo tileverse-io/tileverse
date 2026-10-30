@@ -26,24 +26,22 @@ class ByteRangeCache {
 
     private static final Duration DEFAULT_EXPIRE_AFTER_ACCESS = Duration.ofSeconds(60);
 
-    private int maxHeapPercent = DEFAULT_MAX_HEAP_PERCENT;
-    private static final Duration expireAfterAccess = DEFAULT_EXPIRE_AFTER_ACCESS;
-
     private Cache<ByteRange, ByteBuffer> cache;
 
     public ByteRangeCache(CacheManager cacheManager, String sourceIdentifier) {
         this.cache =
-                cacheManager.getCache(SHARED_CACHE_NAME, this::buildSharedCache).subCache(sourceIdentifier);
+                cacheManager.getCache(SHARED_CACHE_NAME, ByteRangeCache::buildSharedCache).subCache(sourceIdentifier);
     }
 
-    private Cache<ByteRange, ByteBuffer> buildSharedCache() {
+    // static, as the shared cache outlives this instance and must not reference it
+    private static Cache<ByteRange, ByteBuffer> buildSharedCache() {
         return CaffeineCache.<ByteRange, ByteBuffer>newBuilder()
-                .maxHeapPercent(maxHeapPercent, ByteRangeCache::weigh)
+                .maxHeapPercent(DEFAULT_MAX_HEAP_PERCENT, ByteRangeCache::weigh)
                 .averageWeight(64 * 1024)
-                .expireAfterAccess(expireAfterAccess)
+                .expireAfterAccess(DEFAULT_EXPIRE_AFTER_ACCESS)
                 // run eviction tasks when idle to return memory without waiting for cache usage
                 .scheduler(Scheduler.systemScheduler())
-                .removalListener(this::onRemoval)
+                .removalListener(ByteRangeCache::onRemoval)
                 .recordStats()
                 .build();
     }
@@ -69,7 +67,7 @@ class ByteRangeCache {
         return cache.get(key, k -> value);
     }
 
-    void onRemoval(ByteRange key, ByteBuffer value, RemovalCause cause) {
+    static void onRemoval(ByteRange key, ByteBuffer value, RemovalCause cause) {
         if (log.isTraceEnabled()) {
             log.trace("Evicted {}, {}, cause: {}", value, key, cause);
         }

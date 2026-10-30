@@ -11,15 +11,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.awaitility.Awaitility.await;
 
 import io.tileverse.cache.CacheManager;
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.tiling.pyramid.TileIndex;
 import java.io.IOException;
+import java.lang.ref.Reference;
+import java.lang.ref.WeakReference;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
+import java.time.Duration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -340,5 +344,25 @@ class PMTilesReaderTest {
         assertThatThrownBy(() -> PMTilesReader.open(uri))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("PMTiles URI must include a key");
+    }
+
+    // the caches shared by the process outlive a reader and must not keep its range reader reachable
+    @Test
+    void closedRangeReaderIsCollectable() throws IOException {
+        CacheManager sharedCaches = CacheManager.newInstance();
+        WeakReference<RangeReader> rangeReader = readTileAndClose(sharedCaches);
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            System.gc();
+            assertThat(rangeReader.get()).isNull();
+        });
+        Reference.reachabilityFence(sharedCaches);
+    }
+
+    private WeakReference<RangeReader> readTileAndClose(CacheManager sharedCaches) throws IOException {
+        PMTilesReader andorra = new PMTilesReader(getAndorraRangeReader()).cacheManager(sharedCaches);
+        assertThat(andorra.getTile(TileIndex.zxy(0, 0, 0))).isPresent();
+        andorra.close();
+        return new WeakReference<>(andorra.alignedReader());
     }
 }

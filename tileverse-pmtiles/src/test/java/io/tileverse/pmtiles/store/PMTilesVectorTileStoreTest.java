@@ -7,6 +7,7 @@ package io.tileverse.pmtiles.store;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
+import static org.awaitility.Awaitility.await;
 
 import io.tileverse.cache.CacheManager;
 import io.tileverse.geom.BoundingBox2D;
@@ -28,9 +29,12 @@ import io.tileverse.vectortile.mvt.VectorTileCodec;
 import io.tileverse.vectortile.store.WebMercatorTransform;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.ref.Reference;
+import java.lang.ref.WeakReference;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
@@ -270,6 +274,27 @@ class PMTilesVectorTileStoreTest {
                         .isTrue();
             }
         }
+    }
+
+    // the caches shared by the process outlive a store and must not keep its reader reachable
+    @Test
+    void closedReaderIsCollectable() throws IOException {
+        CacheManager sharedCaches = CacheManager.newInstance();
+        WeakReference<PMTilesReader> reader = readTileAndClose(sharedCaches);
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+            System.gc();
+            assertThat(reader.get()).isNull();
+        });
+        Reference.reachabilityFence(sharedCaches);
+    }
+
+    private WeakReference<PMTilesReader> readTileAndClose(CacheManager sharedCaches) throws IOException {
+        PMTilesReader reader = PMTilesReader.open(PMTilesTestData.andorra(tmpFolder).toUri());
+        PMTilesVectorTileStore store = new PMTilesVectorTileStore(reader).cacheManager(sharedCaches);
+        assertThat(store.findTile(TileIndex.zxy(0, 0, 0))).isPresent();
+        reader.close();
+        return new WeakReference<>(reader);
     }
 
     @Test

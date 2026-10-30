@@ -6,7 +6,9 @@
 package io.tileverse.storage.azure;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.azure.core.http.HttpPipelineBuilder;
 import com.azure.storage.blob.BlobServiceClient;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.tck.AbstractStorageTraversalTck;
@@ -21,6 +23,7 @@ class AzureBlobStorageTraversalTest extends AbstractStorageTraversalTck {
     @Override
     protected Storage storage() {
         BlobServiceClient mockClient = mock(BlobServiceClient.class);
+        when(mockClient.getHttpPipeline()).thenReturn(new HttpPipelineBuilder().build());
         return AzureBlobStorageProvider.open(
                 URI.create("https://devstoreaccount1.blob.core.windows.net/test-container/prefix/"), mockClient);
     }

@@ -7,16 +7,24 @@ package io.tileverse.storage.azure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
+import io.tileverse.storage.PresignWriteOptions;
+import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageConfig;
 import io.tileverse.storage.StorageParameter;
+import io.tileverse.storage.UnsupportedCapabilityException;
 import io.tileverse.storage.batch.BatchProviderHelper;
 import io.tileverse.storage.spi.StorageProvider;
+import java.io.IOException;
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 class AzureBlobStorageProviderTest {
@@ -60,6 +68,63 @@ class AzureBlobStorageProviderTest {
     /** The http(s) forms are claimed only for a config naming the provider. */
     private static StorageConfig configNamingTheProvider(String url) {
         return new StorageConfig(url).providerId(AzureBlobStorageProvider.ID);
+    }
+
+    private static final String CONTAINER_URL = "https://acct.blob.core.windows.net/container/";
+
+    /** The well-known account key of the Azurite emulator, valid base64 for signing. */
+    private static final String ACCOUNT_KEY =
+            "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==";
+
+    // the SDK signs a SAS with an account key only
+    @ParameterizedTest
+    @MethodSource("credentialsAndPresigning")
+    void presignsWithAccountKeyOnly(Map<String, String> credentials, boolean presigns) throws IOException {
+        StorageConfig config = configNamingTheProvider(CONTAINER_URL);
+        credentials.forEach(config::setParameter);
+        try (Storage storage = provider.createStorage(config)) {
+            assertThat(storage.capabilities().presignedUrls()).isEqualTo(presigns);
+        }
+    }
+
+    static Stream<Arguments> credentialsAndPresigning() {
+        String keyConnection = "DefaultEndpointsProtocol=https;AccountName=acct;AccountKey=" + ACCOUNT_KEY
+                + ";EndpointSuffix=core.windows.net";
+        String sasConnection =
+                "BlobEndpoint=https://acct.blob.core.windows.net;SharedAccessSignature=sv=2020-08-04&sig=abc";
+        return Stream.of(
+                arguments(Map.of(AzureBlobStorageProvider.AZURE_ACCOUNT_KEY.key(), ACCOUNT_KEY), true),
+                arguments(Map.of(AzureBlobStorageProvider.AZURE_CONNECTION_STRING.key(), keyConnection), true),
+                arguments(Map.of(AzureBlobStorageProvider.AZURE_CONNECTION_STRING.key(), sasConnection), false),
+                arguments(Map.of(AzureBlobStorageProvider.AZURE_SAS_TOKEN.key(), "sv=2020-08-04&sig=abc"), false),
+                arguments(Map.of(AzureBlobStorageProvider.AZURE_ANONYMOUS.key(), "true"), false),
+                arguments(Map.of(), false));
+    }
+
+    @Test
+    void sasTokenStoreRefusesPresign() throws IOException {
+        StorageConfig config = configNamingTheProvider(CONTAINER_URL)
+                .setParameter(AzureBlobStorageProvider.AZURE_SAS_TOKEN, "sv=2020-08-04&sig=abc");
+        Duration ttl = Duration.ofMinutes(5);
+        PresignWriteOptions writeOptions = PresignWriteOptions.defaults();
+        try (Storage storage = provider.createStorage(config)) {
+            assertThatThrownBy(() -> storage.presignGet("blob.bin", ttl))
+                    .isInstanceOf(UnsupportedCapabilityException.class);
+            assertThatThrownBy(() -> storage.presignPut("blob.bin", ttl, writeOptions))
+                    .isInstanceOf(UnsupportedCapabilityException.class);
+        }
+    }
+
+    @Test
+    void accountKeyStorePresigns() throws IOException {
+        StorageConfig config = configNamingTheProvider(CONTAINER_URL)
+                .setParameter(AzureBlobStorageProvider.AZURE_ACCOUNT_KEY, ACCOUNT_KEY);
+        try (Storage storage = provider.createStorage(config)) {
+            URI presigned = storage.presignGet("blob.bin", Duration.ofMinutes(5));
+
+            assertThat(presigned.getPath()).isEqualTo("/container/blob.bin");
+            assertThat(presigned.getRawQuery()).contains("sig=");
+        }
     }
 
     @Test

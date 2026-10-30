@@ -68,6 +68,12 @@ import org.locationtech.jts.geom.GeometryFactory;
  */
 public class VectorTileCodec {
 
+    /**
+     * Arrays for the tiles read from a stream, or from a buffer without an accessible array. A new array has 64 KiB and
+     * doubles until the tile fits. The pool keeps up to 16 MiB of arrays between decodes.
+     */
+    private static final ByteArrayPool ARRAYS = new ByteArrayPool(64 * 1024, 16L * 1024 * 1024);
+
     /** Constructs a new VectorTileCodec. */
     public VectorTileCodec() {
         // Default constructor
@@ -153,7 +159,7 @@ public class VectorTileCodec {
      * @throws IOException if decoding fails
      */
     public VectorTile decode(byte[] data) throws IOException {
-        return decode(ByteBuffer.wrap(data));
+        return parse(data, 0, data.length);
     }
     /**
      * Decodes a ByteBuffer to a tile model.
@@ -165,8 +171,10 @@ public class VectorTileCodec {
      * @throws IOException if decoding fails
      */
     public VectorTile decode(ByteBuffer data) throws IOException {
-        VectorTileProto.Tile tile = VectorTileProto.Tile.parseFrom(data);
-        return new MvtTile(tile);
+        if (data.hasArray()) {
+            return parse(data.array(), data.arrayOffset() + data.position(), data.remaining());
+        }
+        return ARRAYS.withContentOf(data, (array, length) -> parse(array, 0, length));
     }
 
     /**
@@ -181,11 +189,20 @@ public class VectorTileCodec {
      * @throws IOException if decoding fails
      */
     public VectorTile decode(InputStream data) throws IOException {
-        VectorTileProto.Tile tile = VectorTileProto.Tile.parseFrom(data);
-        return new MvtTile(tile);
+        return ARRAYS.withContentOf(data, (array, length) -> parse(array, 0, length));
     }
 
     // ========== Private Helper Methods ==========
+
+    /**
+     * Parses with the byte array parser of protobuf. Its stream and ByteBuffer parsers fail on a packed field of
+     * length zero, such as a feature with an empty geometry or tag list. The parsed tile keeps no reference to
+     * {@code data}: protobuf copies strings and bytes out of it, and the caller may reuse the array.
+     */
+    private static VectorTile parse(byte[] data, int offset, int length) throws IOException {
+        VectorTileProto.Tile tile = VectorTileProto.Tile.parser().parseFrom(data, offset, length);
+        return new MvtTile(tile);
+    }
 
     /**
      * Extracts the protobuf tile from a model tile.

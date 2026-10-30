@@ -5,13 +5,17 @@
  */
 package io.tileverse.pmtiles.store;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.pmtiles.PMTilesHeader;
+import io.tileverse.tiling.matrix.DefaultTileMatrixSets;
 import io.tileverse.tiling.matrix.TileMatrixSet;
+import io.tileverse.tiling.pyramid.TileIndex;
 import org.junit.jupiter.api.Test;
 
 class PMTilesTileMatrixSetTest {
@@ -110,6 +114,34 @@ class PMTilesTileMatrixSetTest {
 
         assertTrue(Math.abs(ratio1 - 2.0) < 0.001, "Resolution ratio should be close to 2.0, was: " + ratio1);
         assertTrue(Math.abs(ratio2 - 2.0) < 0.001, "Resolution ratio should be close to 2.0, was: " + ratio2);
+    }
+
+    // WebMercatorQuad stops at zoom level 24; deeper tiles stay readable through the reader.
+    @Test
+    void zoomBeyondQuadIsCapped() {
+        PMTilesHeader deep =
+                PMTilesHeader.builder().minZoom((byte) 10).maxZoom((byte) 26).build();
+
+        assertThat(PMTilesTileMatrixSet.fromWebMercator(deep).maxZoomLevel()).isEqualTo(24);
+        assertThat(PMTilesTileMatrixSet.fromWebMercator512(deep).maxZoomLevel())
+                .isEqualTo(DefaultTileMatrixSets.WEB_MERCATOR_QUADx2.maxZoomLevel());
+        assertThat(PMTilesTileMatrixSet.fromCRS84(deep).maxZoomLevel())
+                .isEqualTo(DefaultTileMatrixSets.WORLD_CRS84_QUAD.maxZoomLevel());
+    }
+
+    @Test
+    void invertedBoundsCoverTheWorld() {
+        PMTilesHeader inverted = PMTilesHeader.builder()
+                .minLon(10)
+                .minLat(42.42)
+                .maxLon(1.8)
+                .maxLat(11)
+                .build();
+
+        TileMatrixSet tms = PMTilesTileMatrixSet.fromWebMercator(inverted);
+
+        assertThat(inverted.geographicBoundingBox()).isEqualTo(BoundingBox2D.extent(-180, -90, 180, 90));
+        assertThat(tms.getTileMatrix(0).tile(TileIndex.xyz(0, 0, 0))).isPresent();
     }
 
     @Test

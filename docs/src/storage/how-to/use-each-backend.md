@@ -139,7 +139,7 @@ try (Storage storage = StorageFactory.open(URI.create("az://myaccount/my-contain
 
 Authentication uses `DefaultAzureCredential` by default (env vars, managed identity, Azure CLI). Provide `storage.azure.connection-string`, `storage.azure.account-key` or `storage.azure.sas-token` for explicit credentials, or `storage.azure.anonymous=true` for a public container.
 
-`az://account/container` resolves to the public `https://<account>.blob.core.windows.net` endpoint. The `https://` URL of a container opens this backend when `storage.provider=azure` is set; the endpoint then comes from the URL. Set `storage.azure.endpoint` to redirect an `az://` URI to an emulator, a sovereign cloud (Azure Government, Azure China), or a custom domain. The value is the full Blob service endpoint, including the account where the service expects it in the path (the Azurite emulator embeds the account in the path):
+`az://account/container` resolves to the public `https://<account>.blob.core.windows.net` endpoint. The `https://` URL of a container opens this backend when `storage.provider=azure` is set; the endpoint then comes from the URL. Blobs of the root container are reached through its name, `$root`: `az://account/$root/`. Set `storage.azure.endpoint` to redirect an `az://` URI to an emulator, a sovereign cloud (Azure Government, Azure China), or a custom domain. The value is the full Blob service endpoint, including the account where the service expects it in the path (the Azurite emulator embeds the account in the path):
 
 ```java
 Properties props = new Properties();

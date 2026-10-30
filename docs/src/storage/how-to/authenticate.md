@@ -223,10 +223,12 @@ The Azure backend takes the first credentials configured in this order:
 1. `storage.azure.anonymous=true`: unsigned requests, for public containers.
 2. `storage.azure.connection-string`.
 3. `storage.azure.account-key`.
-4. `storage.azure.sas-token`.
+4. `storage.azure.sas-token`, or a SAS token as the query string of the URI.
 5. Nothing set: `DefaultAzureCredential`.
 
 ### SAS token (recommended for limited access)
+
+The token goes in `storage.azure.sas-token`, or in the query string of the URI: `az://account/container/?sv=...&sig=...`. The parameter wins when both are set.
 
 === "Properties"
     ```java

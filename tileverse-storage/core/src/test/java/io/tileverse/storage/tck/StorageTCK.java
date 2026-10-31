@@ -31,8 +31,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -40,6 +42,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * Abstract Storage Technology Compatibility Kit. Concrete provider ITs subclass this and provide an
@@ -161,6 +166,43 @@ public abstract class StorageTCK {
             byte[] window = r.content().readAllBytes();
             assertThat(new String(window, StandardCharsets.UTF_8)).isEqualTo("23456");
         }
+    }
+
+    /** Each row names the range of a conditional read of {@code "0123456789"}, and the content it returns. */
+    static Stream<Arguments> conditionalReads() {
+        return Stream.of(
+                Arguments.argumentSet("whole object", 0L, OptionalLong.empty(), "0123456789"),
+                Arguments.argumentSet("range", 2L, OptionalLong.of(5L), "23456"),
+                Arguments.argumentSet("from an offset", 4L, OptionalLong.empty(), "456789"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("conditionalReads")
+    protected void readOfUnmodifiedObjectFails(long offset, OptionalLong length) {
+        requireWrites();
+        storage.put("since.bin", "0123456789".getBytes(StandardCharsets.UTF_8));
+        Instant lastModified = storage.stat("since.bin").orElseThrow().lastModified();
+        ReadOptions since = ifModifiedSince(offset, length, lastModified);
+
+        assertThatThrownBy(() -> storage.read("since.bin", since)).isInstanceOf(PreconditionFailedException.class);
+    }
+
+    @ParameterizedTest
+    @MethodSource("conditionalReads")
+    void readOfModifiedObjectSucceeds(long offset, OptionalLong length, String expected) throws IOException {
+        requireWrites();
+        storage.put("since.bin", "0123456789".getBytes(StandardCharsets.UTF_8));
+        Instant lastModified = storage.stat("since.bin").orElseThrow().lastModified();
+        ReadOptions since = ifModifiedSince(offset, length, lastModified.minus(Duration.ofHours(1)));
+
+        try (ReadHandle r = storage.read("since.bin", since)) {
+            byte[] content = r.content().readAllBytes();
+            assertThat(new String(content, StandardCharsets.UTF_8)).isEqualTo(expected);
+        }
+    }
+
+    protected static ReadOptions ifModifiedSince(long offset, OptionalLong length, Instant since) {
+        return new ReadOptions(offset, length, Optional.empty(), Optional.empty(), Optional.of(since));
     }
 
     @Test

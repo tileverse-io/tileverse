@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import io.tileverse.storage.PreconditionFailedException;
 import io.tileverse.storage.ReadHandle;
 import io.tileverse.storage.ReadOptions;
 import io.tileverse.storage.StorageException;
@@ -143,16 +144,10 @@ class HttpStorageRangedReadTest {
         return Stream.of(
                 Arguments.argumentSet("redirect to a read of the whole object", redirect(), wholeObject),
                 Arguments.argumentSet(
-                        "304 to a conditional read of the whole object",
-                        aResponse().withStatus(304),
-                        modifiedSince(wholeObject)),
-                Arguments.argumentSet(
                         "204 to a read of the whole object", aResponse().withStatus(204), wholeObject),
                 Arguments.argumentSet("206 to a read of the whole object", rangeAnswer(0, DATA.length), wholeObject),
                 Arguments.argumentSet("redirect to a ranged read", redirect(), range),
-                Arguments.argumentSet("redirect to a read from an offset", redirect(), fromOffset),
-                Arguments.argumentSet(
-                        "304 to a conditional ranged read", aResponse().withStatus(304), modifiedSince(range)));
+                Arguments.argumentSet("redirect to a read from an offset", redirect(), fromOffset));
     }
 
     // Servers ignore a date in another form than the IMF-fixdate of RFC 9110
@@ -170,9 +165,55 @@ class HttpStorageRangedReadTest {
                 .withHeader("If-Modified-Since", equalTo("Sun, 01 Nov 2026 09:05:07 GMT")));
     }
 
+    /** Each row names a read conditional on a change since {@link #LAST_SEEN}. */
+    static Stream<Arguments> conditionalReads() {
+        return Stream.of(
+                Arguments.argumentSet("read of the whole object", modifiedSince(ReadOptions.defaults())),
+                Arguments.argumentSet("ranged read", modifiedSince(ReadOptions.range(1000, 100))));
+    }
+
+    @ParameterizedTest
+    @MethodSource("conditionalReads")
+    void notModifiedFailsThePrecondition(ReadOptions options) {
+        wm.stubFor(get(urlEqualTo(PATH)).willReturn(aResponse().withStatus(304)));
+
+        assertThatThrownBy(() -> storage.read(KEY, options)).isInstanceOf(PreconditionFailedException.class);
+    }
+
     /**
-     * Neither the production client nor the client of this test follows redirects; a 304 or 204 has no content, and a
-     * 206 answers a range.
+     * Each row names an answer with content to a read conditional on a change since {@link #LAST_SEEN}, and the content
+     * of the read.
+     */
+    static Stream<Arguments> answersIgnoringTheCondition() {
+        ReadOptions wholeObject = modifiedSince(ReadOptions.defaults());
+        ReadOptions range = modifiedSince(ReadOptions.range(1000, 100));
+        byte[] rangeBytes = Arrays.copyOfRange(DATA, 1000, 1100);
+        return Stream.of(
+                Arguments.argumentSet("read of the whole object", wholeObjectAnswer(), wholeObject, DATA),
+                Arguments.argumentSet("ranged read", rangeAnswer(1000, 100), range, rangeBytes));
+    }
+
+    // Apache httpd ignores If-Modified-Since on a ranged GET
+    @ParameterizedTest
+    @MethodSource("answersIgnoringTheCondition")
+    void ignoredConditionFailsTheRead(ResponseDefinitionBuilder answer, ReadOptions options) {
+        wm.stubFor(get(urlEqualTo(PATH)).willReturn(answer.withHeader("Last-Modified", LAST_MODIFIED)));
+
+        assertThatThrownBy(() -> storage.read(KEY, options)).isInstanceOf(PreconditionFailedException.class);
+    }
+
+    @ParameterizedTest
+    @MethodSource("answersIgnoringTheCondition")
+    void laterLastModifiedIsRead(ResponseDefinitionBuilder answer, ReadOptions options, byte[] expected)
+            throws IOException {
+        wm.stubFor(get(urlEqualTo(PATH)).willReturn(answer.withHeader("Last-Modified", LATER_LAST_MODIFIED)));
+
+        assertThat(readAll(options)).isEqualTo(expected);
+    }
+
+    /**
+     * Neither the production client nor the client of this test follows redirects; a 204 has no content, and a 206
+     * answers a range.
      */
     @ParameterizedTest
     @MethodSource("answersWithAWrongStatus")
@@ -511,9 +552,7 @@ class HttpStorageRangedReadTest {
      */
     static Stream<Arguments> answersToTheRestWithAWrongStatus() {
         ReadOptions range = ReadOptions.range(1000, 100);
-        return Stream.of(
-                Arguments.argumentSet("redirect", redirect(), range),
-                Arguments.argumentSet("304 to a conditional read", aResponse().withStatus(304), modifiedSince(range)));
+        return Stream.of(Arguments.argumentSet("redirect", redirect(), range));
     }
 
     @ParameterizedTest
@@ -530,6 +569,20 @@ class HttpStorageRangedReadTest {
                     .isInstanceOf(IOException.class)
                     .hasCauseExactlyInstanceOf(StorageException.class)
                     .hasMessageEndingWith(": " + status);
+        }
+    }
+
+    @Test
+    void restNotModifiedFailsThePrecondition() throws IOException {
+        stubRangeAnsweredInPartThenRestWith(aResponse().withStatus(304));
+        ReadOptions options = modifiedSince(ReadOptions.range(1000, 100));
+
+        try (ReadHandle handle = storage.read(KEY, options)) {
+            InputStream content = handle.content();
+
+            assertThatThrownBy(content::readAllBytes)
+                    .isInstanceOf(IOException.class)
+                    .hasCauseInstanceOf(PreconditionFailedException.class);
         }
     }
 

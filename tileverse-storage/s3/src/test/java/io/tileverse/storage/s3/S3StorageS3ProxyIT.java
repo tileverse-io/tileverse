@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
@@ -19,6 +20,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -123,6 +126,18 @@ class S3StorageS3ProxyIT extends StorageTCK {
     @Disabled("s3proxy DeleteObjects response omits the per-key Deleted entries")
     @SuppressWarnings({"java:S2699", "java:S1186"})
     protected void deleteAllLumpsAllIntoDeletedWhenIncapable() {}
+
+    /**
+     * Override to skip on s3proxy: it answers a {@code 200} to an {@code If-Modified-Since} equal to the
+     * {@code Last-Modified} of the object, where RFC 9110 requires a {@code 304}. S3StorageGarageIT and
+     * S3StorageLocalStackIT run this test.
+     */
+    @Override
+    @ParameterizedTest
+    @MethodSource("conditionalReads")
+    @Disabled("s3proxy answers 200 to an If-Modified-Since equal to the Last-Modified of the object")
+    @SuppressWarnings({"java:S2699", "java:S1186"})
+    protected void readOfUnmodifiedObjectFails(long offset, OptionalLong length) {}
 
     @Override
     protected void cleanUp(Storage s) throws IOException {

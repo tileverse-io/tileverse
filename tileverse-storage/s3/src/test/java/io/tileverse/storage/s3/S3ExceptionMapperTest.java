@@ -57,6 +57,12 @@ class S3ExceptionMapperTest {
     }
 
     @Test
+    void status304MapsToPreconditionFailed() {
+        S3Exception ex = (S3Exception) S3Exception.builder().statusCode(304).build();
+        assertThat(S3ExceptionMapper.map(ex, "k")).isInstanceOf(PreconditionFailedException.class);
+    }
+
+    @Test
     void status416MapsToRangeNotSatisfiable() {
         S3Exception ex = (S3Exception)
                 S3Exception.builder().statusCode(416).message("out of range").build();

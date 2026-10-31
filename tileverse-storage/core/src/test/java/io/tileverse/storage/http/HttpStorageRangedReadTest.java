@@ -35,6 +35,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -152,6 +153,21 @@ class HttpStorageRangedReadTest {
                 Arguments.argumentSet("redirect to a read from an offset", redirect(), fromOffset),
                 Arguments.argumentSet(
                         "304 to a conditional ranged read", aResponse().withStatus(304), modifiedSince(range)));
+    }
+
+    // Servers ignore a date in another form than the IMF-fixdate of RFC 9110
+    @Test
+    void ifModifiedSinceIsAnHttpDate() throws IOException {
+        wm.stubFor(get(urlEqualTo(PATH)).willReturn(aResponse().withStatus(200).withBody(DATA)));
+        Optional<Instant> since = Optional.of(Instant.parse("2026-11-01T09:05:07.250Z"));
+        ReadOptions options = new ReadOptions(0L, OptionalLong.empty(), Optional.empty(), Optional.empty(), since);
+
+        try (ReadHandle handle = storage.read(KEY, options)) {
+            handle.content().readAllBytes();
+        }
+
+        wm.verify(getRequestedFor(urlEqualTo(PATH))
+                .withHeader("If-Modified-Since", equalTo("Sun, 01 Nov 2026 09:05:07 GMT")));
     }
 
     /**

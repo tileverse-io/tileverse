@@ -37,9 +37,11 @@ import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Collection;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -52,6 +54,13 @@ import java.util.stream.Stream;
  * as a prefix and key resolution appends the relative key to the base.
  */
 final class HttpStorage implements Storage {
+
+    /**
+     * The IMF-fixdate of RFC 9110 section 5.6.7, the only date form sent in a request header. Servers ignore a date in
+     * another form. {@link DateTimeFormatter#RFC_1123_DATE_TIME} writes the days 1 to 9 with one digit.
+     */
+    private static final DateTimeFormatter HTTP_DATE =
+            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.US).withZone(ZoneOffset.UTC);
 
     private final URI baseUri;
     private final HttpClientHandle clientHandle;
@@ -418,7 +427,7 @@ final class HttpStorage implements Storage {
         HttpRequest.Builder builder = HttpRequest.newBuilder(uri).GET();
         rangeHeader(options).ifPresent(value -> builder.header("Range", value));
         options.ifMatchEtag().ifPresent(etag -> builder.header("If-Match", etag));
-        options.ifModifiedSince().ifPresent(instant -> builder.header("If-Modified-Since", instant.toString()));
+        options.ifModifiedSince().ifPresent(instant -> builder.header("If-Modified-Since", HTTP_DATE.format(instant)));
         return authenticated(builder).build();
     }
 

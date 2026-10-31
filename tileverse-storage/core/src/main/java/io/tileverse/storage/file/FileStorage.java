@@ -39,6 +39,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -46,7 +47,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -57,6 +61,12 @@ import java.util.stream.Stream;
  * tempfile in the same directory and atomically rename to the destination on completion. The target object is not
  * visible until the rename succeeds.
  *
+ * <p><b>Conditions</b>: a local file has no ETag of its own, and this Storage builds one from the attributes of the
+ * file. Within one JVM, a write checks its conditions and renames its file onto the key as one step: of two writes
+ * holding the ETag of one version, one fails. Other processes are not bound by this, and another process replacing the
+ * file between the check and the rename goes unnoticed. Reads and copies check their conditions before the operation,
+ * not atomically with it.
+ *
  * <p><b>Interrupts</b>: the streaming reads and writes of this Storage are not interruptible.
  * {@link Files#newInputStream} and {@link Files#newOutputStream} mark their channel uninterruptible, and
  * {@link Thread#interrupt()} on a thread blocked in one of them has no effect on the I/O. Only the range reader's own
@@ -64,6 +74,9 @@ import java.util.stream.Stream;
  * fails and how the other readers of the file recover.
  */
 final class FileStorage implements Storage {
+
+    /** Shared by the instances of this JVM, because two of them may write one file. Each lock serves several files. */
+    private static final Lock[] REPLACE_LOCKS = newLocks(64);
 
     private final Path root;
     private final URI baseUri;
@@ -117,6 +130,14 @@ final class FileStorage implements Storage {
         closed.set(true);
     }
 
+    private static Lock[] newLocks(int count) {
+        Lock[] locks = new Lock[count];
+        for (int i = 0; i < count; i++) {
+            locks[i] = new ReentrantLock();
+        }
+        return locks;
+    }
+
     private void requireOpen() {
         if (closed.get()) {
             throw new IllegalStateException("FileStorage is closed");
@@ -150,7 +171,7 @@ final class FileStorage implements Storage {
                     key,
                     attrs.size(),
                     attrs.lastModifiedTime().toInstant(),
-                    Optional.empty(),
+                    Optional.of(etagOf(attrs)),
                     Optional.empty(),
                     Optional.ofNullable(contentTypeRaw),
                     Map.of()));
@@ -270,10 +291,25 @@ final class FileStorage implements Storage {
                 relativeKey,
                 attrs.size(),
                 attrs.lastModifiedTime().toInstant(),
-                Optional.empty(),
+                Optional.of(etagOf(attrs)),
                 Optional.empty(),
                 Optional.empty(),
                 Map.of());
+    }
+
+    /**
+     * The ETag of a local file, built from its size, its last-modified time and, where the filesystem provides one,
+     * its identity. A write renames a new file onto the key, and the new file has an identity of its own: the ETag
+     * changes even when the clock of the filesystem has not moved since the previous write.
+     */
+    private static String etagOf(BasicFileAttributes attrs) {
+        long lastModified = attrs.lastModifiedTime().to(TimeUnit.NANOSECONDS);
+        String sizeAndTime = Long.toHexString(attrs.size()) + "-" + Long.toHexString(lastModified);
+        Object identity = attrs.fileKey();
+        if (identity == null) {
+            return sizeAndTime;
+        }
+        return sizeAndTime + "-" + Integer.toHexString(identity.hashCode());
     }
 
     @Override
@@ -295,6 +331,7 @@ final class FileStorage implements Storage {
         Path p = resolve(key);
         try {
             BasicFileAttributes attrs = Files.readAttributes(p, BasicFileAttributes.class);
+            requireReadConditions(key, attrs, options);
             InputStream raw = Files.newInputStream(p);
             long offset = options.offset();
             if (offset > 0L) {
@@ -311,7 +348,7 @@ final class FileStorage implements Storage {
                     key,
                     attrs.size(),
                     attrs.lastModifiedTime().toInstant(),
-                    Optional.empty(),
+                    Optional.of(etagOf(attrs)),
                     Optional.empty(),
                     Optional.empty(),
                     Map.of());
@@ -320,6 +357,18 @@ final class FileStorage implements Storage {
             throw new NotFoundException(p.toString(), e);
         } catch (IOException e) {
             throw new StorageException("read failed for key: " + key, e);
+        }
+    }
+
+    private static void requireReadConditions(String key, BasicFileAttributes attrs, ReadOptions options) {
+        Optional<String> expectedEtag = options.ifMatchEtag();
+        if (expectedEtag.isPresent() && !expectedEtag.get().equals(etagOf(attrs))) {
+            throw new PreconditionFailedException("ETag of " + key + " does not match " + expectedEtag.get());
+        }
+        Optional<Instant> since = options.ifModifiedSince();
+        Instant lastModified = attrs.lastModifiedTime().toInstant();
+        if (since.isPresent() && !lastModified.isAfter(since.get())) {
+            throw new PreconditionFailedException(key + " was not modified since " + since.get());
         }
     }
 
@@ -367,16 +416,14 @@ final class FileStorage implements Storage {
     public StorageEntry.File put(String key, byte[] data, WriteOptions options) {
         requireOpen();
         Path target = resolve(key);
-        if (options.ifNotExists() && Files.exists(target)) {
-            throw new PreconditionFailedException("Key already exists: " + key);
-        }
+        requireWriteConditions(key, target, options);
         try {
             Files.createDirectories(target.getParent());
             Path tmp = createTempFile(target);
             try {
                 Files.write(tmp, data, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
-                Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) {
+                replace(key, tmp, target, options);
+            } catch (IOException | RuntimeException e) {
                 Files.deleteIfExists(tmp);
                 throw e;
             }
@@ -390,16 +437,14 @@ final class FileStorage implements Storage {
     public StorageEntry.File put(String key, Path source, WriteOptions options) {
         requireOpen();
         Path target = resolve(key);
-        if (options.ifNotExists() && Files.exists(target)) {
-            throw new PreconditionFailedException("Key already exists: " + key);
-        }
+        requireWriteConditions(key, target, options);
         try {
             Files.createDirectories(target.getParent());
             Path tmp = createTempFile(target);
             try {
                 Files.copy(source, tmp, StandardCopyOption.REPLACE_EXISTING);
-                Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) {
+                replace(key, tmp, target, options);
+            } catch (IOException | RuntimeException e) {
                 Files.deleteIfExists(tmp);
                 throw e;
             }
@@ -413,20 +458,68 @@ final class FileStorage implements Storage {
     public StorageOutputStream openOutputStream(String key, WriteOptions options) {
         requireOpen();
         Path target = resolve(key);
-        if (options.ifNotExists() && Files.exists(target)) {
-            throw new PreconditionFailedException("Key already exists: " + key);
-        }
+        requireWriteConditions(key, target, options);
         try {
             Files.createDirectories(target.getParent());
             Path spool = createTempFile(target);
-            return StorageOutputStream.spooling(spool, spooled -> moveOntoTarget(spooled, target));
+            return StorageOutputStream.spooling(spool, spooled -> replace(key, spooled, target, options));
         } catch (IOException e) {
             throw new StorageException("openOutputStream failed for key: " + key, e);
         }
     }
 
-    private static void moveOntoTarget(Path spooled, Path target) throws IOException {
-        Files.move(spooled, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+    /**
+     * Checks the conditions of a write again and renames the staged file onto the target, holding the lock of the
+     * target: two writes of this JVM cannot both pass a check against one version of the file. The first check, before
+     * the staging, fails early; another write may have replaced the file since.
+     */
+    private static void replace(String key, Path staged, Path target, WriteOptions options) throws IOException {
+        Lock lock = replaceLockOf(target);
+        lock.lock();
+        try {
+            requireWriteConditions(key, target, options);
+            Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private static Lock replaceLockOf(Path target) {
+        int index = Math.floorMod(target.hashCode(), REPLACE_LOCKS.length);
+        return REPLACE_LOCKS[index];
+    }
+
+    private static void requireWriteConditions(String key, Path target, WriteOptions options) {
+        if (options.ifNotExists() && Files.exists(target)) {
+            throw new PreconditionFailedException("Key already exists: " + key);
+        }
+        requireEtag(key, target, options.ifMatchEtag());
+    }
+
+    /** A missing file has no ETag and matches none. */
+    private static void requireEtag(String key, Path file, Optional<String> expected) {
+        if (expected.isEmpty()) {
+            return;
+        }
+        Optional<String> actual = currentEtag(key, file);
+        if (!actual.equals(expected)) {
+            throw new PreconditionFailedException("ETag of " + key + " does not match " + expected.get());
+        }
+    }
+
+    /** Empty for a missing file or a directory, like {@link #stat(String)}. */
+    private static Optional<String> currentEtag(String key, Path file) {
+        try {
+            BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
+            if (attrs.isDirectory()) {
+                return Optional.empty();
+            }
+            return Optional.of(etagOf(attrs));
+        } catch (NoSuchFileException e) {
+            return Optional.empty();
+        } catch (IOException e) {
+            throw new StorageException("stat failed for key: " + key, e);
+        }
     }
 
     @Override
@@ -468,6 +561,7 @@ final class FileStorage implements Storage {
         if (!Files.exists(src)) {
             throw new NotFoundException("Source not found: " + srcKey);
         }
+        requireEtag(srcKey, src, options.ifMatchSourceEtag());
         if (options.ifNotExistsAtDestination() && Files.exists(dst)) {
             throw new PreconditionFailedException("Destination already exists: " + dstKey);
         }
@@ -497,6 +591,7 @@ final class FileStorage implements Storage {
         if (!Files.exists(src)) {
             throw new NotFoundException("Source not found: " + srcKey);
         }
+        requireEtag(srcKey, src, options.ifMatchSourceEtag());
         if (options.ifNotExistsAtDestination() && Files.exists(target)) {
             throw new PreconditionFailedException("Destination already exists: " + dstKey);
         }
@@ -517,6 +612,7 @@ final class FileStorage implements Storage {
         if (!Files.exists(src)) {
             throw new NotFoundException("Source not found: " + srcKey);
         }
+        requireEtag(srcKey, src, options.ifMatchSourceEtag());
         if (options.ifNotExistsAtDestination() && Files.exists(dst)) {
             throw new PreconditionFailedException("Destination already exists: " + dstKey);
         }

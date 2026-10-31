@@ -5,6 +5,7 @@
  */
 package io.tileverse.storage.azure;
 
+import com.azure.core.util.BinaryData;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
@@ -20,6 +21,7 @@ import com.azure.storage.file.datalake.models.PathHttpHeaders;
 import com.azure.storage.file.datalake.models.PathItem;
 import com.azure.storage.file.datalake.models.PathProperties;
 import com.azure.storage.file.datalake.options.DataLakeFileInputStreamOptions;
+import com.azure.storage.file.datalake.options.FileParallelUploadOptions;
 import io.tileverse.storage.CopyOptions;
 import io.tileverse.storage.DeleteResult;
 import io.tileverse.storage.ListOptions;
@@ -382,7 +384,9 @@ final class AzureDataLakeStorage implements Storage {
             throw new PreconditionFailedException("Key already exists: " + key);
         }
         try {
-            fc.upload(com.azure.core.util.BinaryData.fromBytes(data), true);
+            FileParallelUploadOptions upload = new FileParallelUploadOptions(BinaryData.fromBytes(data))
+                    .setRequestConditions(conditionsOf(options));
+            fc.uploadWithResponse(upload, null, null);
             applyPostWrite(fc, options);
         } catch (DataLakeStorageException e) {
             throw AzureExceptionMapper.map(e, key);
@@ -400,7 +404,7 @@ final class AzureDataLakeStorage implements Storage {
             throw new PreconditionFailedException("Key already exists: " + key);
         }
         try {
-            fc.uploadFromFile(source.toString(), true);
+            fc.uploadFromFile(source.toString(), null, null, null, conditionsOf(options), null);
             applyPostWrite(fc, options);
         } catch (DataLakeStorageException e) {
             throw AzureExceptionMapper.map(e, key);
@@ -418,6 +422,13 @@ final class AzureDataLakeStorage implements Storage {
         } catch (RuntimeException e) {
             throw AzureExceptionMapper.mapUnexpected(e, key);
         }
+    }
+
+    /** The conditions of an upload replacing the file: it fails unless the file has the ETag required by the options. */
+    private static DataLakeRequestConditions conditionsOf(WriteOptions options) {
+        DataLakeRequestConditions conditions = new DataLakeRequestConditions();
+        options.ifMatchEtag().ifPresent(conditions::setIfMatch);
+        return conditions;
     }
 
     private static void applyPostWrite(DataLakeFileClient fc, WriteOptions options) {
@@ -502,7 +513,7 @@ final class AzureDataLakeStorage implements Storage {
         BlobClient srcBlob = blobClient(srcKey);
         BlobClient dstBlob = dst.blobClient(dstKey);
         try {
-            dstBlob.copyFromUrl(srcBlob.getBlobUrl());
+            AzureBlobStorage.copyFromUrl(srcBlob, dstBlob, options);
         } catch (BlobStorageException e) {
             throw AzureExceptionMapper.map(e, srcKey);
         } catch (RuntimeException e) {
@@ -525,8 +536,10 @@ final class AzureDataLakeStorage implements Storage {
             throw new PreconditionFailedException("Destination already exists: " + dstKey);
         }
         DataLakeFileClient fc = fileClient(srcKey);
+        DataLakeRequestConditions sourceConditions = new DataLakeRequestConditions();
+        options.ifMatchSourceEtag().ifPresent(sourceConditions::setIfMatch);
         try {
-            fc.rename(null, location.resolve(dstKey));
+            fc.renameWithResponse(null, location.resolve(dstKey), sourceConditions, null, null, null);
         } catch (DataLakeStorageException e) {
             if (e.getStatusCode() == 404) {
                 throw new NotFoundException("Source not found: " + srcKey, e);

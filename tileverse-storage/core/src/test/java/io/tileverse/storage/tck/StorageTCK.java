@@ -21,6 +21,7 @@ import io.tileverse.storage.ReadOptions;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageCapabilities;
 import io.tileverse.storage.StorageEntry;
+import io.tileverse.storage.StorageException;
 import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.UnsupportedCapabilityException;
 import io.tileverse.storage.WriteOptions;
@@ -205,6 +206,50 @@ public abstract class StorageTCK {
         return new ReadOptions(offset, length, Optional.empty(), Optional.empty(), Optional.of(since));
     }
 
+    @ParameterizedTest
+    @MethodSource("conditionalReads")
+    void staleEtagReadFails(long offset, OptionalLong length) {
+        requireWrites();
+        String staleEtag = replacedEtag("cas.bin");
+        ReadOptions ifMatch = ifMatchEtag(offset, length, staleEtag);
+
+        assertThatThrownBy(() -> storage.read("cas.bin", ifMatch)).isInstanceOf(PreconditionFailedException.class);
+    }
+
+    @ParameterizedTest
+    @MethodSource("conditionalReads")
+    void currentEtagReadSucceeds(long offset, OptionalLong length, String expected) throws IOException {
+        requireWrites();
+        String etag = storage.put("cas.bin", utf8("0123456789")).etag().orElseThrow();
+        ReadOptions ifMatch = ifMatchEtag(offset, length, etag);
+
+        try (ReadHandle r = storage.read("cas.bin", ifMatch)) {
+            byte[] content = r.content().readAllBytes();
+            assertThat(new String(content, StandardCharsets.UTF_8)).isEqualTo(expected);
+        }
+    }
+
+    /** Writes two contents at the key, and returns the ETag of the first. */
+    private String replacedEtag(String key) {
+        String etag = storage.put(key, utf8("0123456789")).etag().orElseThrow();
+        storage.put(key, utf8("9876543210"));
+        return etag;
+    }
+
+    private static ReadOptions ifMatchEtag(long offset, OptionalLong length, String etag) {
+        return new ReadOptions(offset, length, Optional.of(etag), Optional.empty(), Optional.empty());
+    }
+
+    private static byte[] utf8(String content) {
+        return content.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private String contentOf(String key) throws IOException {
+        try (ReadHandle r = storage.read(key)) {
+            return new String(r.content().readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
     @Test
     void openRangeReturnsThreadSafeRangeReader() throws IOException {
         requireWrites();
@@ -349,6 +394,86 @@ public abstract class StorageTCK {
                 .isInstanceOf(PreconditionFailedException.class);
     }
 
+    /** Writes an object through one of the write methods of a storage. */
+    @FunctionalInterface
+    protected interface Writer {
+        void write(Storage storage, String key, byte[] data, WriteOptions options) throws IOException;
+    }
+
+    /** Each row writes through one of the write methods: from a byte array, from a local file, or to a stream. */
+    static Stream<Arguments> writers() {
+        return Stream.of(
+                Arguments.argumentSet("bytes", (Writer) Storage::put),
+                Arguments.argumentSet("file", (Writer) StorageTCK::putFromFile),
+                Arguments.argumentSet("stream", (Writer) StorageTCK::writeToStream));
+    }
+
+    private static void putFromFile(Storage storage, String key, byte[] data, WriteOptions options)
+            throws IOException {
+        Path source = Files.createTempFile("tck-", ".bin");
+        try {
+            Files.write(source, data);
+            storage.put(key, source, options);
+        } finally {
+            Files.delete(source);
+        }
+    }
+
+    /** A stream reports a failed commit as the I/O failure of its close, caused by the storage failure. */
+    private static void writeToStream(Storage storage, String key, byte[] data, WriteOptions options)
+            throws IOException {
+        try (OutputStream out = storage.openOutputStream(key, options)) {
+            out.write(data);
+        } catch (IOException e) {
+            if (e.getCause() instanceof StorageException failure) {
+                throw failure;
+            }
+            throw e;
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("writers")
+    protected void staleEtagWriteFails(Writer writer) throws IOException {
+        requireWrites();
+        requireConditionalWrite();
+        String staleEtag = replacedEtag("cas.bin");
+        WriteOptions ifMatch = WriteOptions.builder().ifMatchEtag(staleEtag).build();
+        byte[] data = utf8("abc");
+
+        assertThatThrownBy(() -> writer.write(storage, "cas.bin", data, ifMatch))
+                .isInstanceOf(PreconditionFailedException.class);
+        assertThat(contentOf("cas.bin")).isEqualTo("9876543210");
+    }
+
+    @ParameterizedTest
+    @MethodSource("writers")
+    void currentEtagWriteSucceeds(Writer writer) throws IOException {
+        requireWrites();
+        requireConditionalWrite();
+        String etag = storage.put("cas.bin", utf8("0123456789")).etag().orElseThrow();
+        WriteOptions ifMatch = WriteOptions.builder().ifMatchEtag(etag).build();
+
+        writer.write(storage, "cas.bin", utf8("abc"), ifMatch);
+
+        assertThat(contentOf("cas.bin")).isEqualTo("abc");
+    }
+
+    // The object exists: ifNotExists fails although the ETag matches.
+    @ParameterizedTest
+    @MethodSource("writers")
+    protected void ifNotExistsWithEtagFails(Writer writer) throws IOException {
+        requireWrites();
+        requireConditionalWrite();
+        String etag = storage.put("cas.bin", utf8("0123456789")).etag().orElseThrow();
+        WriteOptions both = WriteOptions.builder().ifNotExists(true).ifMatchEtag(etag).build();
+        byte[] data = utf8("abc");
+
+        assertThatThrownBy(() -> writer.write(storage, "cas.bin", data, both))
+                .isInstanceOf(PreconditionFailedException.class);
+        assertThat(contentOf("cas.bin")).isEqualTo("0123456789");
+    }
+
     @Test
     void putFromPathHonorsContent(@TempDir Path tmp) throws IOException {
         requireWrites();
@@ -479,6 +604,47 @@ public abstract class StorageTCK {
             assertThat(r.content().readAllBytes()).isEqualTo(data);
         }
         assertThat(storage.exists("src.bin")).isTrue();
+    }
+
+    /** Copies an object through one of the copy methods of a storage. */
+    @FunctionalInterface
+    protected interface Copier {
+        StorageEntry.File copy(Storage storage, String srcKey, String dstKey, CopyOptions options);
+    }
+
+    /** Each row copies an object within the storage, to a storage of the same backend, or moves it. */
+    static Stream<Arguments> copiers() {
+        return Stream.of(
+                Arguments.argumentSet("copy", (Copier) Storage::copy),
+                Arguments.argumentSet("copy to a storage", (Copier) (s, src, dst, o) -> s.copy(src, s, dst, o)),
+                Arguments.argumentSet("move", (Copier) Storage::move));
+    }
+
+    @ParameterizedTest
+    @MethodSource("copiers")
+    void staleSourceEtagCopyFails(Copier copier) throws IOException {
+        requireWrites();
+        requireServerSideCopy();
+        String staleEtag = replacedEtag("src.bin");
+        CopyOptions ifMatch = CopyOptions.builder().ifMatchSourceEtag(staleEtag).build();
+
+        assertThatThrownBy(() -> copier.copy(storage, "src.bin", "dst.bin", ifMatch))
+                .isInstanceOf(PreconditionFailedException.class);
+        assertThat(storage.exists("dst.bin")).isFalse();
+        assertThat(contentOf("src.bin")).isEqualTo("9876543210");
+    }
+
+    @ParameterizedTest
+    @MethodSource("copiers")
+    void currentSourceEtagCopies(Copier copier) throws IOException {
+        requireWrites();
+        requireServerSideCopy();
+        String etag = storage.put("src.bin", utf8("0123456789")).etag().orElseThrow();
+        CopyOptions ifMatch = CopyOptions.builder().ifMatchSourceEtag(etag).build();
+
+        copier.copy(storage, "src.bin", "dst.bin", ifMatch);
+
+        assertThat(contentOf("dst.bin")).isEqualTo("0123456789");
     }
 
     @Test

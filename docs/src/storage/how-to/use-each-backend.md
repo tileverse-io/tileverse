@@ -28,6 +28,8 @@ A local reader opens a file channel on its first read and closes it after `stora
 
 Range reads of local files respond to thread interrupts. A read on an interrupted thread fails with a `StorageException`, and the interrupt flag stays set. An interrupt during a read closes the file channel shared by the readers of that file; the other readers continue on a new channel. Streaming reads and writes do not respond to interrupts.
 
+Local files have no ETag of their own. A local `Storage` builds one from the size, the last-modified time and the identity of the file, and honors the ETag and modified-since conditions of writes, reads and copies. Within one JVM, a write checks its conditions and replaces the file as one step. Other processes are not bound by this: another process writing the same file between the check and the write goes unnoticed.
+
 ## HTTP / HTTPS (read-only)
 
 ```java

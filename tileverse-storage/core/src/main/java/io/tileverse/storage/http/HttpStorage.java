@@ -159,6 +159,7 @@ final class HttpStorage implements Storage {
         try {
             HttpResponse<InputStream> response = client().send(request, HttpResponse.BodyHandlers.ofInputStream());
             checkStatus(uri, options, response);
+            checkModifiedSince(uri, options, response);
             StorageEntry.File metadata = metadataFromHeaders(key, response);
             InputStream content = requestedContent(uri, options, response);
             return new ReadHandle(content, metadata);
@@ -195,11 +196,31 @@ final class HttpStorage implements Storage {
         return switch (status) {
             case 200 -> new StorageException("Server ignored the Range header (HTTP 200) for " + uri);
             case 301, 302, 303, 307, 308 -> new StorageException("Redirect not followed for " + uri + ": " + status);
+            case 304 -> notModified(uri);
             case 404 -> new NotFoundException("Not found: " + uri);
             case 412 -> new PreconditionFailedException("Precondition failed for: " + uri);
             case 416 -> new RangeNotSatisfiableException("Range not satisfiable for: " + uri);
             default -> new StorageException("GET failed for " + uri + ": " + status);
         };
+    }
+
+    /**
+     * Fails a read with {@code ifModifiedSince} answered with the content of an object not modified since that date. A
+     * server may ignore the condition: Apache httpd ignores it on a ranged GET. An answer without a usable
+     * {@code Last-Modified} counts as modified.
+     */
+    private static void checkModifiedSince(URI uri, ReadOptions options, HttpResponse<InputStream> response) {
+        Optional<Instant> since = options.ifModifiedSince();
+        Optional<Instant> lastModified = lastModifiedOf(response);
+        if (since.isEmpty() || lastModified.isEmpty() || lastModified.get().isAfter(since.get())) {
+            return;
+        }
+        ResponseBodies.closeQuietly(response);
+        throw notModified(uri);
+    }
+
+    private static PreconditionFailedException notModified(URI uri) {
+        return new PreconditionFailedException("Not modified since the requested date: " + uri);
     }
 
     /**
@@ -449,19 +470,20 @@ final class HttpStorage implements Storage {
         long size = Math.max(0L, contentLength);
         Optional<String> etag = headers.firstValue(HttpHeaderNames.ETAG);
         Optional<String> contentType = headers.firstValue(HttpHeaderNames.CONTENT_TYPE);
-        Instant lastModified = parseHttpDate(headers.firstValue(HttpHeaderNames.LAST_MODIFIED));
+        Instant lastModified = lastModifiedOf(response).orElse(Instant.EPOCH);
         return new StorageEntry.File(key, size, lastModified, etag, Optional.empty(), contentType, Map.of());
     }
 
-    /** Returns the date of an HTTP date header, or {@link Instant#EPOCH} when the header is absent or unparseable. */
-    private static Instant parseHttpDate(Optional<String> rawHeader) {
+    /** Returns the date of the {@code Last-Modified} header of an answer, empty when absent or unparseable. */
+    private static Optional<Instant> lastModifiedOf(HttpResponse<?> response) {
+        Optional<String> rawHeader = response.headers().firstValue(HttpHeaderNames.LAST_MODIFIED);
         if (rawHeader.isEmpty()) {
-            return Instant.EPOCH;
+            return Optional.empty();
         }
         try {
-            return DateTimeFormatter.RFC_1123_DATE_TIME.parse(rawHeader.get(), Instant::from);
+            return Optional.of(DateTimeFormatter.RFC_1123_DATE_TIME.parse(rawHeader.get(), Instant::from));
         } catch (DateTimeParseException unparseable) {
-            return Instant.EPOCH;
+            return Optional.empty();
         }
     }
 }

@@ -8,6 +8,9 @@ package io.tileverse.storage.http;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.tileverse.storage.PreconditionFailedException;
+import io.tileverse.storage.ReadHandle;
+import io.tileverse.storage.ReadOptions;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.UnsupportedCapabilityException;
@@ -20,10 +23,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.OptionalLong;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -45,16 +52,14 @@ class HttpStorageIT extends StorageTCK {
     @SuppressWarnings("resource")
     static void startHttpd() throws IOException {
         docroot = Files.createTempDirectory("http-storage-it-");
-        // Pre-populate nothing for read-path tests except a single empty file so the
-        // server is available; TCK tests we care about for HttpStorage are stat-missing
-        // and read-missing, which don't depend on fixtures.
-        Files.writeString(docroot.resolve("placeholder.txt"), "ok", StandardCharsets.UTF_8);
+        // The conditional reads of this class read this file; the TCK tests running here need no fixture.
+        Files.writeString(docroot.resolve("since.bin"), "0123456789", StandardCharsets.UTF_8);
 
         httpd = new GenericContainer<>(DockerImageName.parse("httpd:alpine"))
                 .withExposedPorts(80)
                 .withCopyToContainer(
-                        MountableFile.forHostPath(docroot.resolve("placeholder.txt")),
-                        "/usr/local/apache2/htdocs/placeholder.txt")
+                        MountableFile.forHostPath(docroot.resolve("since.bin")),
+                        "/usr/local/apache2/htdocs/since.bin")
                 .waitingFor(Wait.forHttp("/").forPort(80));
         httpd.start();
     }
@@ -111,5 +116,27 @@ class HttpStorageIT extends StorageTCK {
     void presignThrowsUnsupported() {
         Duration duration = Duration.ofMinutes(1);
         assertThatThrownBy(() -> storage.presignGet("k", duration)).isInstanceOf(UnsupportedCapabilityException.class);
+    }
+
+    // TCK tests write the object they read: HttpStorage reads a file served by the container instead.
+    @ParameterizedTest
+    @MethodSource("conditionalReads")
+    void unmodifiedFileReadFails(long offset, OptionalLong length) {
+        Instant lastModified = storage.stat("since.bin").orElseThrow().lastModified();
+        ReadOptions since = ifModifiedSince(offset, length, lastModified);
+
+        assertThatThrownBy(() -> storage.read("since.bin", since)).isInstanceOf(PreconditionFailedException.class);
+    }
+
+    @ParameterizedTest
+    @MethodSource("conditionalReads")
+    void modifiedFileReadSucceeds(long offset, OptionalLong length, String expected) throws IOException {
+        Instant lastModified = storage.stat("since.bin").orElseThrow().lastModified();
+        ReadOptions since = ifModifiedSince(offset, length, lastModified.minus(Duration.ofHours(1)));
+
+        try (ReadHandle handle = storage.read("since.bin", since)) {
+            byte[] content = handle.content().readAllBytes();
+            assertThat(new String(content, StandardCharsets.UTF_8)).isEqualTo(expected);
+        }
     }
 }

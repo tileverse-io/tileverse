@@ -9,12 +9,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sun.net.httpserver.HttpExchange;
 import io.tileverse.storage.NotFoundException;
+import io.tileverse.storage.PreconditionFailedException;
 import io.tileverse.storage.ReadHandle;
+import io.tileverse.storage.ReadOptions;
 import io.tileverse.storage.Storage;
 import io.tileverse.storage.azure.StandInBlobServer.RequestedRange;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.time.Instant;
+import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -94,6 +99,20 @@ class AzureStorageReadTest {
         }
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("storages")
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void notModifiedFailsThePrecondition(String storageName, Function<StandInBlobServer, Storage> opener)
+            throws IOException {
+        server = StandInBlobServer.start(AzureStorageReadTest::answerNotModifiedToConditionalReads);
+        Optional<Instant> lastSeen = Optional.of(Instant.parse("2026-09-29T10:00:00Z"));
+        ReadOptions since = new ReadOptions(0L, OptionalLong.empty(), Optional.empty(), Optional.empty(), lastSeen);
+
+        try (Storage storage = opener.apply(server)) {
+            assertThatThrownBy(() -> storage.read(KEY, since)).isInstanceOf(PreconditionFailedException.class);
+        }
+    }
+
     private static Arguments storage(String name, Function<StandInBlobServer, Storage> opener) {
         return Arguments.of(name, opener);
     }
@@ -101,6 +120,16 @@ class AzureStorageReadTest {
     private static void answerNotFound(HttpExchange exchange) throws IOException {
         exchange.getResponseHeaders().set("x-ms-error-code", "BlobNotFound");
         exchange.sendResponseHeaders(404, -1);
+        exchange.close();
+    }
+
+    /** Answers a read with {@code If-Modified-Since} as Azure does for a blob not modified since that date. */
+    private static void answerNotModifiedToConditionalReads(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestHeaders().containsKey("If-Modified-Since")) {
+            sendTheWholeBlob(exchange);
+            return;
+        }
+        exchange.sendResponseHeaders(304, -1);
         exchange.close();
     }
 

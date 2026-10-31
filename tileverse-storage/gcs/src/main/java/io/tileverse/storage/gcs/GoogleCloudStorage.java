@@ -363,7 +363,7 @@ final class GoogleCloudStorage implements Storage {
             throw new NotFoundException("Blob not found: gs://%s/%s".formatted(location.bucket(), absoluteKey));
         }
         try {
-            ReadChannel channel = blob.reader();
+            ReadChannel channel = openReadChannel(blob);
             if (options.offset() > 0L) {
                 channel.seek(options.offset());
             }
@@ -389,6 +389,13 @@ final class GoogleCloudStorage implements Storage {
         } catch (IOException e) {
             throw new io.tileverse.storage.StorageException("read failed for: " + key, e);
         }
+    }
+
+    private ReadChannel openReadChannel(Blob blob) {
+        List<BlobSourceOption> opts = new ArrayList<>();
+        addUserProject(opts, BlobSourceOption::userProject);
+        // The id of the blob found by read() names its generation: the content matches the returned metadata.
+        return handle.client().reader(blob.getBlobId(), opts.toArray(BlobSourceOption[]::new));
     }
 
     /**

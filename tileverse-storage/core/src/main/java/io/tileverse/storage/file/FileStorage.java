@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -43,6 +44,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -77,6 +79,14 @@ final class FileStorage implements Storage {
 
     /** Shared by the instances of this JVM, because two of them may write one file. Each lock serves several files. */
     private static final Lock[] REPLACE_LOCKS = newLocks(64);
+
+    private static final boolean WINDOWS =
+            System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("windows");
+
+    /** Retries of a rename refused by Windows. The pauses grow by 20 ms each, up to 0.9 s in total. */
+    private static final int RENAME_RETRIES = 9;
+
+    private static final Duration RENAME_RETRY_PAUSE = Duration.ofMillis(20);
 
     private final Path root;
     private final URI baseUri;
@@ -478,7 +488,7 @@ final class FileStorage implements Storage {
         lock.lock();
         try {
             requireWriteConditions(key, target, options);
-            Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            moveReplacing(staged, target);
         } finally {
             lock.unlock();
         }
@@ -487,6 +497,36 @@ final class FileStorage implements Storage {
     private static Lock replaceLockOf(Path target) {
         int index = Math.floorMod(target.hashCode(), REPLACE_LOCKS.length);
         return REPLACE_LOCKS[index];
+    }
+
+    /**
+     * Renames the source onto the target, replacing it. Windows refuses this rename while a handle on the target is
+     * open, even a short-lived one opened by another thread to read the attributes of the file. On Windows, a refused
+     * rename is tried again for up to about a second.
+     */
+    private static void moveReplacing(Path source, Path target) throws IOException {
+        int retries = 0;
+        while (true) {
+            try {
+                Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                return;
+            } catch (AccessDeniedException e) {
+                retries++;
+                if (!WINDOWS || retries > RENAME_RETRIES) {
+                    throw e;
+                }
+                pauseBeforeRetry(retries, e);
+            }
+        }
+    }
+
+    private static void pauseBeforeRetry(int retries, AccessDeniedException refusal) throws AccessDeniedException {
+        try {
+            Thread.sleep(RENAME_RETRY_PAUSE.toMillis() * retries);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw refusal;
+        }
     }
 
     private static void requireWriteConditions(String key, Path target, WriteOptions options) {
@@ -619,7 +659,7 @@ final class FileStorage implements Storage {
         try {
             Files.createDirectories(dst.getParent());
             try {
-                Files.move(src, dst, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                moveReplacing(src, dst);
             } catch (AtomicMoveNotSupportedException e) {
                 // Cross-volume rename: fall back to copy + delete.
                 Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);

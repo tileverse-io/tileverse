@@ -19,6 +19,7 @@ import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.StorageOutputStream;
 import io.tileverse.storage.WriteOptions;
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,6 +33,8 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
@@ -209,6 +212,27 @@ class FileStorageTest {
                     .isInstanceOf(IOException.class)
                     .hasCauseInstanceOf(PreconditionFailedException.class);
             assertThat(Files.readString(tmp.resolve("a.txt"))).isEqualTo("three");
+        }
+    }
+
+    // Windows refuses to rename a file onto an open one: the write waits for the reader to close it
+    @ParameterizedTest
+    @MethodSource("writes")
+    void writeReplacesAnOpenFile(Write write, @TempDir Path tmp) throws Exception {
+        try (FileStorage s = new FileStorage(tmp)) {
+            s.put("a.txt", bytes("one"));
+            ScheduledExecutorService closer = Executors.newSingleThreadScheduledExecutor();
+            try (FileChannel reader = FileChannel.open(tmp.resolve("a.txt"))) {
+                Callable<Void> close = () -> {
+                    reader.close();
+                    return null;
+                };
+                closer.schedule(close, 50, TimeUnit.MILLISECONDS);
+                write.apply(s, "a.txt", bytes("two"), WriteOptions.defaults());
+            } finally {
+                closer.shutdownNow();
+            }
+            assertThat(Files.readString(tmp.resolve("a.txt"))).isEqualTo("two");
         }
     }
 

@@ -7,6 +7,7 @@ package io.tileverse.storage.gcs;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -14,6 +15,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.api.gax.paging.Page;
 import com.google.cloud.NoCredentials;
+import com.google.cloud.ReadChannel;
 import com.google.cloud.WriteChannel;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
@@ -29,6 +31,8 @@ import com.google.cloud.storage.Storage.CopyRequest;
 import com.google.cloud.storage.Storage.SignUrlOption;
 import com.google.cloud.storage.StorageOptions;
 import io.tileverse.storage.CopyOptions;
+import io.tileverse.storage.ReadHandle;
+import io.tileverse.storage.ReadOptions;
 import io.tileverse.storage.WriteOptions;
 import java.net.URI;
 import java.net.URL;
@@ -74,6 +78,9 @@ class GoogleCloudStorageRequesterPaysTest {
 
     @Mock
     Page<Blob> page;
+
+    @Mock
+    ReadChannel readChannel;
 
     @Mock
     WriteChannel writeChannel;
@@ -137,6 +144,20 @@ class GoogleCloudStorageRequesterPaysTest {
         ArgumentCaptor<BlobListOption[]> captor = ArgumentCaptor.forClass(BlobListOption[].class);
         verify(client).list(any(String.class), captor.capture());
         assertThat(captor.getValue()).contains(BlobListOption.userProject(USER_PROJECT));
+    }
+
+    @Test
+    void readSendsUserProject() throws Exception {
+        BlobId id = BlobId.of(BUCKET, "a.bin", 1L);
+        when(blob.getBlobId()).thenReturn(id);
+        when(client.reader(any(BlobId.class), any(BlobSourceOption[].class))).thenReturn(readChannel);
+        try (GoogleCloudStorage storage = openStorage(Optional.of(USER_PROJECT));
+                ReadHandle handle = storage.read("a.bin", ReadOptions.defaults())) {
+            assertThat(handle.metadata().key()).isEqualTo("a.bin");
+        }
+        ArgumentCaptor<BlobSourceOption[]> captor = ArgumentCaptor.forClass(BlobSourceOption[].class);
+        verify(client).reader(eq(id), captor.capture());
+        assertThat(captor.getValue()).contains(BlobSourceOption.userProject(USER_PROJECT));
     }
 
     @Test

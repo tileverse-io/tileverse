@@ -362,6 +362,10 @@ final class GoogleCloudStorage implements Storage {
             String absoluteKey = location.resolve(key);
             throw new NotFoundException("Blob not found: gs://%s/%s".formatted(location.bucket(), absoluteKey));
         }
+        Instant lastModified = blob.getUpdateTimeOffsetDateTime() == null
+                ? Instant.now()
+                : blob.getUpdateTimeOffsetDateTime().toInstant();
+        requireModifiedSince(key, lastModified, options.ifModifiedSince());
         try {
             ReadChannel channel = openReadChannel(blob);
             if (options.offset() > 0L) {
@@ -372,9 +376,6 @@ final class GoogleCloudStorage implements Storage {
             }
             InputStream raw = Channels.newInputStream(channel);
             long size = blob.getSize() == null ? 0L : blob.getSize();
-            Instant lastModified = blob.getUpdateTimeOffsetDateTime() == null
-                    ? Instant.now()
-                    : blob.getUpdateTimeOffsetDateTime().toInstant();
             StorageEntry.File metadata = new StorageEntry.File(
                     key,
                     size,
@@ -388,6 +389,16 @@ final class GoogleCloudStorage implements Storage {
             throw SdkExceptionMapper.map(e, key);
         } catch (IOException e) {
             throw new io.tileverse.storage.StorageException("read failed for: " + key, e);
+        }
+    }
+
+    /**
+     * Fails a read of a blob not modified since {@code since}. The SDK offers no such condition: the check applies to
+     * the blob found by the read, and the read opens the generation of that blob.
+     */
+    private static void requireModifiedSince(String key, Instant lastModified, Optional<Instant> since) {
+        if (since.isPresent() && !lastModified.isAfter(since.get())) {
+            throw new PreconditionFailedException(key + " was not modified since " + since.get());
         }
     }
 

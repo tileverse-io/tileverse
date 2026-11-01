@@ -38,6 +38,9 @@ final class S3ExceptionMapper {
                 return new AccessDeniedException(messageFor(cause, contextKey, "access denied"), cause);
             case 409:
                 return new ConflictException(messageFor(cause, contextKey, "conflict"), cause);
+            // A read with ifModifiedSince of an object not modified since that date
+            case 304:
+                return new PreconditionFailedException(messageFor(cause, contextKey, "not modified"), cause);
             case 412:
                 return new PreconditionFailedException(messageFor(cause, contextKey, "precondition failed"), cause);
             case 416:

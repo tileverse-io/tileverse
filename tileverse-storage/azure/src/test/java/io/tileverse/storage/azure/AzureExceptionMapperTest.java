@@ -49,6 +49,12 @@ class AzureExceptionMapperTest {
     }
 
     @Test
+    void status304MapsToPreconditionFailed() {
+        StorageException mapped = AzureExceptionMapper.map(httpException(304, null), "k");
+        assertThat(mapped).isInstanceOf(PreconditionFailedException.class);
+    }
+
+    @Test
     void status416MapsToRangeNotSatisfiable() {
         StorageException mapped = AzureExceptionMapper.map(httpException(416, "InvalidRange"), "k");
         assertThat(mapped).isInstanceOf(RangeNotSatisfiableException.class);

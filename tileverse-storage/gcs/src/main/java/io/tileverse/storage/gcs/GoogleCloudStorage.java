@@ -62,6 +62,7 @@ import java.util.Spliterators;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.function.LongFunction;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -147,6 +148,58 @@ final class GoogleCloudStorage implements Storage {
      */
     private <O> void addUserProject(List<O> opts, Function<String, O> factory) {
         userProject.ifPresent(p -> opts.add(factory.apply(p)));
+    }
+
+    /**
+     * Fails a write with both {@code ifNotExists} and {@code ifMatchEtag}: an existing blob fails the first condition
+     * and a missing one fails the second. The SDK expresses both conditions as a generation match, and it throws an
+     * {@link IllegalArgumentException} for a request with two of them.
+     */
+    private static void rejectUnsatisfiableConditions(String key, WriteOptions options) {
+        if (options.ifNotExists() && options.ifMatchEtag().isPresent()) {
+            throw new PreconditionFailedException("ifNotExists and ifMatchEtag cannot both hold for " + key);
+        }
+    }
+
+    /**
+     * Adds the conditions of a request expecting the blob at {@code key} to have the ETag {@code expected}. The SDK has
+     * no ETag condition: the request requires the generation and metageneration of the blob found with that ETag, and
+     * fails if another write changed the blob after this lookup. The GCS emulator reports no metageneration: the
+     * request then requires the generation only.
+     */
+    private <O> void addEtagConditions(
+            String key,
+            Optional<String> expected,
+            List<O> opts,
+            LongFunction<O> generationMatch,
+            LongFunction<O> metagenerationMatch) {
+        if (expected.isEmpty()) {
+            return;
+        }
+        Blob blob = requireEtag(key, lookUp(key), expected.get());
+        opts.add(generationMatch.apply(blob.getGeneration()));
+        Long metageneration = blob.getMetageneration();
+        if (metageneration != null) {
+            opts.add(metagenerationMatch.apply(metageneration));
+        }
+    }
+
+    private @Nullable Blob lookUp(String key) {
+        List<BlobGetOption> getOpts = new ArrayList<>();
+        addUserProject(getOpts, BlobGetOption::userProject);
+        try {
+            return handle.client().get(blobId(key), getOpts.toArray(BlobGetOption[]::new));
+        } catch (StorageException e) {
+            throw SdkExceptionMapper.map(e, key);
+        }
+    }
+
+    /** Returns the blob if it has the {@code expected} ETag, and fails for a missing blob or another ETag. */
+    private static Blob requireEtag(String key, @Nullable Blob blob, String expected) {
+        if (blob == null || !expected.equals(blob.getEtag())) {
+            throw new PreconditionFailedException("ETag of " + key + " does not match " + expected);
+        }
+        return blob;
     }
 
     private static StorageCapabilities buildCapabilities(boolean isHns) {
@@ -366,6 +419,7 @@ final class GoogleCloudStorage implements Storage {
                 ? Instant.now()
                 : blob.getUpdateTimeOffsetDateTime().toInstant();
         requireModifiedSince(key, lastModified, options.ifModifiedSince());
+        options.ifMatchEtag().ifPresent(etag -> requireEtag(key, blob, etag));
         try {
             ReadChannel channel = openReadChannel(blob);
             if (options.offset() > 0L) {
@@ -394,7 +448,8 @@ final class GoogleCloudStorage implements Storage {
 
     /**
      * Fails a read of a blob not modified since {@code since}. The SDK offers no such condition: the check applies to
-     * the blob found by the read, and the read opens the generation of that blob.
+     * the blob found by the read, and the read opens the generation of that blob. The ETag condition of a read works
+     * the same way.
      */
     private static void requireModifiedSince(String key, Instant lastModified, Optional<Instant> since) {
         if (since.isPresent() && !lastModified.isAfter(since.get())) {
@@ -469,6 +524,7 @@ final class GoogleCloudStorage implements Storage {
     @Override
     public StorageEntry.File put(String key, byte[] data, WriteOptions options) {
         requireOpen();
+        rejectUnsatisfiableConditions(key, options);
         BlobInfo.Builder bib = BlobInfo.newBuilder(blobId(key));
         options.contentType().ifPresent(bib::setContentType);
         if (!options.userMetadata().isEmpty()) {
@@ -478,13 +534,16 @@ final class GoogleCloudStorage implements Storage {
         if (options.ifNotExists()) {
             opts.add(BlobTargetOption.doesNotExist());
         }
+        addEtagConditions(
+                key,
+                options.ifMatchEtag(),
+                opts,
+                BlobTargetOption::generationMatch,
+                BlobTargetOption::metagenerationMatch);
         addUserProject(opts, BlobTargetOption::userProject);
         try {
             handle.client().create(bib.build(), data, opts.toArray(BlobTargetOption[]::new));
         } catch (StorageException e) {
-            if (e.getCode() == 412) {
-                throw new PreconditionFailedException("Key already exists: " + key, e);
-            }
             throw SdkExceptionMapper.map(e, key);
         }
         return stat(key)
@@ -494,6 +553,7 @@ final class GoogleCloudStorage implements Storage {
     @Override
     public StorageEntry.File put(String key, Path source, WriteOptions options) {
         requireOpen();
+        rejectUnsatisfiableConditions(key, options);
         BlobInfo.Builder bib = BlobInfo.newBuilder(blobId(key));
         options.contentType().ifPresent(bib::setContentType);
         if (!options.userMetadata().isEmpty()) {
@@ -503,13 +563,16 @@ final class GoogleCloudStorage implements Storage {
         if (options.ifNotExists()) {
             opts.add(BlobWriteOption.doesNotExist());
         }
+        addEtagConditions(
+                key,
+                options.ifMatchEtag(),
+                opts,
+                BlobWriteOption::generationMatch,
+                BlobWriteOption::metagenerationMatch);
         addUserProject(opts, BlobWriteOption::userProject);
         try {
             handle.client().createFrom(bib.build(), source, opts.toArray(BlobWriteOption[]::new));
         } catch (StorageException e) {
-            if (e.getCode() == 412) {
-                throw new PreconditionFailedException("Key already exists: " + key, e);
-            }
             throw SdkExceptionMapper.map(e, key);
         } catch (IOException e) {
             throw new io.tileverse.storage.StorageException("Failed to read source file: " + source, e);
@@ -521,6 +584,7 @@ final class GoogleCloudStorage implements Storage {
     @Override
     public StorageOutputStream openOutputStream(String key, WriteOptions options) {
         requireOpen();
+        rejectUnsatisfiableConditions(key, options);
         BlobInfo.Builder bib = BlobInfo.newBuilder(blobId(key));
         options.contentType().ifPresent(bib::setContentType);
         if (!options.userMetadata().isEmpty()) {
@@ -530,6 +594,12 @@ final class GoogleCloudStorage implements Storage {
         if (options.ifNotExists()) {
             opts.add(BlobWriteOption.doesNotExist());
         }
+        addEtagConditions(
+                key,
+                options.ifMatchEtag(),
+                opts,
+                BlobWriteOption::generationMatch,
+                BlobWriteOption::metagenerationMatch);
         addUserProject(opts, BlobWriteOption::userProject);
         WriteChannel writer = handle.client().writer(bib.build(), opts.toArray(BlobWriteOption[]::new));
         return new ResumableUploadOutputStream(key, writer);
@@ -559,9 +629,6 @@ final class GoogleCloudStorage implements Storage {
             try {
                 out.close();
             } catch (StorageException e) {
-                if (e.getCode() == 412) {
-                    throw new PreconditionFailedException("Key already exists: " + key, e);
-                }
                 throw SdkExceptionMapper.map(e, key);
             }
         }
@@ -657,17 +724,24 @@ final class GoogleCloudStorage implements Storage {
         if (options.ifNotExistsAtDestination() && dst.stat(dstKey).isPresent()) {
             throw new PreconditionFailedException("Destination already exists: " + dstKey);
         }
+        List<BlobSourceOption> sourceOpts = new ArrayList<>();
+        addEtagConditions(
+                srcKey,
+                options.ifMatchSourceEtag(),
+                sourceOpts,
+                BlobSourceOption::generationMatch,
+                BlobSourceOption::metagenerationMatch);
+        addUserProject(sourceOpts, BlobSourceOption::userProject);
+        List<BlobTargetOption> targetOpts = new ArrayList<>();
+        addUserProject(targetOpts, BlobTargetOption::userProject);
+        BlobId targetId = BlobId.of(dst.location.bucket(), dst.location.resolve(dstKey));
+        CopyRequest request = CopyRequest.newBuilder()
+                .setSource(blobId(srcKey))
+                .setSourceOptions(sourceOpts)
+                .setTarget(targetId, targetOpts)
+                .build();
         try {
-            BlobId targetId = BlobId.of(dst.location.bucket(), dst.location.resolve(dstKey));
-            CopyRequest.Builder reqBuilder = CopyRequest.newBuilder().setSource(blobId(srcKey));
-            if (userProject.isPresent()) {
-                String p = userProject.orElseThrow();
-                reqBuilder.setSourceOptions(BlobSourceOption.userProject(p));
-                reqBuilder.setTarget(targetId, BlobTargetOption.userProject(p));
-            } else {
-                reqBuilder.setTarget(targetId);
-            }
-            handle.client().copy(reqBuilder.build()).getResult();
+            handle.client().copy(request).getResult();
         } catch (StorageException e) {
             throw SdkExceptionMapper.map(e, srcKey);
         }

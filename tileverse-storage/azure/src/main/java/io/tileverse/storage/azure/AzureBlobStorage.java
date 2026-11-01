@@ -7,6 +7,7 @@ package io.tileverse.storage.azure;
 
 import com.azure.core.exception.HttpResponseException;
 import com.azure.core.http.HttpPipeline;
+import com.azure.core.http.RequestConditions;
 import com.azure.core.http.rest.PagedIterable;
 import com.azure.core.http.rest.Response;
 import com.azure.core.util.BinaryData;
@@ -27,6 +28,7 @@ import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.models.DeleteSnapshotsOptionType;
 import com.azure.storage.blob.models.ListBlobsOptions;
 import com.azure.storage.blob.models.ParallelTransferOptions;
+import com.azure.storage.blob.options.BlobCopyFromUrlOptions;
 import com.azure.storage.blob.options.BlobInputStreamOptions;
 import com.azure.storage.blob.options.BlobParallelUploadOptions;
 import com.azure.storage.blob.options.BlobUploadFromFileOptions;
@@ -405,6 +407,7 @@ final class AzureBlobStorage implements Storage {
     @Override
     public StorageEntry.File put(String key, byte[] data, WriteOptions options) {
         requireOpen();
+        rejectUnsatisfiableConditions(key, options);
         BlobClient client = blobClient(key);
         BlobParallelUploadOptions opts = new BlobParallelUploadOptions(BinaryData.fromBytes(data))
                 .setHeaders(headersOf(options))
@@ -422,6 +425,7 @@ final class AzureBlobStorage implements Storage {
     public StorageEntry.File put(String key, Path source, WriteOptions options) {
         requireOpen();
         requireRegularFile(source);
+        rejectUnsatisfiableConditions(key, options);
         BlobClient client = blobClient(key);
         ParallelTransferOptions blocks = new ParallelTransferOptions().setBlockSizeLong(UPLOAD_BLOCK_SIZE);
         BlobUploadFromFileOptions opts = new BlobUploadFromFileOptions(source.toString())
@@ -466,6 +470,16 @@ final class AzureBlobStorage implements Storage {
 
     private static @Nullable Map<String, String> metadataOf(WriteOptions options) {
         return options.userMetadata().isEmpty() ? null : options.userMetadata();
+    }
+
+    /**
+     * Fails a write with both {@code ifNotExists} and {@code ifMatchEtag}: an existing blob fails the first condition
+     * and a missing one fails the second. Azure answers a 400 error to a request with both headers.
+     */
+    private static void rejectUnsatisfiableConditions(String key, WriteOptions options) {
+        if (options.ifNotExists() && options.ifMatchEtag().isPresent()) {
+            throw new PreconditionFailedException("ifNotExists and ifMatchEtag cannot both hold for " + key);
+        }
     }
 
     private static @Nullable BlobRequestConditions conditionsOf(WriteOptions options) {
@@ -618,13 +632,21 @@ final class AzureBlobStorage implements Storage {
         BlobClient src = blobClient(srcKey);
         BlobClient target = dst.blobClient(dstKey);
         try {
-            target.copyFromUrl(src.getBlobUrl());
+            copyFromUrl(src, target, options);
         } catch (BlobStorageException e) {
             throw AzureExceptionMapper.map(e, srcKey);
         } catch (RuntimeException e) {
             throw AzureExceptionMapper.mapUnexpected(e, srcKey);
         }
         return dst.stat(dstKey).orElseThrow(() -> new StorageException("Copy failed for: " + dstKey));
+    }
+
+    /** Copies a blob on the service, failing unless the source has the ETag required by {@code options}. */
+    static void copyFromUrl(BlobClient source, BlobClient target, CopyOptions options) {
+        BlobCopyFromUrlOptions copy = new BlobCopyFromUrlOptions(source.getBlobUrl());
+        options.ifMatchSourceEtag()
+                .ifPresent(etag -> copy.setSourceRequestConditions(new RequestConditions().setIfMatch(etag)));
+        target.copyFromUrlWithResponse(copy, null, null);
     }
 
     @Override

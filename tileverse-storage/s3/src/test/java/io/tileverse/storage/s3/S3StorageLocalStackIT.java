@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.localstack.LocalStackContainer;
@@ -36,6 +38,7 @@ import org.testcontainers.utility.DockerImageName;
  *
  * <ul>
  *   <li>{@code If-None-Match: *} on PutObject is not enforced (no PreconditionFailedException).
+ *   <li>{@code If-Match} on PutObject is not enforced either.
  * </ul>
  *
  * <p>Mutates {@code aws.accessKeyId}/{@code aws.secretAccessKey} system properties in {@code @BeforeAll} so the SDK
@@ -99,6 +102,28 @@ class S3StorageLocalStackIT extends StorageTCK {
     @Disabled("LocalStack 3.2 does not enforce If-None-Match: * on PutObject")
     @SuppressWarnings({"java:S2699", "java:S1186"})
     protected void putIfNotExistsRejectsExistingKey() {}
+
+    /**
+     * Override to skip on LocalStack 3.2: it does not enforce {@code If-Match} on PutObject (the put succeeds and overwrites
+     * the object). Verified via S3StorageS3ProxyIT.
+     */
+    @Override
+    @ParameterizedTest
+    @MethodSource("writers")
+    @Disabled("LocalStack 3.2 does not enforce If-Match on PutObject")
+    @SuppressWarnings({"java:S2699", "java:S1186"})
+    protected void staleEtagWriteFails(Writer writer) {}
+
+    /**
+     * Override to skip on LocalStack 3.2: it enforces neither {@code If-None-Match: *} nor {@code If-Match} on
+     * PutObject. Verified via S3StorageS3ProxyIT.
+     */
+    @Override
+    @ParameterizedTest
+    @MethodSource("writers")
+    @Disabled("LocalStack 3.2 does not enforce If-None-Match: * on PutObject")
+    @SuppressWarnings({"java:S2699", "java:S1186"})
+    protected void ifNotExistsWithEtagFails(Writer writer) {}
 
     /**
      * Override to skip on LocalStack 3.2: PutObject with empty body throws a 500 ("'NoneType' object has no attribute

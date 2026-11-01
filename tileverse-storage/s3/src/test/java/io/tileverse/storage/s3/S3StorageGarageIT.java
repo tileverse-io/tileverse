@@ -20,6 +20,8 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
@@ -67,6 +69,28 @@ class S3StorageGarageIT extends StorageTCK {
     @Disabled("Garage does not enforce If-None-Match: * on PutObject")
     @SuppressWarnings({"java:S2699", "java:S1186"})
     protected void putIfNotExistsRejectsExistingKey() {}
+
+    /**
+     * Override to skip on Garage: it does not enforce {@code If-Match} on PutObject (the put succeeds and overwrites
+     * the object). Verified via S3StorageS3ProxyIT.
+     */
+    @Override
+    @ParameterizedTest
+    @MethodSource("writers")
+    @Disabled("Garage does not enforce If-Match on PutObject")
+    @SuppressWarnings({"java:S2699", "java:S1186"})
+    protected void staleEtagWriteFails(Writer writer) {}
+
+    /**
+     * Override to skip on Garage: it enforces neither {@code If-None-Match: *} nor {@code If-Match} on PutObject.
+     * Verified via S3StorageS3ProxyIT.
+     */
+    @Override
+    @ParameterizedTest
+    @MethodSource("writers")
+    @Disabled("Garage does not enforce If-None-Match: * on PutObject")
+    @SuppressWarnings({"java:S2699", "java:S1186"})
+    protected void ifNotExistsWithEtagFails(Writer writer) {}
 
     private S3ClientCache.Key keyFor() {
         return S3ClientCache.key(

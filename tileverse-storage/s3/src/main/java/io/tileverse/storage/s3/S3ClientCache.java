@@ -24,6 +24,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
 import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.http.async.SdkAsyncHttpClient;
+import software.amazon.awssdk.profiles.ProfileFile;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.S3AsyncClientBuilder;
@@ -290,8 +291,23 @@ final class S3ClientCache {
                     .region(Region.of(key.region()))
                     .serviceConfiguration(serviceConfiguration())
                     .credentialsProvider(credentials);
-            key.endpointOverride().ifPresent(builder::endpointOverride);
+            key.endpointOverride()
+                    .ifPresentOrElse(
+                            endpoint -> useEndpoint(endpoint, builder),
+                            () -> key.profile().ifPresent(profile -> readSettingsFrom(profile, builder)));
             return builder.build();
+        }
+
+        /** An endpoint override wins over FIPS and dualstack: the SDK refuses a custom endpoint with either one on. */
+        private static void useEndpoint(URI endpoint, S3Presigner.Builder builder) {
+            builder.endpointOverride(endpoint).fipsEnabled(false).dualstackEnabled(false);
+        }
+
+        /** Gives the presigner the settings of the profile of the store: it takes no profile name. */
+        private static void readSettingsFrom(String profile, S3Presigner.Builder builder) {
+            ProfileEndpointSettings settings =
+                    ProfileEndpointSettings.resolve(ProfileFile::defaultProfileFile, profile);
+            builder.fipsEnabled(settings.fips()).dualstackEnabled(settings.dualstack());
         }
 
         /**
@@ -309,8 +325,22 @@ final class S3ClientCache {
                     .crossRegionAccessEnabled(key.crossRegionAccess())
                     .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
                     .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED);
-            key.endpointOverride().ifPresent(builder::endpointOverride);
+            key.endpointOverride().ifPresent(endpoint -> useEndpoint(endpoint, builder));
+            key.profile().ifPresent(profile -> readSettingsFrom(profile, builder));
             return builder;
+        }
+
+        /** An endpoint override wins over FIPS and dualstack: the SDK refuses a custom endpoint with either one on. */
+        private static void useEndpoint(URI endpoint, S3AsyncClientBuilder builder) {
+            builder.endpointOverride(endpoint).fipsEnabled(false).dualstackEnabled(false);
+        }
+
+        /**
+         * Makes the client read its settings from the profile of the store. Without it, the SDK reads endpoint, retry
+         * and FIPS settings from the profile named by {@code AWS_PROFILE}, or {@code default}.
+         */
+        private static void readSettingsFrom(String profile, S3AsyncClientBuilder builder) {
+            builder.overrideConfiguration(override -> override.defaultProfileName(profile));
         }
 
         private S3Configuration serviceConfiguration() {

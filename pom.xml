@@ -510,11 +510,6 @@
           <version>3.11.2</version>
         </plugin>
         <plugin>
-          <groupId>org.xolstice.maven.plugins</groupId>
-          <artifactId>protobuf-maven-plugin</artifactId>
-          <version>0.6.1</version>
-        </plugin>
-        <plugin>
           <groupId>com.diffplug.spotless</groupId>
           <artifactId>spotless-maven-plugin</artifactId>
           <version>2.44.5</version>
@@ -698,9 +693,9 @@
                 <exclude>src/main/java/io/tileverse/vectortile/mvt/GeometryCommand.java</exclude>
                 <exclude>src/main/java/io/tileverse/vectortile/mvt/GeometryEncoder.java</exclude>
                 <exclude>src/main/java/io/tileverse/vectortile/mvt/VectorTileBuilder.java</exclude>
-                <exclude>src/main/java/io/tileverse/vectortile/mvt/VectorTileProto.java</exclude>
                 <exclude>src/test/java/io/tileverse/vectortile/mvt/VectorTileBuilderTest.java</exclude>
                 <exclude>src/test/java/io/tileverse/vectortile/mvt/VectorTileCodecTest.java</exclude>
+                <exclude>src/test/java/io/tileverse/vectortile/mvt/VectorTileProto.java</exclude>
               </excludes>
               <licenseHeader>
                 <file>${maven.multiModuleProjectDirectory}/license_header.txt</file>
@@ -788,7 +783,6 @@
           <excludeArtifacts>
             <excludeArtifact>tileverse-coverage-report</excludeArtifact>
             <excludeArtifact>tileverse-internal</excludeArtifact>
-            <excludeArtifact>tileverse-java-vector-tile-shaded</excludeArtifact>
             <excludeArtifact>tileverse-vectortiles-benchmarks</excludeArtifact>
           </excludeArtifacts>
         </configuration>

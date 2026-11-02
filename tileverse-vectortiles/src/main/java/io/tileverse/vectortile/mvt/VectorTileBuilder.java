@@ -19,6 +19,8 @@
 package io.tileverse.vectortile.mvt;
 
 import io.tileverse.vectortile.model.VectorTile;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Geometry;
@@ -91,6 +93,9 @@ import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
  * <p>This class is <strong>NOT</strong> thread-safe. Each thread should use its own VectorTileBuilder instance.
  */
 public class VectorTileBuilder {
+
+    /** The field number of the layers of the Tile message of the vector tile schema. */
+    private static final int TILE_LAYERS = 3;
 
     /** Constructs a new VectorTileBuilder with default settings. */
     public VectorTileBuilder() {
@@ -243,30 +248,28 @@ public class VectorTileBuilder {
     }
 
     /**
-     * Internal method to build the protobuf tile structure. Layers are added directly via LayerBuilder.build(), so this
-     * just finalizes.
+     * Encodes the layers added by {@link LayerBuilder#build()}, and clears this builder for the next tile.
      *
-     * @return the built VectorTile
+     * @return the built VectorTile, over its encoded bytes
      */
     public VectorTile build() {
-        io.tileverse.vectortile.mvt.VectorTileProto.Tile proto = buildProto();
-        MvtTile tile = new MvtTile(proto);
-        protoTileBuilder.clear();
-        return tile;
+        byte[] encoded = layers.toByteArray();
+        layers.clear();
+        try {
+            return MvtTile.wrap(encoded);
+        } catch (IOException e) {
+            // Unreachable: the builder writes valid tiles
+            throw new UncheckedIOException(e);
+        }
     }
 
-    VectorTileProto.Tile buildProto() {
-        return protoTileBuilder.build();
-    }
-
-    /** The proto tile being built */
-    private VectorTileProto.Tile.Builder protoTileBuilder = VectorTileProto.Tile.newBuilder();
+    /** The layers of the tile being built, each written as a field of the tile. */
+    private final WireWriter layers = new WireWriter();
 
     /**
      * The extent value control how detailed the coordinates are encoded in the vector tile. 4096 is the default.
      *
-     * <p>This will be the extent on the resulting
-     * {@link io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer#getExtent()}, and coordinates added to
+     * <p>This will be the extent on the resulting {@link VectorTile.Layer#getExtent()}, and coordinates added to
      * {@link FeatureBuilder#geometry(Geometry)} are expected to be in {@code 0..extent-1} coordinate space in both
      * axis. Input geometries will be clipped to this extent plus the {@link #setClipBuffer(int) buffer}.
      *
@@ -326,10 +329,8 @@ public class VectorTileBuilder {
     }
 
     /** Internal method for LayerBuilder to add completed layers directly. */
-    void addLayer(VectorTileProto.Tile.Layer layer) {
-        if (layer != null && layer.getFeaturesCount() > 0) {
-            protoTileBuilder.addLayers(layer);
-        }
+    void addLayer(WireWriter layer) {
+        layers.writeMessage(TILE_LAYERS, layer);
     }
 
     /** Expose configuration to LayerBuilder */

@@ -11,9 +11,11 @@ import io.tileverse.vectortile.model.GeometryReader;
 import io.tileverse.vectortile.model.VectorTile;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-record MvtLayer(MvtTile tile, VectorTileProto.Tile.Layer layerProto) implements VectorTile.Layer {
+/** A layer of a decoded tile, as a view over the tile and the index of the layer. */
+record MvtLayer(MvtTile tile, LayerIndex index) implements VectorTile.Layer {
 
     @Override
     public VectorTile getTile() {
@@ -22,35 +24,25 @@ record MvtLayer(MvtTile tile, VectorTileProto.Tile.Layer layerProto) implements 
 
     @Override
     public String getName() {
-        return layerProto.getName();
+        return index.name();
     }
 
     @Override
     public int getExtent() {
-        if (!layerProto.hasExtent()) {
-            return 4096;
-        }
-        return layerProto.getExtent();
+        return index.extent();
     }
 
     @Override
     public Set<String> getAttributeNames() {
-        return Set.copyOf(layerProto.getKeysList());
+        return index.attributeNames();
     }
 
     @Override
     public int count() {
-        return layerProto.getFeaturesCount();
+        return index.featureCount();
     }
 
-    /**
-     * Returns a stream of features in this layer.
-     *
-     * <p>If the features don't have ids, they'll be assigned an id based on their position in the list
-     *
-     * @return a sequential-only stream that reuses Feature instances for memory efficiency
-     * @see MvtFeature#copy() for creating independent Feature copies
-     */
+    /** Returns a stream of new features, each one read from the tile bytes when the stream reaches it. */
     @Override
     public Stream<Feature> getFeatures() {
         return getFeatures(f -> true);
@@ -65,12 +57,12 @@ record MvtLayer(MvtTile tile, VectorTileProto.Tile.Layer layerProto) implements 
     public Stream<Feature> getFeatures(Predicate<Feature> filter, GeometryReader decoder) {
         requireNonNull(filter, "filter");
         requireNonNull(decoder, "decoder");
-        return layerProto.getFeaturesList().stream()
-                .map(f -> createFeature(f, decoder))
+        return IntStream.range(0, count())
+                .mapToObj(feature -> createFeature(feature, decoder))
                 .filter(filter);
     }
 
-    private Feature createFeature(VectorTileProto.Tile.Feature feature, GeometryReader decoder) {
+    private Feature createFeature(int feature, GeometryReader decoder) {
         return new MvtFeature(this, feature, decoder);
     }
 

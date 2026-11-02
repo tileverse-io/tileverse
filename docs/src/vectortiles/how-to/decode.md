@@ -1,6 +1,6 @@
 # Decoding Vector Tiles
 
-`VectorTileCodec` decodes raw [Mapbox Vector Tile](https://github.com/mapbox/vector-tile-spec) bytes into a `VectorTile` model with JTS `Geometry` instances attached to each feature. The codec is stateless and thread-safe; instantiate once and reuse.
+`VectorTileCodec` decodes raw [Mapbox Vector Tile](https://github.com/mapbox/vector-tile-spec) bytes into a `VectorTile` model with JTS `Geometry` instances attached to each feature. A codec is configured when created and is thread-safe. Create it once and reuse it.
 
 ## Pick an input shape
 
@@ -14,7 +14,7 @@ VectorTile fromBuffer = codec.decode(ByteBuffer data);  // reads from data.posit
 VectorTile fromStream = codec.decode(InputStream in);   // reads to the end; the caller closes the stream
 ```
 
-Prefer `decode(InputStream)` when the source is already a stream (HTTP body, channel-backed input). It avoids materializing the encoded bytes in a transient array.
+The tile keeps a copy of the encoded bytes. `decode(byte[])` and `decode(ByteBuffer)` copy the bytes once. `decode(InputStream)` reads the stream into a pooled array, then copies the bytes of the tile. Prefer `decode(byte[])` or `decode(ByteBuffer)` when the bytes are at hand, and `decode(InputStream)` when the source is a stream (HTTP body, channel-backed input).
 
 ## Walk layers and features
 
@@ -37,7 +37,7 @@ for (VectorTile.Layer layer : tile.getLayers()) {
 
 ## Filter features without materializing geometries
 
-Geometry decoding is the expensive step in MVT parsing. A feature decodes its geometry on the first call to `getGeometry()`. A predicate reading only attributes leaves the geometries of rejected features undecoded:
+Decoding a tile decodes the geometry commands of each feature. A feature builds its JTS geometry on the first call to `getGeometry()`. A predicate reading only attributes builds no JTS geometry for the rejected features:
 
 ```java
 import java.util.function.Predicate;
@@ -63,7 +63,7 @@ tile.getLayer("buildings").ifPresent(layer -> ...);       // null-safe layer loo
 
 ## Error handling
 
-`decode(...)` throws `IOException` when the bytes are not a valid MVT protobuf message. Geometry commands are decoded later, on the first call to `getGeometry()`. A corrupt command stream makes that call throw an `IllegalArgumentException` or `IllegalStateException`.
+`decode(...)` throws `IOException` when the bytes are not a valid MVT protobuf message. The geometries decode with the tile. A malformed geometry reads as the empty geometry of its type, and its feature keeps its id and its attributes. A codec from `VectorTileCodec.failingOnMalformedGeometry()` throws an `IOException` from `decode(...)` instead.
 
 ```java
 try {

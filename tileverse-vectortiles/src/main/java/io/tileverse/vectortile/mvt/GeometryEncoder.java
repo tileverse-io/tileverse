@@ -18,8 +18,6 @@
  */
 package io.tileverse.vectortile.mvt;
 
-import static com.google.protobuf.CodedOutputStream.encodeZigZag32;
-
 import io.tileverse.vectortile.mvt.VectorTileBuilder.BuildParams;
 import java.util.ArrayList;
 import java.util.List;
@@ -272,11 +270,11 @@ class GeometryEncoder {
     private List<Integer> pack(Geometry geometry) {
         List<Integer> commands = new ArrayList<>(geometry.getNumPoints());
         IntConsumer sink = commands::add;
-        GeometryPacker.pack(geometry, sink);
+        CommandWriter.write(geometry, sink);
         return commands;
     }
 
-    private static record GeometryPacker(CoordinateCursor cursor, IntConsumer commandsSink)
+    private static record CommandWriter(CoordinateCursor cursor, IntConsumer commandsSink)
             implements GeometryComponentFilter, CoordinateSequenceFilter {
 
         @SuppressWarnings("serial")
@@ -286,11 +284,11 @@ class GeometryEncoder {
             public boolean processingMultiPoint = false;
         }
 
-        public static void pack(Geometry geom, IntConsumer commandSink) {
+        public static void write(Geometry geom, IntConsumer commandSink) {
             checkPreconditions(geom);
             CoordinateCursor cursor = new CoordinateCursor();
             cursor.processingMultiPoint = geom instanceof MultiPoint;
-            geom.apply(((GeometryComponentFilter) new GeometryPacker(cursor, commandSink)));
+            geom.apply(((GeometryComponentFilter) new CommandWriter(cursor, commandSink)));
             cursor.processingMultiPoint = false;
         }
 
@@ -387,6 +385,11 @@ class GeometryEncoder {
             // Update cursor position after encoding deltas
             cursor.setX(x);
             cursor.setY(y);
+        }
+
+        // A parameter holds the zigzag encoding of a delta: deltas of either sign near zero take few bytes
+        private static int encodeZigZag32(int delta) {
+            return (delta << 1) ^ (delta >> 31);
         }
 
         @Override

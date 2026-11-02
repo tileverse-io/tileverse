@@ -81,7 +81,7 @@
 
     <!-- Dependency versions -->
     <cloud-dependencies-bom.version>1.1.0</cloud-dependencies-bom.version>
-    <caffeine.version>3.2.3</caffeine.version>
+    <caffeine.version>3.3.1</caffeine.version>
     <commons-compress.version>1.28.0</commons-compress.version>
     <jackson.version>3.2.4</jackson.version>
     <jts.version>1.20.0</jts.version>

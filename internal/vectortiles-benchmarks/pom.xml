@@ -17,6 +17,17 @@
     <sonar.coverage.exclusions>**/*</sonar.coverage.exclusions>
   </properties>
 
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <!-- The version declared by java-vector-tile 1.4.2. The root pom manages protobuf-java to another version for the cloud SDKs. -->
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-java</artifactId>
+        <version>4.29.3</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
   <dependencies>
     <dependency>
       <groupId>io.tileverse.vectortiles</groupId>
@@ -24,9 +35,9 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>io.tileverse</groupId>
-      <artifactId>tileverse-java-vector-tile-shaded</artifactId>
-      <version>${project.version}</version>
+      <groupId>no.ecc.vectortile</groupId>
+      <artifactId>java-vector-tile</artifactId>
+      <version>1.4.2</version>
     </dependency>
     <dependency>
       <groupId>org.openjdk.jmh</groupId>
@@ -38,6 +49,18 @@
       <scope>provided</scope>
     </dependency>
   </dependencies>
+
+  <repositories>
+    <repository>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+      <!-- java-vector-tile is published to the OSGeo repository -->
+      <id>osgeo</id>
+      <name>OSGeo Release Repository</name>
+      <url>https://repo.osgeo.org/repository/release/</url>
+    </repository>
+  </repositories>
 
   <build>
     <plugins>

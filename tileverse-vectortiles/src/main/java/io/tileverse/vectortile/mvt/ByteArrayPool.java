@@ -7,15 +7,15 @@ package io.tileverse.vectortile.mvt;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Byte arrays reused across tile decodes. The array parser of protobuf needs the whole tile in an array, and borrowing
- * that array from the pool spares an allocation of the size of the tile on each decode.
+ * Byte arrays reused across the decodes of tiles read from a stream. The length of a stream is unknown until its end,
+ * and a decoded tile keeps a copy of exact length. The stream is read into a borrowed array, grown until the tile fits,
+ * and borrowing spares the growing arrays of each decode.
  *
  * <p>A borrowed array is valid only during the call to the {@link ArrayFunction}. The pool keeps released arrays up to
  * a total length, and drops the arrays beyond it.
@@ -44,7 +44,7 @@ final class ByteArrayPool {
 
     /** Reads {@code in} to its end into a pooled array, and applies {@code function} to the bytes read. */
     <T> T withContentOf(InputStream in, ArrayFunction<T> function) throws IOException {
-        byte[] array = borrow(initialLength);
+        byte[] array = borrow();
         try {
             int length = 0;
             int read;
@@ -60,30 +60,13 @@ final class ByteArrayPool {
         }
     }
 
-    /**
-     * Copies the remaining bytes of {@code buffer} into a pooled array, and applies {@code function} to them. The
-     * position of {@code buffer} does not change.
-     */
-    <T> T withContentOf(ByteBuffer buffer, ArrayFunction<T> function) throws IOException {
-        int length = buffer.remaining();
-        byte[] array = borrow(length);
-        try {
-            buffer.get(buffer.position(), array, 0, length);
-            return function.apply(array, length);
-        } finally {
-            release(array);
-        }
-    }
-
-    private byte[] borrow(int minLength) {
+    // A pooled array starts at the initial length and only grows: any of them can start a read
+    private byte[] borrow() {
         byte[] array = free.poll();
         if (array == null) {
-            return new byte[Math.max(minLength, initialLength)];
+            return new byte[initialLength];
         }
         freeBytes.addAndGet(-array.length);
-        if (array.length < minLength) {
-            return new byte[minLength];
-        }
         return array;
     }
 

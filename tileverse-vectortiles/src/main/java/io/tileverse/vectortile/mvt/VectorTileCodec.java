@@ -5,7 +5,6 @@
  */
 package io.tileverse.vectortile.mvt;
 
-import com.google.protobuf.CodedOutputStream;
 import io.tileverse.vectortile.model.GeometryReader;
 import io.tileverse.vectortile.model.VectorTile;
 import java.io.IOException;
@@ -23,8 +22,20 @@ import org.locationtech.jts.geom.GeometryFactory;
  *
  * <h2>Design Philosophy</h2>
  *
- * <p>The codec has no configuration parameters - it simply converts between the model and protobuf representations.
- * Coordinates are always preserved in their natural extent space as stored in the protobuf data.
+ * <p>The codec simply converts between the model and the encoded bytes. Coordinates are always preserved in their
+ * natural extent space, as stored in the tile.
+ *
+ * <h2>Malformed Geometries</h2>
+ *
+ * <p>Decoding a tile also decodes the geometry of each feature. A geometry is malformed when it does not start with a
+ * MoveTo command, when it holds an unknown command or a command announcing more points than the parameters left, or
+ * when a polygon ring of three points or more does not end on its first point. A codec created with
+ * {@link #VectorTileCodec()} decodes a malformed geometry as the empty geometry of its type, and the feature keeps its
+ * id and its attributes. A codec from {@link #failingOnMalformedGeometry()} fails to decode the tile instead.
+ *
+ * <p>A decoded geometry leaves out its lines of fewer than 2 points, its rings of fewer than 3 points, and its closed
+ * rings of zero area. The MVT specification says that a ring of zero area signals anomalous points. A feature with all
+ * its parts left out gets the empty geometry of its type.
  *
  * <h2>Geometry Reading Customization</h2>
  *
@@ -69,20 +80,37 @@ import org.locationtech.jts.geom.GeometryFactory;
 public class VectorTileCodec {
 
     /**
-     * Arrays for the tiles read from a stream, or from a buffer without an accessible array. A new array has 64 KiB and
-     * doubles until the tile fits. The pool keeps up to 16 MiB of arrays between decodes.
+     * Arrays for the tiles read from a stream. The length of a stream is unknown until its end, and the decoded tile
+     * keeps a copy of exact length: the stream is read into a borrowed array. A new array has 64 KiB and doubles until
+     * the tile fits. The pool keeps up to 16 MiB of arrays between decodes.
      */
     private static final ByteArrayPool ARRAYS = new ByteArrayPool(64 * 1024, 16L * 1024 * 1024);
 
-    /** Constructs a new VectorTileCodec. */
+    private final boolean failOnMalformedGeometry;
+
+    /** Constructs a new VectorTileCodec, decoding a malformed geometry as the empty geometry of its type. */
     public VectorTileCodec() {
-        // Default constructor
+        this(false);
+    }
+
+    private VectorTileCodec(boolean failOnMalformedGeometry) {
+        this.failOnMalformedGeometry = failOnMalformedGeometry;
+    }
+
+    /**
+     * Returns a codec whose decode methods throw an {@link IOException} at the first malformed geometry of a tile. The
+     * message of the exception names the layer, the index of the feature in the layer, and the problem.
+     *
+     * @return a codec failing on malformed geometry
+     */
+    public static VectorTileCodec failingOnMalformedGeometry() {
+        return new VectorTileCodec(true);
     }
 
     // ========== Encoding Methods ==========
 
     /**
-     * Encodes a tile model to a byte array.
+     * Encodes a tile model to a byte array. The array is a copy, and the caller may modify it.
      *
      * <p>Use {@link #encode(VectorTile, OutputStream)} or {@link #encode(VectorTile, ByteBuffer)} for better
      * performance.
@@ -91,8 +119,7 @@ public class VectorTileCodec {
      * @return the encoded vector tile as a byte array
      */
     public byte[] encode(VectorTile tile) {
-        VectorTileProto.Tile proto = getProto(tile);
-        return proto.toByteArray();
+        return encodedBytes(tile).clone();
     }
 
     /**
@@ -104,8 +131,7 @@ public class VectorTileCodec {
      * @throws IOException if writing to the stream fails
      */
     public void encode(VectorTile tile, OutputStream outputStream) throws IOException {
-        VectorTileProto.Tile proto = getProto(tile);
-        proto.writeTo(outputStream);
+        outputStream.write(encodedBytes(tile));
     }
 
     /**
@@ -117,40 +143,30 @@ public class VectorTileCodec {
      * @param buffer the ByteBuffer to write the encoded tile to
      * @throws InsufficientBufferException if the buffer has insufficient space, containing the
      *     {@link InsufficientBufferException#getSerializedSize() required size} for proper buffer allocation
-     * @throws IOException if encoding fails for other reasons
      */
     public void encode(VectorTile tile, ByteBuffer buffer) throws IOException {
-        VectorTileProto.Tile proto = getProto(tile);
-        int serializedSize = proto.getSerializedSize();
-
-        if (buffer.remaining() < serializedSize) {
-            throw new InsufficientBufferException(serializedSize, buffer.remaining());
+        byte[] encoded = encodedBytes(tile);
+        if (buffer.remaining() < encoded.length) {
+            throw new InsufficientBufferException(encoded.length, buffer.remaining());
         }
-
-        // Create a CodedOutputStream that writes directly to the ByteBuffer
-        CodedOutputStream codedOutput = CodedOutputStream.newInstance(buffer);
-        proto.writeTo(codedOutput);
-        codedOutput.flush();
+        buffer.put(encoded);
     }
 
     /**
-     * Returns the serialized size of the encoded tile without actually encoding it.
-     *
-     * <p><strong>Note:</strong> This method requires building the entire protobuf structure internally, which involves
-     * computational overhead. Use judiciously.
+     * Returns the size of the encoded tile. A decoded or built tile holds its encoded bytes, and the size costs nothing
+     * to compute.
      *
      * @param tile the tile model to calculate size for
      * @return the size in bytes that the encoded tile will occupy
      */
     public int getSerializedSize(VectorTile tile) {
-        VectorTileProto.Tile proto = getProto(tile);
-        return proto.getSerializedSize();
+        return encodedBytes(tile).length;
     }
 
     // ========== Decoding Methods ==========
 
     /**
-     * Decodes a byte array to a tile model.
+     * Decodes a byte array to a tile model. The tile keeps a copy of the array, and the caller may reuse it.
      *
      * <p>Coordinates are returned in their natural extent space (0 to extent-1) as stored in the MVT data.
      *
@@ -159,10 +175,11 @@ public class VectorTileCodec {
      * @throws IOException if decoding fails
      */
     public VectorTile decode(byte[] data) throws IOException {
-        return parse(data, 0, data.length);
+        return MvtTile.copyOf(data, 0, data.length, failOnMalformedGeometry);
     }
     /**
-     * Decodes a ByteBuffer to a tile model.
+     * Decodes the remaining bytes of a ByteBuffer to a tile model. The tile keeps a copy of the bytes, and the position
+     * and the limit of the buffer do not change.
      *
      * <p>Coordinates are returned in their natural extent space (0 to extent-1) as stored in the MVT data.
      *
@@ -172,9 +189,12 @@ public class VectorTileCodec {
      */
     public VectorTile decode(ByteBuffer data) throws IOException {
         if (data.hasArray()) {
-            return parse(data.array(), data.arrayOffset() + data.position(), data.remaining());
+            int offset = data.arrayOffset() + data.position();
+            return MvtTile.copyOf(data.array(), offset, data.remaining(), failOnMalformedGeometry);
         }
-        return ARRAYS.withContentOf(data, (array, length) -> parse(array, 0, length));
+        byte[] bytes = new byte[data.remaining()];
+        data.get(data.position(), bytes);
+        return MvtTile.wrap(bytes, failOnMalformedGeometry);
     }
 
     /**
@@ -182,37 +202,22 @@ public class VectorTileCodec {
      *
      * <p>Coordinates are returned in their natural extent space (0 to extent-1) as stored in the MVT data.
      *
-     * <p><strong>Warning:</strong> The input stream is consumed fully due to protocol buffer requirements.
+     * <p>The stream is read to its end: decoding needs the whole tile.
      *
      * @param data the encoded MVT data stream
      * @return the decoded tile model
      * @throws IOException if decoding fails
      */
     public VectorTile decode(InputStream data) throws IOException {
-        return ARRAYS.withContentOf(data, (array, length) -> parse(array, 0, length));
+        return ARRAYS.withContentOf(data, (array, length) -> MvtTile.copyOf(array, 0, length, failOnMalformedGeometry));
     }
 
     // ========== Private Helper Methods ==========
 
-    /**
-     * Parses with the byte array parser of protobuf. Its stream and ByteBuffer parsers fail on a packed field of
-     * length zero, such as a feature with an empty geometry or tag list. The parsed tile keeps no reference to
-     * {@code data}: protobuf copies strings and bytes out of it, and the caller may reuse the array.
-     */
-    private static VectorTile parse(byte[] data, int offset, int length) throws IOException {
-        VectorTileProto.Tile tile = VectorTileProto.Tile.parser().parseFrom(data, offset, length);
-        return new MvtTile(tile);
-    }
-
-    /**
-     * Extracts the protobuf tile from a model tile.
-     *
-     * @param tile the model tile
-     * @return the protobuf tile
-     */
-    private VectorTileProto.Tile getProto(VectorTile tile) {
+    /** Returns the encoded bytes held by the tile. The encode methods write them or return a copy. */
+    private static byte[] encodedBytes(VectorTile tile) {
         if (tile instanceof MvtTile mvt) {
-            return mvt.tileProto();
+            return mvt.bytes();
         }
         // TODO: build an MvtTile from a generic Tile
         throw new UnsupportedOperationException("Generic Tile to MVT conversion not yet implemented");

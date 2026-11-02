@@ -35,6 +35,7 @@
     <module>tileverse-tilestore</module>
     <module>tileverse-pmtiles</module>
     <module>tileverse-versatiles</module>
+    <module>internal</module>
   </modules>
 
   <scm>
@@ -786,6 +787,9 @@
           <waitMaxTime>3600</waitMaxTime>
           <excludeArtifacts>
             <excludeArtifact>tileverse-coverage-report</excludeArtifact>
+            <excludeArtifact>tileverse-internal</excludeArtifact>
+            <excludeArtifact>tileverse-java-vector-tile-shaded</excludeArtifact>
+            <excludeArtifact>tileverse-vectortiles-benchmarks</excludeArtifact>
           </excludeArtifacts>
         </configuration>
       </plugin>

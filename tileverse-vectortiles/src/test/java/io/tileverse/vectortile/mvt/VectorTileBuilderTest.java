@@ -21,7 +21,11 @@ package io.tileverse.vectortile.mvt;
 import static io.tileverse.vectortile.mvt.TileAssertions.assertThat;
 
 import io.tileverse.vectortile.model.VectorTile;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.locationtech.jts.geom.Geometry;
@@ -683,5 +687,74 @@ class VectorTileBuilderTest {
                 .coord(3, 6)
                 .done()
                 .matches();
+    }
+
+    // The second build of a held feature builder writes the second geometry alone
+    @Test
+    void buildsHeldFeatureBuilderTwice() {
+        LayerBuilder layer = new VectorTileBuilder().setExtent(256).layer().name("HELD");
+        FeatureBuilder feature = layer.feature();
+        feature.geometry(geom("POINT(3 6)")).build();
+        feature.geometry(geom("POINT(5 7)")).build();
+
+        VectorTile tile = layer.build().build();
+
+        assertThat(tile)
+                .layer("HELD")
+                .hasFeatureCount(2)
+                .feature(1)
+                .geometry()
+                .isPoint()
+                .moveTo(5, 7)
+                .matches();
+    }
+
+    // Protobuf writes a parsed tile back in its own encoding, with its field order and packed fields
+    @Test
+    void writesProtobufEncoding() throws IOException {
+        VectorTile automaticIds = tileWithSeveralLayers(new VectorTileBuilder());
+        VectorTile withoutIds = tileWithSeveralLayers(new VectorTileBuilder().setAutoIncrementIds(false));
+
+        assertThat(automaticIds).hasExactLayers("values", "geometries");
+        assertProtobufEncoding(automaticIds);
+        assertProtobufEncoding(withoutIds);
+    }
+
+    /** Builds a layer with each type of value, a layer without features, and a layer of multi-geometries. */
+    private VectorTile tileWithSeveralLayers(VectorTileBuilder builder) {
+        LayerBuilder values = builder.layer().name("values");
+        values.feature(eachValueType(), geom("POINT(3 6)"));
+        values.feature(Map.of("rank", -2), geom("POINT(5 7)"), 300);
+        values.build();
+        builder.layer().name("empty").build();
+        LayerBuilder geometries = builder.layer().name("geometries");
+        geometries.feature(Map.of(), geom("MULTIPOINT((1 2), (3 4))"));
+        geometries.feature(Map.of(), geom("MULTILINESTRING((0 0, 5 5), (10 10, 15 15, 20 10))"));
+        geometries.feature(
+                Map.of(), geom("MULTIPOLYGON(((0 0, 10 0, 10 10, 0 10, 0 0)), ((20 20, 30 20, 30 30, 20 30, 20 20)))"));
+        // A feature for each type, with the next automatic id
+        geometries.feature(Map.of("kind", "mixed"), geom("GEOMETRYCOLLECTION(POINT(1 1), LINESTRING(0 0, 9 9))"));
+        geometries.build();
+        return builder.build();
+    }
+
+    private static Map<String, Object> eachValueType() {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("string", "text");
+        values.put("int", -7);
+        values.put("long", 1L << 40);
+        values.put("float", 1.5f);
+        values.put("double", -2.25d);
+        values.put("decimal", new BigDecimal("1.10"));
+        values.put("short", (short) 3);
+        values.put("bool", true);
+        values.put("character", 'c');
+        return values;
+    }
+
+    private static void assertProtobufEncoding(VectorTile tile) throws IOException {
+        byte[] bytes = new VectorTileCodec().encode(tile);
+        byte[] rewritten = VectorTileProto.Tile.parseFrom(bytes).toByteArray();
+        Assertions.assertThat(rewritten).isEqualTo(bytes);
     }
 }

@@ -97,6 +97,15 @@ public interface VectorTile {
     OptionalInt serializedSize();
 
     /**
+     * Returns an estimate of the heap memory held by this tile, in bytes. Caches use it to weigh the tile.
+     *
+     * @return the estimated size, or empty if the implementation has no estimate
+     */
+    default OptionalInt heapSize() {
+        return OptionalInt.empty();
+    }
+
+    /**
      * A named collection of vector features with shared coordinate space.
      *
      * <p>Layers group related features and define the coordinate extent. All features within a layer share the same

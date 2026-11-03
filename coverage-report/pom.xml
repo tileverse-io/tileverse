@@ -110,10 +110,6 @@
               <title>Tileverse Coverage</title>
               <footer>Code coverage report for Tileverse ${project.version}</footer>
               <outputDirectory>${project.reporting.outputDirectory}/jacoco-aggregate</outputDirectory>
-              <excludes>
-                <!-- Exclude protobuf generated classes -->
-                <exclude>**/VectorTileProto*</exclude>
-              </excludes>
             </configuration>
           </execution>
         </executions>

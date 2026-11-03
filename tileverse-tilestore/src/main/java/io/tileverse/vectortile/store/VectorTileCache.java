@@ -16,6 +16,7 @@ import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.NullMarked;
@@ -60,16 +61,16 @@ public class VectorTileCache {
      * <p>This value accounts for:
      *
      * <ul>
-     *   <li>Key/Value Overhead: Approximately 100 bytes of JVM object metadata.
+     *   <li>Key/Value Overhead: 52 bytes for the key and the {@code Optional} holding the tile.
      *   <li>Binary Size: An assumed average tile payload of 75-80 KB.
-     *   <li>Inflation: A 5x multiplier to account for in-memory expansion of Protobuf objects compared to their
-     *       serialized form.
+     *   <li>Heap Size: About 2.5 times the binary size, as estimated by {@link VectorTile#heapSize()} for a decoded
+     *       tile. A tile without an estimate weighs 5 times its binary size.
      * </ul>
      *
      * Used by {@link #buildCache()} and effectively by {@code CaffeineCache#Builder}'s {@code computeInitialCapacity()}
      * to pre-size internal data structures and minimize GC churn during cache warm-up.
      */
-    private static final int AVERAGE_TILE_WEIGHT = 1024 * 400;
+    private static final int AVERAGE_TILE_WEIGHT = 1024 * 200;
 
     private final String sourceIdentifier;
 
@@ -162,6 +163,16 @@ public class VectorTileCache {
         }
     }
 
+    /**
+     * Returns the weight of a cache entry: the bytes of the key, of the {@code Optional} and of the tile. The tile
+     * gives its size through {@link VectorTile#heapSize()}. A tile without an estimate weighs 5 times its encoded size.
+     *
+     * <p>The weight counts the bytes of the objects held by the tile. G1 stores an array of at least half a region in
+     * whole regions. A tile decoded by {@code VectorTileCodec} keeps a copy of its encoded bytes. With the 2 MiB
+     * regions of a 3 GB heap, the copy of a 1.1 MiB tile takes 2 MiB, and such a tile holds more memory than its
+     * weight. G1 sizes its regions from the maximum heap, from 1 MiB for a heap of up to 2 GB to 32 MiB for a heap
+     * above 32 GB.
+     */
     static int weigh(TileIndex key, Optional<VectorTile> value) {
         // Key overhead: Record header (12) + long (8) + long (8) + int (4) + padding
         // (4) = 36 bytes.
@@ -172,13 +183,20 @@ public class VectorTileCache {
             return keyWeight + 16; // Optional.empty is a singleton
         }
 
-        // Protobuf expansion:
-        // In-memory Protobuf objects are typically 4x to 8x larger than their binary size.
-        // A multiplier of 5 is a safe, conservative industry standard for Caffeine.
-        int serializedSize = value.get().serializedSize().orElse(0);
-        int valueWeight = 32 + (serializedSize * 5);
+        // Optional header (12) + reference (4) = 16 bytes.
+        long valueWeight = 16L + tileWeight(value.get());
 
-        return keyWeight + valueWeight;
+        return (int) Math.min(keyWeight + valueWeight, Integer.MAX_VALUE);
+    }
+
+    // An implementation without an estimate may decode the tile into objects, several times larger than its bytes
+    private static long tileWeight(VectorTile tile) {
+        OptionalInt heapSize = tile.heapSize();
+        if (heapSize.isPresent()) {
+            return heapSize.getAsInt();
+        }
+        int serializedSize = tile.serializedSize().orElse(0);
+        return 5L * serializedSize;
     }
 
     io.tileverse.cache.CacheStats stats() {

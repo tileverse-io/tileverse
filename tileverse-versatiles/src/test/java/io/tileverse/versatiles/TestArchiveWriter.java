@@ -5,8 +5,10 @@
  */
 package io.tileverse.versatiles;
 
+import io.tileverse.compression.Codec;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -16,8 +18,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.zip.GZIPOutputStream;
-import org.apache.commons.compress.compressors.zstandard.ZstdCompressorOutputStream;
 
 /**
  * Writes small Versatiles containers for tests. The tiles and the metadata use the compression of the archive. The
@@ -156,26 +156,16 @@ public final class TestArchiveWriter {
     private byte[] encode(byte[] data) {
         return switch (compression) {
             case NONE -> data;
-            case GZIP -> gzip(data);
+            case GZIP -> compress(Codec.gzip(), data);
             case BROTLI -> storedBrotli(data);
-            case ZSTD -> zstd(data);
+            case ZSTD -> compress(Codec.zstd(), data);
         };
     }
 
-    private static byte[] zstd(byte[] data) {
+    private static byte[] compress(Codec codec, byte[] data) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try (ZstdCompressorOutputStream zstd = new ZstdCompressorOutputStream(out)) {
-            zstd.write(data);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        return out.toByteArray();
-    }
-
-    private static byte[] gzip(byte[] data) {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try (GZIPOutputStream gzip = new GZIPOutputStream(out)) {
-            gzip.write(data);
+        try (OutputStream encoder = codec.compress(out)) {
+            encoder.write(data);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

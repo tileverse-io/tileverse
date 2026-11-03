@@ -7,21 +7,15 @@ package io.tileverse.versatiles;
 
 import static java.util.Objects.requireNonNull;
 
-import com.github.luben.zstd.RecyclingBufferPool;
-import com.github.luben.zstd.ZstdInputStreamNoFinalizer;
 import io.tileverse.io.ByteBufferPool;
 import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
 import io.tileverse.io.ByteRange;
 import io.tileverse.io.IOFunction;
 import io.tileverse.storage.RangeReader;
-import java.io.BufferedInputStream;
-import java.io.ByteArrayInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import org.apache.commons.compress.compressors.brotli.BrotliCompressorInputStream;
-import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 
 /**
  * Reads the parts of a Versatiles container. A part is read with a single range request and decompressed in memory.
@@ -30,8 +24,6 @@ import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
  * 180 KB would take a dozen round trips to a remote store.
  */
 final class BlobReader {
-
-    private static final int DECOMPRESSED_BUFFER_BYTES = 4096;
 
     private final RangeReader rangeReader;
 
@@ -48,7 +40,7 @@ final class BlobReader {
     <T> T read(ByteRange range, Compression compression, IOFunction<InputStream, T> decoder) throws IOException {
         try (PooledByteBuffer pooled = ByteBufferPool.heapBuffer(range.length())) {
             ByteBuffer bytes = readFully(range, pooled.buffer());
-            try (InputStream decompressed = decompress(asInputStream(bytes), compression)) {
+            try (InputStream decompressed = compression.decompress(bytes)) {
                 return decoder.apply(decompressed);
             }
         }
@@ -71,33 +63,5 @@ final class BlobReader {
                             range.offset()));
         }
         return target.flip();
-    }
-
-    private static InputStream asInputStream(ByteBuffer heapBuffer) {
-        int offset = heapBuffer.arrayOffset() + heapBuffer.position();
-        return new ByteArrayInputStream(heapBuffer.array(), offset, heapBuffer.remaining());
-    }
-
-    private static InputStream decompress(InputStream compressed, Compression compression) throws IOException {
-        return switch (compression) {
-            case NONE -> compressed;
-            case GZIP -> buffered(new GzipCompressorInputStream(compressed));
-            case BROTLI -> buffered(new BrotliCompressorInputStream(compressed));
-            case ZSTD -> buffered(zstd(compressed));
-        };
-    }
-
-    /**
-     * Opens a Zstandard stream with a pooled input buffer and no finalizer. The stream of commons-compress allocates a
-     * 128 KiB input buffer for each stream and registers a finalizer, and both lengthen the garbage collection pauses
-     * under load. The stream must be closed to free its native decoder.
-     */
-    private static InputStream zstd(InputStream compressed) throws IOException {
-        return new ZstdInputStreamNoFinalizer(compressed, RecyclingBufferPool.INSTANCE);
-    }
-
-    /** Without a buffer, a decoder reading one byte at a time would run the decompressor once per byte. */
-    private static InputStream buffered(InputStream decompressor) {
-        return new BufferedInputStream(decompressor, DECOMPRESSED_BUFFER_BYTES);
     }
 }

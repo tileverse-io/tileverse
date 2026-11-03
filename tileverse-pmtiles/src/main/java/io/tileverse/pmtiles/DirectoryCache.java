@@ -5,8 +5,6 @@
  */
 package io.tileverse.pmtiles;
 
-import static io.tileverse.pmtiles.CompressionUtil.*;
-
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.github.benmanes.caffeine.cache.Scheduler;
 import io.tileverse.cache.Cache;
@@ -98,12 +96,12 @@ class DirectoryCache {
 
     /** {@link #cache} loading function */
     PMTilesDirectory readDirectory(ByteRange directoryRange) {
-        final byte compression = header.internalCompression();
+        final Compression compression = Compression.fromCode(header.internalCompression());
         try (PooledByteBuffer pooled = ByteBufferPool.heapBuffer(directoryRange.length())) {
             ByteBuffer buffer = pooled.buffer();
             rangeReader.readRange(directoryRange, buffer);
             buffer.flip();
-            try (InputStream in = decompressingInputStream(buffer, compression)) {
+            try (InputStream in = compression.decompress(buffer)) {
                 return DirectoryUtil.deserializeDirectory(in);
             }
         } catch (IOException e) {

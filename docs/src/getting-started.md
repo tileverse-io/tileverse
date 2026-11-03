@@ -44,6 +44,8 @@ Tileverse is published on Maven Central. Import the BOM to manage the versions, 
 
 Without the BOM, give each dependency its version, `2.1.0`. Tileverse needs Java 17 or later, and Maven 3.9 or Gradle 7 or later.
 
+Since 2.2, `io.tileverse:tileverse-dependencies` manages the versions of the third-party libraries used by Tileverse, such as Caffeine, Jackson, JTS and the compression libraries. Import it before `tileverse-bom` to build against the versions tested with Tileverse.
+
 ## Modules
 
 | Group | Artifact | Contents |
@@ -58,6 +60,7 @@ Without the BOM, give each dependency its version, `2.1.0`. Tileverse needs Java
 | `io.tileverse.vectortiles` | `tileverse-vectortiles` | The Mapbox Vector Tiles codec |
 | `io.tileverse.tilematrixset` | `tileverse-tilematrixset` | The OGC Tile Matrix Set model |
 | `io.tileverse.tilestore` | `tileverse-tilestore` | The tile store API shared by the archive readers |
+| `io.tileverse.compression` | `tileverse-compression` | The gzip, Brotli and Zstandard codecs used by the archive readers |
 
 One application can combine the cloud storage modules: none of them depends on Netty, and their SDK versions come from one curated set.
 

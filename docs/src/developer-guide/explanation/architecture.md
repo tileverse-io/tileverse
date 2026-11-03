@@ -4,7 +4,7 @@ Tileverse is a set of loosely coupled libraries. Each module works on its own, f
 
 ## Module map
 
-The Tileverse monorepo ships six library modules and a BOM. Three are independent of each other: `tileverse-storage`, `tileverse-vectortiles` and `tileverse-tilematrixset`. `tileverse-tilestore` builds on the format and grid libraries. The archive readers `tileverse-pmtiles` and `tileverse-versatiles` depend on all the others (`tileverse-storage` for I/O, `tileverse-vectortiles` for MVT decoding, `tileverse-tilematrixset` for grid math, `tileverse-tilestore` for the high-level tile-store wrappers).
+The Tileverse monorepo ships seven library modules and two BOMs. Three are independent of each other: `tileverse-storage`, `tileverse-vectortiles` and `tileverse-tilematrixset`. `tileverse-tilestore` builds on the format and grid libraries. `tileverse-compression` holds the gzip, Brotli and Zstandard codecs and takes its buffers from `tileverse-storage`. The archive readers `tileverse-pmtiles` and `tileverse-versatiles` depend on all the others (`tileverse-storage` for I/O, `tileverse-compression` for decompression, `tileverse-vectortiles` for MVT decoding, `tileverse-tilematrixset` for grid math, `tileverse-tilestore` for the high-level tile-store wrappers).
 
 ```mermaid
 graph TD
@@ -20,6 +20,7 @@ graph TD
 
     subgraph "Cross-cutting"
         TS[tileverse-tilestore<br/>TileStore&lt;T&gt;]
+        CMP[tileverse-compression<br/>Codec]
     end
 
     subgraph "Composed Modules"
@@ -37,15 +38,19 @@ graph TD
     TS --> VT
     TS --> TMS
 
+    CMP --> ST
+
     PMT --> ST
     PMT --> VT
     PMT --> TMS
     PMT --> TS
+    PMT --> CMP
 
     VER --> ST
     VER --> VT
     VER --> TMS
     VER --> TS
+    VER --> CMP
 ```
 
 ## System context
@@ -105,9 +110,10 @@ The Module column names the modules declaring each dependency.
 | **[Caffeine](https://github.com/ben-manes/caffeine)** | High-performance in-memory caching | `storage-core`, `tilestore`, `pmtiles`, `versatiles` |
 | **[Jackson](https://github.com/FasterXML/jackson)** 3 | JSON encodings (OGC TMS, TileJSON, PMTiles and Versatiles metadata) | `tilematrixset`, `tilestore`, `pmtiles`, `versatiles` |
 | **[webp-imageio](https://github.com/usefulness/webp-imageio)** | `ImageIO` plugin for WebP-encoded raster tiles (registered via JDK SPI; ships native libs for Linux and macOS on x86_64 and arm64, and for Windows on x86 and x86_64) | `pmtiles`, `versatiles` |
-| **[Apache Commons Compress](https://commons.apache.org/proper/commons-compress/)** | Gzip, Zstandard and Brotli decompression of tiles, directories and indexes | `pmtiles`, `versatiles` |
-| **[zstd-jni](https://github.com/luben/zstd-jni)** | Native Zstandard codec used by Commons Compress | `pmtiles`, `versatiles` |
-| **[Brotli decoder](https://github.com/google/brotli)** | Brotli decoder used by Commons Compress | `pmtiles`, `versatiles` |
+| **[Brotli4j](https://github.com/hyperxpro/Brotli4j)** | Native Brotli decoder for tiles, directories and indexes (native libraries for Linux and macOS on x86_64 and arm64, and for Windows on x86_64) | `compression` |
+| **[Brotli decoder](https://github.com/google/brotli)** | Pure-Java Brotli decoder, used when the Brotli4j native library cannot load | `compression` |
+| **[jlibdeflate](https://github.com/fulcrumgenomics/jlibdeflate)** | Native gzip decoder (libdeflate) for tiles, directories and metadata; the JDK decodes gzip when its native library cannot load | `compression` |
+| **[zstd-jni](https://github.com/luben/zstd-jni)** | Native Zstandard codec | `compression` |
 | **[SLF4J](https://www.slf4j.org/)** | Logging abstraction | All |
 
 The cloud SDKs come only with the storage module of their backend:

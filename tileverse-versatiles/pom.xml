@@ -22,18 +22,33 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
+      <dependency>
+        <groupId>io.tileverse</groupId>
+        <artifactId>tileverse-dependencies</artifactId>
+        <version>${project.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
   <dependencies>
     <!--
-     Adding bom as a dependency with type=pom and scope=provided here
-     does not change the dependency tree for the submodules at all, but forces the BOM to be installed
+     Adding tileverse-bom and tileverse-dependencies as dependencies with type=pom and scope=provided here
+     does not change the dependency tree for the submodules at all, but forces both BOMs to be installed
      in the local maven repository first.
     -->
     <dependency>
       <groupId>io.tileverse</groupId>
       <artifactId>tileverse-bom</artifactId>
+      <version>${project.version}</version>
+      <type>pom</type>
+      <scope>provided</scope>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse</groupId>
+      <artifactId>tileverse-dependencies</artifactId>
       <version>${project.version}</version>
       <type>pom</type>
       <scope>provided</scope>
@@ -82,18 +97,10 @@
       <groupId>com.github.ben-manes.caffeine</groupId>
       <artifactId>caffeine</artifactId>
     </dependency>
-    <!-- Compression: gzip via commons-compress, Brotli via org.brotli:dec, Zstandard via zstd-jni -->
+    <!-- gzip, Brotli and Zstandard, with the native libraries for each platform -->
     <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-compress</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.brotli</groupId>
-      <artifactId>dec</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.github.luben</groupId>
-      <artifactId>zstd-jni</artifactId>
+      <groupId>io.tileverse.compression</groupId>
+      <artifactId>tileverse-compression</artifactId>
     </dependency>
     <!-- ImageIO plugin for WebP-encoded raster tiles; PNG/JPEG come with the JDK. -->
     <dependency>

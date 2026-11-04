@@ -70,6 +70,8 @@
     <!-- Build properties -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>17</maven.compiler.release>
+    <!-- The JDK required to build. The libraries still target maven.compiler.release. -->
+    <java.build.version>25</java.build.version>
 
     <!-- Skip GPG signing by default (enabled during publishing) -->
     <gpg.skip>true</gpg.skip>
@@ -358,8 +360,8 @@
               <configuration>
                 <rules>
                   <requireJavaVersion>
-                    <version>[${maven.compiler.release},)</version>
-                    <message>Java ${maven.compiler.release} or newer is required to build this project</message>
+                    <version>[${java.build.version},)</version>
+                    <message>JDK ${java.build.version} or newer is required to build this project. The libraries run on Java ${maven.compiler.release} or newer.</message>
                   </requireJavaVersion>
                   <requireMavenVersion>
                     <version>[3.9.0,)</version>
@@ -764,6 +766,42 @@
   </build>
 
   <profiles>
+    <profile>
+      <!--
+        Runs the tests on another JDK, taken from the Maven toolchains: -Dtest.jdk=17.
+        A bare version requirement matches any toolchain, hence the range.
+      -->
+      <id>test-jdk</id>
+      <activation>
+        <property>
+          <name>test.jdk</name>
+        </property>
+      </activation>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-surefire-plugin</artifactId>
+              <configuration>
+                <jdkToolchain>
+                  <version>[${test.jdk},${test.jdk}.999]</version>
+                </jdkToolchain>
+              </configuration>
+            </plugin>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-failsafe-plugin</artifactId>
+              <configuration>
+                <jdkToolchain>
+                  <version>[${test.jdk},${test.jdk}.999]</version>
+                </jdkToolchain>
+              </configuration>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
+    </profile>
     <profile>
       <!--
       Section to satisfy enforcer-maven-plugin's dependencyConvergence rule

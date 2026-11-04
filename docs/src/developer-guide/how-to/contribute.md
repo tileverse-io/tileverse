@@ -21,7 +21,7 @@ The pull request is merged when the build checks are green, a maintainer has rev
 
 ## Coding standards
 
-- Target Java 17. The build runs on Java 17 and later.
+- Target Java 17. The build runs on JDK 25 and compiles for Java 17: the compiler rejects an API added after Java 17.
 - Follow the [Palantir Java Format](https://github.com/palantir/palantir-java-format). The build applies it.
 - Start each Java file with the license header from `license_header.txt`. The build adds it, except to `package-info.java` files.
 - Document the public API with javadoc.

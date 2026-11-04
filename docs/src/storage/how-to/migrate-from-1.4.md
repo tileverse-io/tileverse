@@ -44,7 +44,7 @@ Update every Java import:
 | `io.tileverse.rangereader.azure.*` | `io.tileverse.storage.azure.*` |
 | `io.tileverse.rangereader.gcs.*` | `io.tileverse.storage.gcs.*` |
 | `io.tileverse.rangereader.spi.*` | `io.tileverse.storage.spi.*` (provider extension points only; see note below) |
-| `io.tileverse.io.*` | unchanged in 2.0; 2.1 moves the channel adapters to `io.tileverse.storage.adapters` |
+| `io.tileverse.io.*` | unchanged in 2.0; 2.1 moves the channel adapters to `io.tileverse.storage.adapters`, and 2.2 moves them back to `io.tileverse.io` |
 | `io.tileverse.cache.*` | unchanged |
 
 Generic utilities (`ByteRange`, `ByteBufferPool`, `IOFunction`, the

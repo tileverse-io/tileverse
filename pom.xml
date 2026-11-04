@@ -30,6 +30,8 @@
   <modules>
     <module>dependencies</module>
     <module>bom</module>
+    <module>tileverse-io</module>
+    <module>tileverse-cache</module>
     <module>tileverse-storage</module>
     <module>tileverse-tilematrixset</module>
     <module>tileverse-vectortiles</module>
@@ -444,8 +446,8 @@
                 <excludes>
                   <exclude>**/logback-test.xml</exclude>
                   <exclude>logback-test.xml</exclude>
-                  <!-- Test-only ServiceLoader registrations must not leak into the test-jar: sibling modules
-                       consume tileverse-storage-core's test-jar and would otherwise discover test providers. -->
+                  <!-- Test-only ServiceLoader registrations must not leak into the test-jar: a module consuming
+                       the test-jar would otherwise discover the test providers. -->
                   <exclude>META-INF/services/io.tileverse.io.ByteBufferPool</exclude>
                 </excludes>
               </configuration>

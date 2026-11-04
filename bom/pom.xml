@@ -22,6 +22,16 @@
         <scope>import</scope>
       </dependency>
       <dependency>
+        <groupId>io.tileverse.io</groupId>
+        <artifactId>tileverse-io</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.tileverse.cache</groupId>
+        <artifactId>tileverse-cache</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
         <groupId>io.tileverse.storage</groupId>
         <artifactId>tileverse-storage-core</artifactId>
         <version>${project.version}</version>

@@ -5,6 +5,7 @@
  */
 package io.tileverse.compression;
 
+import io.tileverse.io.ByteBufferInputStream;
 import com.github.luben.zstd.RecyclingBufferPool;
 import com.github.luben.zstd.ZstdInputStreamNoFinalizer;
 import com.github.luben.zstd.ZstdOutputStreamNoFinalizer;

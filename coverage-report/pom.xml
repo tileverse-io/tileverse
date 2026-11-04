@@ -32,6 +32,16 @@
     </dependencies>
   </dependencyManagement>
   <dependencies>
+    <!-- IO and cache modules -->
+    <dependency>
+      <groupId>io.tileverse.io</groupId>
+      <artifactId>tileverse-io</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.cache</groupId>
+      <artifactId>tileverse-cache</artifactId>
+    </dependency>
+
     <!-- All Tileverse Storage modules -->
     <dependency>
       <groupId>io.tileverse.storage</groupId>

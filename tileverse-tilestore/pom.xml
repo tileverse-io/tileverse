@@ -71,6 +71,10 @@
 
     <!-- Cache abstractions (CacheManager / CaffeineCache) used by VectorTileCache -->
     <dependency>
+      <groupId>io.tileverse.cache</groupId>
+      <artifactId>tileverse-cache</artifactId>
+    </dependency>
+    <dependency>
       <groupId>io.tileverse.storage</groupId>
       <artifactId>tileverse-storage-core</artifactId>
     </dependency>

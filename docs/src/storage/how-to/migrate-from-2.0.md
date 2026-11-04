@@ -35,7 +35,7 @@ an absolute grid; every other read is passed through untouched.
 | `S3StorageProvider.open(URI, S3ClientBundle)` and `S3ClientBundle` | `S3StorageProvider.open(URI, S3AsyncClient)`; presigned URLs need a `Storage` opened from a URI or a `StorageConfig` |
 | `StorageProvider.canProcessHeaders(URI, Map)` | none: provider selection sends no request; a provider overriding it drops the override |
 | `ReadOptions.timeout()`, `WriteOptions.timeout()` and `WriteOptions.Builder.timeout(Duration)` | none: no backend honored them. `ReadOptions` also rejects a zero length |
-| `io.tileverse.io.ReadableByteChannelDataInput`, `SeekableByteChannelDataInput`, `SeekableByteChannelImageInputStream` | the same classes in `io.tileverse.storage.adapters` |
+| `io.tileverse.io.ReadableByteChannelDataInput`, `SeekableByteChannelDataInput`, `SeekableByteChannelImageInputStream` | the same classes in `io.tileverse.storage.adapters`; 2.2 moves them back to `io.tileverse.io` (see [Migrating from 2.1](migrate-from-2.1.md)) |
 | `OutputStream Storage.openOutputStream(String, WriteOptions)` | returns `StorageOutputStream`, an `OutputStream` with `abort()`; a `Storage` implementation changes its return type |
 
 The removed keys are ignored like any unknown parameter; `storage.caching.enabled` keeps

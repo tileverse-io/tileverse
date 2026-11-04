@@ -142,4 +142,4 @@ public interface RangeReader extends Closeable {
 }
 ```
 
-Implementations are thread-safe. `get()` returns a `SeekableByteChannel` view of the reader, for libraries that read from channels. The `io.tileverse.storage.adapters` package adds an ImageIO `ImageInputStream` and `java.io.DataInput` views over channels.
+Implementations are thread-safe. `get()` returns a `SeekableByteChannel` view of the reader, for libraries that read from channels. The `io.tileverse.io` package adds an ImageIO `ImageInputStream` and `java.io.DataInput` views over channels.

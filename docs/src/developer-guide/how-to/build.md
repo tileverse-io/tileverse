@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Java 17 or later, to build and to run. CI also builds on Java 21 and 25.
+- JDK 25 or later, to build. The libraries are compiled for Java 17 and run on Java 17 or later.
 - Maven 3.9 or later. The repository includes the Maven wrapper, `./mvnw`.
 - Docker, for the integration tests.
 
@@ -41,6 +41,30 @@ Unit tests (`*Test.java`) use JUnit 5 and Mockito. Integration tests (`*IT.java`
 ./mvnw test                                   # unit tests, or make test-unit
 ./mvnw verify                                 # unit and integration tests, or make test-it
 ./mvnw verify -pl :tileverse-storage-s3 -am   # the tests of one module
+```
+
+### Test on another JDK
+
+The tests run on the JDK running Maven unless `-Dtest.jdk` names another one, taken from the Maven toolchains in `~/.m2/toolchains.xml`. CI runs them on Java 17, 21 and 25.
+
+```bash
+./mvnw verify -Dtest.jdk=17   # or make test TEST_JDK=17
+```
+
+A toolchain entry gives the JDK version and its home:
+
+```xml
+<toolchains>
+  <toolchain>
+    <type>jdk</type>
+    <provides>
+      <version>17</version>
+    </provides>
+    <configuration>
+      <jdkHome>/path/to/jdk-17</jdkHome>
+    </configuration>
+  </toolchain>
+</toolchains>
 ```
 
 The integration tests use these images:

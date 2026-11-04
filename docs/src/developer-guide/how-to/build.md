@@ -67,6 +67,8 @@ A toolchain entry gives the JDK version and its home:
 </toolchains>
 ```
 
+The tests of `tileverse-io-ffm` run on Java 25 or later whatever `-Dtest.jdk` names. With `-Dtest.jdk`, the toolchains file must also list a JDK 25.
+
 The integration tests use these images:
 
 | Backend | Images |

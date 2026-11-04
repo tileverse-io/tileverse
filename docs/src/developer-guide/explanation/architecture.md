@@ -4,7 +4,7 @@ Tileverse is a set of loosely coupled libraries. Each module works on its own, f
 
 ## Module map
 
-The Tileverse monorepo ships nine library modules and two BOMs. Two foundation modules hold the code shared by the others: `tileverse-io` has the byte buffer pool and the stream and channel adapters over buffers, and `tileverse-cache` has the in-memory caches. Three modules are independent of each other: `tileverse-storage`, `tileverse-vectortiles` and `tileverse-tilematrixset`. `tileverse-tilestore` builds on the format and grid libraries. `tileverse-compression` holds the gzip, Brotli and Zstandard codecs and takes its buffers from `tileverse-io`. The archive readers `tileverse-pmtiles` and `tileverse-versatiles` depend on all the others (`tileverse-storage` for I/O, `tileverse-cache` for their caches of parsed directories and indexes, `tileverse-compression` for decompression, `tileverse-vectortiles` for MVT decoding, `tileverse-tilematrixset` for grid math, `tileverse-tilestore` for the high-level tile-store wrappers).
+The Tileverse monorepo ships ten library modules and two BOMs. Two foundation modules hold the code shared by the others: `tileverse-io` has the byte buffer pool and the stream and channel adapters over buffers, and `tileverse-cache` has the in-memory caches. `tileverse-io-ffm` has a pool of native memory segments, and is the one module requiring Java 25. Three modules are independent of each other: `tileverse-storage`, `tileverse-vectortiles` and `tileverse-tilematrixset`. `tileverse-tilestore` builds on the format and grid libraries. `tileverse-compression` holds the gzip, Brotli and Zstandard codecs and takes its buffers from `tileverse-io`. The archive readers `tileverse-pmtiles` and `tileverse-versatiles` depend on all the others (`tileverse-storage` for I/O, `tileverse-cache` for their caches of parsed directories and indexes, `tileverse-compression` for decompression, `tileverse-vectortiles` for MVT decoding, `tileverse-tilematrixset` for grid math, `tileverse-tilestore` for the high-level tile-store wrappers).
 
 ```mermaid
 graph TD
@@ -21,6 +21,7 @@ graph TD
     subgraph "Foundation"
         IO[tileverse-io<br/>ByteBufferPool]
         CACHE[tileverse-cache]
+        FFM[tileverse-io-ffm<br/>SegmentPool, Java 25]
     end
 
     subgraph "Cross-cutting"
@@ -39,6 +40,7 @@ graph TD
     App --> TS
     App --> PMT
     App --> VER
+    App --> FFM
 
     ST --> IO
     ST --> CACHE

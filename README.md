@@ -164,7 +164,7 @@ Complete documentation is available at **[tileverse.io](https://tileverse.io)**.
 
 This is a standard Maven project wrapped with a Makefile for convenience.
 
-*   **Java 21+** is required for building (runtime support starts at Java 17).
+*   **JDK 25+** is required for building. The libraries run on Java 17 or later, and `tileverse-io-ffm` requires Java 25.
 *   **Docker** is required for running integration tests.
 
 ```bash

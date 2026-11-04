@@ -157,6 +157,10 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
                 tags "Module"
             }
 
+            ffmModule = container "tileverse-io-ffm" "SegmentPool of native memory segments through the Foreign Function and Memory API" "Java 25" {
+                tags "Module"
+            }
+
             cacheModule = container "tileverse-cache" "Named in-memory caches with shared statistics, backed by Caffeine" "Java 17" {
                 tags "Module"
             }

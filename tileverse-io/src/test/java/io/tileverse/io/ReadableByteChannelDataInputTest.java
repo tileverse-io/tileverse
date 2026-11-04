@@ -283,6 +283,20 @@ class ReadableByteChannelDataInputTest {
         }
     }
 
+    // The buffer ends at the \r: the peek at the next byte refills the buffer
+    @Test
+    void readLineCrAtBufferEnd() throws IOException {
+        Files.write(testFile, "a\rb\n".getBytes());
+
+        try (ReadableByteChannel channel = Files.newByteChannel(testFile, StandardOpenOption.READ)) {
+            DataInput dataInput = ReadableByteChannelDataInput.of(channel, 2);
+
+            assertThat(dataInput.readLine()).isEqualTo("a");
+            assertThat(dataInput.readLine()).isEqualTo("b");
+            assertThat(dataInput.readLine()).isNull();
+        }
+    }
+
     @Test
     void eofBehavior() throws IOException {
         Files.write(testFile, new byte[] {1, 2}); // Only 2 bytes

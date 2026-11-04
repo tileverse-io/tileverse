@@ -51,6 +51,7 @@ Since 2.2, `io.tileverse:tileverse-dependencies` manages the versions of the thi
 | Group | Artifact | Contents |
 | :--- | :--- | :--- |
 | `io.tileverse.io` | `tileverse-io` | The byte buffer pool, byte ranges, and stream and channel adapters over buffers |
+| `io.tileverse.io` | `tileverse-io-ffm` | A pool of native memory segments, for Java 25 or later |
 | `io.tileverse.cache` | `tileverse-cache` | The in-memory caches used by the storage cache and the archive readers |
 | `io.tileverse.storage` | `tileverse-storage-core` | The `Storage` and `RangeReader` APIs, with the local file and HTTP backends |
 | `io.tileverse.storage` | `tileverse-storage-s3` | Amazon S3 and S3-compatible services |

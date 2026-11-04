@@ -27,6 +27,11 @@
         <version>${project.version}</version>
       </dependency>
       <dependency>
+        <groupId>io.tileverse.io</groupId>
+        <artifactId>tileverse-io-ffm</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
         <groupId>io.tileverse.cache</groupId>
         <artifactId>tileverse-cache</artifactId>
         <version>${project.version}</version>

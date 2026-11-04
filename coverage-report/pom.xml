@@ -38,6 +38,10 @@
       <artifactId>tileverse-io</artifactId>
     </dependency>
     <dependency>
+      <groupId>io.tileverse.io</groupId>
+      <artifactId>tileverse-io-ffm</artifactId>
+    </dependency>
+    <dependency>
       <groupId>io.tileverse.cache</groupId>
       <artifactId>tileverse-cache</artifactId>
     </dependency>

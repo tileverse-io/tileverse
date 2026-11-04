@@ -204,7 +204,7 @@ public class ReadableByteChannelDataInput implements DataInput {
     }
 
     @Override
-    @SuppressWarnings({"java:S135", "java:S1141"}) // no gain in splitting this method further
+    @SuppressWarnings("java:S135") // no gain in splitting this method further
     public String readLine() throws IOException {
         StringBuilder line = new StringBuilder();
         int c;
@@ -215,16 +215,7 @@ public class ReadableByteChannelDataInput implements DataInput {
                     break;
                 }
                 if (c == '\r') {
-                    // Peek ahead for \n
-                    mark();
-                    try {
-                        int next = readUnsignedByte();
-                        if (next != '\n' && next != -1) {
-                            reset();
-                        }
-                    } catch (EOFException e) {
-                        // End of stream after \r, that's fine
-                    }
+                    skipNewlineAfterCarriageReturn();
                     break;
                 }
                 line.append((char) c);
@@ -235,6 +226,20 @@ public class ReadableByteChannelDataInput implements DataInput {
         }
 
         return !line.isEmpty() || c != -1 ? line.toString() : null;
+    }
+
+    /**
+     * Consumes the byte after a carriage return when it is a newline, and leaves any other byte unread. It peeks at the
+     * buffer instead of reading and resetting to a mark, because a refill of the buffer discards the mark.
+     */
+    private void skipNewlineAfterCarriageReturn() throws IOException {
+        if (!buffer.hasRemaining() && !fillBuffer()) {
+            return;
+        }
+        int position = buffer.position();
+        if (buffer.get(position) == '\n') {
+            buffer.position(position + 1);
+        }
     }
 
     @Override

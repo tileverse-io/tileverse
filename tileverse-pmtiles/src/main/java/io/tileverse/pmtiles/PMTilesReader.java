@@ -5,7 +5,6 @@
  */
 package io.tileverse.pmtiles;
 
-import static io.tileverse.pmtiles.CompressionUtil.decompressingInputStream;
 import static java.util.Objects.requireNonNull;
 
 import io.tileverse.cache.CacheManager;
@@ -360,12 +359,12 @@ public class PMTilesReader implements AutoCloseable {
     }
 
     private <D> D loadTile(ByteRange range, IOFunction<InputStream, D> mapper) {
-        final byte compression = header.tileCompression();
+        final Compression compression = Compression.fromCode(header.tileCompression());
         try (PooledByteBuffer pooled = ByteBufferPool.heapBuffer(range.length())) {
             ByteBuffer buffer = pooled.buffer();
             rangeReader.readRange(range, buffer);
             buffer.flip();
-            try (InputStream in = decompressingInputStream(buffer, compression)) {
+            try (InputStream in = compression.decompress(buffer)) {
                 return mapper.apply(in);
             }
         } catch (IOException e) {
@@ -382,15 +381,15 @@ public class PMTilesReader implements AutoCloseable {
      */
     public String getMetadataAsString() throws IOException {
         final ByteRange metadataRange = header.jsonMetadata();
-        final byte compression = header.internalCompression();
         if (metadataRange.length() == 0) {
             return "";
         }
+        final Compression compression = Compression.fromCode(header.internalCompression());
         try (PooledByteBuffer pooled = ByteBufferPool.heapBuffer(metadataRange.length())) {
             ByteBuffer buffer = pooled.buffer();
             rangeReader.readRange(metadataRange, buffer);
             buffer.flip();
-            try (InputStream in = decompressingInputStream(buffer, compression)) {
+            try (InputStream in = compression.decompress(buffer)) {
                 return new String(in.readAllBytes(), StandardCharsets.UTF_8);
             }
         }

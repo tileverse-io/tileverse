@@ -153,6 +153,10 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
                 }
             }
 
+            compressionModule = container "tileverse-compression" "gzip, Brotli and Zstandard codecs, with native libraries and pure-Java fallbacks" "Java 17" {
+                tags "Module"
+            }
+
             tilestoreModule = container "tileverse-tilestore" "Format-agnostic TileStore<T> abstraction over a TileMatrixSet, plus VectorTileStore, RasterTileStore, and TileJSON v3 model" "Java 17" {
                 tags "Module,Abstraction"
 
@@ -256,11 +260,14 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
         pmtilesModule -> tilematrixsetModule "Uses for WebMercatorQuad math"
         pmtilesModule -> vectortilesModule "Decodes MVT tiles with"
         pmtilesModule -> tilestoreModule "Implements TileStore<T> via VectorTileStore / RasterTileStore"
+        pmtilesModule -> compressionModule "Decompresses tiles, directories and metadata with"
 
         versatilesModule -> coreModule "Reads tile bytes through RangeReader"
         versatilesModule -> tilematrixsetModule "Uses for WebMercatorQuad math"
         versatilesModule -> vectortilesModule "Decodes MVT tiles with"
         versatilesModule -> tilestoreModule "Implements TileStore<T> via VectorTileStore / RasterTileStore"
+        versatilesModule -> compressionModule "Decompresses tiles, metadata and indexes with"
+        compressionModule -> coreModule "Takes buffers for decoded gzip bytes from ByteBufferPool"
 
         tilestoreModule -> tilematrixsetModule "Builds on TileMatrixSet"
         tilestoreModule -> vectortilesModule "Returns VectorTile from VectorTileStore"

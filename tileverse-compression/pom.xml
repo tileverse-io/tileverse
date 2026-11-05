@@ -58,8 +58,8 @@
     </dependency>
     <!-- The buffer pool for the decoded gzip bytes -->
     <dependency>
-      <groupId>io.tileverse.storage</groupId>
-      <artifactId>tileverse-storage-core</artifactId>
+      <groupId>io.tileverse.io</groupId>
+      <artifactId>tileverse-io</artifactId>
     </dependency>
     <!--
      gzip via jlibdeflate with java.util.zip as the fallback, Brotli via brotli4j with org.brotli:dec

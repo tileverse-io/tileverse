@@ -5,6 +5,7 @@
  */
 package io.tileverse.compression;
 
+import io.tileverse.io.ByteBufferInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;

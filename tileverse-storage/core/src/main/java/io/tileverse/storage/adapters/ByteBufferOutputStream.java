@@ -5,38 +5,22 @@
  */
 package io.tileverse.storage.adapters;
 
-import static java.util.Objects.requireNonNull;
-
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.util.Objects;
 
 /**
- * An {@link OutputStream} that writes into a {@link ByteBuffer} at its current position, accepting at most a fixed
- * number of bytes.
+ * An output stream that writes into a {@link ByteBuffer} at its current position, accepting at most a fixed number of
+ * bytes.
  *
- * <p>Backends hand this stream to SDK download calls, or to {@link java.io.InputStream#transferTo}, to land a response
- * body straight in a caller's buffer, heap or direct, without a full-size intermediate array; the transient heap per
- * read is then bounded by the producer's chunk size.
+ * <p>Its write failures are instances of the deprecated {@link ByteBufferSinkException}, for the code that catches
+ * that type.
  *
- * <p>Writes advance the buffer's position and never touch its limit. A write that would exceed the accepted byte count
- * throws {@link ByteBufferSinkException} before touching the buffer, and a write refused by the buffer itself (a
- * read-only, closed, or thread-confined buffer) throws the same exception with the buffer's failure as its cause. The
- * checked type lets an SDK pipeline propagate the failure and lets the caller tell it from an I/O failure of the
- * producer. {@link #flush()} does nothing.
- *
- * <p>{@link #close()} fences the buffer off: it waits for a write in progress, and every later write throws
- * {@link ByteBufferSinkException} without touching the buffer. A caller closes the stream before handing the buffer
- * back, because an SDK may keep writing the body from its own thread after the download call has failed. Writes,
- * {@link #bytesWritten()} and {@link #close()} synchronize on the stream.
+ * @deprecated moved to {@link io.tileverse.io.ByteBufferOutputStream} in the tileverse-io module, and removed in 2.3.0
  */
-public final class ByteBufferOutputStream extends OutputStream {
-
-    private final ByteBuffer target;
-    private final int maxBytes;
-    private int written;
-    private boolean closed;
+@Deprecated(since = "2.2", forRemoval = true)
+// The deprecated 2.1 name, kept until 2.3.0, shadows the class it extends
+@SuppressWarnings({"java:S1133", "java:S2176"})
+public final class ByteBufferOutputStream extends io.tileverse.io.ByteBufferOutputStream {
 
     /**
      * Creates a stream writing into {@code target} from its current position.
@@ -46,70 +30,30 @@ public final class ByteBufferOutputStream extends OutputStream {
      * @throws IllegalArgumentException if {@code maxBytes} is negative or exceeds the buffer's remaining capacity
      */
     public ByteBufferOutputStream(ByteBuffer target, int maxBytes) {
-        this.target = requireNonNull(target, "target cannot be null");
-        if (maxBytes < 0) {
-            throw new IllegalArgumentException("maxBytes cannot be negative: " + maxBytes);
-        }
-        if (maxBytes > target.remaining()) {
-            throw new IllegalArgumentException(
-                    "target has " + target.remaining() + " bytes remaining, fewer than maxBytes " + maxBytes);
-        }
-        this.maxBytes = maxBytes;
-    }
-
-    /**
-     * Returns how many bytes have been written into the buffer so far.
-     *
-     * @return the byte count written, at most {@code maxBytes}
-     */
-    public synchronized int bytesWritten() {
-        return written;
+        super(target, maxBytes);
     }
 
     @Override
     public synchronized void write(int b) throws IOException {
-        ensureOpen();
-        ensureRoomFor(1);
         try {
-            target.put((byte) b);
-        } catch (RuntimeException refused) {
-            throw refusedWrite(refused);
+            super.write(b);
+        } catch (io.tileverse.io.ByteBufferSinkException failure) {
+            throw asDeprecatedType(failure);
         }
-        written++;
     }
 
     @Override
     public synchronized void write(byte[] source, int offset, int length) throws IOException {
-        Objects.checkFromIndexSize(offset, length, source.length);
-        ensureOpen();
-        ensureRoomFor(length);
         try {
-            target.put(source, offset, length);
-        } catch (RuntimeException refused) {
-            throw refusedWrite(refused);
-        }
-        written += length;
-    }
-
-    /** Rejects every later write once a write in progress has finished. Closing again has no effect. */
-    @Override
-    public synchronized void close() {
-        closed = true;
-    }
-
-    private void ensureOpen() throws ByteBufferSinkException {
-        if (closed) {
-            throw new ByteBufferSinkException("Stream closed, the target buffer no longer accepts writes");
+            super.write(source, offset, length);
+        } catch (io.tileverse.io.ByteBufferSinkException failure) {
+            throw asDeprecatedType(failure);
         }
     }
 
-    private void ensureRoomFor(int length) throws ByteBufferSinkException {
-        if (length > maxBytes - written) {
-            throw new ByteBufferSinkException("Server returned more data than requested (" + maxBytes + " bytes)");
-        }
-    }
-
-    private static ByteBufferSinkException refusedWrite(RuntimeException refused) {
-        return new ByteBufferSinkException("Target buffer refused the write: " + refused, refused);
+    private static ByteBufferSinkException asDeprecatedType(io.tileverse.io.ByteBufferSinkException failure) {
+        ByteBufferSinkException deprecated = new ByteBufferSinkException(failure.getMessage(), failure.getCause());
+        deprecated.setStackTrace(failure.getStackTrace());
+        return deprecated;
     }
 }

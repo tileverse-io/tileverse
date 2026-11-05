@@ -1,6 +1,6 @@
 # Tileverse Documentation
 
-This directory contains the documentation for the entire Tileverse toolkit: `tileverse-storage` (with the `RangeReader` byte-range API), `tileverse-pmtiles`, `tileverse-versatiles`, `tileverse-vectortiles`, `tileverse-tilematrixset`, the format-agnostic `tileverse-tilestore` abstraction, and the `tileverse-compression` codecs. The site is built with MkDocs Material and includes C4 architectural diagrams generated from a Structurizr DSL.
+This directory contains the documentation for the entire Tileverse toolkit: `tileverse-storage` (with the `RangeReader` byte-range API), `tileverse-pmtiles`, `tileverse-versatiles`, `tileverse-vectortiles`, `tileverse-tilematrixset`, the format-agnostic `tileverse-tilestore` abstraction, the `tileverse-compression` codecs, and the `tileverse-io` and `tileverse-cache` foundation modules. The site is built with MkDocs Material and includes C4 architectural diagrams generated from a Structurizr DSL.
 
 The published site is [tileverse.io](https://tileverse.io).
 

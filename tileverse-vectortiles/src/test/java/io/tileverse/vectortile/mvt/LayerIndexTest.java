@@ -123,6 +123,16 @@ class LayerIndexTest {
         assertThat(layer.name()).isEqualTo("second");
     }
 
+    // The second layer has a version field 2, then a version field 1
+    @Test
+    void readsLayerVersion() throws IOException {
+        byte[] tile = tile(layer("a"), layer("b").varintField(LAYER_VERSION, 1));
+
+        assertThat(LayerIndex.indexTile(tile, false))
+                .extracting(LayerIndex::version)
+                .containsExactly(2, 1);
+    }
+
     // Features before the keys and values referenced by their tags, and the version last
     @Test
     void acceptsFieldsInAnyOrder() throws IOException {
@@ -296,7 +306,7 @@ class LayerIndexTest {
 
         LayerIndex index = onlyLayer(tile(layer));
 
-        long indexObject = HeapSize.object(6 * HeapSize.REFERENCE + Integer.BYTES);
+        long indexObject = HeapSize.object(6 * HeapSize.REFERENCE + 2 * Integer.BYTES);
         long keysTable = HeapSize.array(HeapSize.REFERENCE, 2);
         long valuesTable = HeapSize.array(HeapSize.REFERENCE, 3);
         long featureStarts = HeapSize.array(Integer.BYTES, 2);

@@ -6,6 +6,7 @@
 package io.tileverse.vectortile.mvt;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.google.protobuf.CodedOutputStream;
 import java.io.ByteArrayOutputStream;
@@ -65,17 +66,94 @@ class WireWriterTest {
         }
     }
 
+    // 300 and -1 take two and five bytes, as unsigned 32-bit values
     @Test
-    void writesPackedVarints() {
-        List<Integer> commands = List.of(9, 50, 34, 2, 18);
-        VectorTileProto.Tile.Feature feature = VectorTileProto.Tile.Feature.newBuilder()
-                .addAllGeometry(commands)
-                .build();
-
-        assertThat(written(writer -> writer.writePackedVarints(GEOMETRY, commands)))
-                .isEqualTo(feature.toByteArray());
-        assertThat(written(writer -> writer.writePackedVarints(GEOMETRY, List.of())))
+    void writesPackedVarintsFromArray() {
+        for (List<Integer> values : List.of(List.of(9, 50, 34, 2, 18), List.of(300, -1))) {
+            VectorTileProto.Tile.Feature feature = VectorTileProto.Tile.Feature.newBuilder()
+                    .addAllGeometry(values)
+                    .build();
+            IntArray array = intArray(values);
+            assertThat(written(writer -> writer.writePackedVarints(GEOMETRY, array)))
+                    .as("%s", values)
+                    .isEqualTo(feature.toByteArray());
+        }
+        assertThat(written(writer -> writer.writePackedVarints(GEOMETRY, new IntArray())))
                 .isEmpty();
+    }
+
+    // The bytes come from the middle of a larger array, as the runs of a decoded tile
+    @Test
+    void writesFieldHeaderThenBytes() {
+        byte[] source = {-1, 9, 50, 34, -1};
+        IntArray commands = intArray(List.of(9, 50, 34));
+
+        byte[] headerThenBytes = written(writer -> {
+            writer.writeFieldHeader(GEOMETRY, 3);
+            writer.appendBytes(source, 1, 4);
+        });
+
+        byte[] packed = written(writer -> writer.writePackedVarints(GEOMETRY, commands));
+        assertThat(headerThenBytes).isEqualTo(packed);
+    }
+
+    @Test
+    void computesFieldLengths() {
+        IntArray commands = intArray(List.of(9, 50, 34));
+
+        assertThat(WireWriter.varintFieldLength(1, 300)).isEqualTo(3);
+        assertThat(WireWriter.packedVarintsFieldLength(GEOMETRY, commands)).isEqualTo(5);
+        assertThat(WireWriter.packedVarintsFieldLength(GEOMETRY, new IntArray()))
+                .isZero();
+    }
+
+    // A length of 300 takes two bytes
+    @Test
+    void computesLengthDelimitedFieldLength() {
+        byte[] content = new byte[300];
+
+        byte[] field = written(writer -> {
+            writer.writeFieldHeader(GEOMETRY, content.length);
+            writer.appendBytes(content, 0, content.length);
+        });
+
+        assertThat(WireWriter.lengthDelimitedFieldLength(GEOMETRY, content.length))
+                .isEqualTo(field.length);
+    }
+
+    @Test
+    void writesToStream() throws IOException {
+        WireWriter writer = new WireWriter();
+        writer.writeVarint32(FIELD, 300);
+        writer.writeString(FIELD, "abc");
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+        writer.writeTo(out);
+
+        assertThat(out.toByteArray()).isEqualTo(writer.toByteArray());
+    }
+
+    // A field longer than the initial array: the writer grows
+    @Test
+    void reportsSizeAndCapacity() {
+        WireWriter writer = new WireWriter();
+        writer.writeString(FIELD, "x".repeat(300));
+
+        assertThat(writer.size()).isEqualTo(writer.toByteArray().length);
+        assertThat(writer.capacity()).isGreaterThanOrEqualTo(writer.size());
+    }
+
+    @Test
+    void truncateKeepsPrefix() {
+        WireWriter writer = new WireWriter();
+        writer.writeVarint32(FIELD, 300);
+        int size = writer.size();
+        writer.writeString(FIELD, "abc");
+
+        writer.truncate(size);
+
+        assertThat(writer.toByteArray()).isEqualTo(written(field -> field.writeVarint32(FIELD, 300)));
+        assertThatThrownBy(() -> writer.truncate(size + 1)).isInstanceOf(IndexOutOfBoundsException.class);
     }
 
     @Test
@@ -108,5 +186,11 @@ class WireWriterTest {
         WireWriter writer = new WireWriter();
         write.accept(writer);
         return writer.toByteArray();
+    }
+
+    private static IntArray intArray(List<Integer> values) {
+        IntArray array = new IntArray();
+        values.forEach(array::add);
+        return array;
     }
 }

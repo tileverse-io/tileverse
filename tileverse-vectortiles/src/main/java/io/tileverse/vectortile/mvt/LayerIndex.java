@@ -61,34 +61,37 @@ final class LayerIndex {
     private static final int VALUE_BOOL = 7 << WIRE_TYPE_BITS | WireReader.VARINT;
 
     /**
-     * The bytes of the fields below, for the heap size: six references (name, keys, values, featureStarts, featureEnds,
-     * geometries) and an int (extent). A new field must be counted here.
+     * The bytes of the fields below, for the heap size: seven references (name, keys, values, featureStarts,
+     * featureEnds, geometries, malformedGeometries) and two ints (extent, version). A new field must be counted here.
      */
-    private static final int FIELD_BYTES = 6 * HeapSize.REFERENCE + Integer.BYTES;
+    private static final int FIELD_BYTES = 7 * HeapSize.REFERENCE + 2 * Integer.BYTES;
+
+    /** The offset returned by {@link #nextRun} when no run is left in the fields of the feature. */
+    static final int NO_RUN = -1;
 
     private final String name;
     private final int extent;
+    private final int version;
     private final String[] keys;
     private final Object[] values;
     private final int[] featureStarts;
     private final int[] featureEnds;
     private final PackedGeometries geometries;
 
-    private LayerIndex(
-            String name,
-            int extent,
-            String[] keys,
-            Object[] values,
-            int[] featureStarts,
-            int[] featureEnds,
-            PackedGeometries geometries) {
-        this.name = name;
-        this.extent = extent;
-        this.keys = keys;
-        this.values = values;
-        this.featureStarts = featureStarts;
-        this.featureEnds = featureEnds;
+    /** Whether the geometry of each feature is malformed, or null when no geometry of the layer is. */
+    private final boolean[] malformedGeometries;
+
+    /** The index of the layer read by the reader, with the packed geometries of its features. */
+    private LayerIndex(LayerReader layer, PackedGeometries geometries) {
+        this.name = layer.name;
+        this.extent = layer.extent;
+        this.version = layer.version;
+        this.keys = layer.keys;
+        this.values = layer.values;
+        this.featureStarts = layer.featureStarts;
+        this.featureEnds = layer.featureEnds;
         this.geometries = geometries;
+        this.malformedGeometries = layer.malformedGeometries;
     }
 
     /**
@@ -169,16 +172,31 @@ final class LayerIndex {
     static byte[] copyRuns(byte[] tile, int featureStart, int featureEnd, int packedTag, int unpackedTag) {
         ByteArrayOutputStream runs = new ByteArrayOutputStream();
         WireReader reader = new WireReader(tile, featureStart, featureEnd, FEATURE_AND_VALUE_DEPTH);
+        int runStart = nextRun(reader, packedTag, unpackedTag);
+        while (runStart != NO_RUN) {
+            runs.write(tile, runStart, reader.position() - runStart);
+            runStart = nextRun(reader, packedTag, unpackedTag);
+        }
+        return runs.toByteArray();
+    }
+
+    /**
+     * Moves the reader over the fields of a feature to the end of the next run of a repeated field, and returns the
+     * offset of the run. The run ends at the position of the reader.
+     *
+     * @param packedTag the tag of the field written packed
+     * @param unpackedTag the tag of the field written as single varints
+     * @return the offset of the first byte of the run, or {@link #NO_RUN} once the reader is past the last field
+     */
+    static int nextRun(WireReader reader, int packedTag, int unpackedTag) {
         while (reader.hasRemaining()) {
             int tag = reader.readTag();
             if (tag == packedTag || tag == unpackedTag) {
-                int runStart = skipRun(reader, tag);
-                runs.write(tile, runStart, reader.position() - runStart);
-            } else {
-                reader.skipField(tag);
+                return skipRun(reader, tag);
             }
+            reader.skipField(tag);
         }
-        return runs.toByteArray();
+        return NO_RUN;
     }
 
     String name() {
@@ -188,6 +206,14 @@ final class LayerIndex {
     /** The width and height of the tile in the coordinates of the layer: 4096 when the layer has no extent field. */
     int extent() {
         return extent;
+    }
+
+    /**
+     * The version of the vector tile specification followed by the layer: the value of its last version field. A layer
+     * without a version field fails to index.
+     */
+    int version() {
+        return version;
     }
 
     /** The distinct keys of the layer, copied into a new set at each call. */
@@ -206,8 +232,8 @@ final class LayerIndex {
     }
 
     /**
-     * The value at {@code index} in the values table: a Boolean, Double, Float, Long or String, or null for a value
-     * without a known field.
+     * The value at {@code index} in the values table: a Boolean, Double, Float, Long or String, an
+     * {@link OpenLayer.UnsignedValue} for a uint value of 2^63 or above, or null for a value without a known field.
      *
      * @throws IllegalArgumentException if the table has no value at this index, as with the tags of a malformed feature
      */
@@ -243,6 +269,14 @@ final class LayerIndex {
     }
 
     /**
+     * Whether the geometry of the feature is malformed. The geometry has no parts, and its commands stay in the tile
+     * bytes. A tile failing on malformed geometry has none.
+     */
+    boolean hasMalformedGeometry(int feature) {
+        return malformedGeometries != null && malformedGeometries[feature];
+    }
+
+    /**
      * Estimates the heap memory held by this index, in bytes: the index object, its name, its keys and values tables
      * with their entries, its feature offsets and its packed geometries. Each call computes the estimate again.
      */
@@ -252,7 +286,15 @@ final class LayerIndex {
                 + keysHeapSize()
                 + valuesHeapSize()
                 + featureOffsetsHeapSize()
-                + geometries.heapSize();
+                + geometries.heapSize()
+                + malformedGeometriesHeapSize();
+    }
+
+    private long malformedGeometriesHeapSize() {
+        if (malformedGeometries == null) {
+            return 0;
+        }
+        return HeapSize.array(Byte.BYTES, malformedGeometries.length);
     }
 
     private long keysHeapSize() {
@@ -310,6 +352,7 @@ final class LayerIndex {
 
         private String name;
         private int extent = DEFAULT_EXTENT;
+        private int version;
         private boolean hasVersion;
         private String[] keys;
         private Object[] values;
@@ -328,6 +371,9 @@ final class LayerIndex {
         // The first malformed geometry of the layer, reported once the name of the layer is known
         private MalformedGeometry malformedGeometry;
 
+        // The features with a malformed geometry, packed as empty, or null until the first one
+        private boolean[] malformedGeometries;
+
         LayerReader(byte[] tile, int start, int end, GeometryPacker packer, boolean failOnMalformedGeometry) {
             this.tile = tile;
             this.start = start;
@@ -344,7 +390,7 @@ final class LayerIndex {
             requireNameAndVersion();
             requireWellFormedGeometries();
             PackedGeometries geometries = packer.finishLayer();
-            return new LayerIndex(name, extent, keys, values, featureStarts, featureEnds, geometries);
+            return new LayerIndex(this, geometries);
         }
 
         private void allocateArrays() {
@@ -443,9 +489,19 @@ final class LayerIndex {
 
         // The packer has packed the geometry as empty. A tile failing on malformed geometry fails on the first one.
         private void recordMalformedGeometry(int featureStart, MalformedGeometryException e) {
-            if (failOnMalformedGeometry && malformedGeometry == null) {
+            if (!failOnMalformedGeometry) {
+                markMalformedGeometry();
+            } else if (malformedGeometry == null) {
                 malformedGeometry = new MalformedGeometry(featureStart, featuresRead, e.getMessage());
             }
+        }
+
+        // A merge leaves out the feature instead of copying its commands
+        private void markMalformedGeometry() {
+            if (malformedGeometries == null) {
+                malformedGeometries = new boolean[featureStarts.length];
+            }
+            malformedGeometries[featuresRead] = true;
         }
 
         private void addKey() {
@@ -477,10 +533,18 @@ final class LayerIndex {
                 case VALUE_FLOAT -> valueFields[FLOAT] = Float.valueOf(readFloat());
                 case VALUE_INT -> valueFields[INT] = Long.valueOf(nestedReader.readVarint64());
                 case VALUE_SINT -> valueFields[SINT] = Long.valueOf(decodeZigZag(nestedReader.readVarint64()));
-                case VALUE_UINT -> valueFields[UINT] = Long.valueOf(nestedReader.readVarint64());
+                case VALUE_UINT -> valueFields[UINT] = uintValue(nestedReader.readVarint64());
                 case VALUE_STRING -> valueFields[STRING] = nestedReader.readString();
                 default -> nestedReader.skipField(tag);
             }
+        }
+
+        // A long holds a uint value below 2^63. A larger one stays apart from the negative long of the same bits.
+        private static Object uintValue(long bits) {
+            if (bits < 0) {
+                return new OpenLayer.UnsignedValue(bits);
+            }
+            return Long.valueOf(bits);
         }
 
         private double readDouble() {
@@ -504,9 +568,9 @@ final class LayerIndex {
             return null;
         }
 
-        // The version must be present, and its value changes nothing in the index
+        // The version must be present
         private void readVersion() {
-            fieldReader.readVarint32();
+            version = fieldReader.readVarint32();
             hasVersion = true;
         }
 

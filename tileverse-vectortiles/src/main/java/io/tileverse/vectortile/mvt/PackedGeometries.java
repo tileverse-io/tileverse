@@ -88,6 +88,26 @@ final class PackedGeometries {
         return partEnds[part] < 0;
     }
 
+    /**
+     * The area of the ring by the surveyor's formula of the specification: positive for an exterior ring, negative for
+     * a hole. The coordinates are taken relative to the first one, to keep the products small.
+     */
+    double ringArea(int ring) {
+        int first = partStart(ring);
+        int end = partEnd(ring);
+        double x0 = x(first);
+        double y0 = y(first);
+        double sum = 0;
+        for (int i = first; i < end - 1; i++) {
+            double x1 = x(i) - x0;
+            double y1 = y(i) - y0;
+            double x2 = x(i + 1) - x0;
+            double y2 = y(i + 1) - y0;
+            sum += x1 * y2 - x2 * y1;
+        }
+        return sum / 2;
+    }
+
     int x(int coordinate) {
         return coordinates.ordinate(2 * coordinate);
     }

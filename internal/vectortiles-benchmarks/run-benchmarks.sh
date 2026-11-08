@@ -3,12 +3,14 @@ set -e
 # A failed benchmark run fails the script, although its output goes through tee
 set -o pipefail
 
-# Runs the decode benchmarks of this module on 7 tiles of mapbox/mvt-fixtures and maplibre/maplibre-tile-spec, then
-# measures the heap held by a tile decoded by each library.
+# Runs the decode and write benchmarks of this module on 7 tiles of mapbox/mvt-fixtures and
+# maplibre/maplibre-tile-spec, then measures the heap held by a tile decoded by each library, and by a tile under
+# construction with each library.
 # The script downloads the missing tiles into tiles/, checks their SHA-256, builds the benchmarks jar, and runs the
-# benchmarks once on the tiles. Each run writes the JSON and the text output of JMH into results/, and the table of
-# the decoded tile sizes next to them.
-# Arguments replace the default JMH options, -f 2 -prof gc -foe true. A smoke run:
+# benchmarks once on the tiles. Each run writes the JSON and the text output of JMH into results/, and the tables of
+# the sizes next to them.
+# Arguments replace the default JMH options, -f 2 -prof gc -foe true. A regular expression after the options selects
+# the benchmarks by name, such as VectorTileWriteBenchmark. A smoke run:
 #   internal/vectortiles-benchmarks/run-benchmarks.sh -f 0 -wi 0 -i 1 -r 100ms -foe true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,6 +44,7 @@ main() {
     mkdir -p "${RESULTS_DIR}"
     run_benchmarks "${results}" "$@"
     measure_decoded_tile_sizes "${results}"
+    measure_tile_under_construction_sizes "${results}"
 }
 
 check_required_commands() {
@@ -132,13 +135,27 @@ tile_list() {
     tile_paths | paste -s -d , -
 }
 
-# The measurement runs in the tiles directory too, with a fixed heap: a growing heap would blur the sizes
 measure_decoded_tile_sizes() {
     local results="$1"
     echo "Measuring the heap held by the decoded tiles"
-    (cd "${TILES_DIR}" && tile_paths | xargs java -Xms4g -Xmx4g -cp "${BENCHMARKS_JAR}" \
-        io.tileverse.vectortile.benchmarks.DecodedTileSize) | tee "${results}-sizes.md"
+    run_size_program DecodedTileSize "${results}-sizes.md"
     echo "Decoded tile sizes: ${results}-sizes.md"
+}
+
+measure_tile_under_construction_sizes() {
+    local results="$1"
+    echo "Measuring the heap held by the tiles under construction"
+    run_size_program TileUnderConstructionSize "${results}-construction-sizes.md"
+    echo "Tile under construction sizes: ${results}-construction-sizes.md"
+}
+
+# A size program runs in the tiles directory too, with a fixed heap: a growing heap would blur the sizes. The README
+# gives the sizes with the regions of G1, and the JVM picks another collector on a small machine.
+run_size_program() {
+    local program="$1"
+    local table="$2"
+    (cd "${TILES_DIR}" && tile_paths | xargs java -Xms4g -Xmx4g -XX:+UseG1GC -cp "${BENCHMARKS_JAR}" \
+        "io.tileverse.vectortile.benchmarks.${program}") | tee "${table}"
 }
 
 # The tiles as their paths in the tiles directory, one per line

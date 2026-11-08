@@ -33,7 +33,7 @@
             <execution>
               <id>test-jar</id>
               <configuration>
-                <!-- The internal modules have no tests to package. -->
+                <!-- An internal module without tests gets no empty test-jar. -->
                 <skipIfEmpty>true</skipIfEmpty>
               </configuration>
             </execution>

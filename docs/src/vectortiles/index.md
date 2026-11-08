@@ -41,7 +41,7 @@ for (VectorTile.Layer layer : tile.getLayers()) {
 }
 ```
 
-Build a tile from JTS geometries and encode it:
+Write a tile from JTS geometries, one layer at a time:
 
 ```java
 import io.tileverse.vectortile.mvt.VectorTileBuilder;
@@ -53,10 +53,10 @@ builder.layer()
             .id(123)
             .geometry(polygon)       // in tile coordinates
             .attribute("height", 50)
-            .build()                 // returns the LayerBuilder
-        .build();                    // adds the layer, returns the VectorTileBuilder
+            .build()                 // writes the feature, returns the LayerBuilder
+        .build();                    // writes the layer, returns the VectorTileBuilder
 
-byte[] encoded = codec.encode(builder.build());
+byte[] encoded = builder.toByteArray();
 ```
 
 ## Performance
@@ -71,15 +71,17 @@ Against java-vector-tile 1.4.2, on the benchmark tiles:
 
 Reading a decoded tile is a repeated cost: the PMTiles and VersaTiles vector tile stores keep decoded tiles in a cache, and a map drawing several layers reads a cached tile once per layer.
 
-The gain depends on the tile and on the processor. The benchmarks ran on an Apple M4 Max, an AMD Ryzen 9 7950X and an Intel Xeon Gold 6138. The [benchmarks README](https://github.com/tileverse-io/tileverse/blob/main/internal/vectortiles-benchmarks/README.md) describes the tiles and gives the results.
+When both libraries only encode the geometries, tileverse writes a tile in 26% to 58% less time than java-vector-tile, and allocates 55% to 82% less, or 57% to 86% less with packed coordinate sequences. With clipping, simplification or an input scale, both libraries run the same JTS operations, and tileverse takes 1% to 64% less time and allocates 6% to 86% less. A tile under construction holds 39% to 84% less heap with tileverse than with java-vector-tile.
+
+The gain depends on the tile and on the processor. The decode benchmarks ran on an Apple M4 Max, an AMD Ryzen 9 7950X and an Intel Xeon Gold 6138, and the writer benchmarks on the Apple M4 Max. The [benchmarks README](https://github.com/tileverse-io/tileverse/blob/main/internal/vectortiles-benchmarks/README.md) describes the tiles and gives the results.
 
 ## Component view
 
 ![tileverse-vectortiles components](../assets/images/storage/structurizr-VectorTilesComponents.svg)
 
-`VectorTileCodec` encodes and decodes between MVT bytes and the `VectorTile` model. `VectorTileBuilder` builds `VectorTile` instances from JTS geometries.
+`VectorTileCodec` encodes and decodes between MVT bytes and the `VectorTile` model. `VectorTileBuilder` writes the bytes of a tile, or a `VectorTile`, from JTS geometries.
 
 ## Next steps
 
-- [Encode vector tiles](how-to/encode.md): build tiles, configure clipping and simplification, and write the bytes.
+- [Encode vector tiles](how-to/encode.md): build tiles, choose the steps run on the geometries, and write the bytes.
 - [Decode vector tiles](how-to/decode.md): read layers and features, and filter features without building their geometries.

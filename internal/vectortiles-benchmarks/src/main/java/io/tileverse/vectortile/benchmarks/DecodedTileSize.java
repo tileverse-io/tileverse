@@ -5,18 +5,22 @@
  */
 package io.tileverse.vectortile.benchmarks;
 
+import static io.tileverse.vectortile.benchmarks.HeapMeasurement.copiesFor;
+import static io.tileverse.vectortile.benchmarks.HeapMeasurement.heapDelta;
+import static io.tileverse.vectortile.benchmarks.HeapMeasurement.kib;
+import static io.tileverse.vectortile.benchmarks.HeapMeasurement.print;
+import static io.tileverse.vectortile.benchmarks.HeapMeasurement.printRuntime;
+import static io.tileverse.vectortile.benchmarks.HeapMeasurement.usedHeapAfterGc;
+
 import io.tileverse.vectortile.model.VectorTile;
 import io.tileverse.vectortile.model.VectorTile.Layer.Feature;
 import io.tileverse.vectortile.mvt.VectorTileCodec;
 import java.io.IOException;
-import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryMXBean;
 import java.lang.ref.Reference;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.function.ToLongFunction;
 import no.ecc.vectortile.VectorTileDecoder;
 import org.locationtech.jts.geom.Geometry;
@@ -29,20 +33,10 @@ import org.locationtech.jts.geom.Geometry;
  * by the number of copies. The read comes first because a library may keep what a read computes: java-vector-tile turns
  * some bytes of its protobuf objects into strings. The program prints a Markdown table, in KiB per tile.
  *
- * <p>Run it with a fixed heap, as {@code run-benchmarks.sh} does: {@code java -Xms4g -Xmx4g -cp benchmarks.jar
- * io.tileverse.vectortile.benchmarks.DecodedTileSize <file>...}
+ * <p>Run it with a fixed heap and the G1 collector, as {@code run-benchmarks.sh} does: {@code java -Xms4g -Xmx4g
+ * -XX:+UseG1GC -cp benchmarks.jar io.tileverse.vectortile.benchmarks.DecodedTileSize <file>...}
  */
 public final class DecodedTileSize {
-
-    /** The heap held by the copies of one measurement: enough to make the size per tile exact to a few KiB. */
-    private static final long MEASURED_BYTES = 512L * 1024 * 1024;
-
-    /** An upper bound of the heap held by a decoded tile, as a multiple of its encoded size, to size the copies. */
-    private static final int DECODED_SIZE_RATIO = 10;
-
-    private static final int MIN_COPIES = 3;
-
-    private static final int MAX_COPIES = 500;
 
     private final VectorTileCodec codec = new VectorTileCodec();
 
@@ -55,9 +49,7 @@ public final class DecodedTileSize {
 
     public static void main(String[] args) throws IOException {
         DecodedTileSize measurement = new DecodedTileSize();
-        long maxHeapMiB = Runtime.getRuntime().maxMemory() / (1024 * 1024);
-        print("Java " + Runtime.version() + ", maximum heap " + maxHeapMiB + " MiB");
-        print("");
+        printRuntime();
         print("| Tile | Encoded | java-vector-tile | tileverse | Heap delta |");
         print("|---|---:|---:|---:|---:|");
         for (String tile : args) {
@@ -79,11 +71,6 @@ public final class DecodedTileSize {
         printRow(tile, tileBytes.length, javaVectorTile.size(), tileverse.size());
     }
 
-    private static int copiesFor(int encodedSize) {
-        long copies = MEASURED_BYTES / ((long) encodedSize * DECODED_SIZE_RATIO);
-        return (int) Math.max(MIN_COPIES, Math.min(MAX_COPIES, copies));
-    }
-
     private static <T> Measurement measureCopies(int copies, TileDecoding<T> decoding, ToLongFunction<T> read)
             throws IOException {
         List<T> tiles = new ArrayList<>(copies);
@@ -97,15 +84,6 @@ public final class DecodedTileSize {
         long fullHeap = usedHeapAfterGc();
         Reference.reachabilityFence(tiles);
         return new Measurement((fullHeap - emptyHeap) / copies, coordinates);
-    }
-
-    @SuppressWarnings("java:S1215") // the used heap counts the live objects alone after a full collection
-    private static long usedHeapAfterGc() {
-        MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
-        // The second collection frees the objects held by references cleared in the first
-        System.gc();
-        System.gc();
-        return memory.getHeapMemoryUsage().getUsed();
     }
 
     /** Reads each feature of a tile, and returns the coordinates of its geometries. */
@@ -135,19 +113,8 @@ public final class DecodedTileSize {
     }
 
     private static void printRow(String tile, int encodedSize, long javaVectorTileSize, long tileverseSize) {
-        // The heap of tileverse against the heap of java-vector-tile: -60% means 60% less
-        double delta = (double) tileverseSize / javaVectorTileSize - 1.0;
         print("| `" + tile + "` | " + kib(encodedSize) + " | " + kib(javaVectorTileSize) + " | " + kib(tileverseSize)
-                + " | " + String.format(Locale.ROOT, "%+.0f%%", delta * 100) + " |");
-    }
-
-    private static String kib(long bytes) {
-        return String.format(Locale.ROOT, "%,d KiB", Math.round(bytes / 1024.0));
-    }
-
-    @SuppressWarnings("java:S106") // the table goes to the standard output, saved by run-benchmarks.sh
-    private static void print(String line) {
-        System.out.println(line);
+                + " | " + heapDelta(tileverseSize, javaVectorTileSize) + " |");
     }
 
     /** Decodes one copy of a tile. */

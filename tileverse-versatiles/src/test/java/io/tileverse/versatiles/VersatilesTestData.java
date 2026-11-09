@@ -7,13 +7,19 @@ package io.tileverse.versatiles;
 
 import static java.util.Objects.requireNonNull;
 
+import io.tileverse.storage.BatchReadResult;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.RangeRequest;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
+import java.util.OptionalLong;
 import javax.imageio.ImageIO;
 import javax.imageio.stream.ImageOutputStream;
 import javax.imageio.stream.MemoryCacheImageOutputStream;
@@ -36,6 +42,14 @@ public class VersatilesTestData {
      */
     public static Path flowers(Path tmpFolder) throws IOException {
         return copyFixture("flowers.versatiles", tmpFolder);
+    }
+
+    /**
+     * Wraps {@code rangeReader} in a reader reporting {@code version} as its {@link RangeReader#version() version}.
+     * Closing the returned reader closes {@code rangeReader}.
+     */
+    public static RangeReader withVersion(RangeReader rangeReader, String version) {
+        return new VersionedRangeReader(rangeReader, version);
     }
 
     /** Encodes a black PNG image of {@code width} x {@code height} pixels. */
@@ -85,5 +99,47 @@ public class VersatilesTestData {
             }
         }
         return target;
+    }
+
+    /** Forwards to {@code delegate} and answers {@link #version()} with the given token. */
+    private static final class VersionedRangeReader implements RangeReader {
+
+        private final RangeReader delegate;
+        private final String version;
+
+        VersionedRangeReader(RangeReader delegate, String version) {
+            this.delegate = delegate;
+            this.version = version;
+        }
+
+        @Override
+        public int readRange(long offset, int length, ByteBuffer target) {
+            return delegate.readRange(offset, length, target);
+        }
+
+        @Override
+        public BatchReadResult readRanges(List<RangeRequest> requests) {
+            return delegate.readRanges(requests);
+        }
+
+        @Override
+        public OptionalLong size() {
+            return delegate.size();
+        }
+
+        @Override
+        public String getSourceIdentifier() {
+            return delegate.getSourceIdentifier();
+        }
+
+        @Override
+        public Optional<String> version() {
+            return Optional.of(version);
+        }
+
+        @Override
+        public void close() throws IOException {
+            delegate.close();
+        }
     }
 }

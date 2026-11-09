@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.imageio.ImageIO;
@@ -88,6 +89,12 @@ public class PMTilesTestData {
         }
     }
 
+    /** Opens the Andorra archive through a reader reporting the given {@link RangeReader#version() version}. */
+    public static RangeReader andorraFileRangeReader(Path tmpFolder, String version) throws IOException {
+        RangeReader andorra = andorraFileRangeReader(tmpFolder);
+        return new VersionedRangeReader(andorra, version);
+    }
+
     private static RangeReader bundle(RangeReader delegate, Storage owner) {
         return new RangeReader() {
             @Override
@@ -119,6 +126,48 @@ public class PMTilesTestData {
                 }
             }
         };
+    }
+
+    /** Forwards to {@code delegate} and answers {@link #version()} with the given token. */
+    private static final class VersionedRangeReader implements RangeReader {
+
+        private final RangeReader delegate;
+        private final String version;
+
+        VersionedRangeReader(RangeReader delegate, String version) {
+            this.delegate = delegate;
+            this.version = version;
+        }
+
+        @Override
+        public int readRange(long offset, int length, ByteBuffer target) {
+            return delegate.readRange(offset, length, target);
+        }
+
+        @Override
+        public BatchReadResult readRanges(List<RangeRequest> requests) {
+            return delegate.readRanges(requests);
+        }
+
+        @Override
+        public OptionalLong size() {
+            return delegate.size();
+        }
+
+        @Override
+        public String getSourceIdentifier() {
+            return delegate.getSourceIdentifier();
+        }
+
+        @Override
+        public Optional<String> version() {
+            return Optional.of(version);
+        }
+
+        @Override
+        public void close() throws IOException {
+            delegate.close();
+        }
     }
 
     public static List<String> andorraLayerNames() {

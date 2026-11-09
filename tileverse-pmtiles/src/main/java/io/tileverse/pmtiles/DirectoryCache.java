@@ -5,11 +5,11 @@
  */
 package io.tileverse.pmtiles;
 
-import com.github.benmanes.caffeine.cache.RemovalCause;
-import com.github.benmanes.caffeine.cache.Scheduler;
 import io.tileverse.cache.Cache;
 import io.tileverse.cache.CacheManager;
-import io.tileverse.cache.CaffeineCache;
+import io.tileverse.cache.CachePool;
+import io.tileverse.cache.CacheStats;
+import io.tileverse.cache.PartitionSpec;
 import io.tileverse.io.ByteBufferPool;
 import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
 import io.tileverse.io.ByteRange;
@@ -20,29 +20,38 @@ import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Objects;
-import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
-@Slf4j
+/**
+ * Caches the decoded directories of PMTiles archives.
+ *
+ * <p>The cache is a partition of the {@link CachePool#METADATA} pool, shared with the other metadata caches. Each
+ * version of an archive has its own sub-partition, keyed by the {@link RangeReader#contentIdentifier()} of the
+ * archive's reader.
+ */
 @NullMarked
 class DirectoryCache {
 
     private static final String SHARED_CACHE_NAME = "tileverse-pmtiles-directory-cache";
 
-    private static final int DEFAULT_MAX_HEAP_PERCENT = 5;
+    private static final Duration EXPIRE_AFTER_ACCESS = Duration.ofMinutes(10);
 
-    private static final Duration DEFAULT_EXPIRE_AFTER_ACCESS = Duration.ofSeconds(10);
+    /**
+     * A constant: registering the partition again requires an equal spec, and the pool compares weighers by identity.
+     */
+    private static final PartitionSpec<ByteRange, PMTilesDirectory> SPEC =
+            new PartitionSpec<>(DirectoryCache::weigh, EXPIRE_AFTER_ACCESS);
 
     @Nullable
     private CacheManager cacheManager;
 
     private final PMTilesHeader header;
-    private final String pmtilesUniqueUri;
+    private final String contentIdentifier;
     private final RangeReader rangeReader;
 
-    public DirectoryCache(String pmtilesUniqueUri, PMTilesHeader header, RangeReader rangeReader) {
-        this.pmtilesUniqueUri = pmtilesUniqueUri;
+    public DirectoryCache(String contentIdentifier, PMTilesHeader header, RangeReader rangeReader) {
+        this.contentIdentifier = contentIdentifier;
         this.header = header;
         this.rangeReader = rangeReader;
     }
@@ -70,28 +79,13 @@ class DirectoryCache {
         throw new IllegalArgumentException("Entry must be a leaf entry: " + entry);
     }
 
-    private io.tileverse.cache.Cache<ByteRange, PMTilesDirectory> cache() {
+    private Cache<ByteRange, PMTilesDirectory> cache() {
         if (this.cacheManager == null) {
             this.cacheManager = CacheManager.getDefault();
         }
         CacheManager manager = this.cacheManager;
-        return manager.getCache(SHARED_CACHE_NAME, DirectoryCache::buildCache).subCache(pmtilesUniqueUri);
-    }
-
-    /**
-     * Short-lived (expireAfterAccess) cache of directory entries to account for multiple/concurrent requests. Static, as
-     * the shared cache outlives this instance and must not reference it.
-     */
-    private static io.tileverse.cache.Cache<ByteRange, PMTilesDirectory> buildCache() {
-        return CaffeineCache.<ByteRange, PMTilesDirectory>newBuilder()
-                .maxHeapPercent(DEFAULT_MAX_HEAP_PERCENT, DirectoryCache::weigh)
-                .averageWeight(1024 * 1024)
-                .expireAfterAccess(DEFAULT_EXPIRE_AFTER_ACCESS)
-                // run eviction tasks when idle to return memory without waiting for cache usage
-                .scheduler(Scheduler.systemScheduler())
-                .removalListener(DirectoryCache::onRemoval)
-                .recordStats()
-                .build();
+        Cache<ByteRange, PMTilesDirectory> partition = manager.partition(CachePool.METADATA, SHARED_CACHE_NAME, SPEC);
+        return partition.subCache(contentIdentifier);
     }
 
     /** {@link #cache} loading function */
@@ -119,12 +113,6 @@ class DirectoryCache {
         }
     }
 
-    static void onRemoval(ByteRange key, PMTilesDirectory value, RemovalCause cause) {
-        if (log.isTraceEnabled()) {
-            log.trace("Evicted {}, {}, cause: {}", value, key, cause);
-        }
-    }
-
     static int weigh(ByteRange key, PMTilesDirectory value) {
         // Approximate overhead of the key record (long + int + object header)
         int keyWeight = 24;
@@ -139,7 +127,7 @@ class DirectoryCache {
         return PMTilesDirectoryImpl.SERIALIZED_ENTRY_SIZE * dir.size();
     }
 
-    io.tileverse.cache.CacheStats stats() {
+    CacheStats stats() {
         return cache().stats();
     }
 }

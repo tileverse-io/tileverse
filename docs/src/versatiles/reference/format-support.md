@@ -65,10 +65,10 @@ An archive without metadata, or without tiles, takes one request less to open. T
 
 | Cache | Contents | Bounds |
 | :--- | :--- | :--- |
-| `tileverse-versatiles-tile-index-cache` | Tile indexes of recently read blocks, one sub-cache per archive | 5% of the maximum heap; an entry expires 30 seconds after its last use |
-| `tileverse-vectortile-cache` | Decoded tiles of `VersatilesVectorTileStore`, shared with the other vector tile stores | 15% of the maximum heap; an entry expires 10 seconds after its last use |
+| `tileverse-versatiles-tile-index-cache` | Tile indexes of recently read blocks, one sub-cache per archive and version | The metadata pool; an entry expires 10 minutes after its last use |
+| `tileverse-vectortile-cache` | Decoded tiles of `VersatilesVectorTileStore`, shared with the other vector tile stores | The data pool; an entry expires 10 seconds after its last use |
 
-Both caches belong to `CacheManager.getDefault()`, unless `cacheManager(CacheManager)` sets another manager on the reader or on the store. The block index is not cached: the reader reads it once and keeps it until it is closed.
+Both caches belong to `CacheManager.getDefault()`, unless `cacheManager(CacheManager)` sets another manager on the reader or on the store. [Configure for performance](../../storage/how-to/configure.md#caching-layers) describes the budgets of the pools. The block index is not cached: the reader reads it once and keeps it until it is closed.
 
 ## Exceptions
 

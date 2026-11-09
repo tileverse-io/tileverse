@@ -40,6 +40,7 @@ import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -1020,22 +1021,22 @@ class FileRangeReaderTest {
             try (r) {
                 List<RangeRequest> requests = List.of(
                         RangeRequest.of(0, 10, ByteBuffer.allocate(10)),
-                        RangeRequest.of(10, 10, ByteBuffer.allocate(10)),
-                        RangeRequest.of(20, 10, ByteBuffer.allocate(10)));
+                        RangeRequest.of(20, 10, ByteBuffer.allocate(10)),
+                        RangeRequest.of(40, 10, ByteBuffer.allocate(10)));
 
                 BatchReadResult result = r.readRanges(requests);
                 int[] read = counts(result);
 
                 assertThat(read).containsExactly(10, 10, 10);
                 assertThat(result.fetches())
-                        .as("local reads merge nothing: one read per range")
+                        .as("requests with a gap between them read one by one")
                         .isEqualTo(3);
                 assertThat(result.bytesTransferred()).isEqualTo(30);
                 assertThat(result.bytesRequested()).isEqualTo(30);
                 for (int i = 0; i < requests.size(); i++) {
                     ByteBuffer target = requests.get(i).target().flip();
                     String content = StandardCharsets.UTF_8.decode(target).toString();
-                    assertThat(content).isEqualTo(textContent.substring(10 * i, 10 * i + 10));
+                    assertThat(content).isEqualTo(textContent.substring(20 * i, 20 * i + 10));
                 }
                 assertThat(opens).hasValue(1);
             }
@@ -1122,33 +1123,6 @@ class FileRangeReaderTest {
             assertThat(closerThread.getName()).isEqualTo("FileRangeReader-idle-closer");
             assertThat(closerThread.isDaemon()).isTrue();
             assertThat(closerThread.getContextClassLoader()).isSameAs(ClassLoader.getSystemClassLoader());
-        }
-
-        private static void awaitQuietly(CyclicBarrier barrier) {
-            try {
-                barrier.await(10, TimeUnit.SECONDS);
-            } catch (Exception e) {
-                throw new IllegalStateException(e);
-            }
-        }
-
-        private static void awaitQuietly(CountDownLatch latch) {
-            try {
-                latch.await(10, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException(e);
-            }
-        }
-
-        @SuppressWarnings("java:S2925") // a forwarding channel whose read outlasts the idle timeout needs a real delay
-        private static void sleepQuietly(long millis) {
-            try {
-                Thread.sleep(millis);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException(e);
-            }
         }
 
         @Test
@@ -1245,104 +1219,795 @@ class FileRangeReaderTest {
             buf.get(bytes);
             return new String(bytes, StandardCharsets.UTF_8);
         }
+    }
+
+    /**
+     * Batches of abutting requests read as one run. Vectored reads fill direct targets, on the shared channel when no
+     * other vectored read holds it, else on an extra channel. A run holding a heap target reads request by request.
+     */
+    @Nested
+    class VectoredReadTests {
+
+        private static final int FILE_SIZE = 64 * 1024;
+
+        private Path binaryFile;
+        private byte[] fileBytes;
+
+        @BeforeEach
+        void writeBinaryFile() throws IOException {
+            fileBytes = new byte[FILE_SIZE];
+            for (int i = 0; i < FILE_SIZE; i++) {
+                fileBytes[i] = (byte) (i * 31 + 7);
+            }
+            binaryFile = tempDir.resolve("vectored.bin");
+            Files.write(binaryFile, fileBytes);
+        }
 
         /**
-         * FileChannel wrapper that delegates all operations to a real channel. Tests override specific methods to
-         * inject failures.
+         * {@code count} abutting requests of {@code length} bytes from {@code offset}, into slices of one direct
+         * buffer: vectored reads take direct buffers only.
          */
-        private static class ForwardingFileChannel extends FileChannel {
-            final FileChannel delegate;
+        private List<RangeRequest> abutting(long offset, int count, int length) {
+            ByteBuffer backing = ByteBuffer.allocateDirect(count * length);
+            List<RangeRequest> requests = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) {
+                ByteBuffer target = backing.slice(i * length, length);
+                requests.add(RangeRequest.of(offset + (long) i * length, length, target));
+            }
+            return requests;
+        }
 
-            ForwardingFileChannel(FileChannel delegate) {
-                this.delegate = delegate;
+        /**
+         * {@code count} abutting requests of {@code length} bytes from {@code offset}, each into a heap buffer of its
+         * own.
+         */
+        private List<RangeRequest> abuttingOnHeap(long offset, int count, int length) {
+            List<RangeRequest> requests = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) {
+                requests.add(RangeRequest.of(offset + (long) i * length, length, ByteBuffer.allocate(length)));
+            }
+            return requests;
+        }
+
+        /**
+         * Checks the counts, and that the targets hold the file bytes of their requests from 0 up to their positions.
+         */
+        private void assertLanded(List<RangeRequest> requests, int[] counts) {
+            for (int i = 0; i < requests.size(); i++) {
+                RangeRequest request = requests.get(i);
+                int offset = (int) request.range().offset();
+                int expected = Math.max(0, Math.min(request.range().length(), FILE_SIZE - offset));
+                assertThat(counts[i]).as("bytes for entry " + i).isEqualTo(expected);
+                ByteBuffer target = request.target().duplicate().flip();
+                byte[] landed = new byte[target.remaining()];
+                target.get(landed);
+                byte[] wanted = expected == 0 ? new byte[0] : Arrays.copyOfRange(fileBytes, offset, offset + expected);
+                assertThat(landed).as("entry " + i).containsExactly(wanted);
+            }
+        }
+
+        @Test
+        void abuttingRequestsReadAsOneRun() throws IOException {
+            try (CountingReader r = new CountingReader()) {
+                List<RangeRequest> requests = abutting(100, 3, 10);
+
+                BatchReadResult result = r.readRanges(requests);
+
+                assertLanded(requests, counts(result));
+                assertThat(result.fetches()).as("one run").isEqualTo(1);
+                assertThat(result.bytesTransferred()).isEqualTo(30);
+                assertThat(r.vectoredReads).hasValue(1);
+                assertThat(r.positionalReads).hasValue(0);
+            }
+        }
+
+        @Test
+        void longRunTakes1024ViewsPerRead() throws IOException {
+            try (CountingReader r = new CountingReader()) {
+                List<RangeRequest> requests = abutting(0, 2_500, 8);
+
+                BatchReadResult result = r.readRanges(requests);
+
+                assertLanded(requests, counts(result));
+                assertThat(result.fetches()).isEqualTo(1);
+                assertThat(r.viewsPerRead).allMatch(views -> views <= FileRangeReader.MAX_VIEWS_PER_READ);
+                assertThat(r.vectoredReads.get()).isGreaterThanOrEqualTo(3);
+            }
+        }
+
+        @Test
+        void requestsWithGapsReadOneByOne() throws IOException {
+            try (CountingReader r = new CountingReader()) {
+                List<RangeRequest> requests = List.of(
+                        RangeRequest.of(0, 10, ByteBuffer.allocate(10)),
+                        RangeRequest.of(20, 10, ByteBuffer.allocate(10)));
+
+                BatchReadResult result = r.readRanges(requests);
+
+                assertLanded(requests, counts(result));
+                assertThat(result.fetches()).isEqualTo(2);
+                assertThat(r.vectoredReads).hasValue(0);
+            }
+        }
+
+        @Test
+        void overlappingRequestsReadOnce() throws IOException {
+            try (CountingReader r = new CountingReader()) {
+                List<RangeRequest> requests = List.of(
+                        RangeRequest.of(0, 20, ByteBuffer.allocate(20)),
+                        RangeRequest.of(10, 20, ByteBuffer.allocate(20)));
+
+                BatchReadResult result = r.readRanges(requests);
+
+                assertLanded(requests, counts(result));
+                assertThat(result.fetches()).isEqualTo(1);
+                assertThat(r.vectoredReads).hasValue(0);
+            }
+        }
+
+        @Test
+        void runEndingPastEofStopsThere() throws IOException {
+            try (CountingReader r = new CountingReader()) {
+                List<RangeRequest> requests = abutting(FILE_SIZE - 20, 3, 15);
+
+                int[] counts = counts(r.readRanges(requests));
+
+                assertThat(counts).containsExactly(15, 5, 0);
+                assertLanded(requests, counts);
+            }
+        }
+
+        @Test
+        void landsAtTheTargetPositions() throws IOException {
+            ByteBuffer first = ByteBuffer.allocateDirect(40);
+            first.position(5);
+            ByteBuffer second = ByteBuffer.allocateDirect(40);
+            second.position(3);
+            List<RangeRequest> requests = List.of(RangeRequest.of(1000, 20, first), RangeRequest.of(1020, 20, second));
+            try (CountingReader r = new CountingReader()) {
+                int[] counts = counts(r.readRanges(requests));
+
+                assertThat(counts).containsExactly(20, 20);
+                assertThat(first.position()).isEqualTo(25);
+                assertThat(second.position()).isEqualTo(23);
+                assertThat(first.get(5)).isEqualTo(fileBytes[1000]);
+                assertThat(second.get(3)).isEqualTo(fileBytes[1020]);
+                assertThat(r.vectoredReads).hasValue(1);
+            }
+        }
+
+        @Test
+        void heapTargetsReadOneByOne() throws IOException {
+            try (CountingReader r = new CountingReader()) {
+                List<RangeRequest> requests = abuttingOnHeap(100, 3, 10);
+
+                BatchReadResult result = r.readRanges(requests);
+
+                assertLanded(requests, counts(result));
+                assertThat(result.fetches()).as("one run").isEqualTo(1);
+                assertThat(r.vectoredReads).hasValue(0);
+                assertThat(r.positionalReads.get()).isGreaterThanOrEqualTo(requests.size());
+                assertThat(r.opens).as("the shared channel only").hasValue(1);
+            }
+        }
+
+        @Test
+        void mixedTargetsReadOneByOne() throws IOException {
+            try (CountingReader r = new CountingReader()) {
+                List<RangeRequest> requests = List.of(
+                        RangeRequest.of(200, 10, ByteBuffer.allocateDirect(10)),
+                        RangeRequest.of(210, 10, ByteBuffer.allocate(10)));
+
+                BatchReadResult result = r.readRanges(requests);
+
+                assertLanded(requests, counts(result));
+                assertThat(result.fetches()).as("one run").isEqualTo(1);
+                assertThat(r.vectoredReads).hasValue(0);
+                assertThat(r.positionalReads.get()).isGreaterThanOrEqualTo(requests.size());
+            }
+        }
+
+        @Test
+        void heapRunEndingPastEofStops() throws IOException {
+            try (CountingReader r = new CountingReader()) {
+                List<RangeRequest> requests = abuttingOnHeap(FILE_SIZE - 20, 3, 15);
+
+                int[] counts = counts(r.readRanges(requests));
+
+                assertThat(counts).containsExactly(15, 5, 0);
+                assertLanded(requests, counts);
+                assertThat(r.vectoredReads).hasValue(0);
+            }
+        }
+
+        @Test
+        void retryResumesAfterTheBytesLanded() throws IOException {
+            AtomicInteger opens = new AtomicInteger();
+            List<Long> positions = Collections.synchronizedList(new ArrayList<>());
+            FileRangeReader r = new FileRangeReader(binaryFile, Duration.ZERO) {
+                @Override
+                FileChannel openChannel(Path path) throws IOException {
+                    boolean stale = opens.incrementAndGet() == 1;
+                    return new ForwardingFileChannel(super.openChannel(path)) {
+                        private int calls;
+
+                        @Override
+                        public FileChannel position(long newPosition) throws IOException {
+                            positions.add(newPosition);
+                            return delegate.position(newPosition);
+                        }
+
+                        @Override
+                        public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
+                            if (stale && ++calls > 1) {
+                                throw new IOException("Stale file handle");
+                            }
+                            // the stale channel lands the first view, then fails
+                            return delegate.read(dsts, offset, stale ? 1 : length);
+                        }
+                    };
+                }
+            };
+            try (r) {
+                List<RangeRequest> requests = abutting(0, 3, 10);
+
+                assertLanded(requests, counts(r.readRanges(requests)));
+                assertThat(opens).hasValue(2);
+                assertThat(positions)
+                        .as("the retry resumes after the bytes already landed")
+                        .containsExactly(0L, 10L, 10L);
+            }
+        }
+
+        @Test
+        void unrecoverableFailureIsNotRetried() throws IOException {
+            AtomicInteger opens = new AtomicInteger();
+            FileRangeReader r = new FileRangeReader(binaryFile, Duration.ZERO) {
+                @Override
+                FileChannel openChannel(Path path) throws IOException {
+                    opens.incrementAndGet();
+                    return new ForwardingFileChannel(super.openChannel(path)) {
+                        @Override
+                        public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
+                            throw new IOException("Permission denied");
+                        }
+                    };
+                }
+            };
+            try (r) {
+                List<RangeRequest> requests = abutting(0, 3, 10);
+
+                assertThatThrownBy(() -> r.readRanges(requests)).isInstanceOf(StorageException.class);
+                assertThat(opens).hasValue(1);
+            }
+        }
+
+        @Test
+        @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+        void zeroByteReadFailsAfterThreeTries() throws IOException {
+            AtomicInteger opens = new AtomicInteger();
+            FileRangeReader r = new FileRangeReader(binaryFile, Duration.ZERO) {
+                @Override
+                FileChannel openChannel(Path path) throws IOException {
+                    opens.incrementAndGet();
+                    return new ForwardingFileChannel(super.openChannel(path)) {
+                        @Override
+                        public long read(ByteBuffer[] dsts, int offset, int length) {
+                            return 0;
+                        }
+                    };
+                }
+            };
+            try (r) {
+                List<RangeRequest> requests = abutting(0, 3, 10);
+
+                assertThatThrownBy(() -> r.readRanges(requests))
+                        .isInstanceOf(StorageException.class)
+                        .hasMessageContaining("3 attempts");
+                assertThat(opens).hasValue(3);
+            }
+        }
+
+        @Test
+        void interruptedThreadReadsNothing() throws IOException {
+            try (CountingReader r = new CountingReader()) {
+                List<RangeRequest> requests = abutting(0, 3, 10);
+
+                Thread.currentThread().interrupt();
+                try {
+                    assertThatThrownBy(() -> r.readRanges(requests))
+                            .isInstanceOf(StorageException.class)
+                            .hasCauseInstanceOf(InterruptedIOException.class);
+                    assertThat(Thread.currentThread().isInterrupted())
+                            .as("the interrupt flag stays set")
+                            .isTrue();
+                } finally {
+                    Thread.interrupted();
+                }
+                assertThat(r.opens).hasValue(0);
+            }
+        }
+
+        @Test
+        void overlappingReadTakesAnExtraChannel() throws Exception {
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try (HoldingReader r = new HoldingReader(Duration.ZERO)) {
+                List<RangeRequest> held = abutting(0, 4, 100);
+                List<RangeRequest> overlapping = abutting(1000, 4, 100);
+                Future<BatchReadResult> heldRead = pool.submit(() -> r.readRanges(held));
+                awaitQuietly(r.sharedReadStarted);
+
+                BatchReadResult overlappingResult =
+                        pool.submit(() -> r.readRanges(overlapping)).get(10, TimeUnit.SECONDS);
+                r.releaseSharedRead.countDown();
+
+                assertLanded(overlapping, counts(overlappingResult));
+                assertLanded(held, counts(heldRead.get(10, TimeUnit.SECONDS)));
+                assertThat(r.opens).as("the shared channel and one extra").hasValue(2);
+                assertThat(r.extraChannels.get(0).isOpen())
+                        .as("kept for the next vectored read")
+                        .isTrue();
+                assertThat(r.idleExtraChannelCount()).isEqualTo(1);
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+
+        @Test
+        void extraChannelIsReused() throws Exception {
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try (HoldingReader r = new HoldingReader(Duration.ZERO)) {
+                Future<BatchReadResult> heldRead = pool.submit(() -> r.readRanges(abutting(0, 4, 100)));
+                awaitQuietly(r.sharedReadStarted);
+
+                pool.submit(() -> r.readRanges(abutting(1000, 4, 100))).get(10, TimeUnit.SECONDS);
+                List<RangeRequest> third = abutting(2000, 4, 100);
+                assertLanded(
+                        third, counts(pool.submit(() -> r.readRanges(third)).get(10, TimeUnit.SECONDS)));
+                r.releaseSharedRead.countDown();
+                heldRead.get(10, TimeUnit.SECONDS);
+
+                assertThat(r.opens)
+                        .as("the third read took the idle extra channel")
+                        .hasValue(2);
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+
+        @Test
+        void atMostFourExtraChannelsStayIdle() throws Exception {
+            int overlapping = FileRangeReader.MAX_IDLE_EXTRA_CHANNELS + 1;
+            ExecutorService pool = Executors.newFixedThreadPool(overlapping + 1);
+            try (HoldingReader r = new HoldingReader(Duration.ZERO)) {
+                r.holdExtraReads(overlapping);
+                Future<BatchReadResult> heldRead = pool.submit(() -> r.readRanges(abutting(0, 4, 100)));
+                awaitQuietly(r.sharedReadStarted);
+                List<Future<BatchReadResult>> reads = new ArrayList<>();
+                for (int i = 0; i < overlapping; i++) {
+                    long offset = 1000L * (i + 1);
+                    reads.add(pool.submit(() -> r.readRanges(abutting(offset, 4, 100))));
+                }
+                awaitQuietly(r.extraReadsStarted);
+
+                r.releaseExtraReads.countDown();
+                for (Future<BatchReadResult> read : reads) {
+                    read.get(10, TimeUnit.SECONDS);
+                }
+                r.releaseSharedRead.countDown();
+                heldRead.get(10, TimeUnit.SECONDS);
+
+                assertThat(r.extraChannels).hasSize(overlapping);
+                assertThat(r.idleExtraChannelCount()).isEqualTo(FileRangeReader.MAX_IDLE_EXTRA_CHANNELS);
+                assertThat(r.extraChannels.stream().filter(FileChannel::isOpen))
+                        .as("the extra channel given back to a full pool is closed")
+                        .hasSize(FileRangeReader.MAX_IDLE_EXTRA_CHANNELS);
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+
+        @Test
+        void idleCheckClosesExtraChannels() throws Exception {
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try (HoldingReader r = new HoldingReader(Duration.ofMillis(200))) {
+                Future<BatchReadResult> heldRead = pool.submit(() -> r.readRanges(abutting(0, 4, 100)));
+                awaitQuietly(r.sharedReadStarted);
+                pool.submit(() -> r.readRanges(abutting(1000, 4, 100))).get(10, TimeUnit.SECONDS);
+                r.releaseSharedRead.countDown();
+                heldRead.get(10, TimeUnit.SECONDS);
+
+                await().atMost(Duration.ofSeconds(5))
+                        .pollInterval(Duration.ofMillis(50))
+                        .untilAsserted(() -> {
+                            assertThat(r.channel()).isNull();
+                            assertThat(r.idleExtraChannelCount()).isZero();
+                            assertThat(r.extraChannels.get(0).isOpen()).isFalse();
+                        });
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+
+        @Test
+        void closeClosesExtraChannels() throws Exception {
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try (HoldingReader r = new HoldingReader(Duration.ZERO)) {
+                Future<BatchReadResult> heldRead = pool.submit(() -> r.readRanges(abutting(0, 4, 100)));
+                awaitQuietly(r.sharedReadStarted);
+                pool.submit(() -> r.readRanges(abutting(1000, 4, 100))).get(10, TimeUnit.SECONDS);
+                r.releaseSharedRead.countDown();
+                heldRead.get(10, TimeUnit.SECONDS);
+
+                r.close();
+
+                assertThat(r.idleExtraChannelCount()).isZero();
+                assertThat(r.extraChannels.get(0).isOpen()).isFalse();
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+
+        @Test
+        void channelBackAfterCloseIsClosed() throws Exception {
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try (HoldingReader r = new HoldingReader(Duration.ZERO)) {
+                r.holdExtraReads(1);
+                Future<BatchReadResult> heldRead = pool.submit(() -> r.readRanges(abutting(0, 4, 100)));
+                awaitQuietly(r.sharedReadStarted);
+                Future<BatchReadResult> extraRead = pool.submit(() -> r.readRanges(abutting(1000, 4, 100)));
+                awaitQuietly(r.extraReadsStarted);
+
+                r.close();
+                r.releaseExtraReads.countDown();
+                extraRead.get(10, TimeUnit.SECONDS);
+
+                assertThat(r.idleExtraChannelCount()).isZero();
+                assertThat(r.extraChannels.get(0).isOpen()).isFalse();
+                r.releaseSharedRead.countDown();
+                assertThatThrownBy(() -> heldRead.get(10, TimeUnit.SECONDS))
+                        .as("the shared channel closed under the held read")
+                        .isInstanceOf(ExecutionException.class);
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+
+        @Test
+        void interruptOnAnExtraChannelSparesShared() throws Exception {
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try (HoldingReader r = new HoldingReader(Duration.ZERO)) {
+                r.interruptExtraReads = true;
+                Future<BatchReadResult> heldRead = pool.submit(() -> r.readRanges(abutting(0, 4, 100)));
+                awaitQuietly(r.sharedReadStarted);
+                FileChannel shared = r.channel();
+
+                Future<BatchReadResult> interrupted = pool.submit(() -> r.readRanges(abutting(1000, 4, 100)));
+
+                assertThatThrownBy(() -> interrupted.get(10, TimeUnit.SECONDS))
+                        .isInstanceOf(ExecutionException.class)
+                        .cause()
+                        .isInstanceOf(StorageException.class)
+                        .hasCauseInstanceOf(ClosedByInterruptException.class);
+                assertThat(shared.isOpen()).as("the shared channel").isTrue();
+                assertThat(r.idleExtraChannelCount())
+                        .as("a failed channel is never kept")
+                        .isZero();
+                r.releaseSharedRead.countDown();
+                heldRead.get(10, TimeUnit.SECONDS);
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+
+        // Single reads keep their positional reads while vectored reads of the same file move a channel's position
+        @Test
+        void singleReadsBesideVectoredReads() throws Exception {
+            int threads = 8;
+            ExecutorService pool = Executors.newFixedThreadPool(threads);
+            try (FileRangeReader r = new FileRangeReader(binaryFile, Duration.ZERO)) {
+                CountDownLatch start = new CountDownLatch(1);
+                List<Future<Void>> tasks = new ArrayList<>();
+                for (int t = 0; t < threads; t++) {
+                    long base = t * 8_000L;
+                    boolean batches = t % 2 == 0;
+                    tasks.add(pool.submit(() -> {
+                        start.await();
+                        for (int round = 0; round < 50; round++) {
+                            List<RangeRequest> requests = abutting(base + round * 13L, batches ? 16 : 1, 64);
+                            int[] counts = batches
+                                    ? counts(r.readRanges(requests))
+                                    : new int[] {
+                                        r.readRange(
+                                                requests.get(0).range(),
+                                                requests.get(0).target())
+                                    };
+                            assertLanded(requests, counts);
+                        }
+                        return null;
+                    }));
+                }
+                start.countDown();
+                for (Future<Void> task : tasks) {
+                    task.get(30, TimeUnit.SECONDS);
+                }
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+
+        @Test
+        void slowRunKeepsItsChannel() throws IOException {
+            Duration idleTimeout = Duration.ofMillis(100);
+            AtomicInteger opens = new AtomicInteger();
+            FileRangeReader r = new FileRangeReader(binaryFile, idleTimeout) {
+                @Override
+                FileChannel openChannel(Path path) throws IOException {
+                    opens.incrementAndGet();
+                    return new ForwardingFileChannel(super.openChannel(path)) {
+                        @Override
+                        public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
+                            sleepQuietly(3 * idleTimeout.toMillis());
+                            return delegate.read(dsts, offset, length);
+                        }
+                    };
+                }
+            };
+            try (r) {
+                List<RangeRequest> requests = abutting(0, 3, 10);
+
+                assertLanded(requests, counts(r.readRanges(requests)));
+                assertThat(opens).hasValue(1);
+            }
+        }
+
+        @Test
+        void eightThreadsReadBatchesAtOnce() throws Exception {
+            int threads = 8;
+            ExecutorService pool = Executors.newFixedThreadPool(threads);
+            try (FileRangeReader r = new FileRangeReader(binaryFile, Duration.ZERO)) {
+                CountDownLatch start = new CountDownLatch(1);
+                List<Future<Void>> tasks = new ArrayList<>();
+                for (int t = 0; t < threads; t++) {
+                    long base = t * 8_000L;
+                    tasks.add(pool.submit(() -> {
+                        start.await();
+                        for (int round = 0; round < 20; round++) {
+                            List<RangeRequest> requests = abutting(base + round * 7L, 16, 64);
+                            assertLanded(requests, counts(r.readRanges(requests)));
+                        }
+                        return null;
+                    }));
+                }
+                start.countDown();
+                for (Future<Void> task : tasks) {
+                    task.get(30, TimeUnit.SECONDS);
+                }
+                assertThat(r.idleExtraChannelCount()).isLessThanOrEqualTo(FileRangeReader.MAX_IDLE_EXTRA_CHANNELS);
+            } finally {
+                pool.shutdownNow();
+            }
+        }
+
+        /** Counts the vectored and the positional reads of its channels. */
+        private final class CountingReader extends FileRangeReader {
+            final AtomicInteger opens = new AtomicInteger();
+            final AtomicInteger vectoredReads = new AtomicInteger();
+            final AtomicInteger positionalReads = new AtomicInteger();
+            final List<Integer> viewsPerRead = Collections.synchronizedList(new ArrayList<>());
+
+            CountingReader() throws IOException {
+                super(binaryFile, Duration.ZERO);
             }
 
             @Override
-            public int read(ByteBuffer dst) throws IOException {
-                return delegate.read(dst);
+            FileChannel openChannel(Path path) throws IOException {
+                opens.incrementAndGet();
+                return new ForwardingFileChannel(super.openChannel(path)) {
+                    @Override
+                    public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
+                        vectoredReads.incrementAndGet();
+                        viewsPerRead.add(length);
+                        return delegate.read(dsts, offset, length);
+                    }
+
+                    @Override
+                    public int read(ByteBuffer dst, long position) throws IOException {
+                        positionalReads.incrementAndGet();
+                        return delegate.read(dst, position);
+                    }
+                };
+            }
+        }
+
+        /**
+         * Holds the vectored reads of its first channel, the shared one, until released: a batch overlapping the held
+         * one finds the shared channel taken and reads on an extra channel. Extra channels can hold their reads too, or
+         * interrupt them.
+         */
+        private final class HoldingReader extends FileRangeReader {
+            final AtomicInteger opens = new AtomicInteger();
+            final List<FileChannel> extraChannels = Collections.synchronizedList(new ArrayList<>());
+            final CountDownLatch sharedReadStarted = new CountDownLatch(1);
+            final CountDownLatch releaseSharedRead = new CountDownLatch(1);
+            final CountDownLatch releaseExtraReads = new CountDownLatch(1);
+            volatile CountDownLatch extraReadsStarted;
+            volatile boolean interruptExtraReads;
+
+            HoldingReader(Duration idleTimeout) throws IOException {
+                super(binaryFile, idleTimeout);
+            }
+
+            /**
+             * Holds the reads of extra channels until {@code count} of them have started and the test releases them.
+             */
+            void holdExtraReads(int count) {
+                extraReadsStarted = new CountDownLatch(count);
             }
 
             @Override
-            public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
-                return delegate.read(dsts, offset, length);
+            FileChannel openChannel(Path path) throws IOException {
+                FileChannel real = super.openChannel(path);
+                if (opens.incrementAndGet() == 1) {
+                    return sharedChannel(real);
+                }
+                extraChannels.add(real);
+                return extraChannel(real);
             }
 
-            @Override
-            public int write(ByteBuffer src) throws IOException {
-                return delegate.write(src);
+            private FileChannel sharedChannel(FileChannel real) {
+                return new ForwardingFileChannel(real) {
+                    @Override
+                    public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
+                        sharedReadStarted.countDown();
+                        awaitQuietly(releaseSharedRead);
+                        return delegate.read(dsts, offset, length);
+                    }
+                };
             }
 
-            @Override
-            public long write(ByteBuffer[] srcs, int offset, int length) throws IOException {
-                return delegate.write(srcs, offset, length);
+            private FileChannel extraChannel(FileChannel real) {
+                return new ForwardingFileChannel(real) {
+                    @Override
+                    public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
+                        CountDownLatch started = extraReadsStarted;
+                        if (started != null) {
+                            started.countDown();
+                            awaitQuietly(releaseExtraReads);
+                        }
+                        if (interruptExtraReads) {
+                            Thread.currentThread().interrupt();
+                        }
+                        return delegate.read(dsts, offset, length);
+                    }
+                };
             }
+        }
+    }
 
-            @Override
-            public long position() throws IOException {
-                return delegate.position();
-            }
+    private static void awaitQuietly(CyclicBarrier barrier) {
+        try {
+            barrier.await(10, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
-            @Override
-            public FileChannel position(long newPosition) throws IOException {
-                return delegate.position(newPosition);
-            }
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await(10, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
 
-            @Override
-            public long size() throws IOException {
-                return delegate.size();
-            }
+    @SuppressWarnings("java:S2925") // a forwarding channel whose read outlasts the idle timeout needs a real delay
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
 
-            @Override
-            public FileChannel truncate(long size) throws IOException {
-                return delegate.truncate(size);
-            }
+    /**
+     * FileChannel wrapper that delegates all operations to a real channel. Tests override specific methods to inject
+     * failures.
+     */
+    private static class ForwardingFileChannel extends FileChannel {
+        final FileChannel delegate;
 
-            @Override
-            public void force(boolean metaData) throws IOException {
-                delegate.force(metaData);
-            }
+        ForwardingFileChannel(FileChannel delegate) {
+            this.delegate = delegate;
+        }
 
-            @Override
-            public long transferTo(long position, long count, java.nio.channels.WritableByteChannel target)
-                    throws IOException {
-                return delegate.transferTo(position, count, target);
-            }
+        @Override
+        public int read(ByteBuffer dst) throws IOException {
+            return delegate.read(dst);
+        }
 
-            @Override
-            public long transferFrom(java.nio.channels.ReadableByteChannel src, long position, long count)
-                    throws IOException {
-                return delegate.transferFrom(src, position, count);
-            }
+        @Override
+        public long read(ByteBuffer[] dsts, int offset, int length) throws IOException {
+            return delegate.read(dsts, offset, length);
+        }
 
-            @Override
-            public int read(ByteBuffer dst, long position) throws IOException {
-                return delegate.read(dst, position);
-            }
+        @Override
+        public int write(ByteBuffer src) throws IOException {
+            return delegate.write(src);
+        }
 
-            @Override
-            public int write(ByteBuffer src, long position) throws IOException {
-                return delegate.write(src, position);
-            }
+        @Override
+        public long write(ByteBuffer[] srcs, int offset, int length) throws IOException {
+            return delegate.write(srcs, offset, length);
+        }
 
-            @Override
-            public java.nio.MappedByteBuffer map(MapMode mode, long position, long size) throws IOException {
-                return delegate.map(mode, position, size);
-            }
+        @Override
+        public long position() throws IOException {
+            return delegate.position();
+        }
 
-            @Override
-            public java.nio.channels.FileLock lock(long position, long size, boolean shared) throws IOException {
-                return delegate.lock(position, size, shared);
-            }
+        @Override
+        public FileChannel position(long newPosition) throws IOException {
+            return delegate.position(newPosition);
+        }
 
-            @Override
-            public java.nio.channels.FileLock tryLock(long position, long size, boolean shared) throws IOException {
-                return delegate.tryLock(position, size, shared);
-            }
+        @Override
+        public long size() throws IOException {
+            return delegate.size();
+        }
 
-            @Override
-            protected void implCloseChannel() throws IOException {
-                delegate.close();
-            }
+        @Override
+        public FileChannel truncate(long size) throws IOException {
+            return delegate.truncate(size);
+        }
+
+        @Override
+        public void force(boolean metaData) throws IOException {
+            delegate.force(metaData);
+        }
+
+        @Override
+        public long transferTo(long position, long count, java.nio.channels.WritableByteChannel target)
+                throws IOException {
+            return delegate.transferTo(position, count, target);
+        }
+
+        @Override
+        public long transferFrom(java.nio.channels.ReadableByteChannel src, long position, long count)
+                throws IOException {
+            return delegate.transferFrom(src, position, count);
+        }
+
+        @Override
+        public int read(ByteBuffer dst, long position) throws IOException {
+            return delegate.read(dst, position);
+        }
+
+        @Override
+        public int write(ByteBuffer src, long position) throws IOException {
+            return delegate.write(src, position);
+        }
+
+        @Override
+        public java.nio.MappedByteBuffer map(MapMode mode, long position, long size) throws IOException {
+            return delegate.map(mode, position, size);
+        }
+
+        @Override
+        public java.nio.channels.FileLock lock(long position, long size, boolean shared) throws IOException {
+            return delegate.lock(position, size, shared);
+        }
+
+        @Override
+        public java.nio.channels.FileLock tryLock(long position, long size, boolean shared) throws IOException {
+            return delegate.tryLock(position, size, shared);
+        }
+
+        @Override
+        protected void implCloseChannel() throws IOException {
+            delegate.close();
         }
     }
 }

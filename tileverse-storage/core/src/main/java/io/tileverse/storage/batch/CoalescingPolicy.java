@@ -18,13 +18,14 @@ import java.time.Duration;
  * {@code maxGap = ttfb * bandwidth * (1/utilization - 1)}, the bytes transferable in the fraction of a round trip one
  * is willing to waste on unrequested data.
  *
- * <p>{@link #NONE} disables merging: every request becomes its own fetch and nothing is deduplicated. It is the right
- * policy when a round trip costs nothing (local files) and the default of the {@code AbstractRangeReader} template.
+ * <p>{@link #NONE} disables merging: every request becomes its own fetch and nothing is deduplicated. It is the default
+ * of the {@code AbstractRangeReader} template. A gap of 0 joins abutting ranges and bridges no gap: the local file
+ * reader joins its runs that way, since a round trip costs it nothing.
  *
  * @param maxGapBytes largest gap between two ranges, in bytes, bridged by fetching the bytes in between; a negative
  *     value disables merging entirely
- * @param maxFetchBytes upper bound on a single merged fetch, in bytes; always positive, capping scratch buffers and
- *     keeping every fetch within {@link io.tileverse.io.ByteRange}'s int length
+ * @param maxFetchBytes upper bound on a single merged fetch, in bytes; always positive, capping the scratch buffer of a
+ *     fetch of overlapping ranges and keeping every fetch within {@link io.tileverse.io.ByteRange}'s int length
  */
 public record CoalescingPolicy(int maxGapBytes, int maxFetchBytes) {
 

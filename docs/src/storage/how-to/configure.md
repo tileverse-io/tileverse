@@ -137,7 +137,7 @@ For full `HttpClient` customization (custom proxy, executor, SSL context), build
 
 ### Local files
 
-A `file:` `Storage` is rooted at an existing directory. Its readers open a file channel on the first read and close it after `storage.file.idle-timeout` (ISO-8601 duration, default `PT60S`; `PT0S` keeps the channel open; a value above zero must be at least 1 millisecond) with no read in progress, which keeps long-lived servers from holding stale NFS handles:
+A `file:` `Storage` is rooted at an existing directory. Its readers open a file channel on the first read and close it after `storage.file.idle-timeout` (ISO-8601 duration, default `PT60S`; `PT0S` keeps the channels open; a value above zero must be at least 1 millisecond) with no read in progress, which keeps long-lived servers from holding stale NFS handles:
 
 ```java
 Properties props = new Properties();

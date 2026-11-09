@@ -6,6 +6,7 @@
 package io.tileverse.storage.s3;
 
 import io.tileverse.storage.StorageException;
+import io.tileverse.storage.batch.FetchTargets;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -19,13 +20,14 @@ import software.amazon.awssdk.core.async.SdkPublisher;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 
 /**
- * Streams an async GET body into a destination buffer as its chunks arrive, inside the SDK's retry loop.
+ * Streams an async GET body into its destination as its chunks arrive, inside the SDK's retry loop.
  *
- * <p>Chunks land at absolute positions from the destination position captured at construction; the destination's
- * position and limit never move, and the caller advances the position from the completed {@link Result}. The SDK calls
- * {@link #prepare()} once per request attempt and subscribes a fresh chunk writer for each, which keeps a retried body
- * from landing after a partial attempt. A body longer than the requested count, or a destination refusing a chunk,
- * cancels the stream and fails the attempt with a {@link StorageException}.
+ * <p>Chunks land at their offsets in the body: in a buffer, at absolute positions from the position captured at
+ * construction, or in the targets of a joined fetch through {@link FetchTargets#write}. No position or limit moves, and
+ * the caller advances the positions from the completed {@link Result}. The SDK calls {@link #prepare()} once per
+ * request attempt and subscribes a fresh chunk writer for each: a retry writes again from offset 0, never after the
+ * bytes of a partial attempt. A body longer than the requested count, or a destination refusing a chunk, cancels the
+ * stream and fails the attempt with a {@link StorageException}.
  *
  * <p>The SDK may call {@code prepare}, {@code onResponse}, {@code onStream}, and {@code exceptionOccurred} from
  * different threads, its timeout scheduler included; the volatile fields publish {@code attempt} and {@code response}
@@ -42,14 +44,27 @@ final class ByteBufferAsyncResponseTransformer
      * What a completed attempt delivered.
      *
      * @param response the GET response metadata
-     * @param bytesWritten how many body bytes landed in the destination
+     * @param bytesWritten how many body bytes were delivered, the gap bytes dropped by a joined fetch included
      */
     record Result(GetObjectResponse response, int bytesWritten) {}
 
-    /** Copies one chunk into the destination; tests replace it to hold a copy open. */
+    /** Where the body bytes land; tests wrap one to hold a write open. */
     @FunctionalInterface
-    interface ChunkCopier {
-        void copy(ByteBuffer destination, int index, ByteBuffer chunk, int length);
+    interface Destination {
+
+        /** Writes {@code length} bytes of {@code chunk}, from its position, at {@code offset} in the body. */
+        void write(int offset, ByteBuffer chunk, int length);
+
+        /** Writes into {@code buffer} at absolute positions from its current position; no position moves. */
+        static Destination of(ByteBuffer buffer) {
+            int start = buffer.position();
+            return (offset, chunk, length) -> buffer.put(start + offset, chunk, chunk.position(), length);
+        }
+
+        /** Writes into the targets of a joined fetch, dropping the bytes between two requests. */
+        static Destination of(FetchTargets targets) {
+            return (offset, chunk, length) -> targets.write(offset, chunk, chunk.position(), length);
+        }
     }
 
     /** Completes an attempt already marked failed; tests replace it to hold the completion back. */
@@ -58,15 +73,10 @@ final class ByteBufferAsyncResponseTransformer
         void fail(CompletableFuture<Result> attempt, Throwable error);
     }
 
-    static final ChunkCopier ABSOLUTE_PUT =
-            (destination, index, chunk, length) -> destination.put(index, chunk, chunk.position(), length);
-
     private static final AttemptFailer COMPLETE_EXCEPTIONALLY = CompletableFuture::completeExceptionally;
 
-    private final ByteBuffer destination;
-    private final int start;
+    private final Destination destination;
     private final int maxBytes;
-    private final ChunkCopier copier;
     private final AttemptFailer failer;
 
     private final Object lock = new Object();
@@ -94,20 +104,31 @@ final class ByteBufferAsyncResponseTransformer
      * @throws IllegalArgumentException if {@code maxBytes} is negative or exceeds the remaining capacity
      */
     ByteBufferAsyncResponseTransformer(ByteBuffer destination, int maxBytes) {
-        this(destination, maxBytes, ABSOLUTE_PUT, COMPLETE_EXCEPTIONALLY);
+        this(Destination.of(destination), checkedMaxBytes(destination, maxBytes), COMPLETE_EXCEPTIONALLY);
     }
 
-    /** Creates a transformer copying chunks through {@code copier} and failing attempts through {@code failer}. */
-    ByteBufferAsyncResponseTransformer(ByteBuffer destination, int maxBytes, ChunkCopier copier, AttemptFailer failer) {
+    /**
+     * Creates a transformer writing the body of a joined fetch straight into the targets of its requests.
+     *
+     * @param targets the targets of the fetch; the length of the fetch is the requested count
+     */
+    ByteBufferAsyncResponseTransformer(FetchTargets targets) {
+        this(Destination.of(targets), targets.length(), COMPLETE_EXCEPTIONALLY);
+    }
+
+    /** Creates a transformer writing through {@code destination} and failing attempts through {@code failer}. */
+    ByteBufferAsyncResponseTransformer(Destination destination, int maxBytes, AttemptFailer failer) {
+        this.destination = destination;
+        this.maxBytes = maxBytes;
+        this.failer = failer;
+    }
+
+    private static int checkedMaxBytes(ByteBuffer destination, int maxBytes) {
         if (maxBytes < 0 || maxBytes > destination.remaining()) {
             throw new IllegalArgumentException(
                     "maxBytes " + maxBytes + " outside the destination's remaining " + destination.remaining());
         }
-        this.destination = destination;
-        this.start = destination.position();
-        this.maxBytes = maxBytes;
-        this.copier = copier;
-        this.failer = failer;
+        return maxBytes;
     }
 
     /**
@@ -204,7 +225,7 @@ final class ByteBufferAsyncResponseTransformer
                     return new StorageException("Server returned more data than requested (" + maxBytes + " bytes)");
                 }
                 try {
-                    copier.copy(destination, start + written, chunk, length);
+                    destination.write(written, chunk, length);
                 } catch (RuntimeException refused) {
                     return new StorageException("Target buffer refused the write: " + refused, refused);
                 }

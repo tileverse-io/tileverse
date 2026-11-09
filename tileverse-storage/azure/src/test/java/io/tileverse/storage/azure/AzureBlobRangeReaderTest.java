@@ -5,14 +5,18 @@
  */
 package io.tileverse.storage.azure;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -29,7 +33,10 @@ import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRange;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.specialized.BlobAsyncClientBase;
+import io.tileverse.io.ByteBufferPool;
+import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.NotFoundException;
+import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.StorageException;
 import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.batch.CoalescingPolicy;
@@ -48,6 +55,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
@@ -438,5 +446,87 @@ class AzureBlobRangeReaderTest {
         AzureBlobRangeReader plainReader = new AzureBlobRangeReader(anonymousClient);
         assertThat(plainReader.coalescingPolicy()).isEqualTo(CoalescingPolicy.objectStoreDefaults());
         assertThat(plainReader.maxConcurrentFetches()).isEqualTo(8);
+    }
+
+    @Test
+    void joinedFetchStreamsIntoTheTargets() {
+        ByteBuffer heap = ByteBuffer.allocate(300);
+        heap.position(10);
+        ByteBuffer direct = ByteBuffer.allocateDirect(300);
+        direct.position(20);
+        ByteBuffer afterAGap = ByteBuffer.allocate(100);
+        List<RangeRequest> requests = List.of(
+                RangeRequest.of(100, 200, heap),
+                RangeRequest.of(300, 200, direct),
+                RangeRequest.of(600, 100, afterAGap));
+
+        int[] counts;
+        try (MockedStatic<ByteBufferPool> pool = mockStatic(ByteBufferPool.class, CALLS_REAL_METHODS)) {
+            counts = counts(reader.readRanges(requests));
+
+            pool.verify(() -> ByteBufferPool.heapBuffer(anyInt()), never());
+        }
+
+        assertThat(counts).containsExactly(200, 200, 100);
+        assertThat(heap.position()).isEqualTo(210);
+        assertThat(direct.position()).isEqualTo(220);
+        assertThat(contents(heap, 10, 200)).containsExactly(Arrays.copyOfRange(TEST_DATA, 100, 300));
+        assertThat(contents(direct, 20, 200)).containsExactly(Arrays.copyOfRange(TEST_DATA, 300, 500));
+        assertThat(contents(afterAGap, 0, 100)).containsExactly(Arrays.copyOfRange(TEST_DATA, 600, 700));
+        verify(asyncClient, times(1)).downloadStreamWithResponse(any(), any(), any(), anyBoolean());
+    }
+
+    @Test
+    void joinedFetchStopsAtEof() {
+        List<RangeRequest> requests = List.of(
+                RangeRequest.of(CONTENT_LENGTH - 150, 100, ByteBuffer.allocate(100)),
+                RangeRequest.of(CONTENT_LENGTH - 50, 100, ByteBuffer.allocate(100)),
+                RangeRequest.of(CONTENT_LENGTH + 50, 100, ByteBuffer.allocate(100)));
+
+        assertThat(counts(reader.readRanges(requests))).containsExactly(100, 50, 0);
+    }
+
+    @Test
+    void moreDataThanTheJoinedFetchFails() {
+        extraBytes = 50;
+        List<RangeRequest> requests = List.of(
+                RangeRequest.of(0, 100, ByteBuffer.allocate(100)), RangeRequest.of(100, 100, ByteBuffer.allocate(100)));
+
+        assertThatThrownBy(() -> reader.readRanges(requests))
+                .isInstanceOf(StorageException.class)
+                .hasMessageContaining("more data than requested");
+    }
+
+    /** The joined path keeps the fence of single reads: a chunk arriving after the read threw lands nowhere. */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void aLateChunkMissesTheJoinedTargets() throws Exception {
+        LateBody body = new LateBody();
+        BlobDownloadAsyncResponse response =
+                new BlobDownloadAsyncResponse(null, 206, new HttpHeaders(), Flux.from(body), null);
+        doReturn(Mono.just(response)).when(asyncClient).downloadStreamWithResponse(any(), any(), any(), anyBoolean());
+        ByteBuffer first = ByteBuffer.allocate(50);
+        ByteBuffer second = ByteBuffer.allocate(50);
+        List<RangeRequest> requests = List.of(RangeRequest.of(0, 50, first), RangeRequest.of(50, 50, second));
+        FutureTask<BatchReadResult> read = new FutureTask<>(() -> reader.readRanges(requests));
+        Thread readingThread = new Thread(read, "joined-read-with-a-late-chunk");
+
+        readingThread.start();
+        try {
+            body.awaitSubscription();
+            readingThread.interrupt();
+            assertThatThrownBy(() -> read.get(10, TimeUnit.SECONDS))
+                    .isInstanceOf(ExecutionException.class)
+                    .hasCauseInstanceOf(StorageException.class);
+
+            body.deliver(ByteBuffer.wrap(TEST_DATA, 0, 100));
+
+            assertThat(contents(first, 0, 50)).containsOnly(0);
+            assertThat(contents(second, 0, 50)).containsOnly(0);
+            assertThat(first.position()).isZero();
+        } finally {
+            readingThread.interrupt();
+            readingThread.join(TimeUnit.SECONDS.toMillis(10));
+        }
     }
 }

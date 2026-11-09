@@ -24,9 +24,9 @@ try (Storage storage = StorageFactory.open(URI.create("file:///data/cache/"))) {
 }
 ```
 
-A local reader opens a file channel on its first read and closes it after `storage.file.idle-timeout` (default 60 seconds) with no read in progress. It holds a file descriptor only while the channel is open, and a closed reader never reopens one. Closing a `FileStorage` leaves the readers obtained from it usable.
+A local reader opens a file channel on its first read and closes it after `storage.file.idle-timeout` (default 60 seconds) with no read in progress. When batched reads into direct buffers run at once on the reader, they may read on extra channels. The reader keeps up to 4 extra channels open between reads and closes them with its own channel. It holds file descriptors only while its channels are open, and a closed reader never reopens one. Closing a `FileStorage` leaves the readers obtained from it usable.
 
-Range reads of local files respond to thread interrupts. A read on an interrupted thread fails with a `StorageException`, and the interrupt flag stays set. An interrupt during a read closes the file channel shared by the readers of that file; the other readers continue on a new channel. Streaming reads and writes do not respond to interrupts.
+Range reads of local files respond to thread interrupts. A read on an interrupted thread fails with a `StorageException`, and the interrupt flag stays set. An interrupt during a read closes the channel used by that read. If it is the reader's own channel, the other reads on it continue on a new one. If it is an extra channel, the reader's own channel stays open. Streaming reads and writes do not respond to interrupts.
 
 Local files have no ETag of their own. A local `Storage` builds one from the size, the last-modified time and the identity of the file, and honors the ETag and modified-since conditions of writes, reads and copies. Within one JVM, a write checks its conditions and replaces the file as one step. Other processes are not bound by this: another process writing the same file between the check and the write goes unnoticed.
 

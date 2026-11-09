@@ -178,7 +178,7 @@ Raise the pool size, `io.tileverse.storage.s3-http-client.max-concurrency`, or k
 
 ### Too many open files
 
-A server opening many local readers fails with `IOException: Too many open files`. A local reader holds a file descriptor only while its channel is open: from the first read until `storage.file.idle-timeout` (default 60 seconds) elapses with no read in progress. Descriptors pile up when many readers are read within the same minute, or when readers are opened and never closed.
+A server opening many local readers fails with `IOException: Too many open files`. A local reader holds file descriptors only while its channels are open: from the first read until `storage.file.idle-timeout` (default 60 seconds) elapses with no read in progress. A reader holds one descriptor for its channel. When batched reads into direct buffers run at once on one reader, they may open extra channels, and the reader keeps up to 4 of them open between reads. Descriptors pile up when many readers are read within the same minute, or when readers are opened and never closed.
 
 - Close readers when a request is done with them. A closed reader never reopens its channel.
 - Shorten the idle timeout, for example `storage.file.idle-timeout=PT10S`.

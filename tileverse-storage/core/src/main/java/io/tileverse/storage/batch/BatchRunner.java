@@ -22,8 +22,10 @@ import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 /**
- * Executes a batch plan: direct fetches land straight in their caller's target, merged fetches read into pooled heap
- * scratch and {@link PlannedFetch#scatter scatter}, and up to {@code maxConcurrentFetches} fetches run at once.
+ * Executes a batch plan: a direct fetch lands straight in its caller's target, and a joined fetch, of requests
+ * following one another without overlapping, lands straight in their targets through {@link FetchReader#readJoined}.
+ * Only a fetch of overlapping or repeated requests reads into pooled heap scratch and {@link PlannedFetch#scatter
+ * scatters}. Up to {@code maxConcurrentFetches} fetches run at once.
  *
  * <p>The calling thread always works; a plan needing {@code n} workers borrows {@code n - 1} executor threads. A
  * single-fetch plan, or a cap of 1, never resolves the executor supplier. The first failure wins: no new fetch starts
@@ -165,12 +167,34 @@ public final class BatchRunner {
     /** Runs one fetch, records its slices' counts and returns how many bytes the fetch read. */
     private static int runFetch(PlannedFetch fetch, List<RangeRequest> requests, FetchReader reader, int[] counts) {
         if (fetch.isDirect()) {
-            PlannedFetch.Slice only = fetch.slices().get(0);
-            int read =
-                    reader.read(fetch.range(), requests.get(only.requestIndex()).target());
-            counts[only.requestIndex()] = read;
-            return read;
+            return runDirectFetch(fetch, requests, reader, counts);
         }
+        if (fetch.hasDisjointSlices()) {
+            return runJoinedFetch(fetch, requests, reader, counts);
+        }
+        return runScatteredFetch(fetch, requests, reader, counts);
+    }
+
+    private static int runDirectFetch(
+            PlannedFetch fetch, List<RangeRequest> requests, FetchReader reader, int[] counts) {
+        PlannedFetch.Slice only = fetch.slices().get(0);
+        int read = reader.read(fetch.range(), requests.get(only.requestIndex()).target());
+        counts[only.requestIndex()] = read;
+        return read;
+    }
+
+    /** Reads the requests' bytes straight into their targets, then settles the counts and positions. */
+    private static int runJoinedFetch(
+            PlannedFetch fetch, List<RangeRequest> requests, FetchReader reader, int[] counts) {
+        FetchTargets targets = FetchTargets.of(fetch, requests);
+        int read = reader.readJoined(fetch.range(), targets);
+        targets.settle(read, counts);
+        return read;
+    }
+
+    /** Reads a fetch of overlapping or repeated requests into pooled heap scratch, then scatters it. */
+    private static int runScatteredFetch(
+            PlannedFetch fetch, List<RangeRequest> requests, FetchReader reader, int[] counts) {
         try (PooledByteBuffer pooled = ByteBufferPool.heapBuffer(fetch.range().length())) {
             ByteBuffer scratch = pooled.buffer();
             int read = reader.read(fetch.range(), scratch);

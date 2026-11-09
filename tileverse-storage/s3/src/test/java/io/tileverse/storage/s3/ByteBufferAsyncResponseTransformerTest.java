@@ -5,20 +5,25 @@
  */
 package io.tileverse.storage.s3;
 
-import static io.tileverse.storage.s3.ByteBufferAsyncResponseTransformer.ABSOLUTE_PUT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
+import io.tileverse.io.ByteRange;
+import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.StorageException;
+import io.tileverse.storage.batch.FetchTargets;
+import io.tileverse.storage.batch.PlannedFetch;
+import io.tileverse.storage.batch.PlannedFetch.Slice;
 import io.tileverse.storage.s3.ByteBufferAsyncResponseTransformer.AttemptFailer;
-import io.tileverse.storage.s3.ByteBufferAsyncResponseTransformer.ChunkCopier;
+import io.tileverse.storage.s3.ByteBufferAsyncResponseTransformer.Destination;
 import io.tileverse.storage.s3.ByteBufferAsyncResponseTransformer.Result;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -110,17 +115,22 @@ class ByteBufferAsyncResponseTransformerTest {
         }
     }
 
-    /** Holds the first copy open until released; later copies go straight through. */
-    private static final class HeldCopy implements ChunkCopier {
+    /** Holds the first write open until released; later writes go straight through. */
+    private static final class HeldCopy implements Destination {
+        private final Destination destination;
         private final Hold hold = new Hold();
         private final AtomicBoolean held = new AtomicBoolean();
 
+        HeldCopy(Destination destination) {
+            this.destination = destination;
+        }
+
         @Override
-        public void copy(ByteBuffer destination, int index, ByteBuffer chunk, int length) {
+        public void write(int offset, ByteBuffer chunk, int length) {
             if (held.compareAndSet(false, true)) {
                 hold.reach();
             }
-            destination.put(index, chunk, chunk.position(), length);
+            destination.write(offset, chunk, length);
         }
 
         void awaitStarted() throws InterruptedException {
@@ -299,9 +309,9 @@ class ByteBufferAsyncResponseTransformerTest {
     @Test
     void aFailureDuringACopyCompletesTheAttemptOnlyAfterTheCopy() throws InterruptedException {
         ByteBuffer destination = ByteBuffer.allocate(32);
-        HeldCopy heldCopy = new HeldCopy();
-        ByteBufferAsyncResponseTransformer transformer = new ByteBufferAsyncResponseTransformer(
-                destination, 16, heldCopy, CompletableFuture::completeExceptionally);
+        HeldCopy heldCopy = new HeldCopy(Destination.of(destination));
+        ByteBufferAsyncResponseTransformer transformer =
+                new ByteBufferAsyncResponseTransformer(heldCopy, 16, CompletableFuture::completeExceptionally);
         IOException timeout = new IOException("attempt timed out");
 
         CompletableFuture<Result> outcome = startAttempt(transformer);
@@ -329,7 +339,7 @@ class ByteBufferAsyncResponseTransformerTest {
         ByteBuffer destination = ByteBuffer.allocate(32);
         HeldFailure heldFailure = new HeldFailure();
         ByteBufferAsyncResponseTransformer transformer =
-                new ByteBufferAsyncResponseTransformer(destination, 16, ABSOLUTE_PUT, heldFailure);
+                new ByteBufferAsyncResponseTransformer(Destination.of(destination), 16, heldFailure);
         byte[] body = bytes(16);
         IOException lateError = new IOException("error of a cancelled attempt");
 
@@ -352,9 +362,9 @@ class ByteBufferAsyncResponseTransformerTest {
     @Test
     void closeReturnsOnlyAfterTheCopyInProgressAndLaterChunksWriteNothing() throws InterruptedException {
         ByteBuffer destination = ByteBuffer.allocate(32);
-        HeldCopy heldCopy = new HeldCopy();
-        ByteBufferAsyncResponseTransformer transformer = new ByteBufferAsyncResponseTransformer(
-                destination, 16, heldCopy, CompletableFuture::completeExceptionally);
+        HeldCopy heldCopy = new HeldCopy(Destination.of(destination));
+        ByteBufferAsyncResponseTransformer transformer =
+                new ByteBufferAsyncResponseTransformer(heldCopy, 16, CompletableFuture::completeExceptionally);
         byte[] body = bytes(16);
 
         startAttempt(transformer);
@@ -454,5 +464,98 @@ class ByteBufferAsyncResponseTransformerTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new ByteBufferAsyncResponseTransformer(destination, -1))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /**
+     * Three requests of a joined fetch of 30 bytes: two abutting ones of 10 bytes, then one of 5 bytes after a gap of
+     * 5.
+     */
+    private final List<RangeRequest> joinedRequests = List.of(
+            RangeRequest.of(0, 10, ByteBuffer.allocate(10)),
+            RangeRequest.of(10, 10, ByteBuffer.allocateDirect(10)),
+            RangeRequest.of(25, 5, ByteBuffer.allocate(5)));
+
+    private FetchTargets joinedTargets() {
+        PlannedFetch fetch = new PlannedFetch(
+                ByteRange.of(0, 30), List.of(new Slice(0, 0, 10), new Slice(1, 10, 10), new Slice(2, 25, 5)));
+        return FetchTargets.of(fetch, joinedRequests);
+    }
+
+    private void assertJoinedTargetsHold(byte[] body) {
+        assertThat(contents(joinedRequests.get(0).target(), 0, 10)).containsExactly(Arrays.copyOfRange(body, 0, 10));
+        assertThat(contents(joinedRequests.get(1).target(), 0, 10)).containsExactly(Arrays.copyOfRange(body, 10, 20));
+        assertThat(contents(joinedRequests.get(2).target(), 0, 5)).containsExactly(Arrays.copyOfRange(body, 25, 30));
+    }
+
+    @Test
+    void chunksSpanRegionsAndSkipGaps() {
+        ByteBufferAsyncResponseTransformer transformer = new ByteBufferAsyncResponseTransformer(joinedTargets());
+        byte[] body = bytes(30);
+
+        CompletableFuture<Result> outcome = startAttempt(transformer);
+        for (int from = 0; from < 30; from += 7) {
+            emit(body, from, Math.min(7, 30 - from));
+        }
+        subscriber.get().onComplete();
+
+        assertThat(outcome.join().bytesWritten()).isEqualTo(30);
+        assertJoinedTargetsHold(body);
+        assertThat(joinedRequests.get(0).target().position())
+                .as("settled by the reader")
+                .isZero();
+    }
+
+    @Test
+    void aRetryRewritesTheTargets() {
+        ByteBufferAsyncResponseTransformer transformer = new ByteBufferAsyncResponseTransformer(joinedTargets());
+        byte[] body = bytes(30);
+
+        startAttempt(transformer);
+        emit(new byte[30], 0, 12);
+        subscriber.get().onError(new IOException("connection reset"));
+        CompletableFuture<Result> retry = startAttempt(transformer);
+        emit(body, 0, 30);
+        subscriber.get().onComplete();
+
+        assertThat(retry.join().bytesWritten()).isEqualTo(30);
+        assertJoinedTargetsHold(body);
+    }
+
+    @Test
+    void aBodyLongerThanTheFetchFails() {
+        ByteBufferAsyncResponseTransformer transformer = new ByteBufferAsyncResponseTransformer(joinedTargets());
+
+        CompletableFuture<Result> outcome = startAttempt(transformer);
+        emit(bytes(35), 0, 35);
+
+        assertThat(subscription.cancelled).isTrue();
+        assertThatThrownBy(outcome::join).hasCauseInstanceOf(StorageException.class);
+    }
+
+    @Test
+    void closeFencesTheTargets() throws InterruptedException {
+        HeldCopy heldCopy = new HeldCopy(Destination.of(joinedTargets()));
+        ByteBufferAsyncResponseTransformer transformer =
+                new ByteBufferAsyncResponseTransformer(heldCopy, 30, CompletableFuture::completeExceptionally);
+        byte[] body = bytes(30);
+
+        startAttempt(transformer);
+        Thread copying = startThread("copying", () -> emit(body, 0, 15));
+        heldCopy.awaitStarted();
+        Thread closing;
+        try {
+            closing = startThread("closing", transformer::close);
+            awaitBlockedOrFinished(closing);
+
+            assertThat(closing.isAlive())
+                    .as("close() returned while a write was in progress")
+                    .isTrue();
+        } finally {
+            heldCopy.release();
+        }
+        joinAll(copying, closing);
+        emit(body, 15, 15);
+        assertThat(contents(joinedRequests.get(1).target(), 5, 5)).containsOnly((byte) 0);
+        assertThat(contents(joinedRequests.get(2).target(), 0, 5)).containsOnly((byte) 0);
     }
 }

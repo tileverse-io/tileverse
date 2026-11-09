@@ -102,15 +102,15 @@ Each remote read pays a round trip. Cache the reads, with `CachingRangeReader.of
 
 ### Memory and the cache
 
-The shared range cache holds at most 20% of the maximum heap, weighed by cached bytes, and an entry expires 60 seconds after its last access. The cache stays empty until readers are wrapped in a `CachingRangeReader` or `storage.caching.enabled` is set.
+The byte-range cache shares the data pool budget, set by `io.tileverse.cache.data.max-size`, with the decoded vector tiles. An entry expires after 5 minutes without access. [Caching Layers](configure.md#caching-layers) describes the pools and their settings. The cache stays empty until readers are wrapped in a `CachingRangeReader` or `storage.caching.enabled` is set.
 
-- Each `CacheManager.newInstance()` owns a cache with a budget of its own. Readers built without an explicit manager share the default one: keep it that way.
+- Each `CacheManager.newInstance()` has its own two cache pools, with their own budgets. Readers built without an explicit manager share the default one: keep it that way.
 - A job reading a file front to back gains nothing from the cache, and fills it with bytes read once. Use the reader returned by `Storage.openRangeReader` directly.
 - `BlockAlignedRangeReader.alignWholeFile()` turns each read inside the file into cached blocks. Declare only the regions read repeatedly, and let tile or row payloads pass through as exact ranges.
 
 ### Low cache hit rate
 
-The cache keys on the exact `(offset, length)` of a read. Two reads share an entry only when they ask for the same range, or when they fall in the same block of a block-aligned region. An entry unused for 60 seconds expires, and a hit rate measured across idle periods drops for that reason alone.
+The cache keys on the exact `(offset, length)` of a read. Two reads share an entry only when they ask for the same range, or when they fall in the same block of a block-aligned region. An entry unused for 5 minutes expires, which alone lowers a hit rate measured across idle periods.
 
 ```java
 import io.tileverse.cache.CacheStats;
@@ -123,7 +123,7 @@ if (reader instanceof CachingRangeReader cachingReader) {
 }
 ```
 
-The statistics cover the shared cache of the `CacheManager`, across the readers using it, not this reader alone.
+The statistics cover the byte-range cache of the `CacheManager`, across the readers using it, not this reader alone.
 
 ## Network
 

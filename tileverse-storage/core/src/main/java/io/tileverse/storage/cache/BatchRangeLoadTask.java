@@ -32,6 +32,9 @@ import java.util.function.LongSupplier;
  *
  * <p>Fetches the ranges claimed by it before waiting for a range claimed by another read. A read holding claims never
  * waits and a waiting read holds none: two reads cannot wait on each other.
+ *
+ * <p>If the misses of a read add up to more than its limit, the read claims none of them and leaves them to the caller.
+ * This check runs before any claim and records nothing in the cache statistics.
  */
 final class BatchRangeLoadTask {
 
@@ -40,26 +43,107 @@ final class BatchRangeLoadTask {
     private final Duration waitDeadline;
     private final LongSupplier nanoClock;
     private final RangeFetch fetch;
+    private final long maxReadBytes;
 
     private final Map<ByteRange, ByteBuffer> values = new HashMap<>();
     // created at the first fetch: a read served from the cache fetches nothing
     private Set<ByteRange> fetched = Set.of();
     private BatchReadResult cost = BatchReadResult.EMPTY;
+    private Set<ByteRange> bypassed = Set.of();
 
+    /** No limit: a read loads its misses, whatever their size. */
     BatchRangeLoadTask(
             ByteRangeCache cache,
             PendingLoads pending,
             Duration waitDeadline,
             LongSupplier nanoClock,
             RangeFetch fetch) {
+        this(cache, pending, waitDeadline, nanoClock, fetch, BatchRangeLoader.NO_READ_SIZE_BOUND);
+    }
+
+    BatchRangeLoadTask(
+            ByteRangeCache cache,
+            PendingLoads pending,
+            Duration waitDeadline,
+            LongSupplier nanoClock,
+            RangeFetch fetch,
+            long maxReadBytes) {
         this.cache = cache;
         this.pending = pending;
         this.waitDeadline = waitDeadline;
         this.nanoClock = nanoClock;
         this.fetch = fetch;
+        this.maxReadBytes = maxReadBytes;
     }
 
     BatchLoadOutcome run(Collection<ByteRange> ranges) {
+        bypassed = tooLargeToCache(ranges);
+        recordMisses(bypassed);
+        Collection<ByteRange> cacheable = without(ranges, bypassed);
+        loadThroughTheCache(cacheable);
+        return loaded();
+    }
+
+    /**
+     * Returns the misses of the read if their lengths add up to more than the limit, or an empty set. A miss is a range
+     * neither cached nor claimed by another read. These lookups do not count in the cache statistics.
+     */
+    private Set<ByteRange> tooLargeToCache(Collection<ByteRange> ranges) {
+        if (lengthOf(ranges) <= maxReadBytes) {
+            // the misses are some of these ranges: their sum cannot exceed the limit either
+            return Set.of();
+        }
+        Set<ByteRange> misses = unclaimedMisses(ranges);
+        if (lengthOf(misses) <= maxReadBytes) {
+            return Set.of();
+        }
+        return misses;
+    }
+
+    private static long lengthOf(Collection<ByteRange> ranges) {
+        long length = 0;
+        for (ByteRange range : ranges) {
+            length += range.length();
+        }
+        return length;
+    }
+
+    private Set<ByteRange> unclaimedMisses(Collection<ByteRange> ranges) {
+        Set<ByteRange> misses = new HashSet<>();
+        for (ByteRange range : ranges) {
+            boolean cached = cache.getIfPresentQuietly(range) != null;
+            if (!cached && !pending.isClaimed(range)) {
+                misses.add(range);
+            }
+        }
+        return misses;
+    }
+
+    /** Looks up each bypassed range once, to count its miss in the cache statistics. */
+    private void recordMisses(Set<ByteRange> tooLarge) {
+        for (ByteRange range : tooLarge) {
+            cache.getIfPresent(range);
+        }
+    }
+
+    private static Collection<ByteRange> without(Collection<ByteRange> ranges, Set<ByteRange> excluded) {
+        if (excluded.isEmpty()) {
+            return ranges;
+        }
+        List<ByteRange> kept = new ArrayList<>(ranges.size());
+        for (ByteRange range : ranges) {
+            if (!excluded.contains(range)) {
+                kept.add(range);
+            }
+        }
+        return kept;
+    }
+
+    /**
+     * Loads {@code ranges} through the cache. The ranges of the failed waits get a second pass, and the ranges of the
+     * expired waits are fetched without a claim.
+     */
+    private void loadThroughTheCache(Collection<ByteRange> ranges) {
         Round first = load(ranges);
         if (first.hasRangesWithoutValue()) {
             Round retry = load(first.failed().keySet());
@@ -71,11 +155,10 @@ final class BatchRangeLoadTask {
 
             fetchWithoutClaim(gaveUpOn);
         }
-        return loaded();
     }
 
     private BatchLoadOutcome loaded() {
-        return new BatchLoadOutcome(values, fetched, cost);
+        return new BatchLoadOutcome(values, fetched, cost, bypassed);
     }
 
     /**

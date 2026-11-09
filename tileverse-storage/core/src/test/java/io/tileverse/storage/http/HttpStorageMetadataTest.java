@@ -7,22 +7,31 @@ package io.tileverse.storage.http;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.head;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.ReadHandle;
 import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.batch.BatchSettings;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -34,6 +43,7 @@ class HttpStorageMetadataTest {
     private static final String KEY = "data.bin";
     private static final String PATH = "/" + KEY;
     private static final byte[] DATA = "some bytes".getBytes(StandardCharsets.US_ASCII);
+    private static final byte[] FIRST_BYTES = Arrays.copyOf(DATA, 4);
 
     // Loopback only: a wildcard socket may share its port with an IPv4 listener of another process, and that
     // listener then receives the requests.
@@ -90,6 +100,66 @@ class HttpStorageMetadataTest {
                         .withStatus(200)
                         .withHeader("Last-Modified", lastModified)
                         .withBody(DATA)));
+    }
+
+    @Test
+    void versionedOpenTakesTheEtag() throws IOException {
+        stubHead(aResponse()
+                .withStatus(200)
+                .withHeader("ETag", "\"e1\"")
+                .withHeader("Content-Length", String.valueOf(DATA.length)));
+        stubFirstBytes();
+        Optional<String> etag = storage.stat(KEY).orElseThrow().etag();
+
+        try (RangeReader reader = storage.openVersionedRangeReader(KEY)) {
+            assertThat(reader.version()).hasValue(etag.orElseThrow());
+            assertThat(firstBytes(reader)).isEqualTo(FIRST_BYTES);
+        }
+    }
+
+    // Some HTTP servers forbid HEAD requests and still serve range reads.
+    @Test
+    void versionedOpenSurvivesForbiddenHead() throws IOException {
+        stubHead(aResponse().withStatus(403));
+        stubFirstBytes();
+
+        try (RangeReader reader = storage.openVersionedRangeReader(KEY)) {
+            assertThat(reader.version()).isEmpty();
+            assertThat(firstBytes(reader)).isEqualTo(FIRST_BYTES);
+        }
+    }
+
+    @Test
+    void versionedOpenOnMissingHeadIsPlain() throws IOException {
+        stubHead(aResponse().withStatus(404));
+
+        try (RangeReader versioned = storage.openVersionedRangeReader(KEY);
+                RangeReader plain = storage.openRangeReader(KEY)) {
+            assertThat(versioned.version()).isEmpty();
+            assertThat(versioned).hasSameClassAs(plain);
+        }
+    }
+
+    private void stubHead(ResponseDefinitionBuilder answer) {
+        wm.stubFor(head(urlEqualTo(PATH)).willReturn(answer));
+    }
+
+    private void stubFirstBytes() {
+        String lastByte = String.valueOf(FIRST_BYTES.length - 1);
+        wm.stubFor(get(urlEqualTo(PATH))
+                .withHeader("Range", equalTo("bytes=0-" + lastByte))
+                .willReturn(aResponse()
+                        .withStatus(206)
+                        .withHeader("Content-Range", "bytes 0-" + lastByte + "/" + DATA.length)
+                        .withBody(FIRST_BYTES)));
+    }
+
+    private static byte[] firstBytes(RangeReader reader) {
+        ByteBuffer buffer = reader.readRange(0, FIRST_BYTES.length);
+        buffer.flip();
+        byte[] bytes = new byte[buffer.remaining()];
+        buffer.get(bytes);
+        return bytes;
     }
 
     private static StorageEntry.File metadataOfARead(HttpStorage storage) throws IOException {

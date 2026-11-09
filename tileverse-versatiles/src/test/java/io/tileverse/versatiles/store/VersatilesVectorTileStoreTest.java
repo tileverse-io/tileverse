@@ -8,8 +8,14 @@ package io.tileverse.versatiles.store;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.tileverse.cache.CacheBudgets;
+import io.tileverse.cache.CacheManager;
+import io.tileverse.cache.CaffeineCacheManager;
 import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.jackson.databind.tilejson.v3.VectorLayer;
+import io.tileverse.storage.RangeReader;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageFactory;
 import io.tileverse.tiling.matrix.Tile;
 import io.tileverse.tiling.matrix.TileMatrixSet;
 import io.tileverse.tiling.pyramid.TileIndex;
@@ -24,6 +30,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -89,6 +96,45 @@ class VersatilesVectorTileStoreTest {
         VectorTile vectorTile = data.get().data();
         assertThat(vectorTile.getLayerNames()).contains("buildings", "streets");
         assertThat(vectorTile.getFeatures("buildings")).isNotEmpty();
+    }
+
+    // The fake clock keeps the decoded tiles from expiring between the reads
+    @Test
+    void replacedArchiveMissesDecodedTiles() throws IOException {
+        AtomicLong nanos = new AtomicLong();
+        CacheManager manager = new CaffeineCacheManager(new CacheBudgets(64L << 20, 64L << 20), nanos::get);
+        TileIndex root = TileIndex.zxy(0, 0, 0);
+        try (Storage storage = StorageFactory.open(tmp.toUri());
+                VersatilesReader original = versionedReader(storage, "v1");
+                VersatilesReader replaced = versionedReader(storage, "v2");
+                VersatilesReader originalAgain = versionedReader(storage, "v1")) {
+            VersatilesVectorTileStore originalStore = new VersatilesVectorTileStore(original).cacheManager(manager);
+            VersatilesVectorTileStore replacedStore = new VersatilesVectorTileStore(replaced).cacheManager(manager);
+            VersatilesVectorTileStore originalAgainStore =
+                    new VersatilesVectorTileStore(originalAgain).cacheManager(manager);
+
+            originalStore.findTile(root);
+            long missesOfOriginal = decodedTileMisses(manager);
+
+            replacedStore.findTile(root);
+            long missesOfReplaced = decodedTileMisses(manager);
+
+            originalAgainStore.findTile(root);
+
+            assertThat(missesOfReplaced).isGreaterThan(missesOfOriginal);
+            assertThat(decodedTileMisses(manager)).isEqualTo(missesOfReplaced);
+        }
+    }
+
+    private VersatilesReader versionedReader(Storage storage, String version) throws IOException {
+        Path file = VersatilesTestData.andorra(tmp);
+        RangeReader andorraReader = storage.openRangeReader(file.toUri());
+        RangeReader versioned = VersatilesTestData.withVersion(andorraReader, version);
+        return new VersatilesReader(versioned);
+    }
+
+    private static long decodedTileMisses(CacheManager manager) {
+        return manager.stats().get("tileverse-vectortile-cache").missCount();
     }
 
     @Test

@@ -16,8 +16,10 @@ import java.util.List;
  * One contiguous downstream fetch produced by {@link BatchPlanner}, together with the request slices it satisfies.
  *
  * <p>A fetch whose single slice covers its whole range is {@link #isDirect() direct}: the executing side reads it
- * straight into the caller's target, zero copy. Every other fetch reads into scratch and {@link #scatter(ByteBuffer,
- * int, List, int[]) scatters} the bytes into its targets.
+ * straight into the caller's target, zero copy. A fetch of slices {@link #hasDisjointSlices() following one another}
+ * writes the requests' bytes straight into their targets through {@link FetchTargets}. A fetch of overlapping or
+ * repeated requests reads into scratch and {@link #scatter(ByteBuffer, int, List, int[]) scatters} the bytes into its
+ * targets.
  *
  * @param range the contiguous byte range to fetch downstream
  * @param slices where the fetched bytes land, one entry per satisfied request
@@ -57,6 +59,23 @@ public record PlannedFetch(ByteRange range, List<Slice> slices) {
         }
         Slice only = slices.get(0);
         return only.offsetInFetch() == 0 && only.length() == range.length();
+    }
+
+    /**
+     * Returns whether the slices follow one another without overlapping: each starts at or after the end of the slice
+     * before it, as the slices of the planner's fetches do unless their requests overlap. A direct fetch passes.
+     *
+     * @return true when each byte of the fetch belongs to one slice at most, in ascending slice order
+     */
+    public boolean hasDisjointSlices() {
+        int previousEnd = 0;
+        for (Slice slice : slices) {
+            if (slice.offsetInFetch() < previousEnd) {
+                return false;
+            }
+            previousEnd = slice.offsetInFetch() + slice.length();
+        }
+        return true;
     }
 
     /**

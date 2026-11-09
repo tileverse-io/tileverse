@@ -17,6 +17,7 @@ import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.models.DownloadRetryOptions;
 import com.azure.storage.blob.specialized.BlobAsyncClientBase;
 import com.azure.storage.blob.specialized.SpecializedBlobClientBuilder;
+import io.tileverse.io.ByteRange;
 import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.ContentRange;
 import io.tileverse.storage.RangeReader;
@@ -25,6 +26,7 @@ import io.tileverse.storage.adapters.ByteBufferOutputStream;
 import io.tileverse.storage.adapters.ByteBufferSinkException;
 import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.batch.CoalescingPolicy;
+import io.tileverse.storage.batch.FetchTargets;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
@@ -32,6 +34,7 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -46,7 +49,8 @@ import reactor.core.publisher.Mono;
  * the merged gaps.
  *
  * <p>Range bodies stream straight into the caller's buffer, heap or direct, through the SDK's download stream; no read
- * holds a full-size heap copy of the response.
+ * holds a full-size heap copy of the response. A fetch joining requests in ascending order without overlap streams into
+ * their targets the same way, and the bytes between two requests are dropped as they arrive.
  */
 @Slf4j
 class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
@@ -121,15 +125,35 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
     @Override
     protected int readRangeNoFlip(long offset, int actualLength, ByteBuffer target) {
         try (ByteBufferOutputStream sink = new ByteBufferOutputStream(target, actualLength)) {
+            downloadRange(offset, actualLength, chunk -> writeChunk(chunk, sink));
+            return sink.bytesWritten();
+        }
+    }
+
+    /**
+     * Streams a joined fetch straight into the targets of its requests through a {@link FetchTargetsSink}, with the
+     * retry options, fence and failure mapping of {@link #readRangeNoFlip}.
+     */
+    @Override
+    protected int readJoinedFetch(ByteRange range, FetchTargets targets) {
+        try (FetchTargetsSink sink = new FetchTargetsSink(targets)) {
+            downloadRange(range.offset(), range.length(), chunk -> writeChunk(chunk, sink));
+            return sink.bytesWritten();
+        }
+    }
+
+    /** Downloads a range, hands the chunks of its body to {@code chunkWriter}, and checks and maps the outcome. */
+    private void downloadRange(long offset, int length, Consumer<ByteBuffer> chunkWriter) {
+        try {
             final long start = System.nanoTime();
 
             BlobDownloadAsyncResponse response =
-                    download(offset, actualLength, sink).block();
+                    download(offset, length, chunkWriter).block();
 
             if (log.isDebugEnabled()) {
                 long end = System.nanoTime();
                 long millis = Duration.ofNanos(end - start).toMillis();
-                log.debug("range:[{} +{}], time: {}ms]", offset, actualLength, millis);
+                log.debug("range:[{} +{}], time: {}ms]", offset, length, millis);
             }
 
             if (response.getStatusCode() < 200 || response.getStatusCode() >= 300) {
@@ -141,7 +165,6 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
                 ContentRange.totalOf(contentRange)
                         .ifPresent(total -> contentLength.compareAndSet(null, OptionalLong.of(total)));
             }
-            return sink.bytesWritten();
         } catch (BlobStorageException e) {
             throw AzureExceptionMapper.map(e, blobClient.getBlobUrl());
         } catch (StorageException e) {
@@ -155,18 +178,26 @@ class AzureBlobRangeReader extends AbstractRangeReader implements RangeReader {
         }
     }
 
-    private Mono<BlobDownloadAsyncResponse> download(long offset, int length, ByteBufferOutputStream sink) {
+    private Mono<BlobDownloadAsyncResponse> download(long offset, int length, Consumer<ByteBuffer> chunkWriter) {
         BlobRange range = new BlobRange(offset, (long) length);
         DownloadRetryOptions options = new DownloadRetryOptions().setMaxRetryRequests(3);
         Mono<BlobDownloadAsyncResponse> pending =
                 asyncClient.downloadStreamWithResponse(range, options, new BlobRequestConditions(), false);
-        return pending.flatMap(response -> writeBody(response, sink));
+        return pending.flatMap(response -> writeBody(response, chunkWriter));
     }
 
     private static Mono<BlobDownloadAsyncResponse> writeBody(
-            BlobDownloadAsyncResponse response, ByteBufferOutputStream sink) {
+            BlobDownloadAsyncResponse response, Consumer<ByteBuffer> chunkWriter) {
         Flux<ByteBuffer> body = response.getValue();
-        return body.doOnNext(chunk -> writeChunk(chunk, sink)).then(Mono.just(response));
+        return body.doOnNext(chunkWriter).then(Mono.just(response));
+    }
+
+    private static void writeChunk(ByteBuffer chunk, FetchTargetsSink sink) {
+        try {
+            sink.write(chunk);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private static void writeChunk(ByteBuffer chunk, ByteBufferOutputStream sink) {

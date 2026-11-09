@@ -10,12 +10,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.tileverse.io.ByteBufferPool;
 import io.tileverse.storage.AccessDeniedException;
 import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.RangeRequest;
@@ -40,6 +44,7 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.core.async.AsyncResponseTransformer;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
@@ -164,14 +169,19 @@ class S3RangeReaderBatchTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void mergedFetchesScatterFromStreamedScratch() {
+    void joinedFetchStreamsIntoTheTargets() {
         object.installAsync(asyncClient);
         ByteBuffer first = ByteBuffer.allocate(200);
         first.position(50);
         ByteBuffer second = ByteBuffer.allocateDirect(100);
         List<RangeRequest> requests = List.of(RangeRequest.of(0, 100, first), RangeRequest.of(1_000, 100, second));
 
-        int[] counts = counts(reader.readRanges(requests));
+        int[] counts;
+        try (MockedStatic<ByteBufferPool> pool = mockStatic(ByteBufferPool.class, CALLS_REAL_METHODS)) {
+            counts = counts(reader.readRanges(requests));
+
+            pool.verify(() -> ByteBufferPool.heapBuffer(anyInt()), never());
+        }
 
         assertThat(counts).containsExactly(100, 100);
         verify(asyncClient, times(1)).getObject(any(GetObjectRequest.class), any(AsyncResponseTransformer.class));
@@ -179,6 +189,69 @@ class S3RangeReaderBatchTest {
         assertThat(contents(first, 50, 100)).containsExactly(bytesFor(0, 100));
         assertThat(second.position()).isEqualTo(100);
         assertThat(contents(second, 0, 100)).containsExactly(bytesFor(1_000, 100));
+    }
+
+    @Test
+    void chunksCrossRequestBoundaries() {
+        object.installAsync(asyncClient);
+        List<RangeRequest> requests = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            ByteBuffer target = i % 2 == 0 ? ByteBuffer.allocate(1_000) : ByteBuffer.allocateDirect(1_000);
+            requests.add(RangeRequest.of(5_000 + i * 1_000L, 1_000, target));
+        }
+
+        BatchReadResult result = reader.readRanges(requests);
+
+        assertContents(requests, counts(result));
+        assertThat(result.fetches()).isEqualTo(1);
+    }
+
+    @Test
+    void aRetryRewritesTheJoinedTargets() {
+        object.failingBodyReads(1).installAsync(asyncClient);
+        List<RangeRequest> requests = batchOf(new long[][] {{0, 3_000}, {3_000, 3_000}, {6_000, 3_000}});
+
+        int[] counts = counts(reader.readRanges(requests));
+
+        assertContents(requests, counts);
+        assertThat(object.attempts()).isEqualTo(2);
+    }
+
+    @Test
+    void joinedFetchStopsAtEof() {
+        object.installAsync(asyncClient);
+        List<RangeRequest> requests =
+                batchOf(new long[][] {{OBJECT_SIZE - 150, 100}, {OBJECT_SIZE - 50, 100}, {OBJECT_SIZE + 50, 100}});
+
+        BatchReadResult result = reader.readRanges(requests);
+
+        assertThat(counts(result)).containsExactly(100, 50, 0);
+        assertContents(requests, counts(result));
+        assertThat(result.bytesTransferred()).isEqualTo(150);
+    }
+
+    /** A direct, a joined and an overlapping fetch in one batch, each landing in its own targets. */
+    @Test
+    void mixedBatchLandsEachRequest() {
+        object.installAsync(asyncClient);
+        List<RangeRequest> requests = batchOf(new long[][] {
+            {0, 100}, {100, 100}, {1_000_000, 100}, {1_000_050, 100}, {2_000_000, 300}, {3_000_000, 10}
+        });
+
+        BatchReadResult result = reader.readRanges(requests);
+
+        assertContents(requests, counts(result));
+        assertThat(result.fetches()).isEqualTo(4);
+    }
+
+    @Test
+    void overlappingFetchScattersFromScratch() {
+        object.installAsync(asyncClient);
+        List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {50, 100}});
+
+        int[] counts = counts(reader.readRanges(requests));
+
+        assertContents(requests, counts);
     }
 
     @Test
@@ -453,14 +526,28 @@ class S3RangeReaderBatchTest {
         assertThat(contents(target, 0, 100)).containsOnly((byte) 0);
     }
 
-    /** Same as the direct fetch: the body of the retry must not reach the scratch returned to the pool. */
+    /** Same as the direct fetch: the body of the retry must not reach the targets of a joined fetch. */
     @Test
-    void aMergedFetchTimingOutWritesNothingToItsScratchAfterTheCallThrows() {
+    void aJoinedFetchTimingOutWritesNothing() {
         TimedOutCall call = new TimedOutCall(asyncClient);
         List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {1_000, 100}});
 
         assertThatThrownBy(() -> reader.readRanges(requests)).isInstanceOf(StorageException.class);
         call.startTheScheduledRetry(1_100);
+
+        assertThat(call.bytesWrittenByTheRetry()).isZero();
+        assertThat(contents(requests.get(0).target(), 0, 100)).containsOnly((byte) 0);
+        assertThat(contents(requests.get(1).target(), 0, 100)).containsOnly((byte) 0);
+    }
+
+    /** Same again: the body of the retry must not reach the scratch of overlapping requests, back in the pool. */
+    @Test
+    void aScatteredFetchTimingOutWritesNothing() {
+        TimedOutCall call = new TimedOutCall(asyncClient);
+        List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {50, 100}});
+
+        assertThatThrownBy(() -> reader.readRanges(requests)).isInstanceOf(StorageException.class);
+        call.startTheScheduledRetry(150);
 
         assertThat(call.bytesWrittenByTheRetry()).isZero();
     }

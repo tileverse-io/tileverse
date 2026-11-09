@@ -5,15 +5,20 @@
  */
 package io.tileverse.storage.gcs;
 
+import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static io.tileverse.storage.gcs.GoogleCloudStorageRangeReader.DEFAULT_HOST;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -27,15 +32,19 @@ import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.Storage.BlobGetOption;
 import com.google.cloud.storage.Storage.BlobSourceOption;
 import com.google.cloud.storage.StorageException;
+import io.tileverse.io.ByteBufferPool;
+import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.batch.CoalescingPolicy;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -303,5 +312,52 @@ class GoogleCloudStorageRangeReaderTest {
                 storage, "http://localhost:4443", BUCKET, OBJECT_NAME, Optional.empty());
 
         assertThat(onEmulator.getSourceIdentifier()).isEqualTo("http://localhost:4443/" + BUCKET + "/" + OBJECT_NAME);
+    }
+
+    @Test
+    void joinedFetchStreamsIntoTheTargets() throws IOException {
+        stubReader();
+        ByteBuffer heap = ByteBuffer.allocate(300);
+        heap.position(10);
+        ByteBuffer direct = ByteBuffer.allocateDirect(300);
+        direct.position(20);
+        ByteBuffer afterAGap = ByteBuffer.allocate(100);
+        List<RangeRequest> requests = List.of(
+                RangeRequest.of(100, 200, heap),
+                RangeRequest.of(300, 200, direct),
+                RangeRequest.of(600, 100, afterAGap));
+
+        int[] counts;
+        try (MockedStatic<ByteBufferPool> pool = mockStatic(ByteBufferPool.class, CALLS_REAL_METHODS)) {
+            counts = counts(reader.readRanges(requests));
+
+            pool.verify(() -> ByteBufferPool.heapBuffer(anyInt()), never());
+        }
+
+        assertThat(counts).containsExactly(200, 200, 100);
+        assertThat(heap.position()).isEqualTo(210);
+        assertThat(direct.position()).isEqualTo(220);
+        assertArrayEquals(Arrays.copyOfRange(TEST_DATA, 100, 300), contents(heap, 10, 200));
+        assertArrayEquals(Arrays.copyOfRange(TEST_DATA, 300, 500), contents(direct, 20, 200));
+        assertArrayEquals(Arrays.copyOfRange(TEST_DATA, 600, 700), contents(afterAGap, 0, 100));
+        verify(readChannel, times(1)).seek(anyLong());
+        verify(readChannel).seek(100L);
+    }
+
+    @Test
+    void joinedFetchStopsAtEof() {
+        stubReader();
+        List<RangeRequest> requests = List.of(
+                RangeRequest.of(CONTENT_LENGTH - 150, 100, ByteBuffer.allocate(100)),
+                RangeRequest.of(CONTENT_LENGTH - 50, 100, ByteBuffer.allocate(100)),
+                RangeRequest.of(CONTENT_LENGTH + 50, 100, ByteBuffer.allocate(100)));
+
+        assertThat(counts(reader.readRanges(requests))).containsExactly(100, 50, 0);
+    }
+
+    private static byte[] contents(ByteBuffer buffer, int from, int length) {
+        byte[] out = new byte[length];
+        buffer.get(from, out);
+        return out;
     }
 }

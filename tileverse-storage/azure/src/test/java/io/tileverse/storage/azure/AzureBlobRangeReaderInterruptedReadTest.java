@@ -12,6 +12,8 @@ import static org.awaitility.Awaitility.await;
 import com.azure.core.http.jdk.httpclient.JdkHttpClientBuilder;
 import com.azure.storage.blob.BlobClient;
 import com.sun.net.httpserver.HttpExchange;
+import io.tileverse.storage.BatchReadResult;
+import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.StorageException;
 import io.tileverse.storage.azure.StandInBlobServer.RequestedRange;
 import java.io.IOException;
@@ -19,6 +21,7 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -170,6 +173,34 @@ class AzureBlobRangeReaderInterruptedReadTest {
         } catch (InterruptedException stopping) {
             Thread.currentThread().interrupt();
             throw new IOException("Server stopping", stopping);
+        }
+    }
+
+    /** A joined read moves no target position before it ends: progress shows as the first body byte landing. */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void anInterruptedJoinedReadStopsWriting() throws InterruptedException {
+        AzureBlobRangeReader reader = new AzureBlobRangeReader(blobClient);
+        int half = BODY_SIZE / 2;
+        ByteBuffer first = ByteBuffer.allocate(half);
+        ByteBuffer second = ByteBuffer.allocate(half);
+        List<RangeRequest> requests = List.of(RangeRequest.of(0, half, first), RangeRequest.of(half, half, second));
+        FutureTask<BatchReadResult> read = new FutureTask<>(() -> reader.readRanges(requests));
+        Thread readingThread = new Thread(read, "interrupted-joined-read");
+
+        readingThread.start();
+        try {
+            await().atMost(Duration.ofSeconds(10)).until(() -> first.get(0) != 0);
+            readingThread.interrupt();
+
+            assertThatThrownBy(() -> read.get(10, TimeUnit.SECONDS))
+                    .isInstanceOf(ExecutionException.class)
+                    .hasCauseInstanceOf(StorageException.class);
+            assertTargetStaysUnchanged(first);
+            assertTargetStaysUnchanged(second);
+        } finally {
+            readingThread.interrupt();
+            readingThread.join(TimeUnit.SECONDS.toMillis(10));
         }
     }
 }

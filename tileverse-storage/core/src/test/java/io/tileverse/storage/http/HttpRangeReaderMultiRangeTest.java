@@ -16,6 +16,10 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.extension.ResponseDefinitionTransformerV2;
@@ -23,6 +27,7 @@ import com.github.tomakehurst.wiremock.http.ResponseDefinition;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import com.github.tomakehurst.wiremock.stubbing.Scenario;
 import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
+import io.tileverse.io.ByteBufferPool;
 import io.tileverse.storage.BatchReadResult;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
@@ -50,6 +55,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.MockedStatic;
 
 /**
  * Batched-read tests for {@link HttpRangeReader} against stubbed multi-range responses: multipart routing, part
@@ -770,6 +776,95 @@ class HttpRangeReaderMultiRangeTest {
                     .as("the part and the extra GET before the refusal, then the whole batch again")
                     .isEqualTo(1500 + 100 + 1700);
         }
+    }
+
+    @Test
+    void partsLandInJoinedTargets() throws IOException {
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=0-249,600000-600199"))
+                .willReturn(multipartResponse(multipartBody(new long[][] {{0, 250}, {600_000, 200}}))));
+        List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {150, 100}, {600_000, 200}});
+
+        int[] counts;
+        try (MockedStatic<ByteBufferPool> pool = mockStatic(ByteBufferPool.class, CALLS_REAL_METHODS)) {
+            counts = counts(reader.readRanges(requests));
+
+            pool.verify(() -> ByteBufferPool.heapBuffer(anyInt()), never());
+        }
+        assertContents(requests, counts);
+    }
+
+    /** One part spanning a joined fetch, its gaps and the next fetch: each fetch reads its own bytes from the part. */
+    @Test
+    void coalescedPartFeedsJoinedFetches() throws IOException {
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=0-249,600000-600199"))
+                .willReturn(multipartResponse(multipartBody(new long[][] {{0, 600_200}}))));
+        List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {150, 100}, {600_000, 100}, {600_100, 100}});
+
+        BatchReadResult result = reader.readRanges(requests);
+
+        assertContents(requests, counts(result));
+        assertThat(result.fetches()).isEqualTo(1);
+    }
+
+    @Test
+    void singleRangeAnswerFillsJoinedTargets() {
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=0-249,600000-600199"))
+                .willReturn(aResponse()
+                        .withStatus(206)
+                        .withHeader("Content-Type", "application/octet-stream")
+                        .withHeader("Content-Range", "bytes 0-600199/" + FILE_SIZE)
+                        .withBody(slice(0, 600_200))));
+        List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {150, 100}, {600_000, 200}});
+
+        assertContents(requests, counts(reader.readRanges(requests)));
+    }
+
+    @Test
+    void oneJoinedFetchReadsWithOneGet() {
+        stubSingleRangeGet(0, 400);
+        List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {100, 100}, {300, 100}});
+
+        BatchReadResult result;
+        try (MockedStatic<ByteBufferPool> pool = mockStatic(ByteBufferPool.class, CALLS_REAL_METHODS)) {
+            result = reader.readRanges(requests);
+
+            pool.verify(() -> ByteBufferPool.heapBuffer(anyInt()), never());
+        }
+        assertContents(requests, counts(result));
+        assertThat(result.fetches()).isEqualTo(1);
+        wm.verify(1, getRequestedFor(urlEqualTo(TEST_PATH)).withHeader("Range", equalTo("bytes=0-399")));
+    }
+
+    @Test
+    void unansweredJoinedFetchGetsItsOwnGet() throws IOException {
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=0-249,600000-600199"))
+                .willReturn(multipartResponse(multipartBody(new long[][] {{600_000, 200}}))));
+        stubSingleRangeGet(0, 250);
+        List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {150, 100}, {600_000, 200}});
+
+        assertContents(requests, counts(reader.readRanges(requests)));
+        wm.verify(1, getRequestedFor(urlEqualTo(TEST_PATH)).withHeader("Range", equalTo("bytes=0-249")));
+    }
+
+    /** A server answers the GET of a joined fetch in part: a GET of the rest completes the targets. */
+    @Test
+    void partialAnswerCompletesJoinedTargets() {
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .withHeader("Range", equalTo("bytes=0-399"))
+                .willReturn(aResponse()
+                        .withStatus(206)
+                        .withHeader("Content-Type", "application/octet-stream")
+                        .withHeader("Content-Range", "bytes 0-149/" + FILE_SIZE)
+                        .withBody(slice(0, 150))));
+        stubSingleRangeGet(150, 250);
+        List<RangeRequest> requests = batchOf(new long[][] {{0, 100}, {100, 100}, {300, 100}});
+
+        assertContents(requests, counts(reader.readRanges(requests)));
+        wm.verify(1, getRequestedFor(urlEqualTo(TEST_PATH)).withHeader("Range", equalTo("bytes=150-399")));
     }
 
     private void stubSingleRangeGets() {

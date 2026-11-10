@@ -5,11 +5,15 @@
  */
 package io.tileverse.storage.rangereader;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageEntry;
+import io.tileverse.storage.StorageFactory;
 import io.tileverse.storage.block.BlockAlignedRangeReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -231,5 +235,18 @@ class BlockAlignedRangeReaderTest {
     void testReadWithInsufficientBufferCapacity() {
         ByteBuffer target = ByteBuffer.allocate(5);
         assertThatThrownBy(() -> reader.readRange(0, 10, target)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void versionPassesThrough() throws IOException {
+        try (Storage storage = StorageFactory.open(tempDir.toUri())) {
+            StorageEntry.File entry = storage.stat("block-test.txt").orElseThrow();
+            String etag = entry.etag().orElseThrow();
+            RangeReader delegate = storage.openRangeReader(entry);
+            try (BlockAlignedRangeReader aligned = new BlockAlignedRangeReader(delegate, TEST_BLOCK_SIZE)) {
+                assertThat(aligned.version()).hasValue(etag);
+                assertThat(aligned.contentIdentifier()).endsWith("@" + etag);
+            }
+        }
     }
 }

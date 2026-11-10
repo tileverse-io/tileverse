@@ -145,20 +145,38 @@ public interface Storage extends Closeable {
     RangeReader openRangeReader(String key);
 
     /**
-     * Open a {@link RangeReader} for a listed blob, seeding the object size from the listing entry such that
-     * {@link RangeReader#size()} answers without any metadata request. Equivalent to {@link #openRangeReader(String)}
-     * for {@code entry.key()} otherwise; the reader's {@link RangeReader#getSourceIdentifier() source identifier} is
-     * identical.
+     * Open a {@link RangeReader} for a listed blob. The reader answers {@link RangeReader#size()} and
+     * {@link RangeReader#version()} from the entry, without any metadata request. Equivalent to
+     * {@link #openRangeReader(String)} for {@code entry.key()} otherwise; the reader's
+     * {@link RangeReader#getSourceIdentifier() source identifier} is identical.
      *
-     * <p>The seeded size reflects the listing observation; if the object is replaced between listing and reading, reads
-     * return whatever the backend serves for the requested offsets.
+     * <p>The version is the entry's ETag, or its version id if it has no ETag, or else its size and last-modified time.
+     * If the entry has no ETag, no version id and no last-modified time, the reader reports the version of the reader
+     * opened by key, if that one knows it. The size and the version are those of the listing: if the object is replaced
+     * between listing and reading, reads return whatever the backend serves for the requested offsets.
      *
      * @param entry a file entry obtained from this storage's listing or stat operations
-     * @return a thread-safe RangeReader bound to the blob, answering size() from the entry
+     * @return a thread-safe RangeReader bound to the blob, answering size() and version() from the entry
      */
     default RangeReader openRangeReader(StorageEntry.File entry) {
         Objects.requireNonNull(entry, "entry");
-        return KnownSizeRangeReader.of(openRangeReader(entry.key()), entry.size());
+        return KnownSizeRangeReader.of(openRangeReader(entry.key()), entry);
+    }
+
+    /**
+     * Open a {@link RangeReader} that knows the {@link RangeReader#version() version} of the blob. This method calls
+     * {@link #stat(String)} first and opens the reader from the entry, as {@link #openRangeReader(StorageEntry.File)}
+     * does. Each open costs one metadata request.
+     *
+     * <p>If {@code stat} returns empty or throws, the reader is opened with {@link #openRangeReader(String)} and has no
+     * version. Some HTTP servers reject the HEAD request sent by {@code stat} but still serve range reads.
+     *
+     * @param key key relative to {@link #baseUri()}
+     * @return a thread-safe RangeReader bound to the blob
+     * @throws StorageException on transport or authorization failures
+     */
+    default RangeReader openVersionedRangeReader(String key) {
+        return VersionedOpen.open(this, key);
     }
 
     /**

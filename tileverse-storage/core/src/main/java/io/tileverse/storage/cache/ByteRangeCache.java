@@ -5,45 +5,53 @@
  */
 package io.tileverse.storage.cache;
 
-import com.github.benmanes.caffeine.cache.RemovalCause;
-import com.github.benmanes.caffeine.cache.Scheduler;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import io.tileverse.cache.Cache;
 import io.tileverse.cache.CacheManager;
+import io.tileverse.cache.CachePool;
 import io.tileverse.cache.CacheStats;
-import io.tileverse.cache.CaffeineCache;
+import io.tileverse.cache.PartitionSpec;
 import io.tileverse.io.ByteRange;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
-import lombok.extern.slf4j.Slf4j;
+import java.util.concurrent.atomic.LongAdder;
 
-@Slf4j
+/**
+ * The byte ranges cached for one content identifier, in a partition of the {@link CachePool#DATA} pool. Caches built
+ * from one {@link CacheManager} with equal content identifiers share their ranges.
+ *
+ * <p>The partition also counts the reads that were too large to cache, for the caches built from its manager, whatever
+ * their content identifier.
+ */
 class ByteRangeCache {
 
     static final String SHARED_CACHE_NAME = "tileverse-storage-cache";
 
-    private static final int DEFAULT_MAX_HEAP_PERCENT = 20;
+    static final Duration EXPIRE_AFTER_ACCESS = Duration.ofMinutes(5);
 
-    private static final Duration DEFAULT_EXPIRE_AFTER_ACCESS = Duration.ofSeconds(60);
+    /**
+     * A constant: registering the partition again requires an equal spec, and the pool compares weighers by identity.
+     */
+    private static final PartitionSpec<ByteRange, ByteBuffer> SPEC =
+            new PartitionSpec<>(ByteRangeCache::weigh, EXPIRE_AFTER_ACCESS);
 
-    private Cache<ByteRange, ByteBuffer> cache;
+    /**
+     * The bypass counters of each partition. A manager returns the same partition object each time the partition is
+     * registered, hence the partition identifies its manager. The weak keys are compared by identity, and the counters
+     * of a discarded manager are collected with its partition.
+     */
+    private static final LoadingCache<Cache<ByteRange, ByteBuffer>, BypassCounters> BYPASS_COUNTERS =
+            Caffeine.newBuilder().weakKeys().build(partition -> new BypassCounters());
 
-    public ByteRangeCache(CacheManager cacheManager, String sourceIdentifier) {
-        this.cache =
-                cacheManager.getCache(SHARED_CACHE_NAME, ByteRangeCache::buildSharedCache).subCache(sourceIdentifier);
-    }
+    private final Cache<ByteRange, ByteBuffer> cache;
+    private final BypassCounters bypassCounters;
 
-    // static, as the shared cache outlives this instance and must not reference it
-    private static Cache<ByteRange, ByteBuffer> buildSharedCache() {
-        return CaffeineCache.<ByteRange, ByteBuffer>newBuilder()
-                .maxHeapPercent(DEFAULT_MAX_HEAP_PERCENT, ByteRangeCache::weigh)
-                .averageWeight(64 * 1024)
-                .expireAfterAccess(DEFAULT_EXPIRE_AFTER_ACCESS)
-                // run eviction tasks when idle to return memory without waiting for cache usage
-                .scheduler(Scheduler.systemScheduler())
-                .removalListener(ByteRangeCache::onRemoval)
-                .recordStats()
-                .build();
+    public ByteRangeCache(CacheManager cacheManager, String contentIdentifier) {
+        Cache<ByteRange, ByteBuffer> partition = cacheManager.partition(CachePool.DATA, SHARED_CACHE_NAME, SPEC);
+        this.cache = partition.subCache(contentIdentifier);
+        this.bypassCounters = BYPASS_COUNTERS.get(partition);
     }
 
     /**
@@ -67,12 +75,6 @@ class ByteRangeCache {
         return cache.get(key, k -> value);
     }
 
-    static void onRemoval(ByteRange key, ByteBuffer value, RemovalCause cause) {
-        if (log.isTraceEnabled()) {
-            log.trace("Evicted {}, {}, cause: {}", value, key, cause);
-        }
-    }
-
     static int weigh(ByteRange key, ByteBuffer value) {
         // Approximate overhead of the key record (long + int + object header)
         int keyWeight = 24;
@@ -91,6 +93,16 @@ class ByteRangeCache {
         return cache.stats();
     }
 
+    /** Counts one read that was too large to cache, and its bytes. */
+    public void recordBypass(long bytes) {
+        bypassCounters.countCall(bytes);
+    }
+
+    /** Returns the reads that were too large to cache, and their bytes, for the caches sharing the partition. */
+    public BypassStats bypassStats() {
+        return bypassCounters.snapshot();
+    }
+
     public long getEstimatedCacheSizeBytes() {
         final AtomicLong size = new AtomicLong();
         cache.forEach((k, buff) -> {
@@ -99,5 +111,20 @@ class ByteRangeCache {
             }
         });
         return size.get();
+    }
+
+    /** Counts the reads of one partition that were too large to cache, and their bytes. */
+    private static final class BypassCounters {
+        private final LongAdder calls = new LongAdder();
+        private final LongAdder bytes = new LongAdder();
+
+        void countCall(long bytesRead) {
+            calls.increment();
+            bytes.add(bytesRead);
+        }
+
+        BypassStats snapshot() {
+            return new BypassStats(calls.sum(), bytes.sum());
+        }
     }
 }

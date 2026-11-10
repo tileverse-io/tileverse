@@ -39,22 +39,39 @@ import java.util.concurrent.TimeoutException;
  * <p>The sharing is between the reads going through one loader. A wait lasts {@link #DEFAULT_WAIT_DEADLINE} at most, to
  * keep a stalled fetch from holding the reads waiting on it; past it, a read fetches the range itself, hands its value
  * to the reads still waiting and frees the range for the next ones.
+ *
+ * <p>The misses of a read are its ranges found neither in the cache nor in the table. If they add up to more than
+ * {@link #maxReadBytes()}, the read loads none of them, and the caller reads them directly into its targets. Otherwise
+ * one large read would evict the small ranges kept by the cache for reuse.
  */
 final class BatchRangeLoader {
 
     static final Duration DEFAULT_WAIT_DEADLINE = Duration.ofSeconds(10);
 
+    /** No limit: a read loads its misses, whatever their size. */
+    static final long NO_READ_SIZE_BOUND = Long.MAX_VALUE;
+
     private final ByteRangeCache cache;
     private final PendingLoads pending = new PendingLoads();
     private final Duration waitDeadline;
+    private final long maxReadBytes;
 
     BatchRangeLoader(ByteRangeCache cache) {
-        this(cache, DEFAULT_WAIT_DEADLINE);
+        this(cache, DEFAULT_WAIT_DEADLINE, NO_READ_SIZE_BOUND);
+    }
+
+    BatchRangeLoader(ByteRangeCache cache, long maxReadBytes) {
+        this(cache, DEFAULT_WAIT_DEADLINE, maxReadBytes);
     }
 
     BatchRangeLoader(ByteRangeCache cache, Duration waitDeadline) {
+        this(cache, waitDeadline, NO_READ_SIZE_BOUND);
+    }
+
+    BatchRangeLoader(ByteRangeCache cache, Duration waitDeadline, long maxReadBytes) {
         this.cache = requireNonNull(cache, "cache cannot be null");
         this.waitDeadline = requireNonNull(waitDeadline, "waitDeadline cannot be null");
+        this.maxReadBytes = maxReadBytes;
     }
 
     /**
@@ -62,19 +79,28 @@ final class BatchRangeLoader {
      * this read fails, the read tries the range once more. The failure of its own fetch, or of a fetch awaited on that
      * second try, is rethrown as thrown.
      *
+     * <p>If the misses of the read add up to more than {@link #maxReadBytes()}, they are returned as bypassed, with no
+     * value, and the caller reads them.
+     *
      * @param ranges the distinct, non-empty ranges of one read
      * @param fetch reads ranges from the delegate
-     * @return the values, the ranges fetched by this read and the cost of its fetches
+     * @return the values, the ranges fetched by this read, the cost of its fetches and the bypassed ranges
      * @throws TransientStorageException if the calling thread is interrupted while waiting for another read
      */
     public BatchLoadOutcome load(Collection<ByteRange> ranges, RangeFetch fetch) {
-        BatchRangeLoadTask load = new BatchRangeLoadTask(cache, pending, waitDeadline, System::nanoTime, fetch);
+        BatchRangeLoadTask load =
+                new BatchRangeLoadTask(cache, pending, waitDeadline, System::nanoTime, fetch, maxReadBytes);
         return load.run(ranges);
     }
 
     /** The number of ranges being fetched at this moment. */
     public int pendingLoads() {
         return pending.size();
+    }
+
+    /** The largest sum of misses loaded by one read, in bytes. */
+    long maxReadBytes() {
+        return maxReadBytes;
     }
 
     /** Reads ranges from the delegate of a {@link CachingRangeReader}, each into the target of its request. */
@@ -123,6 +149,11 @@ final class BatchRangeLoader {
         void fail(ByteRange range, PendingLoad load, Throwable failure) {
             loads.remove(range, load);
             load.fail(failure);
+        }
+
+        /** Whether a read is fetching {@code range}. The answer can change as soon as it is returned. */
+        boolean isClaimed(ByteRange range) {
+            return loads.containsKey(range);
         }
 
         int size() {

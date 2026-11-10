@@ -86,7 +86,7 @@ public class VersatilesReader implements AutoCloseable {
             this.header = readHeader(rangeReader);
             this.metadata = parseMetadata(readMetadataJson());
             this.blockIndex = readBlockIndex();
-            this.tileIndexCache = new TileIndexCache(rangeReader.getSourceIdentifier(), blobReader);
+            this.tileIndexCache = new TileIndexCache(rangeReader.contentIdentifier(), blobReader);
         } catch (IOException | RuntimeException e) {
             closeAfterFailure(rangeReader, e);
             throw e;
@@ -113,6 +113,10 @@ public class VersatilesReader implements AutoCloseable {
      * {@code config}, such as credentials, endpoints, and timeouts, configure the {@link Storage} opened for the parent
      * location. The returned reader owns that storage and its range reader, and closes both in {@link #close()}.
      *
+     * <p>The archive is opened from its {@link Storage#stat(String) stat} entry. The entry gives the reader the version
+     * of the archive, and the caches use that version to keep the data of a replaced archive apart. This costs one
+     * metadata request per open. If the stat finds no entry or fails, the archive opens without a version.
+     *
      * @param config configuration whose {@code baseUri} points at the Versatiles file
      * @return a new {@code VersatilesReader}
      * @throws IllegalArgumentException if {@code config.baseUri()} is null or has no key segment
@@ -128,7 +132,8 @@ public class VersatilesReader implements AutoCloseable {
         StorageConfig parentConfig = config.copy().baseUri(parent);
         Storage storage = StorageFactory.open(parentConfig);
         try {
-            RangeReader reader = storage.openRangeReader(versatilesUri);
+            String key = storage.relativizeToKey(versatilesUri);
+            RangeReader reader = storage.openVersionedRangeReader(key);
             return new VersatilesReader(storage, reader);
         } catch (IOException | RuntimeException e) {
             closeAfterFailure(storage, e);
@@ -197,7 +202,7 @@ public class VersatilesReader implements AutoCloseable {
 
     /**
      * Keeps the tile indexes read by this reader in {@code cacheManager} instead of {@link CacheManager#getDefault()}.
-     * Readers of the same archive share entries in the same cache manager.
+     * Readers of the same {@link #contentIdentifier() archive version} share entries in a cache manager.
      *
      * @return this reader
      */
@@ -209,6 +214,16 @@ public class VersatilesReader implements AutoCloseable {
     /** Returns the identifier of the file, as reported by its {@link RangeReader}. */
     public String getSourceIdentifier() {
         return rangeReader.getSourceIdentifier();
+    }
+
+    /**
+     * Returns the cache key of the data of this archive. When the reader reports a {@link RangeReader#version()
+     * version}, a replaced archive gets a new key.
+     *
+     * @return the {@link RangeReader#contentIdentifier() content identifier} of the archive's reader
+     */
+    public String contentIdentifier() {
+        return rangeReader.contentIdentifier();
     }
 
     /** Returns the header of the archive. */

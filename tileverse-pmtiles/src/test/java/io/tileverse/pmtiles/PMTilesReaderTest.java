@@ -347,6 +347,15 @@ class PMTilesReaderTest {
         }
     }
 
+    // FileStorage answers the stat with an ETag
+    @Test
+    void openReportsTheStatVersion() throws IOException {
+        URI andorra = PMTilesTestData.andorra(tmpFolder).toUri();
+        try (PMTilesReader opened = PMTilesReader.open(andorra)) {
+            assertThat(opened.contentIdentifier()).startsWith(opened.getSourceIdentifier() + "@");
+        }
+    }
+
     @Test
     void openRejectsUriWithoutKey() {
         URI uri = URI.create("file:///tmp/");
@@ -373,6 +382,41 @@ class PMTilesReaderTest {
         assertThat(andorra.getTile(TileIndex.zxy(0, 0, 0))).isPresent();
         andorra.close();
         return new WeakReference<>(andorra.alignedReader());
+    }
+
+    @Test
+    void replacedArchiveMissesDirectories() throws IOException {
+        TileIndex root = TileIndex.zxy(0, 0, 0);
+        try (PMTilesReader original = versionedReader("v1");
+                PMTilesReader replaced = versionedReader("v2");
+                PMTilesReader originalAgain = versionedReader("v1")) {
+            original.getTile(root);
+            long missesOfOriginal = directoryMisses();
+
+            replaced.getTile(root);
+            long missesOfReplaced = directoryMisses();
+
+            originalAgain.getTile(root);
+
+            assertThat(missesOfReplaced).isGreaterThan(missesOfOriginal);
+            assertThat(directoryMisses()).isEqualTo(missesOfReplaced);
+        }
+    }
+
+    private PMTilesReader versionedReader(String version) throws IOException {
+        RangeReader rangeReader = PMTilesTestData.andorraFileRangeReader(tmpFolder, version);
+        return new PMTilesReader(rangeReader).cacheManager(cacheManager);
+    }
+
+    private long directoryMisses() {
+        return cacheManager.stats().get("tileverse-pmtiles-directory-cache").missCount();
+    }
+
+    @Test
+    void directoriesLiveInTheMetadataPool() throws IOException {
+        reader.getTile(TileIndex.zxy(0, 0, 0));
+
+        assertThat(cacheManager.getCacheNames()).contains("tileverse-cache-metadata");
     }
 
     // A signed URL may hold slashes in its query; the parent location ends at the path.

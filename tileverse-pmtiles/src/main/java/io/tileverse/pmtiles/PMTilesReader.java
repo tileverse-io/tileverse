@@ -8,6 +8,7 @@ package io.tileverse.pmtiles;
 import static java.util.Objects.requireNonNull;
 
 import io.tileverse.cache.CacheManager;
+import io.tileverse.cache.CacheStats;
 import io.tileverse.io.ByteBufferPool;
 import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
 import io.tileverse.io.ByteRange;
@@ -118,7 +119,7 @@ public class PMTilesReader implements AutoCloseable {
             this.header = PMTilesReader.readHeader(this.rangeReader);
             declareRegionsFrom(header);
             this.hilbertCurve = new HilbertCurve();
-            this.directoryCache = new DirectoryCache(this.rangeReader.getSourceIdentifier(), header, this.rangeReader);
+            this.directoryCache = new DirectoryCache(this.rangeReader.contentIdentifier(), header, this.rangeReader);
             this.parsedMetadata = parseMetadata();
         } catch (IOException | RuntimeException e) {
             closeAfterFailure(rangeReader, e);
@@ -150,8 +151,8 @@ public class PMTilesReader implements AutoCloseable {
     /**
      * Opens a PMTiles file at the given URI using the {@link Storage} API. Splits the URI into (parent, key), opens a
      * {@link Storage} at the parent via {@link StorageFactory#open(URI)}, and uses
-     * {@link Storage#openRangeReader(String)} for the tail key. The returned {@code PMTilesReader} owns both the
-     * {@code RangeReader} and the parent {@code Storage}; closing the {@code PMTilesReader} closes both.
+     * {@link Storage#openVersionedRangeReader(String)} for the tail key. The returned {@code PMTilesReader} owns both
+     * the {@code RangeReader} and the parent {@code Storage}; closing the {@code PMTilesReader} closes both.
      *
      * @param uri the PMTiles URI; e.g. {@code s3://bucket/tiles.pmtiles}, {@code az://acct/container/tiles.pmtiles},
      *     {@code gs://bucket/tiles.pmtiles}, {@code file:///path/to/tiles.pmtiles}
@@ -170,6 +171,10 @@ public class PMTilesReader implements AutoCloseable {
      * {@link RangeReader} for the tail is acquired from it. The {@code PMTilesReader} owns both and closes them on
      * {@link #close()}.
      *
+     * <p>The archive is opened from its {@link Storage#stat(String) stat} entry. The entry gives the reader the version
+     * of the archive, and the caches use that version to keep the data of a replaced archive apart. This costs one
+     * metadata request per open. If the stat finds no entry or fails, the archive opens without a version.
+     *
      * @param config configuration whose {@code baseUri} points at the PMTiles file
      * @return a new {@code PMTilesReader}
      * @throws IllegalArgumentException if {@code config.baseUri()} is null or has no key segment
@@ -183,7 +188,8 @@ public class PMTilesReader implements AutoCloseable {
         StorageConfig parentConfig = config.copy().baseUri(parent);
         Storage storage = StorageFactory.open(parentConfig);
         try {
-            RangeReader reader = storage.openRangeReader(pmtilesUri);
+            String key = storage.relativizeToKey(pmtilesUri);
+            RangeReader reader = storage.openVersionedRangeReader(key);
             return new PMTilesReader(storage, reader);
         } catch (IOException | RuntimeException e) {
             closeAfterFailure(storage, e);
@@ -242,7 +248,7 @@ public class PMTilesReader implements AutoCloseable {
         return this;
     }
 
-    io.tileverse.cache.CacheStats cacheStats() {
+    CacheStats cacheStats() {
         return directoryCache.stats();
     }
 
@@ -253,6 +259,16 @@ public class PMTilesReader implements AutoCloseable {
      */
     public String getSourceIdentifier() {
         return rangeReader.getSourceIdentifier();
+    }
+
+    /**
+     * Returns the cache key of the data of this archive. When the reader reports a {@link RangeReader#version()
+     * version}, a replaced archive gets a new key.
+     *
+     * @return the {@link RangeReader#contentIdentifier() content identifier} of the archive's reader
+     */
+    public String contentIdentifier() {
+        return rangeReader.contentIdentifier();
     }
 
     /**

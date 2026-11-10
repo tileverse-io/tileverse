@@ -53,7 +53,7 @@ public class VersatilesVectorTileStore extends VectorTileStore {
         requireMapboxVectorTiles(reader);
         VectorTileCodec decoder = new VectorTileCodec();
         this.vectorTileCache = new VectorTileCache(
-                reader.getSourceIdentifier(), tileIndex -> reader.getTile(tileIndex, decoder::decode));
+                reader.contentIdentifier(), tileIndex -> reader.getTile(tileIndex, decoder::decode));
     }
 
     /**

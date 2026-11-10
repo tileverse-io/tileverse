@@ -18,8 +18,11 @@ import org.jspecify.annotations.NonNull;
  * @param values the cached value of each range, read-only and holding exactly the bytes read
  * @param fetched the ranges fetched by this read, as opposed to found cached or taken from another read
  * @param cost the fetches and bytes transferred by this read
+ * @param bypassed the ranges left for the caller to read because the read is too large to cache; nothing is loaded or
+ *     stored for them
  */
-record BatchLoadOutcome(Map<ByteRange, ByteBuffer> values, Set<ByteRange> fetched, BatchReadResult cost) {
+record BatchLoadOutcome(
+        Map<ByteRange, ByteBuffer> values, Set<ByteRange> fetched, BatchReadResult cost, Set<ByteRange> bypassed) {
 
     @NonNull
     ByteBuffer cachedValue(ByteRange range) {
@@ -28,5 +31,9 @@ record BatchLoadOutcome(Map<ByteRange, ByteBuffer> values, Set<ByteRange> fetche
 
     public boolean fetched(ByteRange range) {
         return fetched().contains(range);
+    }
+
+    public boolean bypassed(ByteRange range) {
+        return bypassed().contains(range);
     }
 }

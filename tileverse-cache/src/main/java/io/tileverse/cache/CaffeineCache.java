@@ -49,6 +49,8 @@ public class CaffeineCache<K, V> implements Cache<K, V> {
      * caches (especially if loading a value from one cache can trigger loading a value from another cache).
      *
      * <p>We're only creating synchronous caches so it's safe for them to share the maintenance executor service.
+     * {@link PoolCache} is built on an {@link AsyncCache}, but its partitions load on the calling thread and never
+     * schedule a load on this executor.
      */
     private static final ExecutorService MAINTENANCE_EXECUTOR = Executors.newFixedThreadPool(
             Math.max(1, (Runtime.getRuntime().availableProcessors() / 2)), maintenanceThreadFactory);
@@ -59,6 +61,11 @@ public class CaffeineCache<K, V> implements Cache<K, V> {
 
     public CaffeineCache(com.github.benmanes.caffeine.cache.Cache<K, V> cache) {
         this.cache = requireNonNull(cache);
+    }
+
+    /** Returns the executor shared by the caches of this package for their maintenance. */
+    static ExecutorService maintenanceExecutor() {
+        return MAINTENANCE_EXECUTOR;
     }
 
     @SuppressWarnings("unchecked")
@@ -171,7 +178,7 @@ public class CaffeineCache<K, V> implements Cache<K, V> {
          * @return a conservative initial capacity estimate, clamped to valid Integer ranges
          * @throws IllegalArgumentException if avgWeight is less than or equal to 0
          */
-        private int computeInitialCapacity(long maxWeight, int avgWeight) {
+        static int computeInitialCapacity(long maxWeight, int avgWeight) {
             if (avgWeight <= 0) {
                 throw new IllegalArgumentException("averageWeight must be greater than 0 to calculate capacity");
             }

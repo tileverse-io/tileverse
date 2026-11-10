@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
@@ -365,6 +366,11 @@ public class BlockAlignedRangeReader extends AbstractRangeReader implements Rang
     @Override
     public String getSourceIdentifier() {
         return delegate.getSourceIdentifier();
+    }
+
+    @Override
+    public Optional<String> version() {
+        return delegate.version();
     }
 
     @Override

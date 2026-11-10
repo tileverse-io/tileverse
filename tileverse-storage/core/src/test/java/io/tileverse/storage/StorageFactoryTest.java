@@ -7,7 +7,11 @@ package io.tileverse.storage;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import io.tileverse.cache.CacheManager;
+import io.tileverse.storage.cache.CachingRangeReader;
 import io.tileverse.storage.spi.CachingProviderHelper;
 import java.io.IOException;
 import java.net.URI;
@@ -15,6 +19,10 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -52,6 +60,35 @@ class StorageFactoryTest {
         try (Storage s = StorageFactory.open(config)) {
             assertThat(s).isInstanceOf(CachingStorage.class);
         }
+    }
+
+    // The file provider does not enable caching: the test wraps its storage as the factory wraps other backends.
+    @Test
+    void cachedReaderFromEntryReportsVersion(@TempDir Path tmp) throws IOException {
+        Files.write(tmp.resolve("data.bin"), new byte[16]);
+        CacheManager cacheManager = CacheManager.newInstance();
+        UnaryOperator<RangeReader> caching = reader ->
+                CachingRangeReader.builder(reader).cacheManager(cacheManager).build();
+        try (Storage storage = new CachingStorage(StorageFactory.open(tmp.toUri()), caching)) {
+            StorageEntry.File entry = storage.stat("data.bin").orElseThrow();
+            try (RangeReader reader = storage.openRangeReader(entry)) {
+                assertThat(reader).isInstanceOf(CachingRangeReader.class);
+                assertThat(reader.version()).hasValue(entry.etag().orElseThrow());
+                assertThat(reader.size()).hasValue(entry.size());
+            }
+        }
+    }
+
+    @Test
+    void entryOpenHonorsBackendOverride() {
+        Storage backend = mock(Storage.class);
+        RangeReader backendReader = mock(RangeReader.class);
+        StorageEntry.File entry = new StorageEntry.File(
+                "key", 16, Instant.EPOCH, Optional.empty(), Optional.empty(), Optional.empty(), Map.of());
+        when(backend.openRangeReader(entry)).thenReturn(backendReader);
+        Storage storage = new CachingStorage(backend, UnaryOperator.identity());
+
+        assertThat(storage.openRangeReader(entry)).isSameAs(backendReader);
     }
 
     @Test

@@ -183,7 +183,7 @@ reader.cacheManager(cacheManager);
 VersatilesVectorTileStore store = new VersatilesVectorTileStore(reader).cacheManager(cacheManager);
 ```
 
-Readers of the same archive share entries in the same `CacheManager`. The [Format support](../reference/format-support.md#caches) reference lists the cache names and bounds.
+Readers of the same version of an archive share cache entries in a `CacheManager`. When the archive is replaced, the new version gets its own entries. Readers opened without a version share one set of entries per archive. The [Format support](../reference/format-support.md#caches) reference lists the cache names and bounds.
 
 ## Handle errors
 

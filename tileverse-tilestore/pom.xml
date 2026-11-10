@@ -85,12 +85,6 @@
       <artifactId>jackson-databind</artifactId>
     </dependency>
 
-    <!-- Caffeine for VectorTileCache -->
-    <dependency>
-      <groupId>com.github.ben-manes.caffeine</groupId>
-      <artifactId>caffeine</artifactId>
-    </dependency>
-
     <!-- JTS for geometry transformation in VectorTileLayerReader / WebMercatorTransform -->
     <dependency>
       <groupId>org.locationtech.jts</groupId>

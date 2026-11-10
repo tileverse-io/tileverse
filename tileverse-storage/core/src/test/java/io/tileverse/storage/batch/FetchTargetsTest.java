@@ -262,6 +262,36 @@ class FetchTargetsTest {
                 .containsExactly(Arrays.copyOfRange(fetched, 10 + gap, 20 + gap));
     }
 
+    @Test
+    void readStopsInsideAGap() throws IOException {
+        FetchTargets targets = FetchTargets.of(fetchWithAGap, requests);
+        byte[] fetched = fetchBytes(30);
+        int[] counts = new int[2];
+
+        int consumed = targets.read(channelOf(fetched, 0, 15), 0, 30);
+        targets.settle(consumed, counts);
+
+        assertThat(consumed).isEqualTo(15);
+        assertThat(counts).containsExactly(10, 0);
+        assertThat(requests.get(1).target().position()).isZero();
+        assertThat(contents(requests.get(1).target(), 0, 10)).containsOnly((byte) 0);
+    }
+
+    // A first read ending in the gap and a second one resuming there, as the GET of the rest of a partial answer does.
+    @Test
+    void readResumesInsideAGap() throws IOException {
+        FetchTargets targets = FetchTargets.of(fetchWithAGap, requests);
+        byte[] fetched = fetchBytes(30);
+
+        int first = targets.read(channelOf(fetched, 0, 15), 0, 15);
+        int rest = targets.read(channelOf(fetched, 15, 15), 15, 15);
+
+        assertThat(first).isEqualTo(15);
+        assertThat(rest).isEqualTo(15);
+        assertThat(contents(requests.get(0).target(), 0, 10)).containsExactly(Arrays.copyOfRange(fetched, 0, 10));
+        assertThat(contents(requests.get(1).target(), 0, 10)).containsExactly(Arrays.copyOfRange(fetched, 20, 30));
+    }
+
     // The targets are direct: the only heap buffers handed to the channel receive the dropped gap bytes.
     @Test
     void readsShareTheDropArray() throws IOException {

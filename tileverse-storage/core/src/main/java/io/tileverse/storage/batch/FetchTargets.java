@@ -44,8 +44,10 @@ public final class FetchTargets {
      */
     public record Region(int offsetInFetch, int length, ByteBuffer view) {}
 
-    /** Size of the buffer receiving the gap bytes dropped by {@link #read}. */
-    private static final int DROP_BUFFER_SIZE = 8192;
+    /**
+     * Receives the gap bytes dropped by {@link #read}. Concurrent reads share it because nobody reads these bytes back.
+     */
+    private static final byte[] DROPPED_BYTES = new byte[8192];
 
     private final int length;
     private final List<Region> regions;
@@ -155,6 +157,9 @@ public final class FetchTargets {
      * byte lands in the region covering its offset, and the bytes outside the regions are read and dropped. Stops early
      * at the end of the stream. The views of the regions advance as they fill; the targets' positions do not move.
      *
+     * <p>The dropped bytes land in one array shared by concurrent reads. The channel must not read back the bytes
+     * written into a buffer, for instance to checksum them, because another read may overwrite them in the meantime.
+     *
      * @param channel the stream of the fetch bytes, positioned at {@code offsetInFetch}
      * @param offsetInFetch where the bytes start in the fetch
      * @param count how many bytes to read
@@ -258,7 +263,7 @@ public final class FetchTargets {
 
         private ByteBuffer dropBuffer() {
             if (dropBuffer == null) {
-                dropBuffer = ByteBuffer.allocate(DROP_BUFFER_SIZE);
+                dropBuffer = ByteBuffer.wrap(DROPPED_BYTES);
             }
             return dropBuffer;
         }

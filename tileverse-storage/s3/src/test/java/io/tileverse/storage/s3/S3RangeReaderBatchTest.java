@@ -269,6 +269,21 @@ class S3RangeReaderBatchTest {
     }
 
     @Test
+    void joinedFetchPastEofReportsZero() {
+        object.installAsync(asyncClient);
+        List<RangeRequest> requests =
+                batchOf(new long[][] {{OBJECT_SIZE + 1_000, 10}, {OBJECT_SIZE + 1_100, 10}, {0, 100}});
+
+        BatchReadResult result = reader.readRanges(requests);
+
+        assertThat(counts(result)).containsExactly(0, 0, 100);
+        assertContents(requests, counts(result));
+        assertThat(result.fetches())
+                .as("the joined fetch answered 416 and the first bytes")
+                .isEqualTo(2);
+    }
+
+    @Test
     void aBodyLongerThanTheFetchFailsTheBatch() {
         object.respondingWithExtraBytes(10);
         object.installAsync(asyncClient);

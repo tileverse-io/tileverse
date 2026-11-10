@@ -10,7 +10,8 @@
  * {@link io.tileverse.storage.batch.PlannedFetch}es under a {@link io.tileverse.storage.batch.CoalescingPolicy};
  * {@link io.tileverse.storage.batch.BatchRunner} executes a plan with bounded parallelism on the
  * {@link io.tileverse.storage.batch.BatchExecutors shared executor}. Backends reuse the planner with their own
- * execution strategies (parallel object-store fetches, HTTP multipart).
+ * execution strategies (parallel object-store fetches, HTTP multipart). {@link io.tileverse.storage.batch.FetchTargets}
+ * lands the bytes of a fetch joining several requests straight in their targets.
  *
  * <p>Each Storage of the object-store and HTTP providers resolves its own
  * {@link io.tileverse.storage.batch.BatchSettings} from the {@code storage.batch.*} parameters of

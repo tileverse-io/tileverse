@@ -551,4 +551,83 @@ public abstract class AbstractRangeReaderIT {
             }
         }
     }
+
+    /**
+     * Requests joined into one run, each target a slice of one direct buffer, as a Parquet reader may ask for the pages
+     * of a column chunk: more requests than the 1,024 buffers accepted by one vectored read of a local file.
+     */
+    @Test
+    public void testJoinedRequestsLandInSlicesOfOneBuffer() throws IOException {
+        int count = 1_100;
+        int length = 90;
+        ByteBuffer backing = ByteBuffer.allocateDirect(count * length);
+        List<RangeRequest> requests = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            requests.add(RangeRequest.of((long) i * length, length, backing.slice(i * length, length)));
+        }
+        try (RangeReader reader = createBaseReader()) {
+            int[] read = counts(reader.readRanges(requests));
+
+            for (int i = 0; i < count; i++) {
+                assertEquals(length, read[i], "bytes read for entry " + i);
+                assertEquals(length, requests.get(i).target().position(), "position of entry " + i);
+            }
+            ByteBuffer expected = reader.readRange(0, count * length).flip();
+            assertEquals(expected, backing, "the bytes of the run");
+        }
+    }
+
+    @Test
+    public void testJoinedRequestsWithGaps() throws IOException {
+        List<RangeRequest> requests = new ArrayList<>();
+        for (int i = 0; i < 50; i++) {
+            requests.add(RangeRequest.of(i * 150L, 100, ByteBuffer.allocate(100)));
+        }
+        try (RangeReader reader = createBaseReader()) {
+            int[] read = counts(reader.readRanges(requests));
+
+            assertMatchesSingleReads(reader, requests, read);
+        }
+    }
+
+    @Test
+    public void testJoinedRunEndingPastEof() throws IOException {
+        List<RangeRequest> requests = List.of(
+                RangeRequest.of(TEST_FILE_SIZE - 150, 100, ByteBuffer.allocate(100)),
+                RangeRequest.of(TEST_FILE_SIZE - 50, 100, ByteBuffer.allocate(100)),
+                RangeRequest.of(TEST_FILE_SIZE + 50, 100, ByteBuffer.allocate(100)));
+        try (RangeReader reader = createBaseReader()) {
+            int[] read = counts(reader.readRanges(requests));
+
+            assertArrayEquals(new int[] {100, 50, 0}, read);
+            assertMatchesSingleReads(reader, requests, read);
+        }
+    }
+
+    @Test
+    public void testJoinedTargetsAtNonZeroPositions() throws IOException {
+        ByteBuffer heap = ByteBuffer.allocate(300);
+        heap.position(11);
+        ByteBuffer direct = ByteBuffer.allocateDirect(300);
+        direct.position(23);
+        List<RangeRequest> requests = List.of(RangeRequest.of(2000, 200, heap), RangeRequest.of(2200, 200, direct));
+        try (RangeReader reader = createBaseReader()) {
+            int[] read = counts(reader.readRanges(requests));
+
+            assertArrayEquals(new int[] {200, 200}, read);
+            assertEquals(211, heap.position());
+            assertEquals(223, direct.position());
+            assertEquals(reader.readRange(2000, 200).flip(), heap.flip().position(11));
+            assertEquals(reader.readRange(2200, 200).flip(), direct.flip().position(23));
+        }
+    }
+
+    private static void assertMatchesSingleReads(RangeReader reader, List<RangeRequest> requests, int[] read) {
+        for (int i = 0; i < requests.size(); i++) {
+            RangeRequest request = requests.get(i);
+            ByteBuffer expected = reader.readRange(request.range()).flip();
+            assertEquals(expected.remaining(), read[i], "bytes read for entry " + i);
+            assertEquals(expected, request.target().duplicate().flip(), "content for entry " + i);
+        }
+    }
 }

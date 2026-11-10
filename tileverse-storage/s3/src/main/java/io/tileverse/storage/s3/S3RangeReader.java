@@ -17,6 +17,7 @@ import io.tileverse.storage.StorageException;
 import io.tileverse.storage.batch.BatchPlanner;
 import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.batch.CoalescingPolicy;
+import io.tileverse.storage.batch.FetchTargets;
 import io.tileverse.storage.batch.PlannedFetch;
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -63,9 +64,10 @@ import software.amazon.awssdk.services.s3.model.RequestPayer;
  * the planned ranges in parallel, with one async {@code getObject} each.
  *
  * <p>Range bodies stream straight into their destination, heap or direct, through an {@link AsyncResponseTransformer}
- * writing chunks as they arrive, inside the SDK's retry loop. No read holds a full-size heap copy of the response;
- * transient heap per read is bounded by the SDK's chunk size, plus one pooled scratch buffer for a merged fetch
- * scattering to several requests. Once a read returns or throws, no thread writes its destination.
+ * writing chunks as they arrive, inside the SDK's retry loop: the caller's target for one request, the targets of its
+ * requests for a fetch joining several. No read holds a full-size heap copy of the response; transient heap per read is
+ * bounded by the SDK's chunk size, plus one pooled scratch buffer for a fetch of overlapping or repeated requests. Once
+ * a read returns or throws, no thread writes its destination.
  */
 final class S3RangeReader extends AbstractRangeReader implements RangeReader {
 
@@ -159,10 +161,11 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
      * <p>A fetch answered 416 (entirely past EOF) reports 0 bytes for its entries, exactly like {@code readRange}; any
      * other failure, an {@link Error} included, stops the admission of new fetches and aborts the whole call once the
      * fetches in flight have completed, rethrowing an Error unchanged. Worst-case amplification: the requested bytes
-     * plus the gaps merged by the object-store policy, at most {@link CoalescingPolicy#maxFetchBytes()} per fetch. Peak
-     * heap scratch of one call is the in-flight bound times that cap, since a merged fetch borrows scratch for its
-     * whole extent. The result counts one fetch per async GET issued and, as bytes transferred, the bytes streamed by
-     * those GETs.
+     * plus the gaps merged by the object-store policy, at most {@link CoalescingPolicy#maxFetchBytes()} per fetch. A
+     * fetch joining requests in ascending order without overlap streams into their targets, and the bytes between two
+     * requests are dropped as they arrive. Only a fetch of overlapping or repeated requests borrows heap scratch, for
+     * its whole extent: peak scratch of one call is at most the in-flight bound times that cap. The result counts one
+     * fetch per async GET issued and, as bytes transferred, the bytes streamed by those GETs.
      *
      * @param requests the ranges to read and their target buffers
      * @return the bytes read per request, in request order, and what the call cost
@@ -303,14 +306,17 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
 
         /**
          * Issues one async GET for a fetch, streaming the body into its destination as chunks arrive: the caller's
-         * target for a direct fetch, pooled heap scratch scattered to its requests for a merged one. A 416 leaves the
-         * fetch's entries at 0 and completes normally; every other failure completes the future exceptionally with the
-         * mapped storage exception, or with the {@link Error} unmapped. A failure before the GET goes out, an Error
-         * included, is thrown.
+         * target for a direct fetch, the targets of its requests for a joined one, pooled heap scratch scattered to its
+         * requests for a fetch of overlapping or repeated requests. A 416 leaves the fetch's entries at 0 and completes
+         * normally; other failures complete the future exceptionally with the mapped storage exception, or with the
+         * {@link Error} unmapped. A failure before the GET goes out, an Error included, is thrown.
          */
         private CompletableFuture<Integer> fetchAsync(PlannedFetch fetch) {
             if (fetch.isDirect()) {
                 return fetchDirect(fetch, requests, counts);
+            }
+            if (fetch.hasDisjointSlices()) {
+                return fetchJoined(fetch, requests, counts);
             }
             return fetchAndScatter(fetch, requests, counts);
         }
@@ -340,8 +346,27 @@ final class S3RangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     /**
-     * Streams a merged fetch into pooled scratch and scatters it to its requesters. The completion closes the body
-     * before anything else: no writer may touch the scratch once it goes back to the pool.
+     * Streams a joined fetch straight into the targets of its requests and settles their counts and positions. The
+     * completion closes the body before anything else: no writer may touch a target after the batch returns.
+     */
+    @SuppressWarnings("java:S3398") // per-fetch I/O of the reader; the launcher only sequences it
+    private CompletableFuture<Integer> fetchJoined(PlannedFetch fetch, List<RangeRequest> requests, int[] counts) {
+        FetchTargets targets = FetchTargets.of(fetch, requests);
+        ByteBufferAsyncResponseTransformer body = new ByteBufferAsyncResponseTransformer(targets);
+        return streamFetch(fetch, body).handle((streamed, failure) -> {
+            body.close();
+            if (failure != null) {
+                return failedFetch(failure);
+            }
+            captureSizeFrom(streamed.response());
+            targets.settle(streamed.bytesWritten(), counts);
+            return streamed.bytesWritten();
+        });
+    }
+
+    /**
+     * Streams a fetch of overlapping or repeated requests into pooled scratch and scatters it to its requesters. The
+     * completion closes the body before anything else: no writer may touch the scratch once it goes back to the pool.
      */
     @SuppressWarnings({
         "java:S3398", // per-fetch I/O of the reader; the launcher only sequences it

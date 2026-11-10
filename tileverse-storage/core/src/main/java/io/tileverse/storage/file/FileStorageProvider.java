@@ -49,10 +49,10 @@ public class FileStorageProvider extends AbstractStorageProvider {
     public static final String ID = "file";
 
     /**
-     * Idle timeout after which a {@code FileRangeReader} closes its underlying {@code FileChannel} to release file
-     * descriptors. The channel is reopened on demand. ISO-8601 duration format (e.g. {@code PT60S} for 60 seconds).
-     * Default {@code PT60S}; {@code PT0S} disables the idle close, and a value above zero must be at least 1
-     * millisecond.
+     * Idle timeout after which a {@code FileRangeReader} closes its file channels to release file descriptors: its own
+     * channel, and up to 4 extra channels kept for batched reads of the same file running at once. The channels are
+     * reopened on demand. ISO-8601 duration format (e.g. {@code PT60S} for 60 seconds). Default {@code PT60S};
+     * {@code PT0S} disables the idle close, and a value above zero must be at least 1 millisecond.
      *
      * <p><b>Key:</b> {@code storage.file.idle-timeout}
      */
@@ -60,8 +60,9 @@ public class FileStorageProvider extends AbstractStorageProvider {
             .key("storage.file.idle-timeout")
             .title("File channel idle timeout")
             .description("""
-                    Idle timeout after which a FileRangeReader closes its underlying FileChannel to release file descriptors. \
-                    The channel is reopened on demand on the next read. ISO-8601 duration format (e.g. PT60S for 60 seconds, PT0S to disable). \
+                    Idle timeout after which a FileRangeReader closes its file channels to release file descriptors: \
+                    its own channel, and up to 4 extra channels kept for batched reads of the same file running at once. \
+                    The channels are reopened on demand on the next read. ISO-8601 duration format (e.g. PT60S for 60 seconds, PT0S to disable). \
                     A value above zero must be at least 1 millisecond.
                     """)
             .type(Duration.class)
@@ -123,8 +124,8 @@ public class FileStorageProvider extends AbstractStorageProvider {
      * Opens a reader over one local file without a {@link Storage}.
      *
      * @param file the file to read
-     * @param idleTimeout how long the reader's channel may sit idle before it closes; {@link Duration#ZERO} keeps it
-     *     open, a value above zero must be at least 1 millisecond
+     * @param idleTimeout how long the reader's channels may sit idle before they close; {@link Duration#ZERO} keeps
+     *     them open until the reader closes, a value above zero must be at least 1 millisecond
      * @return a reader over the file, identified by the file's real path
      * @throws NotFoundException if the file does not exist
      * @throws IllegalArgumentException if the path is a directory, or the timeout is negative or sub-millisecond

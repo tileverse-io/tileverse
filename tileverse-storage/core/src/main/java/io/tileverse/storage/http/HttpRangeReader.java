@@ -25,6 +25,7 @@ import io.tileverse.storage.batch.BatchPlanner;
 import io.tileverse.storage.batch.BatchRunner;
 import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.batch.CoalescingPolicy;
+import io.tileverse.storage.batch.FetchTargets;
 import io.tileverse.storage.batch.PlannedFetch;
 import java.io.IOException;
 import java.io.InputStream;
@@ -153,8 +154,24 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
 
     @Override
     protected int readRangeNoFlip(final long offset, final int actualLength, ByteBuffer target) {
+        // offsetInRange is not needed: the target's position is already past the bytes read by the earlier GETs
+        return readRangeInto(
+                offset, actualLength, (channel, offsetInRange, length) -> readAtMost(channel, length, target));
+    }
+
+    /**
+     * Reads a joined fetch with one GET, streaming the bytes of the requests into their targets and dropping the bytes
+     * between two requests. An answer given in part is completed with further GETs, as for a single range.
+     */
+    @Override
+    protected int readJoinedFetch(ByteRange range, FetchTargets targets) {
+        return readRangeInto(range.offset(), range.length(), targets::read);
+    }
+
+    /** Reads a range into {@code sink}, mapping I/O failures and interrupts to transient storage failures. */
+    private int readRangeInto(long offset, int length, RangeSink sink) {
         try {
-            return getRange(offset, actualLength, target);
+            return getRange(offset, length, sink);
         } catch (IOException e) {
             throw new TransientStorageException("Range read failed for " + uri, e);
         } catch (InterruptedException e) {
@@ -193,6 +210,10 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
      * <p>A policy with merging disabled ({@link CoalescingPolicy#maxGapBytes()} negative) routes the whole batch
      * through the batched-read template instead, one GET per planned fetch, in request order and duplicates included.
      *
+     * <p>The bytes of a fetch land straight in the targets of its requests when they follow one another without
+     * overlapping, and the bytes between two requests are skipped. A fetch of overlapping or repeated requests is read
+     * into pooled heap scratch and copied into its targets.
+     *
      * <p>Worst-case amplification: the requested bytes plus the gaps the HTTP policy merges, at most
      * {@link CoalescingPolicy#maxFetchBytes()} per fetch. The result counts one fetch per GET sent and, as bytes
      * transferred, the payload of every part received and of every fetch read with a GET of its own. The fetch count
@@ -217,7 +238,7 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
             return BatchReadResult.of(requests, new int[requests.size()], 0, 0, 0);
         }
         if (fetches.size() == 1) {
-            return BatchRunner.run(requests, fetches, this::readRange, 1, BatchExecutors::shared);
+            return BatchRunner.run(requests, fetches, fetchReader(), 1, BatchExecutors::shared);
         }
         if (coalescingPolicy().maxGapBytes() < 0) {
             // merging disabled: the template sends one GET per planned fetch, in request order
@@ -380,7 +401,7 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     /**
-     * Scatters one part's bytes to every fetch held whole by the part; the group is in ascending offset order. A fetch
+     * Routes one part's bytes to the fetches held whole by the part; the group is in ascending offset order. A fetch
      * cut short before the end of the object stays unanswered: a server may answer a subset of a range.
      */
     private void routeOnePart(
@@ -400,14 +421,55 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
             long offsetInPart = fetch.range().offset() - part.firstPos();
             parser.skipBody(offsetInPart - consumed);
             int available = (int) Math.min(fetch.range().length(), part.length() - offsetInPart);
-            try (PooledByteBuffer pooled = ByteBufferPool.heapBuffer(available)) {
-                ByteBuffer scratch = pooled.buffer();
-                int read = parser.readBody(scratch, available);
-                fetch.scatter(scratch, read, requests, counts);
-                consumed = offsetInPart + read;
-            }
+            int read = readFetchFromPart(parser, fetch, available, requests, counts);
+            consumed = offsetInPart + read;
             answer.markAnswered(index);
         }
+    }
+
+    /**
+     * Reads the first {@code available} bytes of a fetch out of the current part, records the counts of its requests
+     * and returns the bytes read. The bytes land straight in the targets when the requests follow one another without
+     * overlapping, and go through pooled heap scratch otherwise.
+     */
+    private static int readFetchFromPart(
+            MultipartByteRangesParser parser,
+            PlannedFetch fetch,
+            int available,
+            List<RangeRequest> requests,
+            int[] counts)
+            throws IOException {
+        if (fetch.hasDisjointSlices()) {
+            FetchTargets targets = FetchTargets.of(fetch, requests);
+            int read = readPartIntoTargets(parser, targets, available);
+            targets.settle(read, counts);
+            return read;
+        }
+        try (PooledByteBuffer pooled = ByteBufferPool.heapBuffer(available)) {
+            ByteBuffer scratch = pooled.buffer();
+            int read = parser.readBody(scratch, available);
+            fetch.scatter(scratch, read, requests, counts);
+            return read;
+        }
+    }
+
+    /** Reads the first {@code available} bytes of a fetch into its targets, skipping the gaps between requests. */
+    private static int readPartIntoTargets(MultipartByteRangesParser parser, FetchTargets targets, int available)
+            throws IOException {
+        List<FetchTargets.Region> regions = targets.regions();
+        int consumed = 0;
+        int index = 0;
+        boolean streamEnded = false;
+        while (!streamEnded && index < regions.size() && regions.get(index).offsetInFetch() < available) {
+            FetchTargets.Region region = regions.get(index);
+            parser.skipBody((long) region.offsetInFetch() - consumed);
+            int wanted = Math.min(region.length(), available - region.offsetInFetch());
+            int read = parser.readBody(region.view(), wanted);
+            consumed = region.offsetInFetch() + read;
+            streamEnded = read < wanted;
+            index++;
+        }
+        return consumed;
     }
 
     /**
@@ -461,7 +523,7 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
             return;
         }
         // one at a time: this group already holds one of the batch's in-flight slots
-        BatchReadResult reread = BatchRunner.run(requests, unanswered, this::readRange, 1, BatchExecutors::shared);
+        BatchReadResult reread = BatchRunner.run(requests, unanswered, fetchReader(), 1, BatchExecutors::shared);
         for (PlannedFetch fetch : unanswered) {
             copySliceCounts(fetch, reread, counts);
         }
@@ -520,24 +582,23 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
     }
 
     /**
-     * Reads one range into {@code target}. RFC 9110 section 15.3.7 lets a server answer a subset of a range: the rest
-     * is read with further GETs, each landing after the bytes already read, until the range or the object ends. A GET
-     * of the rest answered from another version of the object than the first answer fails the read with a
+     * Reads one range into {@code sink}. RFC 9110 section 15.3.7 lets a server answer a subset of a range: the rest is
+     * read with further GETs, each landing after the bytes already read, until the range or the object ends. A GET of
+     * the rest answered from another version of the object than the first answer fails the read with a
      * {@link TransientStorageException}.
      */
-    private int getRange(final long offset, final int length, ByteBuffer target)
-            throws IOException, InterruptedException {
+    private int getRange(final long offset, final int length, RangeSink sink) throws IOException, InterruptedException {
 
         final long start = System.nanoTime();
         HttpResponse<InputStream> firstResponse = sendRangeRequest(offset, length);
         requireRangeAnswer(firstResponse, length);
         AnsweredVersion version = AnsweredVersion.of(firstResponse);
-        RangeAnswer answer = readAnswer(firstResponse, offset, length, target);
+        RangeAnswer answer = readAnswer(firstResponse, offset, length, sink, 0);
         captureMetadataFrom(firstResponse);
         int totalRead = answer.bytesRead();
         // an answer leaving a remainder holds at least one byte: every pass moves the range forward
         while (answer.leavesARemainder()) {
-            answer = readRemainder(offset + totalRead, length - totalRead, target, version);
+            answer = readRemainder(offset + totalRead, length - totalRead, sink, totalRead, version);
             totalRead += answer.bytesRead();
         }
 
@@ -551,9 +612,10 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
 
     /**
      * Reads the rest of a range answered in part from the {@code version} of the object named by the first answer, as
-     * decided by {@link AnsweredVersion}.
+     * decided by {@link AnsweredVersion}. The rest starts {@code offsetInRange} bytes into the range.
      */
-    private RangeAnswer readRemainder(long offset, int length, ByteBuffer target, AnsweredVersion version)
+    private RangeAnswer readRemainder(
+            long offset, int length, RangeSink sink, int offsetInRange, AnsweredVersion version)
             throws IOException, InterruptedException {
         HttpResponse<InputStream> response = sendRangeRequest(offset, length);
         if (version.endsTheRead(response, offset, uri)) {
@@ -561,23 +623,24 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
         }
         requireRangeAnswer(response, length);
         version.requireSameVersion(response, uri);
-        RangeAnswer answer = readAnswer(response, offset, length, target);
+        RangeAnswer answer = readAnswer(response, offset, length, sink, offsetInRange);
         captureMetadataFrom(response);
         return answer;
     }
 
     /**
-     * Reads the body of an answer to a range GET into {@code target} and consumes it through its end before closing it.
+     * Reads the body of an answer to a range GET into {@code sink} and consumes it through its end before closing it.
      * The JDK client cancels an HTTP/2 stream whose body is closed before its final frame arrived, and servers count
      * those cancellations against their rapid-reset protection; the extra read after the requested bytes both observes
      * the end of the stream and catches a server sending more than requested.
      */
-    private RangeAnswer readAnswer(HttpResponse<InputStream> response, long offset, int length, ByteBuffer target)
+    private RangeAnswer readAnswer(
+            HttpResponse<InputStream> response, long offset, int length, RangeSink sink, int offsetInRange)
             throws IOException {
         int bytesRead;
         try (InputStream in = response.body();
                 ReadableByteChannel channel = Channels.newChannel(in)) {
-            bytesRead = readAtMost(channel, length, target);
+            bytesRead = sink.readFrom(channel, offsetInRange, length);
             if (bytesRead == length && channel.read(ByteBuffer.allocate(1)) != -1) {
                 throw new StorageException(
                         "Server returned more data than requested (" + length + " bytes) for URI: " + uri);
@@ -898,6 +961,19 @@ final class HttpRangeReader extends AbstractRangeReader implements RangeReader {
         BatchReadResult toResult(List<RangeRequest> requests, int[] counts) {
             return BatchReadResult.of(requests, counts, fetches.get(), bytesTransferred.get(), 0);
         }
+    }
+
+    /** Where the body of a range answer lands: one buffer, or the targets of a joined fetch. */
+    @FunctionalInterface
+    private interface RangeSink {
+
+        /**
+         * Reads up to {@code length} bytes of the range, from {@code offsetInRange} on, out of {@code channel},
+         * stopping early at the end of the stream.
+         *
+         * @return the bytes consumed from the channel
+         */
+        int readFrom(ReadableByteChannel channel, int offsetInRange, int length) throws IOException;
     }
 
     /** Internal control-flow signal: this server cannot serve multi-range GETs; the caller falls back. */

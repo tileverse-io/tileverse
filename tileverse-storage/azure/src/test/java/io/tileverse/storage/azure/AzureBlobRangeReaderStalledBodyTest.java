@@ -13,6 +13,8 @@ import com.azure.core.http.HttpClient;
 import com.azure.core.http.jdk.httpclient.JdkHttpClientBuilder;
 import com.azure.storage.blob.BlobClient;
 import com.sun.net.httpserver.HttpExchange;
+import io.tileverse.storage.BatchReadResult;
+import io.tileverse.storage.RangeRequest;
 import io.tileverse.storage.StorageException;
 import io.tileverse.storage.azure.StandInBlobServer.RequestedRange;
 import java.io.IOException;
@@ -20,6 +22,8 @@ import java.io.OutputStream;
 import java.net.http.HttpTimeoutException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -116,6 +120,56 @@ class AzureBlobRangeReaderStalledBodyTest {
             testFinished.await();
         } catch (InterruptedException stopping) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void aStalledJoinedReadFailsOnTheReadTimeout() {
+        AzureBlobRangeReader reader = new AzureBlobRangeReader(blobClient);
+        int half = BLOB_SIZE / 2;
+        List<RangeRequest> requests = List.of(
+                RangeRequest.of(0, half, ByteBuffer.allocate(half)),
+                RangeRequest.of(half, half, ByteBuffer.allocate(half)));
+
+        assertThatThrownBy(() -> reader.readRanges(requests))
+                .isInstanceOf(StorageException.class)
+                .hasRootCauseInstanceOf(HttpTimeoutException.class);
+    }
+
+    /**
+     * The stand-in sends zeros. The targets start filled with another byte, and a zero in the first target shows that
+     * the body has started landing.
+     */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void anInterruptedJoinedReadDoesNotResume() throws InterruptedException {
+        AzureBlobRangeReader reader = new AzureBlobRangeReader(blobClient);
+        int half = BLOB_SIZE / 2;
+        byte[] filled = new byte[half];
+        Arrays.fill(filled, (byte) -1);
+        ByteBuffer first = ByteBuffer.wrap(filled.clone());
+        List<RangeRequest> requests =
+                List.of(RangeRequest.of(0, half, first), RangeRequest.of(half, half, ByteBuffer.wrap(filled.clone())));
+        FutureTask<BatchReadResult> read = new FutureTask<>(() -> reader.readRanges(requests));
+        Thread readingThread = new Thread(read, "interrupted-stalled-joined-read");
+
+        readingThread.start();
+        try {
+            await().atMost(Duration.ofSeconds(10)).until(() -> first.get(0) == 0);
+            readingThread.interrupt();
+            assertThatThrownBy(() -> read.get(10, TimeUnit.SECONDS))
+                    .isInstanceOf(ExecutionException.class)
+                    .hasCauseInstanceOf(StorageException.class);
+
+            await().during(Duration.ofSeconds(2))
+                    .atMost(Duration.ofSeconds(3))
+                    .untilAsserted(() -> assertThat(rangeRequests.get())
+                            .as("range requests after the read failed")
+                            .isEqualTo(1));
+        } finally {
+            readingThread.interrupt();
+            readingThread.join(TimeUnit.SECONDS.toMillis(10));
         }
     }
 }

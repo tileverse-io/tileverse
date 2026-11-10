@@ -37,6 +37,34 @@ class PlannedFetchTest {
     }
 
     @Test
+    void disjointSlicesFollowOneAnother() {
+        ByteRange range = ByteRange.of(0, 30);
+        assertThat(new PlannedFetch(range, List.of(new Slice(0, 0, 30))).hasDisjointSlices())
+                .as("direct")
+                .isTrue();
+        assertThat(new PlannedFetch(range, List.of(new Slice(0, 0, 10), new Slice(1, 10, 20))).hasDisjointSlices())
+                .as("abutting")
+                .isTrue();
+        assertThat(new PlannedFetch(range, List.of(new Slice(0, 0, 10), new Slice(1, 20, 10))).hasDisjointSlices())
+                .as("with a gap")
+                .isTrue();
+    }
+
+    @Test
+    void overlappingSlicesAreNotDisjoint() {
+        ByteRange range = ByteRange.of(0, 30);
+        assertThat(new PlannedFetch(range, List.of(new Slice(0, 0, 20), new Slice(1, 10, 20))).hasDisjointSlices())
+                .as("overlapping")
+                .isFalse();
+        assertThat(new PlannedFetch(range, List.of(new Slice(0, 0, 30), new Slice(1, 0, 30))).hasDisjointSlices())
+                .as("repeated")
+                .isFalse();
+        assertThat(new PlannedFetch(range, List.of(new Slice(0, 20, 10), new Slice(1, 0, 10))).hasDisjointSlices())
+                .as("descending")
+                .isFalse();
+    }
+
+    @Test
     void scatterCopiesEachSliceIntoItsTarget() {
         byte[] fetchedBytes = new byte[30];
         for (int i = 0; i < fetchedBytes.length; i++) {

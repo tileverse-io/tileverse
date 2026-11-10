@@ -8,9 +8,15 @@ package io.tileverse.storage;
 import static io.tileverse.storage.RangeReaderTestSupport.counts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 
+import io.tileverse.io.ByteBufferPool;
 import io.tileverse.io.ByteRange;
 import io.tileverse.storage.batch.CoalescingPolicy;
+import io.tileverse.storage.batch.FetchTargets;
 import io.tileverse.storage.cache.CachingRangeReader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -20,11 +26,13 @@ import java.util.List;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 
 /**
- * Contract tests for the batched {@link AbstractRangeReader#readRanges} template: planning honors the protected hooks,
- * every fetch goes through the public {@code readRange} (keeping the 416-to-0 translation on one path), and the default
- * hooks reproduce the interface-default behavior exactly.
+ * Contract tests for the batched {@link AbstractRangeReader#readRanges} template. Planning honors the protected hooks.
+ * A joined fetch goes through {@link AbstractRangeReader#readJoinedFetch}, the other fetches through the public
+ * {@code readRange}, and both paths translate a 416 into 0 bytes read. The default hooks reproduce the
+ * interface-default behavior exactly.
  */
 class AbstractRangeReaderBatchTest {
 
@@ -89,6 +97,22 @@ class AbstractRangeReaderBatchTest {
         @Override
         public void close() {
             // nothing to release
+        }
+    }
+
+    /** Writes joined fetches straight into their targets, as a backend overriding the hook does, and records them. */
+    static class JoiningRangeReader extends RecordingRangeReader {
+        final List<ByteRange> joinedFetches = Collections.synchronizedList(new ArrayList<>());
+
+        @Override
+        protected int readJoinedFetch(ByteRange range, FetchTargets targets) {
+            joinedFetches.add(range);
+            if (range.offset() >= data.length) {
+                throw new RangeNotSatisfiableException("offset " + range.offset() + " is past EOF");
+            }
+            int available = (int) Math.min(range.length(), data.length - range.offset());
+            targets.write(0, ByteBuffer.wrap(data), (int) range.offset(), available);
+            return available;
         }
     }
 
@@ -212,5 +236,101 @@ class AbstractRangeReaderBatchTest {
             // additionally records every entry as a single read; only the batch log is asserted.
             assertThat(delegate.batchReads()).hasSize(1);
         }
+    }
+
+    @Test
+    void joinedFetchGoesThroughTheHook() {
+        JoiningRangeReader joining = new JoiningRangeReader();
+        joining.policy = new CoalescingPolicy(0, 4096);
+        List<RangeRequest> requests = batchOf(new long[][] {{100, 20}, {120, 20}, {140, 20}});
+
+        BatchReadResult result = joining.readRanges(requests);
+
+        assertThat(joining.joinedFetches).containsExactly(ByteRange.of(100, 60));
+        assertThat(joining.backendReads).as("no read into scratch").isEmpty();
+        assertMatchesSingleReads(requests, counts(result));
+        assertThat(result.fetches()).isEqualTo(1);
+        assertThat(result.bytesTransferred()).isEqualTo(60);
+    }
+
+    @Test
+    void joinedFetchBorrowsNoScratch() {
+        JoiningRangeReader joining = new JoiningRangeReader();
+        joining.policy = new CoalescingPolicy(0, 4096);
+        List<RangeRequest> requests = batchOf(new long[][] {{100, 20}, {120, 20}});
+
+        try (MockedStatic<ByteBufferPool> pool = mockStatic(ByteBufferPool.class, CALLS_REAL_METHODS)) {
+            joining.readRanges(requests);
+
+            pool.verify(() -> ByteBufferPool.heapBuffer(anyInt()), never());
+        }
+    }
+
+    @Test
+    void pastEofJoinedFetchReadsZero() {
+        JoiningRangeReader joining = new JoiningRangeReader();
+        joining.policy = new CoalescingPolicy(0, 4096);
+        List<RangeRequest> requests = batchOf(new long[][] {{SOURCE_SIZE + 10, 10}, {SOURCE_SIZE + 20, 10}});
+
+        int[] counts = counts(joining.readRanges(requests));
+
+        assertThat(counts).containsExactly(0, 0);
+        assertThat(requests.get(0).target().position()).isZero();
+        assertThat(requests.get(1).target().position()).isZero();
+        assertThat(joining.joinedFetches).containsExactly(ByteRange.of(SOURCE_SIZE + 10, 20));
+    }
+
+    @Test
+    void defaultHookCopiesFromScratch() {
+        reader.policy = new CoalescingPolicy(0, 4096);
+        ByteBuffer heap = ByteBuffer.allocate(40);
+        heap.position(7);
+        ByteBuffer direct = ByteBuffer.allocateDirect(40);
+        direct.position(3);
+        List<RangeRequest> requests = List.of(RangeRequest.of(100, 20, heap), RangeRequest.of(120, 20, direct));
+
+        int[] counts = counts(reader.readRanges(requests));
+
+        assertThat(reader.backendReads).containsExactly(ByteRange.of(100, 40));
+        assertThat(counts).containsExactly(20, 20);
+        assertThat(heap.position()).isEqualTo(27);
+        assertThat(direct.position()).isEqualTo(23);
+        assertThat(heap.get(7)).isEqualTo(reader.data[100]);
+        assertThat(direct.get(3)).isEqualTo(reader.data[120]);
+    }
+
+    @Test
+    void defaultHookStopsAtEof() {
+        reader.policy = new CoalescingPolicy(0, 4096);
+        List<RangeRequest> requests = batchOf(new long[][] {{SOURCE_SIZE - 10, 20}, {SOURCE_SIZE + 10, 10}});
+
+        int[] counts = counts(reader.readRanges(requests));
+
+        assertThat(counts).containsExactly(10, 0);
+        assertMatchesSingleReads(requests, counts);
+    }
+
+    @Test
+    void defaultHookTranslatesPastEof() {
+        reader.policy = new CoalescingPolicy(0, 4096);
+        List<RangeRequest> requests = batchOf(new long[][] {{SOURCE_SIZE + 10, 10}, {SOURCE_SIZE + 20, 10}});
+
+        int[] counts = counts(reader.readRanges(requests));
+
+        assertThat(counts).containsExactly(0, 0);
+        assertThat(reader.backendReads).containsExactly(ByteRange.of(SOURCE_SIZE + 10, 20));
+    }
+
+    @Test
+    void overlappingRequestsSkipTheHook() {
+        JoiningRangeReader joining = new JoiningRangeReader();
+        joining.policy = new CoalescingPolicy(64, 4096);
+        List<RangeRequest> requests = batchOf(new long[][] {{100, 50}, {120, 50}});
+
+        int[] counts = counts(joining.readRanges(requests));
+
+        assertThat(joining.joinedFetches).isEmpty();
+        assertThat(joining.backendReads).containsExactly(ByteRange.of(100, 70));
+        assertMatchesSingleReads(requests, counts);
     }
 }

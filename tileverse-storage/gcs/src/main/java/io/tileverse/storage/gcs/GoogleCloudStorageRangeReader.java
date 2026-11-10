@@ -14,11 +14,13 @@ import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.Storage.BlobGetOption;
 import com.google.cloud.storage.Storage.BlobSourceOption;
 import com.google.cloud.storage.StorageException;
+import io.tileverse.io.ByteRange;
 import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.NotFoundException;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.batch.BatchSettings;
 import io.tileverse.storage.batch.CoalescingPolicy;
+import io.tileverse.storage.batch.FetchTargets;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
@@ -37,7 +39,8 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>Batched reads merge nearby ranges and run fetches concurrently on the shared batch executor under the
  * {@link BatchSettings} of the Storage the reader was opened from; worst-case amplification is the requested bytes plus
- * the merged gaps.
+ * the merged gaps. A fetch joining requests in ascending order without overlap reads through one read channel straight
+ * into their targets.
  */
 @Slf4j
 final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements RangeReader {
@@ -107,25 +110,33 @@ final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements
 
     @Override
     protected int readRangeNoFlip(final long offset, final int actualLength, ByteBuffer target) {
+        return readFromObject(offset, actualLength, reader -> readFully(reader, actualLength, target));
+    }
+
+    /**
+     * Reads a joined fetch through one read channel, straight into the targets of its requests. The bytes between two
+     * requests are read and dropped: a seek inside the fetch would restart the download.
+     */
+    @Override
+    protected int readJoinedFetch(ByteRange range, FetchTargets targets) {
+        return readFromObject(range.offset(), range.length(), reader -> targets.read(reader, 0, range.length()));
+    }
+
+    /**
+     * Opens a read channel on a range of the current object generation and reads the range with {@code read}.
+     * Translates the failures of the GCS client into the storage exception hierarchy.
+     */
+    private int readFromObject(long offset, int length, ChannelRead read) {
         try {
             final long start = System.nanoTime();
-            // Read the specified range from GCS, always against the current object generation
             try (ReadChannel reader = storage.reader(BlobId.of(bucket, objectName), readOptions())) {
                 reader.seek(offset);
-                reader.limit(offset + actualLength);
-                int totalBytesRead = 0;
-                while (totalBytesRead < actualLength) {
-                    int bytesRead = reader.read(target);
-                    if (bytesRead == -1) {
-                        // End of file reached
-                        break;
-                    }
-                    totalBytesRead += bytesRead;
-                }
+                reader.limit(offset + length);
+                int totalBytesRead = read.from(reader);
                 if (log.isDebugEnabled()) {
                     long end = System.nanoTime();
                     long millis = Duration.ofNanos(end - start).toMillis();
-                    log.debug("range:[{} +{}], time: {}ms]", offset, actualLength, millis);
+                    log.debug("range:[{} +{}], time: {}ms]", offset, length, millis);
                 }
                 return totalBytesRead;
             }
@@ -134,6 +145,18 @@ final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements
         } catch (IOException e) {
             throw new io.tileverse.storage.StorageException("Failed to read range from GCS: " + e.getMessage(), e);
         }
+    }
+
+    private static int readFully(ReadChannel reader, int length, ByteBuffer target) throws IOException {
+        int totalBytesRead = 0;
+        while (totalBytesRead < length) {
+            int bytesRead = reader.read(target);
+            if (bytesRead == -1) {
+                break;
+            }
+            totalBytesRead += bytesRead;
+        }
+        return totalBytesRead;
     }
 
     private BlobSourceOption[] readOptions() {
@@ -198,5 +221,11 @@ final class GoogleCloudStorageRangeReader extends AbstractRangeReader implements
     @Override
     public void close() {
         // Google Cloud Storage client is typically managed externally and should be closed by the caller
+    }
+
+    /** Reads the opened range out of a read channel and returns the number of bytes consumed. */
+    @FunctionalInterface
+    private interface ChannelRead {
+        int from(ReadChannel reader) throws IOException;
     }
 }

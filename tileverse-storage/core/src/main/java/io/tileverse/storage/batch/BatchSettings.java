@@ -12,8 +12,9 @@ import static java.util.Objects.requireNonNull;
  * opens: how far apart two ranges may be and still share a fetch, how large a merged fetch may grow, and how many
  * fetches of one batch may be in flight at once.
  *
- * <p>Peak scratch memory of one batched read is the in-flight bound times the fetch cap, since each merged fetch
- * borrows heap scratch for its whole extent.
+ * <p>A merged fetch writes the bytes of each request straight into its target. Only a fetch of overlapping or repeated
+ * requests borrows heap scratch for its whole extent: peak scratch memory of one batched read is at most the in-flight
+ * bound times the fetch cap.
  *
  * @param maxGapBytes largest gap between two ranges bridged by one fetch, in bytes; negative disables merging
  * @param maxFetchBytes upper bound on a single merged fetch, in bytes; positive

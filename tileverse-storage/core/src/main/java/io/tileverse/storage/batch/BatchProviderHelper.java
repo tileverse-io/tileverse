@@ -15,7 +15,7 @@ import java.util.List;
 /**
  * The {@code storage.batch.*} parameters shared by the object-store and HTTP providers, and their resolution into a
  * {@link BatchSettings}: the parameter on the {@link StorageConfig} wins, else the value derived from the backend's
- * connection profile. The local file provider declares none of them: its reads merge nothing.
+ * connection profile. The local file provider declares none of them: it joins abutting requests and bridges no gap.
  */
 public final class BatchProviderHelper {
 
@@ -45,7 +45,8 @@ public final class BatchProviderHelper {
             .title("Largest merged fetch")
             .description("""
                     Upper bound, in bytes, on a single merged fetch. Ranges whose merged extent would exceed it are \
-                    fetched separately. Bounds the scratch buffer borrowed by a merged fetch. Default 32 MiB.
+                    fetched separately. Bounds the heap scratch borrowed by a fetch of overlapping or repeated \
+                    ranges; other merged fetches land straight in their targets. Default 32 MiB.
                     """)
             .type(Integer.class)
             .group(GROUP_BATCH)
@@ -58,8 +59,8 @@ public final class BatchProviderHelper {
             .title("Fetches in flight per batch")
             .description("""
                     How many fetches of one batched read may be in flight at once; each completion admits the next. \
-                    Peak scratch memory of a batch is this bound times the largest merged fetch. Zero removes the \
-                    bound. Default 8.
+                    Peak scratch memory of a batch is at most this bound times the largest merged fetch. Zero \
+                    removes the bound. Default 8.
                     """)
             .type(Integer.class)
             .group(GROUP_BATCH)

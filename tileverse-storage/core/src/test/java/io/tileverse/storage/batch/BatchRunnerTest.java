@@ -62,6 +62,26 @@ class BatchRunnerTest {
         throw new AssertionError("the executor must not be resolved for sequential plans");
     };
 
+    /** Records the joined fetches and writes them through their targets, as a backend writing straight into them. */
+    private final class JoinedRecorder implements FetchReader {
+        final List<ByteRange> joined = Collections.synchronizedList(new ArrayList<>());
+
+        @Override
+        public int read(ByteRange range, ByteBuffer target) {
+            return reader.read(range, target);
+        }
+
+        @Override
+        public int readJoined(ByteRange range, FetchTargets targets) {
+            joined.add(range);
+            int available = (int) Math.max(0, Math.min(range.length(), SOURCE_SIZE - range.offset()));
+            if (available > 0) {
+                targets.write(0, ByteBuffer.wrap(source), (int) range.offset(), available);
+            }
+            return available;
+        }
+    }
+
     @BeforeEach
     void fillSource() {
         for (int i = 0; i < SOURCE_SIZE; i++) {
@@ -128,15 +148,54 @@ class BatchRunnerTest {
     }
 
     @Test
-    void mergedFetchScattersFromScratch() {
+    void joinedFetchGoesToReadJoined() {
         List<RangeRequest> batch = requests(new long[][] {{0, 10}, {20, 10}});
         List<PlannedFetch> fetches = BatchPlanner.plan(batch, new CoalescingPolicy(64, 1024));
         assertThat(fetches).hasSize(1);
+        JoinedRecorder joining = new JoinedRecorder();
+
+        int[] counts = counts(BatchRunner.run(batch, fetches, joining, 1, FORBIDDEN_EXECUTOR));
+
+        assertContents(batch, counts);
+        assertThat(joining.joined).containsExactly(ByteRange.of(0, 30));
+        assertThat(fetchLog).as("no read into scratch").isEmpty();
+    }
+
+    @Test
+    void defaultReadJoinedCopiesScratch() {
+        List<RangeRequest> batch = requests(new long[][] {{0, 10}, {20, 10}});
+        List<PlannedFetch> fetches = BatchPlanner.plan(batch, new CoalescingPolicy(64, 1024));
 
         int[] counts = counts(BatchRunner.run(batch, fetches, reader, 1, FORBIDDEN_EXECUTOR));
 
         assertContents(batch, counts);
         assertThat(fetchLog).containsExactly(ByteRange.of(0, 30));
+    }
+
+    @Test
+    void overlappingFetchScatters() {
+        List<RangeRequest> batch = requests(new long[][] {{0, 20}, {10, 20}});
+        List<PlannedFetch> fetches = BatchPlanner.plan(batch, new CoalescingPolicy(64, 1024));
+        JoinedRecorder joining = new JoinedRecorder();
+
+        int[] counts = counts(BatchRunner.run(batch, fetches, joining, 1, FORBIDDEN_EXECUTOR));
+
+        assertContents(batch, counts);
+        assertThat(joining.joined).isEmpty();
+        assertThat(fetchLog).containsExactly(ByteRange.of(0, 30));
+    }
+
+    @Test
+    void joinedFetchSettlesAShortRead() {
+        List<RangeRequest> batch = requests(new long[][] {{99_990, 10}, {100_000, 10}});
+        List<PlannedFetch> fetches = BatchPlanner.plan(batch, new CoalescingPolicy(0, 4096));
+        JoinedRecorder joining = new JoinedRecorder();
+
+        BatchReadResult result = BatchRunner.run(batch, fetches, joining, 1, FORBIDDEN_EXECUTOR);
+
+        assertThat(counts(result)).containsExactly(10, 0);
+        assertContents(batch, counts(result));
+        assertThat(result.bytesTransferred()).isEqualTo(10);
     }
 
     @Test

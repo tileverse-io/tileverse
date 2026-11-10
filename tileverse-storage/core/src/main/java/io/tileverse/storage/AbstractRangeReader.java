@@ -5,10 +5,15 @@
  */
 package io.tileverse.storage;
 
+import io.tileverse.io.ByteBufferPool;
+import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
+import io.tileverse.io.ByteRange;
 import io.tileverse.storage.batch.BatchExecutors;
 import io.tileverse.storage.batch.BatchPlanner;
 import io.tileverse.storage.batch.BatchRunner;
 import io.tileverse.storage.batch.CoalescingPolicy;
+import io.tileverse.storage.batch.FetchReader;
+import io.tileverse.storage.batch.FetchTargets;
 import io.tileverse.storage.batch.PlannedFetch;
 import java.nio.ByteBuffer;
 import java.nio.ReadOnlyBufferException;
@@ -26,11 +31,15 @@ import lombok.extern.slf4j.Slf4j;
  * concerns (validation, EOF handling, buffer preparation) and delegates the actual reading to the abstract
  * {@code readRangeNoFlip} method.
  *
- * <p>Batched reads ({@link #readRanges(List)}) run through the same {@code readRange} template: subclasses tune them
- * with {@link #coalescingPolicy()} and {@link #maxConcurrentFetches()} instead of reimplementing the batch loop.
+ * <p>Batched reads ({@link #readRanges(List)}) run through the same {@code readRange} template, and through
+ * {@link #readJoinedFetch} for a fetch joining several requests: subclasses tune them with {@link #coalescingPolicy()}
+ * and {@link #maxConcurrentFetches()}, and write joined fetches straight into their targets by overriding
+ * {@code readJoinedFetch}, instead of reimplementing the batch loop.
  */
 @Slf4j
 public abstract class AbstractRangeReader implements RangeReader {
+
+    private final FetchReader fetchReader = new TemplateFetchReader();
 
     /**
      * Creates a new AbstractRangeReader.
@@ -131,16 +140,19 @@ public abstract class AbstractRangeReader implements RangeReader {
      * Reads a batch by planning fetches with {@link #coalescingPolicy()} and running them with up to
      * {@link #maxConcurrentFetches()} concurrent fetches on the shared batch executor.
      *
-     * <p>Every fetch goes through {@link #readRange(long, int, ByteBuffer)}: backend exception mapping, the translation
-     * of {@link RangeNotSatisfiableException} into 0 bytes read, and any response metadata captures apply to batched
-     * reads exactly as to single reads. With the default hooks ({@link CoalescingPolicy#NONE}, one fetch at a time) the
-     * behavior is the interface default: each range read exactly, in request order, nothing amplified.
+     * <p>A fetch of one request goes through {@link #readRange(long, int, ByteBuffer)}, and a joined fetch, of requests
+     * following one another without overlapping, through {@link #readJoinedFetch}, with the same translation of
+     * {@link RangeNotSatisfiableException} into 0 bytes read. Backend exception mapping and any response metadata
+     * captures apply to batched reads exactly as to single reads. A fetch of overlapping or repeated requests reads
+     * into pooled heap scratch through {@code readRange} and is copied into its targets. With the default hooks
+     * ({@link CoalescingPolicy#NONE}, one fetch at a time) the behavior is the interface default: each range read
+     * exactly, in request order, nothing amplified.
      *
      * <p>Worst-case amplification: the requested bytes plus the gaps the policy merges, at most
      * {@link CoalescingPolicy#maxFetchBytes()} per fetch.
      *
-     * <p>An override that bypasses this template, and with it {@code readRange}, must translate
-     * {@link RangeNotSatisfiableException} into 0-byte results itself; the translation lives only in {@code readRange}.
+     * <p>An override that bypasses this template, and with it {@code readRange} and {@link #fetchReader()}, must
+     * translate {@link RangeNotSatisfiableException} into 0-byte results itself.
      *
      * @param requests the ranges to read and the buffers they land in
      * @return the bytes read per request, in request order, and what the call cost
@@ -152,12 +164,54 @@ public abstract class AbstractRangeReader implements RangeReader {
             return BatchReadResult.EMPTY;
         }
         List<PlannedFetch> fetches = BatchPlanner.plan(requests, coalescingPolicy());
-        return BatchRunner.run(requests, fetches, this::readRange, maxConcurrentFetches(), BatchExecutors::shared);
+        return BatchRunner.run(requests, fetches, fetchReader(), maxConcurrentFetches(), BatchExecutors::shared);
+    }
+
+    /**
+     * The fetch reader of the batched-read template, for a subclass running {@link BatchRunner} itself: a fetch of one
+     * request, or of overlapping requests, goes through {@link #readRange(long, int, ByteBuffer)}, a joined fetch
+     * through {@link #readJoinedFetch}, both translating {@link RangeNotSatisfiableException} into 0 bytes read.
+     *
+     * @return the reader to hand to {@link BatchRunner}
+     */
+    protected final FetchReader fetchReader() {
+        return fetchReader;
+    }
+
+    /**
+     * Reads a joined fetch: a fetch of several requests following one another without overlapping, planned under
+     * {@link #coalescingPolicy()}. The bytes of the requests land in their targets through {@code targets}, with
+     * {@link FetchTargets#write}, {@link FetchTargets#read} or the views of {@link FetchTargets#regions()}, and the
+     * bytes between two requests are dropped. The caller settles the counts and target positions from the returned
+     * count.
+     *
+     * <p>The default reads the fetch into pooled heap scratch through {@link #readRangeNoFlip(long, int, ByteBuffer)}
+     * and copies the bytes of the requests into their targets. Backends override it to write the bytes straight into
+     * the targets.
+     *
+     * <p><strong>Implementation requirements:</strong> return how many bytes of the fetch were read from its start, gap
+     * bytes included, short of the range only at EOF; leave the targets' positions alone; write nothing once the method
+     * has returned or thrown. A range starting at or past EOF may read 0 bytes or throw
+     * {@link RangeNotSatisfiableException}. The template translates the exception into 0 bytes read. Backend exception
+     * mapping and response metadata captures apply as in {@code readRangeNoFlip}.
+     *
+     * @param range the byte range of the fetch; guaranteed to start at its first request and to hold at least one byte
+     * @param targets where the requests' bytes land
+     * @return the number of bytes of the fetch read
+     */
+    protected int readJoinedFetch(ByteRange range, FetchTargets targets) {
+        try (PooledByteBuffer pooled = ByteBufferPool.heapBuffer(range.length())) {
+            ByteBuffer scratch = pooled.buffer();
+            int read = readRangeNoFlip(range.offset(), range.length(), scratch);
+            targets.write(0, scratch, 0, read);
+            return read;
+        }
     }
 
     /**
      * The merge policy for batched reads. The default, {@link CoalescingPolicy#NONE}, reads every range exactly;
-     * backends where a round trip has a real cost override this with a network-derived policy.
+     * backends where a round trip has a real cost override this with a network-derived policy. The local file reader
+     * joins abutting ranges and bridges no gap.
      *
      * @return the policy handed to the batch planner
      */
@@ -229,4 +283,26 @@ public abstract class AbstractRangeReader implements RangeReader {
      * @throws StorageException If a storage error occurs during reading from the underlying source
      */
     protected abstract int readRangeNoFlip(long offset, int actualLength, ByteBuffer target);
+
+    /**
+     * The reader of the batched-read template: one request or overlapping requests through readRange, joined requests
+     * through the hook.
+     */
+    private final class TemplateFetchReader implements FetchReader {
+
+        @Override
+        public int read(ByteRange range, ByteBuffer target) {
+            return readRange(range, target);
+        }
+
+        /** Translates a fetch answered 416 into 0 bytes read, as readRange does: the fetch starts at or past EOF. */
+        @Override
+        public int readJoined(ByteRange range, FetchTargets targets) {
+            try {
+                return readJoinedFetch(range, targets);
+            } catch (RangeNotSatisfiableException pastEof) {
+                return 0;
+            }
+        }
+    }
 }

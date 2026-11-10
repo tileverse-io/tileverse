@@ -18,7 +18,9 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class FetchTargetsTest {
@@ -40,6 +42,29 @@ class FetchTargetsTest {
 
     private static ReadableByteChannel channelOf(byte[] bytes, int from, int length) {
         return Channels.newChannel(new ByteArrayInputStream(bytes, from, length));
+    }
+
+    /** Wraps {@code channel}, collecting the backing array of each heap buffer handed to it. */
+    private static ReadableByteChannel recordingArrays(ReadableByteChannel channel, Set<byte[]> arrays) {
+        return new ReadableByteChannel() {
+            @Override
+            public int read(ByteBuffer destination) throws IOException {
+                if (destination.hasArray()) {
+                    arrays.add(destination.array());
+                }
+                return channel.read(destination);
+            }
+
+            @Override
+            public boolean isOpen() {
+                return channel.isOpen();
+            }
+
+            @Override
+            public void close() throws IOException {
+                channel.close();
+            }
+        };
     }
 
     /** Requests of 10 bytes at 100 and 120 of the object: one fetch of 30 bytes with a gap of 10 in the middle. */
@@ -235,6 +260,23 @@ class FetchTargetsTest {
         assertThat(consumed).isEqualTo(fetched.length);
         assertThat(contents(batch.get(1).target(), 0, 10))
                 .containsExactly(Arrays.copyOfRange(fetched, 10 + gap, 20 + gap));
+    }
+
+    // The targets are direct: the only heap buffers handed to the channel receive the dropped gap bytes.
+    @Test
+    void readsShareTheDropArray() throws IOException {
+        Set<byte[]> dropArrays = new HashSet<>();
+        byte[] fetched = fetchBytes(30);
+
+        for (int read = 0; read < 2; read++) {
+            List<RangeRequest> batch = List.of(
+                    RangeRequest.of(100, 10, ByteBuffer.allocateDirect(10)),
+                    RangeRequest.of(120, 10, ByteBuffer.allocateDirect(10)));
+            FetchTargets targets = FetchTargets.of(fetchWithAGap, batch);
+            targets.read(recordingArrays(channelOf(fetched, 0, 30), dropArrays), 0, 30);
+        }
+
+        assertThat(dropArrays).hasSize(1);
     }
 
     /** Targets carved out of one larger buffer: the bytes around each region must stay as they were. */

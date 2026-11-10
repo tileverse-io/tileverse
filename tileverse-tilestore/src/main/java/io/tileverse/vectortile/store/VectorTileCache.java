@@ -5,10 +5,11 @@
  */
 package io.tileverse.vectortile.store;
 
-import com.github.benmanes.caffeine.cache.RemovalCause;
-import com.github.benmanes.caffeine.cache.Scheduler;
+import io.tileverse.cache.Cache;
 import io.tileverse.cache.CacheManager;
-import io.tileverse.cache.CaffeineCache;
+import io.tileverse.cache.CachePool;
+import io.tileverse.cache.CacheStats;
+import io.tileverse.cache.PartitionSpec;
 import io.tileverse.tiling.pyramid.TileIndex;
 import io.tileverse.vectortile.model.VectorTile;
 import java.io.IOException;
@@ -16,7 +17,6 @@ import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
-import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -28,10 +28,10 @@ import org.jspecify.annotations.Nullable;
  * multiple layers or features are requested for the same tile. It uses a {@link VectorTileLoader} to fetch and decode
  * tiles from an underlying source.
  *
- * <p>The cache is partitioned by a {@code sourceIdentifier} to allow sharing a single cache instance across multiple
- * vector tile sources while avoiding key collisions.
+ * <p>Tiles are grouped by the content identifier of their source, the
+ * {@link io.tileverse.storage.RangeReader#contentIdentifier()} of the archive's reader. The cache is a partition of the
+ * {@link CachePool#DATA} pool, shared with the byte-range cache.
  */
-@Slf4j
 @NullMarked
 public class VectorTileCache {
 
@@ -50,28 +50,15 @@ public class VectorTileCache {
 
     private static final String SHARED_CACHE_NAME = "tileverse-vectortile-cache";
 
-    private static final int DEFAULT_MAX_HEAP_PERCENT = 15;
-
-    private static final Duration DEFAULT_EXPIRE_AFTER_ACCESS = Duration.ofSeconds(10);
+    private static final Duration EXPIRE_AFTER_ACCESS = Duration.ofSeconds(10);
 
     /**
-     * Estimated average weight of a cached VectorTile entry in bytes.
-     *
-     * <p>This value accounts for:
-     *
-     * <ul>
-     *   <li>Key/Value Overhead: Approximately 100 bytes of JVM object metadata.
-     *   <li>Binary Size: An assumed average tile payload of 75-80 KB.
-     *   <li>Inflation: A 5x multiplier to account for in-memory expansion of Protobuf objects compared to their
-     *       serialized form.
-     * </ul>
-     *
-     * Used by {@link #buildCache()} and effectively by {@code CaffeineCache#Builder}'s {@code computeInitialCapacity()}
-     * to pre-size internal data structures and minimize GC churn during cache warm-up.
+     * A constant: registering the partition again requires an equal spec, and the pool compares weighers by identity.
      */
-    private static final int AVERAGE_TILE_WEIGHT = 1024 * 400;
+    private static final PartitionSpec<TileIndex, Optional<VectorTile>> SPEC =
+            new PartitionSpec<>(VectorTileCache::weigh, EXPIRE_AFTER_ACCESS);
 
-    private final String sourceIdentifier;
+    private final String contentIdentifier;
 
     private final VectorTileLoader loader;
 
@@ -81,11 +68,11 @@ public class VectorTileCache {
     /**
      * Creates a new cache instance for the specified source.
      *
-     * @param sourceIdentifier a unique identifier for the tile source
+     * @param contentIdentifier the {@link io.tileverse.storage.RangeReader#contentIdentifier()} of the archive's reader
      * @param loader the loader used to fetch and decode tiles
      */
-    public VectorTileCache(String sourceIdentifier, VectorTileLoader loader) {
-        this.sourceIdentifier = Objects.requireNonNull(sourceIdentifier);
+    public VectorTileCache(String contentIdentifier, VectorTileLoader loader) {
+        this.contentIdentifier = Objects.requireNonNull(contentIdentifier);
         this.loader = Objects.requireNonNull(loader);
     }
 
@@ -109,25 +96,13 @@ public class VectorTileCache {
      * <p>Since {@link VectorTile} objects are immutable and relatively expensive to decode, caching them improves
      * performance when multiple layers are requested for the same tile.
      */
-    private final io.tileverse.cache.Cache<TileIndex, Optional<VectorTile>> cache() {
+    private Cache<TileIndex, Optional<VectorTile>> cache() {
         if (this.cacheManager == null) {
             this.cacheManager = CacheManager.getDefault();
         }
         CacheManager manager = this.cacheManager;
-        return manager.getCache(SHARED_CACHE_NAME, VectorTileCache::buildCache).subCache(sourceIdentifier);
-    }
-
-    // static, as the shared cache outlives this instance and must not reference it
-    private static io.tileverse.cache.Cache<TileIndex, Optional<VectorTile>> buildCache() {
-        return CaffeineCache.<TileIndex, Optional<VectorTile>>newBuilder()
-                .maxHeapPercent(DEFAULT_MAX_HEAP_PERCENT, VectorTileCache::weigh)
-                .averageWeight(AVERAGE_TILE_WEIGHT)
-                .expireAfterAccess(DEFAULT_EXPIRE_AFTER_ACCESS)
-                // run eviction tasks when idle to return memory without waiting for cache usage
-                .scheduler(Scheduler.systemScheduler())
-                .removalListener(VectorTileCache::onRemoval)
-                .recordStats()
-                .build();
+        Cache<TileIndex, Optional<VectorTile>> partition = manager.partition(CachePool.DATA, SHARED_CACHE_NAME, SPEC);
+        return partition.subCache(contentIdentifier);
     }
 
     /**
@@ -156,12 +131,6 @@ public class VectorTileCache {
         }
     }
 
-    static void onRemoval(TileIndex key, Optional<VectorTile> value, RemovalCause cause) {
-        if (log.isTraceEnabled()) {
-            log.trace("Evicted {}, {}, cause: {}", value, key, cause);
-        }
-    }
-
     static int weigh(TileIndex key, Optional<VectorTile> value) {
         // Key overhead: Record header (12) + long (8) + long (8) + int (4) + padding
         // (4) = 36 bytes.
@@ -181,7 +150,7 @@ public class VectorTileCache {
         return keyWeight + valueWeight;
     }
 
-    io.tileverse.cache.CacheStats stats() {
+    CacheStats stats() {
         return cache().stats();
     }
 }

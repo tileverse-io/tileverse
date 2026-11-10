@@ -9,13 +9,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 import static org.awaitility.Awaitility.await;
 
+import io.tileverse.cache.CacheBudgets;
 import io.tileverse.cache.CacheManager;
+import io.tileverse.cache.CaffeineCacheManager;
 import io.tileverse.geom.BoundingBox2D;
 import io.tileverse.jackson.databind.pmtiles.v3.PMTilesMetadata;
 import io.tileverse.jackson.databind.tilejson.v3.VectorLayer;
 import io.tileverse.pmtiles.PMTilesHeader;
 import io.tileverse.pmtiles.PMTilesReader;
 import io.tileverse.pmtiles.PMTilesTestData;
+import io.tileverse.storage.RangeReader;
 import io.tileverse.tiling.matrix.DefaultTileMatrixSets;
 import io.tileverse.tiling.matrix.Tile;
 import io.tileverse.tiling.matrix.TileMatrix;
@@ -37,6 +40,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -295,6 +299,41 @@ class PMTilesVectorTileStoreTest {
         assertThat(store.findTile(TileIndex.zxy(0, 0, 0))).isPresent();
         reader.close();
         return new WeakReference<>(reader);
+    }
+
+    // The fake clock keeps the decoded tiles from expiring between the reads
+    @Test
+    void replacedArchiveMissesDecodedTiles() throws IOException {
+        AtomicLong nanos = new AtomicLong();
+        CacheManager manager = new CaffeineCacheManager(new CacheBudgets(64L << 20, 64L << 20), nanos::get);
+        TileIndex root = TileIndex.zxy(0, 0, 0);
+        try (PMTilesReader original = versionedReader("v1");
+                PMTilesReader replaced = versionedReader("v2");
+                PMTilesReader originalAgain = versionedReader("v1")) {
+            PMTilesVectorTileStore originalStore = new PMTilesVectorTileStore(original).cacheManager(manager);
+            PMTilesVectorTileStore replacedStore = new PMTilesVectorTileStore(replaced).cacheManager(manager);
+            PMTilesVectorTileStore originalAgainStore = new PMTilesVectorTileStore(originalAgain).cacheManager(manager);
+
+            originalStore.findTile(root);
+            long missesOfOriginal = decodedTileMisses(manager);
+
+            replacedStore.findTile(root);
+            long missesOfReplaced = decodedTileMisses(manager);
+
+            originalAgainStore.findTile(root);
+
+            assertThat(missesOfReplaced).isGreaterThan(missesOfOriginal);
+            assertThat(decodedTileMisses(manager)).isEqualTo(missesOfReplaced);
+        }
+    }
+
+    private PMTilesReader versionedReader(String version) throws IOException {
+        RangeReader andorra = PMTilesTestData.andorraFileRangeReader(tmpFolder, version);
+        return new PMTilesReader(andorra);
+    }
+
+    private static long decodedTileMisses(CacheManager manager) {
+        return manager.stats().get("tileverse-vectortile-cache").missCount();
     }
 
     @Test

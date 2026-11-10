@@ -67,6 +67,14 @@ class VersatilesReaderTest {
         }
     }
 
+    // FileStorage answers the stat with an ETag
+    @Test
+    void openReportsTheStatVersion() throws IOException {
+        try (VersatilesReader r = VersatilesReader.open(andorra)) {
+            assertThat(r.contentIdentifier()).startsWith(r.getSourceIdentifier() + "@");
+        }
+    }
+
     @Test
     void truncatedArchiveFailsToOpen() throws IOException {
         Path truncated = truncatedCopy();
@@ -311,6 +319,47 @@ class VersatilesReaderTest {
 
             // one request for the tile index, dropped from the cache manager, and one for the tile
             assertThat(counting.requests()).isEqualTo(2);
+        }
+    }
+
+    @Test
+    void replacedArchiveMissesTileIndexes() throws IOException {
+        CacheManager manager = CacheManager.newInstance();
+        TileIndex root = TileIndex.zxy(0, 0, 0);
+        try (Storage storage = StorageFactory.open(tmp.toUri());
+                VersatilesReader original = versionedReader(storage, "v1").cacheManager(manager);
+                VersatilesReader replaced = versionedReader(storage, "v2").cacheManager(manager);
+                VersatilesReader originalAgain = versionedReader(storage, "v1").cacheManager(manager)) {
+            original.getTile(root);
+            long missesOfOriginal = tileIndexMisses(manager);
+
+            replaced.getTile(root);
+            long missesOfReplaced = tileIndexMisses(manager);
+
+            originalAgain.getTile(root);
+
+            assertThat(missesOfReplaced).isGreaterThan(missesOfOriginal);
+            assertThat(tileIndexMisses(manager)).isEqualTo(missesOfReplaced);
+        }
+    }
+
+    private VersatilesReader versionedReader(Storage storage, String version) throws IOException {
+        RangeReader andorraReader = storage.openRangeReader(andorra.toUri());
+        RangeReader versioned = VersatilesTestData.withVersion(andorraReader, version);
+        return new VersatilesReader(versioned);
+    }
+
+    private static long tileIndexMisses(CacheManager manager) {
+        return manager.stats().get("tileverse-versatiles-tile-index-cache").missCount();
+    }
+
+    @Test
+    void tileIndexesLiveInTheMetadataPool() throws IOException {
+        CacheManager manager = CacheManager.newInstance();
+        try (VersatilesReader r = VersatilesReader.open(andorra).cacheManager(manager)) {
+            r.getTile(0, 0, 0);
+
+            assertThat(manager.getCacheNames()).contains("tileverse-cache-metadata");
         }
     }
 

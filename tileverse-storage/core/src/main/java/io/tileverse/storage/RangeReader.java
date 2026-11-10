@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
 import java.util.List;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.function.Supplier;
 
@@ -172,7 +173,8 @@ public interface RangeReader extends Closeable, Supplier<SeekableByteChannel> {
     /**
      * Returns a stable identifier for the underlying source, typically its URI ({@code s3://bucket/key},
      * {@code https://...}, {@code /path/to/file}). {@link io.tileverse.storage.cache.CachingRangeReader} partitions the
-     * shared range cache by this identifier; error messages and logs quote it.
+     * shared range cache by the {@link #contentIdentifier() content identifier}, made of this identifier and the
+     * {@link #version() version}; error messages and logs quote this identifier.
      *
      * <p>Because the identifier keys cached bytes, two readers whose bytes could differ must return different
      * identifiers, and two readers over the same object must return equal ones. The identifier therefore includes every
@@ -184,6 +186,32 @@ public interface RangeReader extends Closeable, Supplier<SeekableByteChannel> {
      * @return a stable identifier for the underlying source
      */
     String getSourceIdentifier();
+
+    /**
+     * Returns an opaque token for the version of the object when this reader was opened. Two readers of the same source
+     * with different tokens may read different bytes. Empty means the version is unknown.
+     *
+     * @return the version token of the content, or empty if unknown
+     */
+    default Optional<String> version() {
+        return Optional.empty();
+    }
+
+    /**
+     * Returns the cache key of the data read by this reader: the {@link #getSourceIdentifier() source identifier},
+     * followed by {@code "@"} and the {@link #version() version} when it is known. Two versions of one object get
+     * different keys. {@link #getSourceIdentifier()} remains the stable identity of the object in messages and logs.
+     *
+     * @return the source identifier and the version, or the source identifier alone if the version is unknown
+     */
+    default String contentIdentifier() {
+        String sourceIdentifier = getSourceIdentifier();
+        Optional<String> version = version();
+        if (version.isEmpty()) {
+            return sourceIdentifier;
+        }
+        return sourceIdentifier + "@" + version.get();
+    }
 
     /**
      * Closes this range reader and releases any underlying resource.This operation is idempotent.

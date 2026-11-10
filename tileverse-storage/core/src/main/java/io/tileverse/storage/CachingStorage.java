@@ -10,18 +10,20 @@ import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
 /**
- * Decorator that wraps every {@link RangeReader} returned by {@link #openRangeReader(String)} with a caller-supplied
- * transform (typically caching and/or block alignment), while delegating every other {@link Storage} method straight
- * through to the inner backend.
+ * Decorator that wraps the {@link RangeReader}s returned by {@link #openRangeReader(String)} and
+ * {@link #openRangeReader(StorageEntry.File)} with a caller-supplied transform (typically caching and/or block
+ * alignment), while delegating the other {@link Storage} methods straight through to the inner backend.
  *
- * <p><b>Cache scope:</b> only {@link #openRangeReader(String)} returns a decorated (potentially cached) reader.
- * {@link #read(String, ReadOptions)}, {@link #stat(String)}, {@link #list(String, ListOptions)}, and all write methods
- * delegate uncached. Caches operate on byte ranges; sequential streams skip the cache by design.
+ * <p><b>Cache scope:</b> only {@link #openRangeReader(String)} and {@link #openRangeReader(StorageEntry.File)} return a
+ * decorated (potentially cached) reader. {@link #read(String, ReadOptions)}, {@link #stat(String)},
+ * {@link #list(String, ListOptions)}, and all write methods delegate uncached. Caches operate on byte ranges;
+ * sequential streams skip the cache by design.
  *
  * <p>Used by {@link StorageFactory} to apply caching auto-decoration based on the {@code storage.caching.*} parameters
  * in the {@link io.tileverse.storage.StorageConfig}, preserving the legacy auto-caching behavior without leaking the
@@ -60,6 +62,16 @@ final class CachingStorage implements Storage {
     @Override
     public RangeReader openRangeReader(String key) {
         return readerDecorator.apply(delegate.openRangeReader(key));
+    }
+
+    /**
+     * Decorates the reader opened by the delegate for the entry. That reader reports the size and the version of the
+     * entry.
+     */
+    @Override
+    public RangeReader openRangeReader(StorageEntry.File entry) {
+        Objects.requireNonNull(entry, "entry");
+        return readerDecorator.apply(delegate.openRangeReader(entry));
     }
 
     /**

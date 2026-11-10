@@ -18,16 +18,39 @@ try (Storage storage = StorageFactory.open(bucket);
 }
 ```
 
-The cache stores exactly the `(offset, length)` ranges requested from it. One in-memory cache is shared by every `CachingRangeReader` of the JVM (one per `CacheManager`), partitioned by the source identifier of the wrapped reader, and sized as a whole rather than per reader:
+The cache stores exactly the `(offset, length)` ranges requested from it. The in-memory caches of a `CacheManager` live in two pools, each with its own budget:
 
-| Setting | Value |
-| :--- | :--- |
-| Capacity | 20% of the maximum heap, weighed by cached bytes; over capacity, Caffeine evicts by its frequency and recency policy |
-| Expiry | 60 seconds after the last access to an entry; a system scheduler removes expired entries promptly |
+- The data pool holds data: the byte ranges cached by `CachingRangeReader` and the tiles decoded by the vector tile stores.
+- The metadata pool holds the indexes for finding that data: PMTiles directories and VersaTiles tile indexes. Other libraries can add their own caches to it.
 
-`clearCache()` drops the entries of one reader's source, and closing the reader does the same. `getCacheStats()` reports hits, misses, evictions and the entry count. `CachingRangeReader.builder(reader).cacheManager(CacheManager.newInstance())` gives a reader a cache of its own with the same capacity: every extra manager adds another 20% of the heap to the budget.
+The caches in a pool share its budget, counted in bytes. When a pool is full, Caffeine evicts entries from any of its caches, keeping the ones used often and recently. Two settings set the size of the pools, and a third sets the largest read kept by the byte-range cache. Each setting is read from its system property, then from its environment variable, and otherwise takes its default:
 
-Concurrent reads of one range through one `CachingRangeReader` fetch it once: the other reads wait for that fetch, and a read that waited 10 seconds fetches the range itself. Readers built separately over the same source share the cache, not the fetches in progress.
+| Property | Environment variable | Default | Meaning |
+| :--- | :--- | :--- | :--- |
+| `io.tileverse.cache.data.max-size` | `IO_TILEVERSE_CACHE_DATA_MAXSIZE` | `20%` | Budget of the data pool |
+| `io.tileverse.cache.metadata.max-size` | `IO_TILEVERSE_CACHE_METADATA_MAXSIZE` | `10%` | Budget of the metadata pool |
+| `io.tileverse.cache.data.max-read-size` | `IO_TILEVERSE_CACHE_DATA_MAXREADSIZE` | `16M` | Largest read kept by the byte-range cache, as a byte count |
+
+A size is either a percentage of the maximum heap, from `0%` to `100%`, or a byte count. A byte count is an integer with an optional unit `K`, `M` or `G`, in powers of 1024, optionally followed by `B` or `iB`: `512M`, `1GiB` and `4096` are byte counts. Units are case-insensitive. A budget of `0` or `0%` disables the pool. The two pool settings are read when the first pool is created, and `max-read-size` when the first `CachingRangeReader` is built without its own limit. An invalid value makes that call fail with an `IllegalArgumentException` that names the setting and the value.
+
+Each cache drops an entry after it goes unused for the time below. A background scheduler removes expired entries without waiting for the next access.
+
+| Cache | Contents | Expires after unused for |
+| :--- | :--- | :--- |
+| `tileverse-storage-cache` | Byte ranges | 5 minutes |
+| `tileverse-vectortile-cache` | Decoded vector tiles | 10 seconds |
+| `tileverse-pmtiles-directory-cache` | PMTiles directories | 10 minutes |
+| `tileverse-versatiles-tile-index-cache` | VersaTiles tile indexes | 10 minutes |
+
+The caches key entries by source and, when it is known, by the version of the object. The version is the object's ETag, or its version id if it has no ETag, or else its size and last-modified time. A reader knows the version when it is opened from a listing or stat entry with `Storage.openRangeReader(StorageEntry.File)`, or opened with `Storage.openVersionedRangeReader(String)`. Archives opened with `PMTilesReader.open` or `VersatilesReader.open` know it too. These last three make one metadata request per open to get it. When an object is replaced, a reader opened with the new version does not see the data cached for the old one. Readers opened by key alone have no version and share one set of entries per source. If the storage cannot answer the metadata request, for example an HTTP server that rejects `HEAD`, the reader or the archive opens without a version.
+
+If the uncached ranges of a read add up to more than `io.tileverse.cache.data.max-read-size`, the reader reads them directly into the caller's buffers and does not cache them. Ranges of that read already in the cache are still served from it. `CachingRangeReader.Builder.maxReadSize(long)` sets the limit for one reader, and `getBypassStats()` counts these reads and their bytes across the readers of a cache manager.
+
+`CacheManager.stats()` and `getCacheNames()` list the two pools as `tileverse-cache-data` and `tileverse-cache-metadata`. The `CaffeineCacheManager` returned by `CacheManager.getDefault()` and `CacheManager.newInstance()` also lists each cache of the table above by its name. An application with its own `CacheManager` sees the two pools in its cache registry.
+
+`clearCache()` and closing the reader both remove the entries of the reader's source and version. `getCacheStats()` reports hits, misses, evictions and the entry count of the whole `tileverse-storage-cache`, not of one reader. `CachingRangeReader.builder(reader).cacheManager(CacheManager.newInstance())` gives a reader its own manager, with its own two pools of the same sizes. Each extra manager adds another data budget and another metadata budget.
+
+Concurrent reads of one range through one `CachingRangeReader` fetch it once: the other reads wait for that fetch, and a read that waited 10 seconds fetches the range itself. Readers built separately over the same source and version share the cache, not the fetches in progress.
 
 To cache every reader opened by a `Storage` without composing the decorator by hand, set `storage.caching.enabled=true` on the configuration passed to `StorageFactory.open`. It is off by default. The file backend ignores it.
 
@@ -178,14 +201,17 @@ The executor behind batched fetches is shared by the whole JVM and picked once, 
 | `io.tileverse.storage.batch.executor` | Executor for batched fetches: `auto` (virtual threads on Java 24+, `pool` before), `virtual` or `pool` | `auto` |
 | `io.tileverse.storage.batch.pool.size` | Size of the `pool` executor | the larger of 8 and the processor count |
 
-The connection pool of the S3 clients takes three settings, each read from its system property first and from its environment variable second:
+The S3 connection pool and the cache pools take six settings, each read from its system property and then from its environment variable:
 
 | Property | Environment variable | Description | Default |
 | :--- | :--- | :--- | :--- |
 | `io.tileverse.storage.s3-http-client.max-concurrency` | `IO_TILEVERSE_STORAGE_S3HTTPCLIENT_MAXCONCURRENCY` | Connections pooled per host, shared by single reads, batches and uploads | a tenth of the memory limit seen by the JVM, or of four times its maximum heap when that is smaller, divided by 7 MiB, between 50 and 500 |
 | `io.tileverse.storage.s3-http-client.connection-timeout` | `IO_TILEVERSE_STORAGE_S3HTTPCLIENT_CONNECTIONTIMEOUT` | Longest wait for a connection to open | 2 seconds |
 | `io.tileverse.storage.s3-http-client.connection-acquisition-timeout` | `IO_TILEVERSE_STORAGE_S3HTTPCLIENT_CONNECTIONACQUISITIONTIMEOUT` | Longest wait of a request for a pooled connection | 30 seconds |
+| `io.tileverse.cache.data.max-size` | `IO_TILEVERSE_CACHE_DATA_MAXSIZE` | Budget of the data cache pool | `20%` |
+| `io.tileverse.cache.metadata.max-size` | `IO_TILEVERSE_CACHE_METADATA_MAXSIZE` | Budget of the metadata cache pool | `10%` |
+| `io.tileverse.cache.data.max-read-size` | `IO_TILEVERSE_CACHE_DATA_MAXREADSIZE` | Largest read kept by the byte-range cache, as a byte count | `16M` |
 
-A duration reads as ISO-8601 (`PT30S`) or as a number and a unit (`30s`, `500ms`).
+A duration reads as ISO-8601 (`PT30S`) or as a number and a unit (`30s`, `500ms`). [Caching Layers](#caching-layers) describes the cache pools and the format of a size.
 
 A multipart upload keeps at most an eighth of the pool in flight, 6 connections of 50; the rest serves single reads, batches and other uploads.

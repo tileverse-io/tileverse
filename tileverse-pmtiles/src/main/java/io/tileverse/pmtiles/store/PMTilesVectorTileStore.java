@@ -61,8 +61,7 @@ public class PMTilesVectorTileStore extends VectorTileStore {
         }
         VectorTileCodec decoder = new VectorTileCodec();
         this.vectorTileCache = new VectorTileCache(
-                reader.getSourceIdentifier(),
-                tileIndex -> reader.getTile(reader.getTileId(tileIndex), decoder::decode));
+                reader.contentIdentifier(), tileIndex -> reader.getTile(reader.getTileId(tileIndex), decoder::decode));
     }
 
     /**

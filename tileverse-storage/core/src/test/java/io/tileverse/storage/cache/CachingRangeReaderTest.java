@@ -13,11 +13,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.github.benmanes.caffeine.cache.Scheduler;
-import io.tileverse.cache.Cache;
+import com.github.benmanes.caffeine.cache.Ticker;
+import io.tileverse.cache.CacheBudgets;
 import io.tileverse.cache.CacheManager;
 import io.tileverse.cache.CacheStats;
-import io.tileverse.cache.CaffeineCache;
+import io.tileverse.cache.CaffeineCacheManager;
 import io.tileverse.io.ByteRange;
 import io.tileverse.storage.AbstractRangeReader;
 import io.tileverse.storage.BatchReadResult;
@@ -25,7 +25,10 @@ import io.tileverse.storage.ByteArrayRangeReader;
 import io.tileverse.storage.RangeReader;
 import io.tileverse.storage.RangeReaderTestSupport;
 import io.tileverse.storage.RangeRequest;
+import io.tileverse.storage.Storage;
+import io.tileverse.storage.StorageEntry;
 import io.tileverse.storage.StorageException;
+import io.tileverse.storage.StorageFactory;
 import io.tileverse.storage.TransientStorageException;
 import io.tileverse.storage.cache.PausingRangeReaderCache.Pause;
 import java.io.IOException;
@@ -38,6 +41,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Random;
 import java.util.concurrent.Callable;
@@ -51,8 +55,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
-import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -164,11 +168,65 @@ class CachingRangeReaderTest {
     }
 
     @Test
+    void readersOfDifferentVersionsDoNotShare() throws IOException {
+        CountingRangeReader firstDelegate = new CountingRangeReader(RangeReaderTestSupport.fileReader(testFile));
+        CountingRangeReader secondDelegate = new CountingRangeReader(RangeReaderTestSupport.fileReader(testFile));
+
+        try (CachingRangeReader first = cached(new VersionedReader(firstDelegate, "v1"));
+                CachingRangeReader second = cached(new VersionedReader(secondDelegate, "v2"))) {
+            first.readRange(0, 100);
+            second.readRange(0, 100);
+
+            assertThat(second.getSourceIdentifier())
+                    .as("both readers read one source")
+                    .isEqualTo(first.getSourceIdentifier());
+            assertThat(secondDelegate.getReadCount())
+                    .as("the second version reads its own bytes")
+                    .isEqualTo(1);
+        }
+    }
+
+    @Test
+    void readersOfOneVersionShare() throws IOException {
+        CountingRangeReader firstDelegate = new CountingRangeReader(RangeReaderTestSupport.fileReader(testFile));
+        CountingRangeReader secondDelegate = new CountingRangeReader(RangeReaderTestSupport.fileReader(testFile));
+
+        try (CachingRangeReader first = cached(new VersionedReader(firstDelegate, "v1"));
+                CachingRangeReader second = cached(new VersionedReader(secondDelegate, "v1"))) {
+            first.readRange(0, 100);
+            long hitsBefore = second.getCacheStats().hitCount();
+            second.readRange(0, 100);
+
+            assertThat(secondDelegate.getReadCount())
+                    .as("the second reader takes the bytes of the first")
+                    .isZero();
+            assertThat(second.getCacheStats().hitCount()).isGreaterThan(hitsBefore);
+        }
+    }
+
+    @Test
+    void versionPassesThrough() throws IOException {
+        try (Storage storage = StorageFactory.open(tempDir.toUri())) {
+            StorageEntry.File entry = storage.stat("test.bin").orElseThrow();
+            String etag = entry.etag().orElseThrow();
+            RangeReader delegate = storage.openRangeReader(entry);
+            try (CachingRangeReader reader = cached(delegate)) {
+                assertThat(reader.version()).hasValue(etag);
+                assertThat(reader.contentIdentifier()).endsWith("@" + etag);
+            }
+        }
+    }
+
+    @Test
     void testCacheMaxSize() throws IOException {
+        // a data budget with room for two of the three ranges read below
+        int entryWeight = ByteRangeCache.weigh(ByteRange.of(0, 500), ByteBuffer.allocate(500));
+        AtomicLong nanos = new AtomicLong();
+        CacheManager manager = new CaffeineCacheManager(new CacheBudgets(2L * entryWeight, 0), nanos::get);
         RangeReader delegate = RangeReaderTestSupport.fileReader(testFile);
 
         try (CachingRangeReader reader =
-                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
+                CachingRangeReader.builder(delegate).cacheManager(manager).build()) {
 
             // Read multiple ranges that exceed cache size
             reader.readRange(0, 500);
@@ -176,8 +234,8 @@ class CachingRangeReaderTest {
             reader.readRange(2000, 500);
 
             // Cache should have evicted some entries due to size limit
-            // Note: Exact behavior depends on Caffeine's eviction timing
             assertThat(reader.getCacheEntryCount()).isGreaterThan(0);
+            assertThat(reader.getCacheStats().evictionCount()).isEqualTo(1);
         }
     }
 
@@ -201,9 +259,11 @@ class CachingRangeReaderTest {
 
     @Test
     void testClearCache() throws IOException {
+        // the pool counts removals in its maintenance, run on the calling thread by this manager
+        CacheManager manager = new CaffeineCacheManager(new CacheBudgets(1_000_000, 0), Ticker.systemTicker());
         RangeReader delegate = RangeReaderTestSupport.fileReader(testFile);
         try (CachingRangeReader reader =
-                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
+                CachingRangeReader.builder(delegate).cacheManager(manager).build()) {
 
             // Add data to cache
             reader.readRange(1000, 500);
@@ -330,40 +390,25 @@ class CachingRangeReaderTest {
 
     @Test
     void testExpireAfterAccess() throws IOException {
-        RangeReader delegate = RangeReaderTestSupport.fileReader(testFile);
-
-        assertThat(cacheManager.getCacheNames()).doesNotContain(ByteRangeCache.SHARED_CACHE_NAME);
-
-        // Create a cache with very short expiration
-        @SuppressWarnings("unused")
-        Cache<ByteRange, ByteBuffer> cache = cacheManager.getCache(ByteRangeCache.SHARED_CACHE_NAME, () -> {
-            return CaffeineCache.<ByteRange, ByteBuffer>newBuilder()
-                    .expireAfterAccess(Duration.ofMillis(100))
-                    .maxHeapPercent(10, ByteRangeCache::weigh)
-                    .averageWeight(64 * 1024)
-                    // run eviction tasks when idle to return memory without waiting for cache usage
-                    .scheduler(Scheduler.systemScheduler())
-                    .recordStats()
-                    .build();
-        });
+        AtomicLong nanos = new AtomicLong();
+        CacheManager manager = new CaffeineCacheManager(new CacheBudgets(1_000_000, 0), nanos::get);
+        CountingRangeReader delegate = new CountingRangeReader(RangeReaderTestSupport.fileReader(testFile));
 
         try (CachingRangeReader reader =
-                CachingRangeReader.builder(delegate).cacheManager(cacheManager).build()) {
-
-            // Read some data
+                CachingRangeReader.builder(delegate).cacheManager(manager).build()) {
             reader.readRange(0, 100);
-            assertThat(reader.getCacheEntryCount()).isEqualTo(1);
+            nanos.addAndGet(Duration.ofMinutes(4).toNanos());
+            reader.readRange(0, 100);
+            int readsAfterTheHit = delegate.getReadCount();
+            nanos.addAndGet(Duration.ofMinutes(5).plusNanos(1).toNanos());
+            reader.readRange(0, 100);
 
-            // Wait for expiration and trigger cleanup by reading again
-            Awaitility.await()
-                    .atMost(1, TimeUnit.SECONDS)
-                    .pollInterval(50, TimeUnit.MILLISECONDS)
-                    .untilAsserted(() -> {
-                        // Trigger cache cleanup by reading again
-                        reader.readRange(1000, 100);
-                        // Cache should have at least the new entry
-                        assertThat(reader.getCacheEntryCount()).isGreaterThan(0);
-                    });
+            assertThat(readsAfterTheHit)
+                    .as("a hit 4 minutes after the last access")
+                    .isEqualTo(1);
+            assertThat(delegate.getReadCount())
+                    .as("a miss 5 minutes and 1 ns after the last access")
+                    .isEqualTo(2);
         }
     }
 
@@ -913,6 +958,29 @@ class CachingRangeReaderTest {
         }
 
         @Test
+        void bypassStillAwaitsRangesInFlight() throws Exception {
+            loader = new BatchRangeLoader(cache, Duration.ofMinutes(1), 1_000);
+            reader = new CachingRangeReader(delegate, cache, loader);
+            ByteRange large = new ByteRange(5_000, 2_000);
+            List<RangeRequest> secondRequests = requests(A, large);
+            delegate.hold(1);
+
+            RunningRead<BatchReadResult> first = RunningRead.start(() -> reader.readRanges(requests(A)));
+            delegate.awaitCall(1);
+            RunningRead<BatchReadResult> second = RunningRead.start(() -> reader.readRanges(secondRequests));
+            second.awaitWaitingForAnotherRead(); // it waits for A, claimed by the first read
+            delegate.release(1);
+            first.result();
+            BatchReadResult secondResult = second.result();
+
+            assertThat(delegate.calls()).containsExactly(List.of(A), List.of(large));
+            assertHoldsTheBytesOfItsRange(secondRequests);
+            assertThat(secondResult.bytesFromCache()).isEqualTo(100);
+            assertThat(reader.getBypassStats()).isEqualTo(new BypassStats(1, 2_000));
+            assertThat(reader.getCacheEntryCount()).isEqualTo(1);
+        }
+
+        @Test
         void concurrentReadsFetchOnce() throws Exception {
             List<ByteRange> pool = rangePool(64);
             int threads = 8;
@@ -984,6 +1052,161 @@ class CachingRangeReaderTest {
                 }
             }
             return fetches;
+        }
+    }
+
+    /** Reads whose misses add up to more than the read-size limit of the reader. */
+    @Nested
+    class ReadSizeBound {
+
+        private RecordingRangeReader delegate;
+        private CachingRangeReader reader;
+
+        @BeforeEach
+        void openReader() {
+            delegate = new RecordingRangeReader("recording://test-data");
+            reader = boundedReader(1_000);
+        }
+
+        private CachingRangeReader boundedReader(long maxReadSize) {
+            return CachingRangeReader.builder(delegate)
+                    .cacheManager(cacheManager)
+                    .maxReadSize(maxReadSize)
+                    .build();
+        }
+
+        @Test
+        void batchOverBoundReadsIntoTargets() {
+            List<RangeRequest> requests = requests(
+                    new ByteRange(0, 600),
+                    new ByteRange(600, 600),
+                    new ByteRange(0, 600),
+                    new ByteRange(300, 600),
+                    new ByteRange(50, 0));
+
+            BatchReadResult result = reader.readRanges(requests);
+
+            assertThat(counts(result)).containsExactly(600, 600, 600, 600, 0);
+            assertHoldsTheBytesOfItsRange(requests);
+            assertThat(reader.getCacheEntryCount()).isZero();
+            assertThat(delegate.batches()).hasSize(1);
+            List<RangeRequest> forwarded = delegate.batches().get(0);
+            assertThat(forwarded).hasSize(4);
+            for (int i = 0; i < forwarded.size(); i++) {
+                assertThat(forwarded.get(i).target()).isSameAs(requests.get(i).target());
+            }
+            assertThat(reader.getBypassStats()).isEqualTo(new BypassStats(1, 2_400));
+            assertThat(result.bytesTransferred()).isEqualTo(2_400);
+            assertThat(result.bytesFromCache()).isZero();
+        }
+
+        @Test
+        void hitsStillServedOnBypass() {
+            reader.readRange(0, 100);
+            List<RangeRequest> requests =
+                    requests(new ByteRange(0, 100), new ByteRange(1_000, 1_500), new ByteRange(3_000, 1_500));
+
+            BatchReadResult result = reader.readRanges(requests);
+
+            assertHoldsTheBytesOfItsRange(requests);
+            assertThat(delegate.batchRanges())
+                    .containsExactly(List.of(new ByteRange(1_000, 1_500), new ByteRange(3_000, 1_500)));
+            assertThat(result.bytesFromCache()).isEqualTo(100);
+            assertThat(reader.getCacheEntryCount()).isEqualTo(1);
+        }
+
+        @Test
+        void singleReadOverBoundNotStored() {
+            ByteBuffer read = reader.readRange(0, 1_001);
+
+            assertThat(read.flip()).isEqualTo(bytesOf(new ByteRange(0, 1_001)));
+            assertThat(reader.getCacheEntryCount()).isZero();
+            assertThat(reader.getBypassStats()).isEqualTo(new BypassStats(1, 1_001));
+            assertThat(delegate.singleReads()).containsExactly(new ByteRange(0, 1_001));
+            assertThat(delegate.batches()).isEmpty();
+        }
+
+        // the range was stored by a reader of the same content with a larger limit
+        @Test
+        void singleReadOverBoundServesHit() throws IOException {
+            RecordingRangeReader sameContent = new RecordingRangeReader("recording://test-data");
+            try (CachingRangeReader largerBound = CachingRangeReader.builder(sameContent)
+                    .cacheManager(cacheManager)
+                    .maxReadSize(10_000)
+                    .build()) {
+                largerBound.readRange(0, 1_001);
+
+                ByteBuffer read = reader.readRange(0, 1_001);
+
+                assertThat(read.flip()).isEqualTo(bytesOf(new ByteRange(0, 1_001)));
+                assertThat(delegate.singleReads()).isEmpty();
+                assertThat(delegate.batches()).isEmpty();
+                assertThat(reader.getBypassStats()).isEqualTo(new BypassStats(0, 0));
+            }
+        }
+
+        @Test
+        void batchAtBoundStoresAsToday() {
+            reader.readRanges(requests(new ByteRange(0, 400), new ByteRange(400, 600)));
+
+            assertThat(reader.getCacheEntryCount()).isEqualTo(2);
+            assertThat(reader.getBypassStats()).isEqualTo(new BypassStats(0, 0));
+        }
+
+        @Test
+        void zeroBoundStoresNothing() {
+            CachingRangeReader storingNothing = boundedReader(0);
+
+            ByteBuffer read = storingNothing.readRange(0, 10);
+
+            assertThat(read.flip()).isEqualTo(bytesOf(new ByteRange(0, 10)));
+            assertThat(storingNothing.getCacheEntryCount()).isZero();
+            assertThat(storingNothing.getBypassStats()).isEqualTo(new BypassStats(1, 10));
+        }
+
+        @Test
+        void bypassCountsAMissPerRange() {
+            CacheStats before = reader.getCacheStats();
+
+            reader.readRanges(requests(new ByteRange(0, 500), new ByteRange(1_000, 500), new ByteRange(2_000, 500)));
+
+            CacheStats after = reader.getCacheStats();
+            assertThat(after.missCount() - before.missCount()).isEqualTo(3);
+            assertThat(after.loadCount() - before.loadCount()).isZero();
+        }
+
+        @Test
+        void bypassCountsSharedByReaders() {
+            RecordingRangeReader otherSource = new RecordingRangeReader("recording://other-data");
+            CachingRangeReader sameManager = CachingRangeReader.builder(otherSource)
+                    .cacheManager(cacheManager)
+                    .maxReadSize(1_000)
+                    .build();
+            CachingRangeReader otherManager = CachingRangeReader.builder(delegate)
+                    .cacheManager(CacheManager.newInstance())
+                    .maxReadSize(1_000)
+                    .build();
+
+            reader.readRange(0, 1_001);
+            sameManager.readRange(0, 2_000);
+
+            BypassStats bothReads = new BypassStats(2, 3_001);
+            assertThat(reader.getBypassStats()).isEqualTo(bothReads);
+            assertThat(sameManager.getBypassStats()).isEqualTo(bothReads);
+            assertThat(otherManager.getBypassStats()).isEqualTo(new BypassStats(0, 0));
+        }
+
+        @Test
+        void negativeBoundRejected() {
+            CachingRangeReader.Builder builder = CachingRangeReader.builder(delegate);
+
+            assertThatThrownBy(() -> builder.maxReadSize(-1)).isInstanceOf(IllegalArgumentException.class);
+        }
+
+        // the setting is unset on the build machines
+        @Test
+        void defaultBoundIsSixteenMebibytes() {
+            assertThat(CachingRangeReader.defaultMaxReadSize()).isEqualTo(16_777_216L);
         }
     }
 
@@ -1092,6 +1315,47 @@ class CachingRangeReaderTest {
         }
     }
 
+    /** Forwards to its delegate and reports the given version. */
+    private static final class VersionedReader implements RangeReader {
+        private final RangeReader delegate;
+        private final String version;
+
+        VersionedReader(RangeReader delegate, String version) {
+            this.delegate = delegate;
+            this.version = version;
+        }
+
+        @Override
+        public int readRange(long offset, int length, ByteBuffer target) {
+            return delegate.readRange(offset, length, target);
+        }
+
+        @Override
+        public BatchReadResult readRanges(List<RangeRequest> requests) {
+            return delegate.readRanges(requests);
+        }
+
+        @Override
+        public OptionalLong size() {
+            return delegate.size();
+        }
+
+        @Override
+        public String getSourceIdentifier() {
+            return delegate.getSourceIdentifier();
+        }
+
+        @Override
+        public Optional<String> version() {
+            return Optional.of(version);
+        }
+
+        @Override
+        public void close() throws IOException {
+            delegate.close();
+        }
+    }
+
     /** Serves one constant byte value under a caller-chosen source identifier. */
     private static final class ConstantBytesRangeReader extends AbstractRangeReader {
         private final String identifier;
@@ -1118,6 +1382,76 @@ class CachingRangeReaderTest {
         @Override
         public String getSourceIdentifier() {
             return identifier;
+        }
+
+        @Override
+        public void close() {
+            // nothing to release
+        }
+    }
+
+    /** Serves {@link #TEST_DATA} and records the calls reaching it, single reads apart from batches. */
+    private static final class RecordingRangeReader implements RangeReader {
+        private final String sourceIdentifier;
+        private final List<ByteRange> singleReads = new ArrayList<>();
+        private final List<List<RangeRequest>> batches = new ArrayList<>();
+
+        RecordingRangeReader(String sourceIdentifier) {
+            this.sourceIdentifier = sourceIdentifier;
+        }
+
+        @Override
+        public int readRange(long offset, int length, ByteBuffer target) {
+            singleReads.add(new ByteRange(offset, length));
+            return serve(offset, length, target);
+        }
+
+        @Override
+        public BatchReadResult readRanges(List<RangeRequest> requests) {
+            batches.add(List.copyOf(requests));
+            int[] bytesRead = new int[requests.size()];
+            for (int i = 0; i < requests.size(); i++) {
+                RangeRequest request = requests.get(i);
+                ByteRange range = request.range();
+                bytesRead[i] = serve(range.offset(), range.length(), request.target());
+            }
+            return BatchReadResult.perRange(requests, bytesRead);
+        }
+
+        private static int serve(long offset, int length, ByteBuffer target) {
+            ByteBuffer bytes = bytesOf(new ByteRange(offset, length));
+            int count = bytes.remaining();
+            target.put(bytes);
+            return count;
+        }
+
+        List<ByteRange> singleReads() {
+            return List.copyOf(singleReads);
+        }
+
+        /** The requests of each batch, the caller's own objects. */
+        List<List<RangeRequest>> batches() {
+            return List.copyOf(batches);
+        }
+
+        List<List<ByteRange>> batchRanges() {
+            List<List<ByteRange>> ranges = new ArrayList<>(batches.size());
+            for (List<RangeRequest> batch : batches) {
+                List<ByteRange> rangesOfBatch =
+                        batch.stream().map(RangeRequest::range).toList();
+                ranges.add(rangesOfBatch);
+            }
+            return ranges;
+        }
+
+        @Override
+        public OptionalLong size() {
+            return OptionalLong.of(TEST_DATA.length);
+        }
+
+        @Override
+        public String getSourceIdentifier() {
+            return sourceIdentifier;
         }
 
         @Override

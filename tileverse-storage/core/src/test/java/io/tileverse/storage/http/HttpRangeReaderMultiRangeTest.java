@@ -867,6 +867,43 @@ class HttpRangeReaderMultiRangeTest {
         wm.verify(1, getRequestedFor(urlEqualTo(TEST_PATH)).withHeader("Range", equalTo("bytes=150-399")));
     }
 
+    // Two groups run one at a time: the first settles a joined fetch, then the second gets a 200.
+    @Test
+    void refusalRestoresJoinedTargets() throws IOException {
+        long stride = 2_000;
+        List<long[]> ranges = new ArrayList<>(List.of(new long[] {0, 10}, new long[] {20, 10}));
+        long[][] firstGroup = new long[100][];
+        firstGroup[0] = new long[] {0, 30};
+        stubSingleRangeGet(0, 30);
+        for (int i = 1; i <= 100; i++) {
+            ranges.add(new long[] {i * stride, 10});
+            stubSingleRangeGet(i * stride, 10);
+            if (i < 100) {
+                firstGroup[i] = new long[] {i * stride, 10};
+            }
+        }
+        stubMultiRangeGet(firstGroup, firstGroup);
+        // registered after the single-range stub of the same range: WireMock picks the most recently added match
+        wm.stubFor(get(urlEqualTo(TEST_PATH))
+                .inScenario("second-group-refused")
+                .whenScenarioStateIs(Scenario.STARTED)
+                .withHeader("Range", equalTo("bytes=200000-200009"))
+                .willSetStateTo("refused")
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/octet-stream")
+                        .withBody(slice(0, 1_000))));
+        BatchSettings oneGroupAtATime = new BatchSettings(1_000, 1_000_000, 1);
+        URI uri = URI.create("http://localhost:" + wm.getPort() + TEST_PATH);
+        try (HttpRangeReader sequential =
+                new HttpRangeReader(uri, HttpClient.newHttpClient(), HttpAuthentication.NONE, oneGroupAtATime)) {
+            List<RangeRequest> requests = batchOf(ranges.toArray(long[][]::new));
+
+            assertContents(requests, counts(sequential.readRanges(requests)));
+        }
+        wm.verify(1, getRequestedFor(urlEqualTo(TEST_PATH)).withHeader("Range", equalTo("bytes=0-29")));
+    }
+
     private void stubSingleRangeGets() {
         stubSingleRangeGet(0, 100);
         stubSingleRangeGet(600_000, 200);

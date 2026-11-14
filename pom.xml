@@ -606,6 +606,10 @@
           <!-- Don't try to auto-detect JavaDoc links from dependencies (prevents errors for BOM modules) -->
           <detectLinks>false</detectLinks>
           <detectOfflineLinks>false</detectOfflineLinks>
+          <!-- Leave the web fonts out of the javadoc jars: they add about 4 MB to each jar. -->
+          <additionalOptions>
+            <additionalOption>--no-fonts</additionalOption>
+          </additionalOptions>
         </configuration>
         <executions>
           <execution>

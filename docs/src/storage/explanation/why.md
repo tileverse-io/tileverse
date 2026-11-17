@@ -19,7 +19,7 @@ About a dozen libraries solve some of the same problems. None of them solves all
 
 | Library | What it gives you | Why it doesn't fit |
 | :--- | :--- | :--- |
-| **Apache Hadoop `FileSystem`** (S3A, ABFS, GCS) | A mature, widely used multi-cloud abstraction. | Brings the whole Hadoop dependency tree, about 80 MB of transitive dependencies, and the GeoServer ecosystem avoids it. [Parquetry](https://github.com/tileverse-io/parquetry) reads GeoParquet through `tileverse-storage` without it. |
+| **Apache Hadoop `FileSystem`** (S3A, ABFS, GCS) | A mature, widely used multi-cloud abstraction. | Brings the whole Hadoop dependency tree, about 80 MB of transitive dependencies, and the GeoServer ecosystem avoids it. [Parquetry](https://parquetry.io/) reads GeoParquet through `tileverse-storage` without it. |
 | **Apache jclouds `BlobStore`** | The closest in scope: S3, Azure, GCS, Swift. | A heavyweight Guice-based bootstrap, slowed development, and no byte-range or caching API. |
 | **Micronaut Object Storage** (`io.micronaut.objectstorage`) | A modern, slim API similar to `Storage`. | Built around the Micronaut `ApplicationContext`: a Spring application would run two DI containers and annotation processors. `listObjects()` returns a `Set<String>`, with no metadata and no glob. No range reads. |
 | **Spring Cloud Resource** (`S3Resource`, `BlobResource`, `GoogleStorageResource`) | First-class in Spring Boot; one `Resource` per blob. | One blob at a time: no listing, no range reads, no presigning in the core. Does not work outside Spring. |
@@ -60,7 +60,7 @@ The `storage.caching.enabled` parameter (off by default) makes `StorageFactory` 
 
 ## Adapters to other APIs
 
-Other ecosystems can reach `tileverse-storage` through thin adapters. [Parquetry](https://github.com/tileverse-io/parquetry), a separate project, reads Parquet and GeoParquet through `tileverse-storage` without Hadoop. `tileverse-storage-core` ships adapters to JDK and ImageIO types: `RangeReader.get()` returns a `SeekableByteChannel`, and the `io.tileverse.storage.adapters` package provides an ImageIO `ImageInputStream` and `java.io.DataInput` views over channels. Adapters to a NIO `FileSystemProvider`, Spring `Resource`, Micronaut `ObjectStorageOperations` or Iceberg `FileIO` would each be a thin module; none exists yet.
+Other ecosystems can reach `tileverse-storage` through thin adapters. [Parquetry](https://parquetry.io/), a separate project, reads Parquet and GeoParquet through `tileverse-storage` without Hadoop. `tileverse-storage-core` ships adapters to JDK and ImageIO types: `RangeReader.get()` returns a `SeekableByteChannel`, and the `io.tileverse.storage.adapters` package provides an ImageIO `ImageInputStream` and `java.io.DataInput` views over channels. Adapters to a NIO `FileSystemProvider`, Spring `Resource`, Micronaut `ObjectStorageOperations` or Iceberg `FileIO` would each be a thin module; none exists yet.
 
 ## When *not* to use this library
 

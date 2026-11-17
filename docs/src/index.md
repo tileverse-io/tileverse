@@ -15,11 +15,15 @@ Tileverse is a set of Java libraries for cloud-native geospatial applications. E
 
 [Getting Started](getting-started.md) shows how to add them to a project.
 
+## Related projects
+
+[Parquetry](https://parquetry.io/) reads and writes Apache Parquet and GeoParquet files from Java. Its experimental modules read Apache Iceberg tables and STAC GeoParquet catalogs. It is a separate project with its own releases, and it reads object storage through **Storage**.
+
 ## How they fit together
 
 The archive readers build on the other libraries. **Storage**, **Vector Tiles** and **Tile Matrix Set** are independent of each other:
 
-- Building a GeoParquet datastore that lists and reads partitioned files in S3, Azure or GCS? Use **Storage**.
+- Reading Parquet or GeoParquet files in S3, Azure or GCS? Use [Parquetry](https://parquetry.io/), which reads them through **Storage**.
 - Reading Cloud Optimized GeoTIFFs with byte-range requests? Use the `RangeReader` API of **Storage**.
 - Building a tile server from PostGIS? Use **Vector Tiles** and **Tile Matrix Set**.
 - Need a standard grid definition? Use **Tile Matrix Set**.
@@ -44,6 +48,10 @@ graph TD
 
     TS[Tile Store]
 
+    subgraph "Related projects"
+        PQ["Parquetry<br/>Parquet, GeoParquet,<br/>Apache Iceberg,<br/>STAC GeoParquet"]
+    end
+
     App --> ST
     App --> VT
     App --> PMT
@@ -62,4 +70,10 @@ graph TD
 
     TS -.-> VT
     TS -.-> TMS
+
+    App --> PQ
+    PQ -.-> ST
+
+    classDef external stroke-dasharray: 5 5
+    class PQ external
 ```

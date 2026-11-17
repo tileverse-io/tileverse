@@ -34,7 +34,7 @@ Maven or Gradle reports conflicts with the AWS, Azure, or Google Cloud SDKs. Imp
         <dependency>
             <groupId>io.tileverse</groupId>
             <artifactId>tileverse-bom</artifactId>
-            <version>2.1.0</version>
+            <version>2.1.2</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>

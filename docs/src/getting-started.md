@@ -12,7 +12,7 @@ Tileverse is published on Maven Central. Import the BOM to manage the versions, 
             <dependency>
                 <groupId>io.tileverse</groupId>
                 <artifactId>tileverse-bom</artifactId>
-                <version>2.1.0</version>
+                <version>2.1.2</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -35,14 +35,14 @@ Tileverse is published on Maven Central. Import the BOM to manage the versions, 
 
     ```kotlin
     dependencies {
-        implementation(platform("io.tileverse:tileverse-bom:2.1.0"))
+        implementation(platform("io.tileverse:tileverse-bom:2.1.2"))
 
         implementation("io.tileverse.storage:tileverse-storage-all")
         implementation("io.tileverse.pmtiles:tileverse-pmtiles")
     }
     ```
 
-Without the BOM, give each dependency its version, `2.1.0`. Tileverse needs Java 17 or later, and Maven 3.9 or Gradle 7 or later.
+Without the BOM, give each dependency its version, `2.1.2`. Tileverse needs Java 17 or later, and Maven 3.9 or Gradle 7 or later.
 
 Since 2.2, `io.tileverse:tileverse-dependencies` manages the versions of the third-party libraries used by Tileverse, such as Caffeine, Jackson, JTS and the compression libraries. Import it before `tileverse-bom` to build against the versions tested with Tileverse.
 

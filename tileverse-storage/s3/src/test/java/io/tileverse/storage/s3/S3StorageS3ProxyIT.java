@@ -12,7 +12,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
@@ -20,8 +19,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -39,7 +36,7 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers(disabledWithoutDocker = true)
 class S3StorageS3ProxyIT extends StorageTCK {
 
-    private static final DockerImageName DOCKER_IMAGE_NAME = DockerImageName.parse("andrewgaul/s3proxy:latest");
+    private static final DockerImageName DOCKER_IMAGE_NAME = DockerImageName.parse("andrewgaul/s3proxy:4.2.0");
     private static final String IDENTITY = "s3proxy-access-key";
     private static final String CREDENTIAL = "s3proxy-secret-key";
 
@@ -106,38 +103,6 @@ class S3StorageS3ProxyIT extends StorageTCK {
     @Disabled("s3proxy rejects the x-amz-mp-object-size header of CompleteMultipartUpload")
     @SuppressWarnings({"java:S2699", "java:S1186"})
     protected void multiPartRoundTrip16MiB(@TempDir Path tmp) {}
-
-    /**
-     * Override to skip on s3proxy: its DeleteObjects response omits the per-key {@code <Deleted>} entries, leaving
-     * {@code DeleteResult#deleted()} empty even though the objects are removed. Real S3, Garage and LocalStack report
-     * each deleted key.
-     */
-    @Override
-    @Test
-    @Disabled("s3proxy DeleteObjects response omits the per-key Deleted entries")
-    @SuppressWarnings({"java:S2699", "java:S1186"})
-    protected void deleteAllReportsPerKeyOutcome() {}
-
-    /**
-     * Override to skip on s3proxy: same DeleteObjects reporting limitation as {@link #deleteAllReportsPerKeyOutcome()}.
-     */
-    @Override
-    @Test
-    @Disabled("s3proxy DeleteObjects response omits the per-key Deleted entries")
-    @SuppressWarnings({"java:S2699", "java:S1186"})
-    protected void deleteAllLumpsAllIntoDeletedWhenIncapable() {}
-
-    /**
-     * Override to skip on s3proxy: it answers a {@code 200} to an {@code If-Modified-Since} equal to the
-     * {@code Last-Modified} of the object, where RFC 9110 requires a {@code 304}. S3StorageGarageIT and
-     * S3StorageLocalStackIT run this test.
-     */
-    @Override
-    @ParameterizedTest
-    @MethodSource("conditionalReads")
-    @Disabled("s3proxy answers 200 to an If-Modified-Since equal to the Last-Modified of the object")
-    @SuppressWarnings({"java:S2699", "java:S1186"})
-    protected void readOfUnmodifiedObjectFails(long offset, OptionalLong length) {}
 
     @Override
     protected void cleanUp(Storage s) throws IOException {

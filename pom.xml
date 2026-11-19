@@ -463,7 +463,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.11.2</version>
+          <version>3.12.0</version>
         </plugin>
         <plugin>
           <groupId>com.diffplug.spotless</groupId>
@@ -606,10 +606,6 @@
           <!-- Don't try to auto-detect JavaDoc links from dependencies (prevents errors for BOM modules) -->
           <detectLinks>false</detectLinks>
           <detectOfflineLinks>false</detectOfflineLinks>
-          <!-- Leave the web fonts out of the javadoc jars: they add about 4 MB to each jar. -->
-          <additionalOptions>
-            <additionalOption>--no-fonts</additionalOption>
-          </additionalOptions>
         </configuration>
         <executions>
           <execution>

@@ -25,10 +25,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 /**
- * S3 TCK against an s3proxy container. s3proxy is the strict member of the emulator family: it answers any
- * {@code x-amz-*} header it does not implement with {@code 501 NotImplemented}. In particular it rejects the checksum
- * headers the AWS SDK adds by default since 2.30 ({@code x-amz-checksum-mode}, {@code x-amz-sdk-checksum-algorithm}),
- * making it the emulator that catches checksum-default regressions that MinIO and LocalStack tolerate.
+ * S3 TCK against an s3proxy container. s3proxy answers {@code 501 NotImplemented} to unsupported {@code x-amz-*}
+ * headers, such as the {@code x-amz-mp-object-size} header sent by the SDK with CompleteMultipartUpload. It accepts the
+ * checksum headers added by default by the AWS SDK since 2.30: these tests pass with the SDK defaults in place of the
+ * checksum settings of {@link S3ClientCache}.
  *
  * <p>Credentials are passed as static keys through the {@link S3ClientCache.Key}, no system property mutation is
  * needed. The container uses the in-memory {@code transient} jclouds provider as its backing store.

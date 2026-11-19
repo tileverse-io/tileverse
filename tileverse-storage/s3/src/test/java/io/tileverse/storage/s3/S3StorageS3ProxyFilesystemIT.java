@@ -46,7 +46,12 @@ import software.amazon.awssdk.services.s3.S3AsyncClient;
 @Testcontainers(disabledWithoutDocker = true)
 class S3StorageS3ProxyFilesystemIT {
 
-    private static final DockerImageName DOCKER_IMAGE_NAME = DockerImageName.parse("andrewgaul/s3proxy:latest");
+    /**
+     * The last version serving a file placed in the backend without an ETag. Version 4.2.0 derives an ETag for such a
+     * file from its size, modification time and inode.
+     */
+    private static final DockerImageName DOCKER_IMAGE_NAME = DockerImageName.parse("andrewgaul/s3proxy:4.1.1");
+
     private static final String IDENTITY = "s3proxy-access-key";
     private static final String CREDENTIAL = "s3proxy-secret-key";
     private static final String BACKEND_DIR = "/data";

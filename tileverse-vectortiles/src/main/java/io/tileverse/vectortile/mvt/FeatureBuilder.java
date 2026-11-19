@@ -5,107 +5,114 @@
  */
 package io.tileverse.vectortile.mvt;
 
-import io.tileverse.vectortile.mvt.VectorTileBuilder.BuildParams;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.Consumer;
 import org.locationtech.jts.geom.Geometry;
-import org.locationtech.jts.geom.Lineal;
-import org.locationtech.jts.geom.LinearRing;
-import org.locationtech.jts.geom.Polygon;
-import org.locationtech.jts.geom.Polygonal;
-import org.locationtech.jts.geom.PrecisionModel;
-import org.locationtech.jts.geom.Puntal;
-import org.locationtech.jts.precision.GeometryPrecisionReducer;
 
 /**
- * Builder for creating vector tile features with geometry and attributes.
+ * Builder of a feature of the open layer: an id, attributes and a geometry. The geometry is in tile coordinates, or in
+ * units of the input when the tile builder has an {@link VectorTileBuilder#setInputScale(double) input scale}: the tile
+ * builder multiplies the coordinates by the scale when it rounds them.
  *
- * <p>This builder is reused by LayerBuilder for efficiency, avoiding object creation overhead when building multiple
- * features.
+ * <p>{@link #build()} runs the geometry through the {@link VectorTileBuilder#pipeline() pipeline} of the tile builder
+ * and writes the result into the layer. A {@code GeometryCollection} gives one feature per member, each with the id and
+ * the attributes of the feature. A geometry dropped by a step, or left without commands once rounded, gives no feature.
+ *
+ * <p>A tile is written one layer at a time, and the feature builder writes into the layer of the
+ * {@link LayerBuilder#feature()} call that returned it: it fails once that layer is built or the next layer started. A
+ * layer builder has one feature builder, reset for each feature. It is not thread-safe.
  */
 public class FeatureBuilder {
 
-    // Field numbers of the Feature message of the vector tile schema
-    private static final int FEATURE_ID = 1;
-    private static final int FEATURE_TAGS = 2;
-    private static final int FEATURE_TYPE = 3;
-    private static final int FEATURE_GEOMETRY = 4;
+    /** The id of a feature without one. The feature builder writes no negative id. */
+    static final long NO_ID = -1;
 
+    private final VectorTileBuilder tileBuilder;
+    private final OpenLayer openLayer;
     private final LayerBuilder layerBuilder;
 
-    // The id and the tags of the feature being built. A feature without an id has no id field.
-    private long id;
-    private boolean hasId;
-    private final List<Integer> tags = new ArrayList<>();
+    // The arrays of the tile builder, shared by the feature builders of its layers. The tags are the indexes of the
+    // keys and values of the feature in the tables of the layer.
+    private final CommandEncoder encoder;
+    private final IntArray tags;
 
-    // Holds each feature until the layer copies it
-    private final WireWriter encodedFeature = new WireWriter();
+    // Created once: a method reference in build() would allocate an object per call
+    private final Consumer<Geometry> featureWriter = this::writeFeature;
 
-    private GeometryPrecisionReducer precisionReducer;
+    // The feature being built
+    private long givenId;
     private Geometry geometry;
 
-    private GeometryEncoder encoder;
+    /** The id written with each geometry of the feature, decided at build(), or NO_ID. */
+    private long featureId;
 
-    FeatureBuilder(LayerBuilder layerBuilder) {
+    FeatureBuilder(
+            VectorTileBuilder tileBuilder,
+            OpenLayer openLayer,
+            LayerBuilder layerBuilder,
+            CommandEncoder encoder,
+            IntArray tags) {
+        this.tileBuilder = tileBuilder;
+        this.openLayer = openLayer;
         this.layerBuilder = layerBuilder;
-        PrecisionModel integerPrecision = new PrecisionModel(1.0); // Scale 1.0 = snap to integers
-        precisionReducer = new GeometryPrecisionReducer(integerPrecision);
-        precisionReducer.setRemoveCollapsedComponents(true); // Remove degenerate components
-
-        encoder = new GeometryEncoder(params());
+        this.encoder = encoder;
+        this.tags = tags;
     }
 
-    BuildParams params() {
-        return layerBuilder.params();
-    }
-
-    /**
-     * Reset this feature builder for reuse with a new feature ID. This avoids object creation overhead in tight loops.
-     */
-    FeatureBuilder reset(long id) {
+    /** Starts a feature of the layer: no id, no attributes, no geometry. */
+    FeatureBuilder reset() {
+        givenId = NO_ID;
         tags.clear();
-        this.id = id;
-        hasId = id > -1L;
+        geometry = null;
         return this;
     }
 
     /**
-     * Sets the feature identifier.
+     * Sets the feature identifier. A negative id means no id: the feature gets the next automatic id when automatic ids
+     * are on, and is written without an id otherwise.
      *
      * @param id the feature ID
      * @return this FeatureBuilder for method chaining
+     * @throws IllegalStateException if the layer of this feature is built, or the next layer started
+     * @see VectorTileBuilder#setAutoIncrementIds(boolean)
      */
     public FeatureBuilder id(long id) {
-        this.id = id;
-        hasId = true;
+        layerBuilder.requireOpen();
+        givenId = id;
         return this;
     }
 
     /**
-     * Set the feature geometry. The geometry will be processed at {@link #build()} time and may result in duplicate
-     * features added if pre-processing results in multiple geometries.
+     * Sets the geometry of the feature, in tile coordinates, or in units of the input when the tile builder has an
+     * {@link VectorTileBuilder#setInputScale(double) input scale}. The geometry goes through the pipeline as given at
+     * {@link #build()}, and a {@code GeometryCollection} gives one feature per member. The tile builder multiplies the
+     * coordinates by the scale after the pipeline, when it rounds them.
      *
      * @param geometry a {@link Geometry} for the vector tile feature.
      * @return this FeatureBuilder for method chaining
+     * @throws IllegalStateException if the layer of this feature is built, or the next layer started
      */
     public FeatureBuilder geometry(Geometry geometry) {
+        layerBuilder.requireOpen();
         this.geometry = geometry;
         return this;
     }
 
     /**
-     * Add an attribute to this feature. Attributes are added directly to the tags of the feature as they're set.
+     * Adds an attribute to this feature. The key and the value join the tables of the layer, shared by its features. A
+     * value failing to join them, for example when its {@code toString()} throws, leaves the feature as it was.
      *
      * @param name the attribute name
      * @param value the attribute value (null values are ignored)
      * @return this FeatureBuilder for method chaining
+     * @throws NullPointerException if the name is null
+     * @throws IllegalStateException if the layer of this feature is built, or the next layer started
      */
     public FeatureBuilder attribute(String name, Object value) {
-        if (value != null) {
-            tags.add(layerBuilder.getKeyIndex(name));
-            tags.add(layerBuilder.getValueIndex(value));
-        }
+        Objects.requireNonNull(name, "The name of an attribute cannot be null");
+        layerBuilder.requireOpen();
+        openLayer.addTag(tags, name, value);
         return this;
     }
 
@@ -114,77 +121,68 @@ public class FeatureBuilder {
      *
      * @param attributes map of attribute names to values
      * @return this FeatureBuilder for method chaining
+     * @throws IllegalStateException if the layer of this feature is built, or the next layer started
      */
     public FeatureBuilder attributes(Map<String, Object> attributes) {
+        layerBuilder.requireOpen();
         attributes.forEach(this::attribute);
         return this;
     }
 
     /**
-     * Complete building this feature and add it directly to the parent LayerBuilder.
+     * Runs the geometry through the pipeline and writes the result into the layer, with the id and the attributes of
+     * this builder. A feature without an id gets the next automatic id here, and a given id moves the automatic ids
+     * past it, also when the pipeline drops the feature.
+     *
+     * <p>A feature is written whole or not at all. When a step or the encoding fails, for example on a NaN ordinate,
+     * the members of a collection written before the failure are removed from the layer, and the automatic ids stay as
+     * they were. The exception goes to the caller. The keys and values added by the feature stay in the tables of the
+     * layer: the layer stays valid, with these entries unused.
      *
      * @return the layer builder to either build it or continue adding features
+     * @throws IllegalStateException if the layer of this feature is built, or the next layer started, or if the feature
+     *     has no id and no automatic id is left: see {@link VectorTileBuilder#setAutoIncrementIds(boolean)}. Also when
+     *     a step of the pipeline calls a builder of the tile to change it.
      */
     public LayerBuilder build() {
-
-        List<Geometry> finalGeometries = encoder.prepareGeometries(this.geometry);
-
-        if (finalGeometries.isEmpty()) {
-            // skip empty/ignored geometry
-            return layerBuilder;
-        }
-        if (finalGeometries.size() == 1) {
-            // single-feature to build
-            addFeature(finalGeometries.get(0));
-        } else {
-            // We need to create multiple Fetures as processGeometries resulted in disparate geometry types
-            for (Geometry preparedGeom : finalGeometries) {
-                addFeature(params().getNextFeatureId(), preparedGeom);
-            }
-        }
-
+        layerBuilder.requireOpen();
+        featureId = decideId();
+        runPipeline();
+        tileBuilder.noteFeatureId(featureId);
         return layerBuilder;
     }
 
-    /** Adds a feature with the id and the tags of this builder. */
-    private void addFeature(Geometry geometry) {
-        encodedFeature.clear();
-        if (hasId) {
-            encodedFeature.writeVarint64(FEATURE_ID, id);
+    /** Returns the given id, or the next automatic id when none is given. */
+    private long decideId() {
+        if (givenId < 0) {
+            return tileBuilder.nextFeatureId();
         }
-        writeTagsTypeAndGeometry(geometry);
-        layerBuilder.addFeature(encodedFeature);
+        return givenId;
     }
 
-    /** Adds a feature with its own id, and the tags of this builder. */
-    private void addFeature(long featureId, Geometry geometry) {
-        encodedFeature.clear();
-        encodedFeature.writeVarint64(FEATURE_ID, featureId);
-        writeTagsTypeAndGeometry(geometry);
-        layerBuilder.addFeature(encodedFeature);
-    }
-
-    // The fields after the id, in the order of their field numbers
-    private void writeTagsTypeAndGeometry(Geometry geometry) {
-        GeomType geomType = toGeomType(geometry);
-        List<Integer> commands = encoder.commands(geometry);
-        encodedFeature.writePackedVarints(FEATURE_TAGS, tags);
-        encodedFeature.writeVarint32(FEATURE_TYPE, geomType.number());
-        encodedFeature.writePackedVarints(FEATURE_GEOMETRY, commands);
-    }
-
-    private static GeomType toGeomType(Geometry geometry) {
-        if (geometry instanceof Puntal) {
-            return GeomType.POINT;
-        } else if (geometry instanceof Lineal) {
-            return GeomType.LINESTRING;
-        } else if (geometry instanceof Polygonal) {
-            return GeomType.POLYGON;
+    /** Runs the pipeline on the geometry, and removes what it wrote into the layer when it fails, also on an Error. */
+    private void runPipeline() {
+        WireWriter features = openLayer.features();
+        int sizeBefore = features.size();
+        boolean completed = false;
+        try {
+            tileBuilder.runPipeline(geometry, featureWriter);
+            completed = true;
+        } finally {
+            if (!completed) {
+                features.truncate(sizeBefore);
+            }
         }
-        return GeomType.UNKNOWN;
     }
 
-    static boolean shouldClosePath(Geometry geometry) {
-        return (geometry instanceof Polygon) || (geometry instanceof LinearRing);
+    /** Writes a geometry returned by the pipeline as a feature of the layer, unless it has no commands once rounded. */
+    private void writeFeature(Geometry part) {
+        if (encoder.encode(part, tileBuilder.inputScale())) {
+            openLayer.writeFeature(hasId(), featureId, tags, encoder);
+        }
+    }
+
+    private boolean hasId() {
+        return featureId >= 0;
     }
 }

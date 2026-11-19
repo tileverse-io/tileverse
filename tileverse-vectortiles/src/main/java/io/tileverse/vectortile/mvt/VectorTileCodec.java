@@ -11,6 +11,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.function.UnaryOperator;
 import org.locationtech.jts.geom.GeometryFactory;
 
@@ -18,12 +20,24 @@ import org.locationtech.jts.geom.GeometryFactory;
  * Codec for serializing and deserializing vector tiles between model objects and byte representations.
  *
  * <p>This class handles the conversion between the abstract {@link VectorTile} model and the MVT protobuf format,
- * without any coordinate transformations or scaling logic. The codec simply reads and writes data as-is.
+ * without any coordinate transformations or scaling logic. The codec reads and writes the coordinates in the extent of
+ * each layer.
  *
  * <h2>Design Philosophy</h2>
  *
  * <p>The codec simply converts between the model and the encoded bytes. Coordinates are always preserved in their
  * natural extent space, as stored in the tile.
+ *
+ * <h2>Encoding</h2>
+ *
+ * <p>A tile decoded by this codec or built by a {@link VectorTileBuilder} holds its encoded bytes, and the encode
+ * methods write them as they are. Another {@link VectorTile} implementation is written one layer at a time, each layer
+ * with its own extent, as {@link LayerBuilder#merge(VectorTile.Layer)} writes the features of a layer: without the
+ * steps of a pipeline, with the coordinates rounded, and without an id for a feature of id 0. A negative id stands for
+ * an id of 2^63 or above, and is written as its unsigned value. The encode methods fail with an
+ * {@link IllegalArgumentException} on a layer without a name, and on two layers of one name, also when one of them has
+ * no features: the MVT specification forbids two layers of one name in a tile. They fail the same way on a name with an
+ * unpaired surrogate: UTF-8 has no encoding for it.
  *
  * <h2>Malformed Geometries</h2>
  *
@@ -117,9 +131,14 @@ public class VectorTileCodec {
      *
      * @param tile the tile model to encode
      * @return the encoded vector tile as a byte array
+     * @throws IllegalArgumentException if another implementation has a layer without a name, or two layers of one name,
+     *     as described in the class documentation
      */
     public byte[] encode(VectorTile tile) {
-        return encodedBytes(tile).clone();
+        if (tile instanceof MvtTile mvt) {
+            return mvt.bytes().clone();
+        }
+        return builderOf(tile).toByteArray();
     }
 
     /**
@@ -129,9 +148,15 @@ public class VectorTileCodec {
      * @param tile the tile model to encode
      * @param outputStream the stream to write the encoded tile to
      * @throws IOException if writing to the stream fails
+     * @throws IllegalArgumentException if another implementation has a layer without a name, or two layers of one name,
+     *     as described in the class documentation
      */
     public void encode(VectorTile tile, OutputStream outputStream) throws IOException {
-        outputStream.write(encodedBytes(tile));
+        if (tile instanceof MvtTile mvt) {
+            outputStream.write(mvt.bytes());
+        } else {
+            builderOf(tile).writeTo(outputStream);
+        }
     }
 
     /**
@@ -143,6 +168,8 @@ public class VectorTileCodec {
      * @param buffer the ByteBuffer to write the encoded tile to
      * @throws InsufficientBufferException if the buffer has insufficient space, containing the
      *     {@link InsufficientBufferException#getSerializedSize() required size} for proper buffer allocation
+     * @throws IllegalArgumentException if another implementation has a layer without a name, or two layers of one name,
+     *     as described in the class documentation
      */
     public void encode(VectorTile tile, ByteBuffer buffer) throws IOException {
         byte[] encoded = encodedBytes(tile);
@@ -154,10 +181,12 @@ public class VectorTileCodec {
 
     /**
      * Returns the size of the encoded tile. A decoded or built tile holds its encoded bytes, and the size costs nothing
-     * to compute.
+     * to compute. Another implementation is encoded to measure it.
      *
      * @param tile the tile model to calculate size for
      * @return the size in bytes that the encoded tile will occupy
+     * @throws IllegalArgumentException if another implementation has a layer without a name, or two layers of one name,
+     *     as described in the class documentation
      */
     public int getSerializedSize(VectorTile tile) {
         return encodedBytes(tile).length;
@@ -214,13 +243,35 @@ public class VectorTileCodec {
 
     // ========== Private Helper Methods ==========
 
-    /** Returns the encoded bytes held by the tile. The encode methods write them or return a copy. */
+    /**
+     * Returns the encoded bytes held by a decoded or built tile, without a copy, or the bytes of another implementation
+     * once encoded.
+     */
     private static byte[] encodedBytes(VectorTile tile) {
         if (tile instanceof MvtTile mvt) {
             return mvt.bytes();
         }
-        // TODO: build an MvtTile from a generic Tile
-        throw new UnsupportedOperationException("Generic Tile to MVT conversion not yet implemented");
+        return builderOf(tile).toByteArray();
+    }
+
+    /**
+     * Returns a builder holding the layers of another implementation. Each layer keeps its extent, its features skip
+     * the pipeline, and no feature gets an automatic id.
+     *
+     * @throws IllegalArgumentException if a layer has no name, or the name of a layer before it, also of a layer
+     *     without features
+     */
+    private static VectorTileBuilder builderOf(VectorTile tile) {
+        VectorTileBuilder builder = new VectorTileBuilder().setAutoIncrementIds(false);
+        Set<String> names = new HashSet<>();
+        for (VectorTile.Layer layer : tile.getLayers()) {
+            String name = layer.getName();
+            VectorTileBuilder.requireLayerName(name);
+            VectorTileBuilder.requireNameNotRepeated(names, name);
+            builder.setExtent(layer.getExtent());
+            builder.layer().name(name).merge(layer).build();
+        }
+        return builder;
     }
 
     /**

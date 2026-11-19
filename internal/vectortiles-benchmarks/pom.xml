@@ -10,10 +10,10 @@
 
   <artifactId>tileverse-vectortiles-benchmarks</artifactId>
   <name>Tileverse :: Internal :: Vector Tile Benchmarks</name>
-  <description>JMH benchmarks of vector tile decoding by tileverse and by java-vector-tile. The benchmarks profile builds the runnable jar.</description>
+  <description>JMH benchmarks of vector tile decoding and writing by tileverse and by java-vector-tile, and a test checking the tiles written by tileverse against those written by java-vector-tile. The benchmarks profile builds the runnable jar.</description>
 
   <properties>
-    <!-- The benchmarks have no tests. -->
+    <!-- The benchmarks and the measurement programs run from run-benchmarks.sh, outside the tests: coverage is not measured. -->
     <sonar.coverage.exclusions>**/*</sonar.coverage.exclusions>
   </properties>
 
@@ -48,6 +48,14 @@
       <artifactId>jmh-generator-annprocess</artifactId>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <!-- The geometry helpers of the tests of tileverse-vectortiles -->
+      <groupId>io.tileverse.vectortiles</groupId>
+      <artifactId>tileverse-vectortiles</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <repositories>
@@ -79,6 +87,20 @@
               <artifactId>jmh-generator-annprocess</artifactId>
             </path>
           </annotationProcessorPaths>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!--
+          The directories of the tiles of the parity test: the tiles committed in tileverse-vectortiles, and the tiles
+          downloaded by run-benchmarks.sh.
+          -->
+          <systemPropertyVariables>
+            <tileverse.vectortiles.testResources>${project.basedir}/../../tileverse-vectortiles/src/test/resources</tileverse.vectortiles.testResources>
+            <tileverse.benchmarks.tiles>${project.basedir}/tiles</tileverse.benchmarks.tiles>
+          </systemPropertyVariables>
         </configuration>
       </plugin>
     </plugins>

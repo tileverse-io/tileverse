@@ -651,8 +651,9 @@
               </includes>
               <excludes>
                 <exclude>src/main/java/io/tileverse/vectortile/mvt/GeometryCommand.java</exclude>
-                <exclude>src/main/java/io/tileverse/vectortile/mvt/GeometryEncoder.java</exclude>
                 <exclude>src/main/java/io/tileverse/vectortile/mvt/VectorTileBuilder.java</exclude>
+                <exclude>src/main/java/io/tileverse/vectortile/pipeline/ClipStep.java</exclude>
+                <exclude>src/main/java/io/tileverse/vectortile/pipeline/SimplificationStep.java</exclude>
                 <exclude>src/test/java/io/tileverse/vectortile/mvt/VectorTileBuilderTest.java</exclude>
                 <exclude>src/test/java/io/tileverse/vectortile/mvt/VectorTileCodecTest.java</exclude>
                 <exclude>src/test/java/io/tileverse/vectortile/mvt/VectorTileProto.java</exclude>

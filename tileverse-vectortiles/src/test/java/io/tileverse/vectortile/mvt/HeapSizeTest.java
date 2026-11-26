@@ -6,9 +6,16 @@
 package io.tileverse.vectortile.mvt;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.time.LocalDate;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class HeapSizeTest {
 
@@ -48,10 +55,24 @@ class HeapSizeTest {
         assertThat(HeapSize.value("abc")).isEqualTo(48);
     }
 
-    @Test
-    void rejectsOtherValueTypes() {
-        Integer value = Integer.valueOf(1000);
+    @ParameterizedTest
+    @MethodSource("otherValueTypes")
+    void sizesOtherValueTypes(Object value, long expected) {
+        assertThat(HeapSize.value(value)).isEqualTo(expected);
+    }
 
-        assertThatIllegalArgumentException().isThrownBy(() -> HeapSize.value(value));
+    static Stream<Arguments> otherValueTypes() {
+        return Stream.of(
+                Arguments.of(Integer.valueOf(1000), 16L),
+                Arguments.of(Short.valueOf((short) 1000), 16L),
+                Arguments.of(Byte.valueOf((byte) 100), 16L),
+                Arguments.of(Character.valueOf('c'), 16L),
+                Arguments.of(new BigDecimal("1.10"), HeapSize.string("1.10")),
+                // 2^1000 has 1001 bits: 32 ints of magnitude, after the 40 bytes of the object
+                Arguments.of(BigInteger.ONE.shiftLeft(1000), 40 + HeapSize.array(Integer.BYTES, 32)),
+                // -2^64 has 64 bits in two's complement, and its magnitude 2^64 takes 65 bits: 3 ints
+                Arguments.of(BigInteger.ONE.shiftLeft(64).negate(), 40 + HeapSize.array(Integer.BYTES, 3)),
+                Arguments.of(new AtomicLong(1000), 24L),
+                Arguments.of(LocalDate.of(2026, 11, 5), HeapSize.string("2026-11-05")));
     }
 }

@@ -28,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
 import io.tileverse.vectortile.model.GeometryReader;
@@ -940,11 +939,101 @@ class VectorTileCodecTest {
         assertThat(buffer.position()).isZero();
     }
 
+    // The length of the field is 0 too: the merge leaves out a feature without geometry commands
     @Test
-    void testEncodeOtherTileFails() {
-        VectorTile other = mock(VectorTile.class);
+    void writesNoEmptyGeometryField() throws IOException {
+        // id 1, type POINT, no geometry field
+        byte[] tile = tileWithFeature(new byte[] {0x08, 0x01, 0x18, 0x01});
+        MvtFeature feature = (MvtFeature) onlyFeature(tile);
+        WireWriter target = new WireWriter();
 
-        assertThatThrownBy(() -> codec.encode(other)).isInstanceOf(UnsupportedOperationException.class);
+        feature.writeGeometryField(target);
+
+        assertThat(feature.geometryFieldLength()).isZero();
+        assertThat(target.isEmpty()).isTrue();
+    }
+
+    // The tile has no ids: another implementation writes the id 0 of the model as no id, and the decoder reads it as 0
+    @Test
+    void encodesOtherTile() throws IOException {
+        VectorTile source = codec.decode(resource("cells-11-1058-568.mvt"));
+
+        byte[] bytes = codec.encode(new DelegatingTile(source));
+
+        RoundTripAssertions.assertSameFeatures(codec.decode(bytes), source);
+    }
+
+    // The layer of the other implementation hands out the empty name of the decoded layer
+    @Test
+    void encodeRejectsUnnamedLayer() throws IOException {
+        byte[] point = new ProtoWriter()
+                .varintField(FEATURE_TYPE, POINT)
+                .packedField(FEATURE_GEOMETRY, 9, 50, 34)
+                .toByteArray();
+        byte[] layer = new ProtoWriter()
+                .varintField(LAYER_VERSION, 2)
+                .stringField(LAYER_NAME, "")
+                .bytesField(LAYER_FEATURE, point)
+                .toByteArray();
+        byte[] tile = new ProtoWriter().bytesField(TILE_LAYER, layer).toByteArray();
+        VectorTile other = new DelegatingTile(codec.decode(tile));
+
+        assertThatThrownBy(() -> codec.encode(other)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // The first layer of the name has no features, and the tile would leave it out
+    @Test
+    void encodeRejectsRepeatedName() throws IOException {
+        byte[] point = new ProtoWriter()
+                .varintField(FEATURE_TYPE, POINT)
+                .packedField(FEATURE_GEOMETRY, 9, 50, 34)
+                .toByteArray();
+        byte[] emptyLayer = new ProtoWriter()
+                .varintField(LAYER_VERSION, 2)
+                .stringField(LAYER_NAME, "points")
+                .toByteArray();
+        byte[] layer = new ProtoWriter()
+                .varintField(LAYER_VERSION, 2)
+                .stringField(LAYER_NAME, "points")
+                .bytesField(LAYER_FEATURE, point)
+                .toByteArray();
+        byte[] tile = new ProtoWriter()
+                .bytesField(TILE_LAYER, emptyLayer)
+                .bytesField(TILE_LAYER, layer)
+                .toByteArray();
+        VectorTile other = new DelegatingTile(codec.decode(tile));
+
+        assertThatThrownBy(() -> codec.encode(other))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("two layers named points");
+    }
+
+    @Test
+    void encodesOtherTileToStream() throws IOException {
+        VectorTile other = new DelegatingTile(codec.decode(resource("cells-11-1058-568.mvt")));
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+
+        codec.encode(other, stream);
+
+        assertThat(stream.toByteArray()).isEqualTo(codec.encode(other));
+    }
+
+    @Test
+    void encodesOtherTileToBuffer() throws IOException {
+        VectorTile other = new DelegatingTile(codec.decode(resource("cells-11-1058-568.mvt")));
+        byte[] bytes = codec.encode(other);
+        ByteBuffer buffer = ByteBuffer.allocate(bytes.length);
+
+        codec.encode(other, buffer);
+
+        assertThat(buffer.array()).isEqualTo(bytes);
+    }
+
+    @Test
+    void sizesOtherTile() throws IOException {
+        VectorTile other = new DelegatingTile(codec.decode(resource("cells-11-1058-568.mvt")));
+
+        assertThat(codec.getSerializedSize(other)).isEqualTo(codec.encode(other).length);
     }
 
     // Keys, values and coordinates take memory twice: in the tile bytes, and decoded. The second tile holds more

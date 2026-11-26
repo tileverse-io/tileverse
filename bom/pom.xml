@@ -62,6 +62,11 @@
         <version>${project.version}</version>
       </dependency>
       <dependency>
+        <groupId>io.tileverse.compression</groupId>
+        <artifactId>tileverse-compression</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
         <groupId>io.tileverse.pmtiles</groupId>
         <artifactId>tileverse-pmtiles</artifactId>
         <version>${project.version}</version>

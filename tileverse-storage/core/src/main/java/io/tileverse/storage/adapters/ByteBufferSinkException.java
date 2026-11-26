@@ -5,17 +5,16 @@
  */
 package io.tileverse.storage.adapters;
 
-import java.io.IOException;
-
 /**
- * Signals that a {@link ByteBufferOutputStream} could not take the bytes offered to it: the producer sent more than the
- * accepted count or wrote after the stream was closed, or the target buffer refused the write. None is an I/O failure
- * of the producer, and retrying the download does not help.
+ * Signals that a {@link ByteBufferOutputStream} could not take the bytes offered to it.
  *
- * <p>Checked, because the sink lives inside SDK download pipelines that propagate an {@link IOException} raised by the
- * stream but may drop anything else, leaving the read to wait out its timeout.
+ * @deprecated moved to {@link io.tileverse.io.ByteBufferSinkException} in the tileverse-io module, and removed in
+ *     2.3.0
  */
-public final class ByteBufferSinkException extends IOException {
+@Deprecated(since = "2.2", forRemoval = true)
+// The deprecated 2.1 name, kept until 2.3.0, shadows the class it extends
+@SuppressWarnings({"java:S1133", "java:S2176"})
+public final class ByteBufferSinkException extends io.tileverse.io.ByteBufferSinkException {
 
     private static final long serialVersionUID = 1L;
 

@@ -3,7 +3,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-package io.tileverse.compression;
+package io.tileverse.io;
 
 import io.tileverse.io.ByteBufferPool.PooledByteBuffer;
 import java.io.IOException;
@@ -17,7 +17,7 @@ import org.jspecify.annotations.Nullable;
  * read, as the JDK streams do. For a pooled buffer, this also protects the next borrower: closing the stream returns
  * the buffer to its pool.
  */
-final class ByteBufferInputStream extends InputStream {
+public final class ByteBufferInputStream extends InputStream {
 
     private final ByteBuffer buffer;
 
@@ -31,12 +31,12 @@ final class ByteBufferInputStream extends InputStream {
     }
 
     /** Returns a stream over {@code buffer}. The caller keeps ownership of the buffer. */
-    static ByteBufferInputStream over(ByteBuffer buffer) {
+    public static ByteBufferInputStream over(ByteBuffer buffer) {
         return new ByteBufferInputStream(buffer, null);
     }
 
     /** Returns a stream over the buffer of {@code pooled}. Closing the stream returns the buffer to its pool. */
-    static ByteBufferInputStream releasing(PooledByteBuffer pooled) {
+    public static ByteBufferInputStream releasing(PooledByteBuffer pooled) {
         return new ByteBufferInputStream(pooled.buffer(), pooled);
     }
 

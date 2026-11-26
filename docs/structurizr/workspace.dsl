@@ -153,6 +153,14 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
                 }
             }
 
+            ioModule = container "tileverse-io" "ByteBufferPool, ByteRange, and stream and channel adapters over buffers" "Java 17" {
+                tags "Module"
+            }
+
+            cacheModule = container "tileverse-cache" "Named in-memory caches with shared statistics, backed by Caffeine" "Java 17" {
+                tags "Module"
+            }
+
             compressionModule = container "tileverse-compression" "gzip, Brotli and Zstandard codecs, with native libraries and pure-Java fallbacks" "Java 17" {
                 tags "Module"
             }
@@ -267,7 +275,12 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
         versatilesModule -> vectortilesModule "Decodes MVT tiles with"
         versatilesModule -> tilestoreModule "Implements TileStore<T> via VectorTileStore / RasterTileStore"
         versatilesModule -> compressionModule "Decompresses tiles, metadata and indexes with"
-        compressionModule -> coreModule "Takes buffers for decoded gzip bytes from ByteBufferPool"
+        compressionModule -> ioModule "Takes buffers for decoded gzip bytes from ByteBufferPool"
+        coreModule -> ioModule "Borrows read buffers from ByteBufferPool"
+        coreModule -> cacheModule "Caches byte ranges with"
+        pmtilesModule -> cacheModule "Caches parsed directories with"
+        versatilesModule -> cacheModule "Caches parsed block indexes with"
+        tilestoreModule -> cacheModule "Caches decoded tiles with"
 
         tilestoreModule -> tilematrixsetModule "Builds on TileMatrixSet"
         tilestoreModule -> vectortilesModule "Returns VectorTile from VectorTileStore"

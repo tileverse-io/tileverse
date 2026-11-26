@@ -4,7 +4,7 @@ Tileverse is a set of loosely coupled libraries. Each module works on its own, f
 
 ## Module map
 
-The Tileverse monorepo ships seven library modules and two BOMs. Three are independent of each other: `tileverse-storage`, `tileverse-vectortiles` and `tileverse-tilematrixset`. `tileverse-tilestore` builds on the format and grid libraries. `tileverse-compression` holds the gzip, Brotli and Zstandard codecs and takes its buffers from `tileverse-storage`. The archive readers `tileverse-pmtiles` and `tileverse-versatiles` depend on all the others (`tileverse-storage` for I/O, `tileverse-compression` for decompression, `tileverse-vectortiles` for MVT decoding, `tileverse-tilematrixset` for grid math, `tileverse-tilestore` for the high-level tile-store wrappers).
+The Tileverse monorepo ships nine library modules and two BOMs. Two foundation modules hold the code shared by the others: `tileverse-io` has the byte buffer pool and the stream and channel adapters over buffers, and `tileverse-cache` has the in-memory caches. Three modules are independent of each other: `tileverse-storage`, `tileverse-vectortiles` and `tileverse-tilematrixset`. `tileverse-tilestore` builds on the format and grid libraries. `tileverse-compression` holds the gzip, Brotli and Zstandard codecs and takes its buffers from `tileverse-io`. The archive readers `tileverse-pmtiles` and `tileverse-versatiles` depend on all the others (`tileverse-storage` for I/O, `tileverse-cache` for their caches of parsed directories and indexes, `tileverse-compression` for decompression, `tileverse-vectortiles` for MVT decoding, `tileverse-tilematrixset` for grid math, `tileverse-tilestore` for the high-level tile-store wrappers).
 
 ```mermaid
 graph TD
@@ -16,6 +16,11 @@ graph TD
         ST[tileverse-storage<br/>Storage + RangeReader]
         VT[tileverse-vectortiles]
         TMS[tileverse-tilematrixset]
+    end
+
+    subgraph "Foundation"
+        IO[tileverse-io<br/>ByteBufferPool]
+        CACHE[tileverse-cache]
     end
 
     subgraph "Cross-cutting"
@@ -35,22 +40,28 @@ graph TD
     App --> PMT
     App --> VER
 
+    ST --> IO
+    ST --> CACHE
+
     TS --> VT
     TS --> TMS
+    TS --> CACHE
 
-    CMP --> ST
+    CMP --> IO
 
     PMT --> ST
     PMT --> VT
     PMT --> TMS
     PMT --> TS
     PMT --> CMP
+    PMT --> CACHE
 
     VER --> ST
     VER --> VT
     VER --> TMS
     VER --> TS
     VER --> CMP
+    VER --> CACHE
 ```
 
 ## System context
@@ -107,7 +118,7 @@ The Module column names the modules declaring each dependency.
 | Library | Usage | Module |
 | :--- | :--- | :--- |
 | **[JTS Topology Suite](https://github.com/locationtech/jts)** | Geometry model (Points, Polygons, etc.) | `vectortiles`, `tilestore` |
-| **[Caffeine](https://github.com/ben-manes/caffeine)** | High-performance in-memory caching | `storage-core`, `tilestore`, `pmtiles`, `versatiles` |
+| **[Caffeine](https://github.com/ben-manes/caffeine)** | High-performance in-memory caching | `cache`, `storage-core`, `tilestore`, `pmtiles`, `versatiles` |
 | **[Jackson](https://github.com/FasterXML/jackson)** 3 | JSON encodings (OGC TMS, TileJSON, PMTiles and Versatiles metadata) | `tilematrixset`, `tilestore`, `pmtiles`, `versatiles` |
 | **[webp-imageio](https://github.com/usefulness/webp-imageio)** | `ImageIO` plugin for WebP-encoded raster tiles (registered via JDK SPI; ships native libs for Linux and macOS on x86_64 and arm64, and for Windows on x86 and x86_64) | `pmtiles`, `versatiles` |
 | **[Brotli4j](https://github.com/hyperxpro/Brotli4j)** | Native Brotli decoder for tiles, directories and indexes (native libraries for Linux and macOS on x86_64 and arm64, and for Windows on x86_64) | `compression` |

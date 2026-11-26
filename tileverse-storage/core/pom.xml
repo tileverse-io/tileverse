@@ -13,7 +13,15 @@
   <description>Core storage interfaces and implementations including file, HTTP, caching, and block alignment</description>
 
   <dependencies>
-    <!-- Caching -->
+    <dependency>
+      <groupId>io.tileverse.io</groupId>
+      <artifactId>tileverse-io</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.tileverse.cache</groupId>
+      <artifactId>tileverse-cache</artifactId>
+    </dependency>
+    <!-- The byte-range cache -->
     <dependency>
       <groupId>com.github.ben-manes.caffeine</groupId>
       <artifactId>caffeine</artifactId>

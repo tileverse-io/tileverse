@@ -5,6 +5,7 @@
  */
 package io.tileverse.compression;
 
+import io.tileverse.io.ByteBufferInputStream;
 import com.fulcrumgenomics.jlibdeflate.DecompressionResult;
 import com.fulcrumgenomics.jlibdeflate.LibdeflateDecompressor;
 import com.fulcrumgenomics.jlibdeflate.LibdeflateException;

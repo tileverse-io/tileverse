@@ -3,7 +3,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-package io.tileverse.storage.adapters;
+package io.tileverse.io;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -280,6 +280,20 @@ class ReadableByteChannelDataInputTest {
             assertThat(dataInput.readLine()).isEqualTo("Line 3");
             assertThat(dataInput.readLine()).isEqualTo("Line 4");
             assertThat(dataInput.readLine()).isNull(); // End of file
+        }
+    }
+
+    // The buffer ends at the \r: the peek at the next byte refills the buffer
+    @Test
+    void readLineCrAtBufferEnd() throws IOException {
+        Files.write(testFile, "a\rb\n".getBytes());
+
+        try (ReadableByteChannel channel = Files.newByteChannel(testFile, StandardOpenOption.READ)) {
+            DataInput dataInput = ReadableByteChannelDataInput.of(channel, 2);
+
+            assertThat(dataInput.readLine()).isEqualTo("a");
+            assertThat(dataInput.readLine()).isEqualTo("b");
+            assertThat(dataInput.readLine()).isNull();
         }
     }
 

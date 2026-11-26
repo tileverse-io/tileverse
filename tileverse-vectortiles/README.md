@@ -20,7 +20,7 @@ A high-performance Java library for reading and writing [Mapbox Vector Tiles](ht
 - **Custom GeometryFactory Support**: Configure coordinate sequence implementations
 - **Generic GeometryCollection Handling**: Automatic decomposition into multiple features
 - **Coordinate Validation**: Automatic bounds checking and invalid geometry filtering
-- **Thread Safety**: All components designed for concurrent usage
+- **Thread Safety**: The codec and the decoded tiles are safe for concurrent use. The builders are not.
 
 ## Quick Start
 
@@ -240,20 +240,18 @@ void testTileCreation() {
 
 - **Memory Efficient**: Streaming construction avoids intermediate collections
 - **Optimized Encoding**: Direct OutputStream/ByteBuffer encoding avoids byte array allocation
-- **Fast Decoding**: Heavily optimized geometry decoder shows ~2.5x performance improvement over original java-vector-tile library (9.0s vs 23.2s on large tile benchmark)
-- **Minimal Allocations**: Reuses objects where possible with configurable GeometryFactory
-- **Protobuf Lite**: Uses protobuf-javalite for reduced binary size and faster serialization
-- **Thread Safe**: All components safe for concurrent use
+- **Fast Decoding**: A feature builds its JTS geometry and decodes its attributes when asked
+- **Compact Decoded Tiles**: A decoded tile holds its bytes, an index of its layers and features, and the packed coordinates of its geometries
+- **No Protobuf Runtime**: Reads and writes the MVT wire format itself
+- **Thread Safe**: The codec and the decoded tiles are safe for concurrent use. The builders are not.
 
 ### Performance Improvements
 
 This library builds upon the original [Electronic Chart Centre's java-vector-tile](https://github.com/ElectronicChartCentre/java-vector-tile) with significant optimizations:
 
-- **Geometry decoding**: ~2.5x faster coordinate sequence processing
 - **Memory usage**: Reduced object allocation with streaming patterns
-- **Binary size**: Smaller footprint with protobuf-javalite dependency
 
-*Note: Performance numbers from `VectorTileCodecTest.testBigTile(1000)` benchmark (9077ms vs 23215ms). Comprehensive JMH benchmarks are planned for future releases.*
+The [decode benchmarks](../internal/vectortiles-benchmarks/README.md) measure the decoding time and allocation of both libraries on public tiles.
 
 ### Encoding Performance Tips
 
@@ -284,7 +282,6 @@ Full compliance with the [Mapbox Vector Tile Specification 2.1](https://github.c
 - **Java 17+** (runtime)
 - **Java 21+** (development)
 - **JTS Topology Suite** for geometry operations
-- **Protocol Buffers Java Lite** for efficient MVT serialization
 
 ## License
 

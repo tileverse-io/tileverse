@@ -61,12 +61,8 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
     }
 
     /**
-     * Assert that the MVT Feature does not have the tag for the given attribute name This is different from
-     * {@link #hasAttribute(String)} in that this method checks the internal
-     * {@link VectorTileProto.Tile.Feature#getTagsList} does not contain a tag for a layer's
-     * {@link io.tileverse.vectortile.mvt.VectorTileProto.Tile.Layer#getKeysList key}, whereas
-     * {@link #hasAttribute(String)} works on the "unified feature type model" {@link Layer#getAttributeNames()}
-     * returning {@code null} when asking a feature for an attribute whos'e tag it doesn't have
+     * Asserts that the feature has no tag for the attribute: the map of {@link Feature#getAttributes()} has no entry
+     * with this name. {@link #hasAttribute(String, Object)} with a null value passes for a missing tag too.
      */
     public FeatureAssertions doesNotHaveTag(String name) {
         isNotNull();
@@ -472,41 +468,38 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
         }
 
         /**
-         * Assert that the MVT feature has a POINT geometry type. This checks the protobuf GeomType, complementing the
-         * JTS geometry type check from the parent class.
+         * Assert that the MVT feature has a POINT geometry type. This checks the MVT GeomType, complementing the JTS
+         * geometry type check from the parent class.
          */
         public FeatureGeometryAssertions hasPointMvtType() {
-            VectorTileProto.Tile.Feature protoFeature = getProtoFeature();
-            Assertions.assertThat(protoFeature.getType())
-                    .overridingErrorMessage(
-                            "Expected MVT feature type to be POINT but was <%s>", protoFeature.getType())
-                    .isEqualTo(VectorTileProto.Tile.GeomType.POINT);
+            GeomType type = mvtFeature().geometryType();
+            Assertions.assertThat(type)
+                    .overridingErrorMessage("Expected MVT feature type to be POINT but was <%s>", type)
+                    .isEqualTo(GeomType.POINT);
             return this;
         }
 
         /**
-         * Assert that the MVT feature has a LINESTRING geometry type. This checks the protobuf GeomType, complementing
-         * the JTS geometry type check from the parent class.
-         */
-        public FeatureGeometryAssertions hasLinestringMvtType() {
-            VectorTileProto.Tile.Feature protoFeature = getProtoFeature();
-            Assertions.assertThat(protoFeature.getType())
-                    .overridingErrorMessage(
-                            "Expected MVT feature type to be LINESTRING but was <%s>", protoFeature.getType())
-                    .isEqualTo(VectorTileProto.Tile.GeomType.LINESTRING);
-            return this;
-        }
-
-        /**
-         * Assert that the MVT feature has a POLYGON geometry type. This checks the protobuf GeomType, complementing the
+         * Assert that the MVT feature has a LINESTRING geometry type. This checks the MVT GeomType, complementing the
          * JTS geometry type check from the parent class.
          */
+        public FeatureGeometryAssertions hasLinestringMvtType() {
+            GeomType type = mvtFeature().geometryType();
+            Assertions.assertThat(type)
+                    .overridingErrorMessage("Expected MVT feature type to be LINESTRING but was <%s>", type)
+                    .isEqualTo(GeomType.LINESTRING);
+            return this;
+        }
+
+        /**
+         * Assert that the MVT feature has a POLYGON geometry type. This checks the MVT GeomType, complementing the JTS
+         * geometry type check from the parent class.
+         */
         public FeatureGeometryAssertions hasPolygonMvtType() {
-            VectorTileProto.Tile.Feature protoFeature = getProtoFeature();
-            Assertions.assertThat(protoFeature.getType())
-                    .overridingErrorMessage(
-                            "Expected MVT feature type to be POLYGON but was <%s>", protoFeature.getType())
-                    .isEqualTo(VectorTileProto.Tile.GeomType.POLYGON);
+            GeomType type = mvtFeature().geometryType();
+            Assertions.assertThat(type)
+                    .overridingErrorMessage("Expected MVT feature type to be POLYGON but was <%s>", type)
+                    .isEqualTo(GeomType.POLYGON);
             return this;
         }
 
@@ -542,8 +535,8 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
 
         /** Finalize the command sequence verification. */
         public FeatureGeometryAssertions matches() {
-            VectorTileProto.Tile.Feature protoFeature = getProtoFeature();
-            List<DecodedCommand> actualCommands = decodeFeatureCommands(protoFeature);
+            List<DecodedCommand> actualCommands =
+                    decodeFeatureCommands(mvtFeature().geometryCommands());
 
             // Provide detailed error message showing exactly where the mismatch occurs
             if (!actualCommands.equals(expectedCommands)) {
@@ -601,31 +594,28 @@ class FeatureAssertions extends AbstractAssert<FeatureAssertions, Feature> {
             return parentFeature.tile();
         }
 
-        private VectorTileProto.Tile.Feature getProtoFeature() {
-            if (feature instanceof io.tileverse.vectortile.mvt.MvtFeature mvtFeature) {
-                return (VectorTileProto.Tile.Feature) mvtFeature.featureProto;
+        private MvtFeature mvtFeature() {
+            if (feature instanceof MvtFeature mvtFeature) {
+                return mvtFeature;
             }
             throw new UnsupportedOperationException("Geometry assertion only supports MvtFeature instances");
         }
 
-        private List<DecodedCommand> decodeFeatureCommands(VectorTileProto.Tile.Feature protoFeature) {
+        private List<DecodedCommand> decodeFeatureCommands(VarintCursor geometry) {
             List<DecodedCommand> commands = new ArrayList<>();
-            com.google.protobuf.Internal.IntList geometryList =
-                    (com.google.protobuf.Internal.IntList) protoFeature.getGeometryList();
 
             int cursorX = 0;
             int cursorY = 0;
-            int cmdIndex = 0;
 
-            while (cmdIndex < geometryList.size()) {
-                int cmd = geometryList.getInt(cmdIndex++);
+            while (geometry.hasNext()) {
+                int cmd = geometry.next();
                 int command = extractCommand(cmd);
                 int count = extractCount(cmd);
 
                 if (command == GeometryCommand.MoveTo || command == GeometryCommand.LineTo) {
                     for (int i = 0; i < count; i++) {
-                        int dx = decodeZigZag32(geometryList.getInt(cmdIndex++));
-                        int dy = decodeZigZag32(geometryList.getInt(cmdIndex++));
+                        int dx = decodeZigZag32(geometry.next());
+                        int dy = decodeZigZag32(geometry.next());
                         cursorX += dx;
                         cursorY += dy;
                         commands.add(new DecodedCommand(command, cursorX, cursorY));

@@ -117,7 +117,7 @@ workspace "Tileverse" "Architecture documentation for the Tileverse Java librari
             }
 
             # === Other Tileverse modules ===
-            vectortilesModule = container "tileverse-vectortiles" "Mapbox Vector Tiles (MVT) codec: encode/decode between MVT bytes and a JTS-backed model" "Java 17, Protocol Buffers, JTS" {
+            vectortilesModule = container "tileverse-vectortiles" "Mapbox Vector Tiles (MVT) codec: encode/decode between MVT bytes and a JTS-backed model" "Java 17, JTS" {
                 tags "Module,Format"
 
                 vectorTileCodec = component "VectorTileCodec" "Encode VectorTile to byte[]/OutputStream/ByteBuffer; decode from byte[]/ByteBuffer/InputStream" "Java Class" {

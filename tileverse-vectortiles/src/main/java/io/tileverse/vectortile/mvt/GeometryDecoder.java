@@ -5,17 +5,11 @@
  */
 package io.tileverse.vectortile.mvt;
 
-import static com.google.protobuf.CodedInputStream.decodeZigZag32;
+import static io.tileverse.vectortile.mvt.GeometryPacker.decodeZigZag;
 
-import com.google.protobuf.Internal.IntList;
 import io.tileverse.vectortile.model.GeometryReader;
 import io.tileverse.vectortile.model.VectorTile;
-import io.tileverse.vectortile.mvt.VectorTileProto.Tile.GeomType;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.function.UnaryOperator;
-import org.jspecify.annotations.Nullable;
-import org.locationtech.jts.algorithm.Area;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.CoordinateSequence;
 import org.locationtech.jts.geom.CoordinateSequenceFactory;
@@ -28,12 +22,14 @@ import org.locationtech.jts.geom.impl.PackedCoordinateSequenceFactory;
 import org.locationtech.jts.geom.util.AffineTransformation;
 
 /**
- * Optimized MVT geometry decoder that minimizes memory allocations and coordinate access.
+ * Builds the JTS geometry of a feature of a decoded tile from the geometries of its layer, decoded and packed when the
+ * tile was decoded (see {@link GeometryPacker}). Coordinates are preserved exactly as stored in the tile.
  *
- * <p>Uses pre-computed orientations and direct coordinate sequence operations for better performance. Coordinates are
- * preserved exactly as stored in the MVT protobuf data.
+ * <p>Each geometry gets coordinate sequences of its own, created with the factory of the reader: callers may modify
+ * them, as a transformation applied in place does.
  *
  * @param gf the JTS GeometryFactory used to create geometries and coordinate sequences
+ * @param transform the transformation applied to the decoded geometries
  */
 record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) implements GeometryReader {
 
@@ -42,33 +38,6 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
 
     public GeometryDecoder() {
         this(DEFAULT_GEOMETRY_FACTORY, UnaryOperator.identity());
-    }
-
-    /** Ring orientation for polygon construction. */
-    private enum Orientation {
-        /** Clockwise orientation */
-        CW,
-        /** Counter-clockwise orientation */
-        CCW,
-        /** Degenerate ring (invalid/zero area) */
-        DEGENERATE
-    }
-
-    /**
-     * Represents a geometry part with coordinate range and orientation.
-     *
-     * @param start starting index in the coordinate sequence
-     * @param length number of coordinates in this part
-     * @param orientation ring orientation (only meaningful for polygon rings)
-     */
-    private static record Part(int start, int length, Orientation orientation) {
-        static Part of(int start, int length) {
-            return of(start, length, Orientation.DEGENERATE);
-        }
-
-        static Part of(int start, int length, Orientation orientation) {
-            return new Part(start, length, orientation);
-        }
     }
 
     /**
@@ -106,30 +75,29 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
 
     @Override
     public Geometry decode(VectorTile.Layer.Feature feature) {
-        return decode(((MvtFeature) feature).featureProto);
-    }
-
-    public Geometry decode(VectorTileProto.Tile.Feature feature) {
-        return decode(feature, gf());
+        MvtFeature mvtFeature = (MvtFeature) feature;
+        return decode(mvtFeature.geometryType(), mvtFeature.layerGeometries(), mvtFeature.index(), gf());
     }
 
     /**
-     * Decodes the MVT feature into a JTS Geometry.
+     * Builds the geometry of a feature from the packed geometries of its layer, then applies the transformation of this
+     * decoder. A feature without parts gets the empty geometry of its type, and a feature of unknown type an empty
+     * geometry collection.
      *
+     * @param type the geometry type of the feature
+     * @param geometries the packed geometries of the layer of the feature
+     * @param feature the index of the feature in its layer
+     * @param gf the factory of the geometry and of its coordinate sequences
      * @return the decoded geometry
      */
-    public Geometry decode(VectorTileProto.Tile.Feature feature, GeometryFactory gf) {
-
-        // empyric sizing with profiler's aid
-        List<Part> parts = new ArrayList<>(feature.getGeometryCount() / 3);
-        CoordinateSequence allCoords = extractAllCoordinates(feature, parts, gf);
-
-        final GeomType type = feature.getType();
+    Geometry decode(GeomType type, PackedGeometries geometries, int feature, GeometryFactory gf) {
+        int firstPart = geometries.firstPart(feature);
+        int partCount = geometries.partCount(feature);
         final Geometry decoded =
                 switch (type) {
-                    case POINT -> decodePoint(allCoords, gf);
-                    case LINESTRING -> decodeLineString(parts, allCoords, gf);
-                    case POLYGON -> decodePolygon(parts, allCoords, gf);
+                    case POINT -> decodePoint(geometries, firstPart, partCount, gf);
+                    case LINESTRING -> decodeLineString(geometries, firstPart, partCount, gf);
+                    case POLYGON -> decodePolygon(geometries, firstPart, partCount, gf);
                     default -> gf.createGeometryCollection();
                 };
 
@@ -137,219 +105,74 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
     }
 
     /**
-     * Extracts all coordinates from MVT commands and populates geometry parts. For POINT geometries, creates a single
-     * part with all coordinates. For POLYGON geometries, pre-computes polygon structure with holes. For other
-     * geometries, creates separate parts for each ring/line.
+     * Creates Point or MultiPoint geometry from the part holding the points of a feature.
      *
-     * @param feature
-     * @param parts output list to store geometry parts with pre-computed orientations
-     * @param gf
-     * @return coordinate sequence containing all decoded coordinates
+     * @return Point for single coordinate, MultiPoint for multiple coordinates, or empty Point
      */
-    private CoordinateSequence extractAllCoordinates(
-            VectorTileProto.Tile.Feature feature, List<Part> parts, GeometryFactory gf) {
-        final GeomType geomType = feature.getType();
-        final IntList commands = (IntList) feature.getGeometryList();
-        final int cmdCount = commands.size();
-        final int exactCoordCount = calculateCoordinateCount(commands);
-        CoordinateSequence allCoords = gf.getCoordinateSequenceFactory().create(exactCoordCount, 2);
-
-        int coordIndex = 0;
-        // unscaled cursor position to compute each deltified ordinate
-        int cursorX = 0;
-        int cursorY = 0;
-
-        // track part start coordinate (unscaled) for ClosePath
-        int partStartX = 0;
-        int partStartY = 0;
-
-        // For polygon structure pre-computation
-        Orientation firstRingOrientation = null;
-
-        int cmdIndex = 0;
-        while (cmdIndex < cmdCount) {
-            int cmd = commands.getInt(cmdIndex++);
-            int command = GeometryCommand.extractCommand(cmd);
-            int count = GeometryCommand.extractCount(cmd);
-
-            if (command != GeometryCommand.MoveTo) {
-                throw new IllegalArgumentException("Geometry part must start with MoveTo");
-            }
-            requireParameters(count, cmdCount - cmdIndex);
-
-            final int partStart = coordIndex;
-
-            // Process MoveTo coordinates
-            for (int k = 0; k < count; k++) {
-                int dx = decodeZigZag32(commands.getInt(cmdIndex++));
-                int dy = decodeZigZag32(commands.getInt(cmdIndex++));
-                cursorX += dx;
-                cursorY += dy;
-                partStartX = cursorX;
-                partStartY = cursorY;
-                allCoords.setOrdinate(coordIndex, 0, cursorX);
-                allCoords.setOrdinate(coordIndex, 1, cursorY);
-                coordIndex++;
-            }
-
-            while (cmdIndex < cmdCount) {
-                final int nextCmd = commands.getInt(cmdIndex);
-                final int nextCommand = GeometryCommand.extractCommand(nextCmd);
-                if (nextCommand == GeometryCommand.MoveTo) {
-                    break; // Next part
-                } else if (nextCommand == GeometryCommand.LineTo) {
-                    final int nextCount = GeometryCommand.extractCount(nextCmd);
-                    cmdIndex++; // Skip command
-                    requireParameters(nextCount, cmdCount - cmdIndex);
-                    for (int k = 0; k < nextCount; k++) {
-                        int dx = decodeZigZag32(commands.getInt(cmdIndex++));
-                        int dy = decodeZigZag32(commands.getInt(cmdIndex++));
-                        cursorX += dx;
-                        cursorY += dy;
-                        allCoords.setOrdinate(coordIndex, 0, cursorX);
-                        allCoords.setOrdinate(coordIndex, 1, cursorY);
-                        coordIndex++;
-                    }
-                } else if (nextCommand == GeometryCommand.ClosePath) {
-                    cmdIndex++;
-                    allCoords.setOrdinate(coordIndex, 0, partStartX);
-                    allCoords.setOrdinate(coordIndex, 1, partStartY);
-                    coordIndex++;
-                } else {
-                    throw new IllegalArgumentException("Invalid command: " + nextCommand);
-                }
-            }
-
-            final int partLength = coordIndex - partStart;
-            Part part = buildPart(geomType, allCoords, partStart, partLength);
-            if (part != null) {
-                parts.add(part);
-                if (geomType == GeomType.POLYGON && firstRingOrientation == null) {
-                    firstRingOrientation = part.orientation();
-                }
-            }
+    private static Geometry decodePoint(PackedGeometries geometries, int firstPart, int partCount, GeometryFactory gf) {
+        if (partCount == 0) {
+            return gf.createPoint();
         }
-
-        // For POINT geometries, create a single part containing all coordinates
-        if (geomType == GeomType.POINT && coordIndex > 0) {
-            parts.add(Part.of(0, coordIndex));
-        }
-
-        if (coordIndex != exactCoordCount) {
-            throw new IllegalStateException(
-                    "number of coordinates (%d) doesn't match calculated number of coordinates (%d)"
-                            .formatted(coordIndex, exactCoordCount));
-        }
-        return allCoords;
-    }
-
-    /** A command announcing more points than the remaining parameters hold belongs to a malformed geometry. */
-    private static void requireParameters(int count, int parametersLeft) {
-        if (count > parametersLeft / 2) {
-            throw new IllegalArgumentException(
-                    "Geometry command announces %d points, %d parameters left".formatted(count, parametersLeft));
-        }
-    }
-
-    @Nullable
-    private Part buildPart(
-            final GeomType geomType, CoordinateSequence allCoords, final int partStart, final int partLength) {
-        return switch (geomType) {
-            case POLYGON -> polygon(allCoords, partStart, partLength);
-            case LINESTRING -> line(partStart, partLength);
-            default -> null; // for POINT geometries don't create parts here - handled after loop
-        };
-    }
-
-    private Part line(int partStart, int partLength) {
-        // skip invalid linestrings
-        return partLength < 2 ? null : Part.of(partStart, partLength);
-    }
-
-    private Part polygon(CoordinateSequence allCoords, int partStart, int partLength) {
-        Orientation orientation = areaOfRingSigned(allCoords, partStart, partLength);
-        // skip degenerate linarrings
-        return orientation == Orientation.DEGENERATE ? null : Part.of(partStart, partLength, orientation);
-    }
-
-    /**
-     * Creates Point or MultiPoint geometry from coordinate sequence.
-     *
-     * @param coords the coordinate sequence
-     * @return Point for single coordinate, MultiPoint for multiple coordinates
-     */
-    private Geometry decodePoint(CoordinateSequence coords, GeometryFactory gf) {
-        return switch (coords.size()) {
-            case 0 -> gf.createPoint();
-            case 1 -> gf.createPoint(coords);
-            default -> gf.createMultiPoint(coords);
-        };
+        CoordinateSequence points = partSequence(geometries, firstPart, gf);
+        return points.size() == 1 ? gf.createPoint(points) : gf.createMultiPoint(points);
     }
 
     /**
      * Creates LineString or MultiLineString geometry from parts.
      *
-     * @param parts geometry parts defining line segments (all valid)
-     * @param allCoords coordinate sequence containing all coordinates
      * @return LineString, MultiLineString, or empty LineString
      */
-    private Geometry decodeLineString(List<Part> parts, CoordinateSequence allCoords, GeometryFactory gf) {
-        return switch (parts.size()) {
+    private static Geometry decodeLineString(
+            PackedGeometries geometries, int firstPart, int partCount, GeometryFactory gf) {
+        return switch (partCount) {
             case 0 -> gf.createLineString();
-            case 1 -> gf.createLineString(allCoords);
-            default -> createMultiLineString(parts, allCoords, gf);
+            case 1 -> gf.createLineString(partSequence(geometries, firstPart, gf));
+            default -> createMultiLineString(partSequences(geometries, firstPart, partCount, gf), gf);
         };
     }
 
     /**
      * Creates Polygon or MultiPolygon geometry from ring parts.
      *
-     * @param parts geometry parts defining polygon rings
-     * @param allCoords coordinate sequence containing all coordinates
      * @return Polygon, MultiPolygon, or empty Polygon
      */
-    private Geometry decodePolygon(List<Part> parts, CoordinateSequence allCoords, GeometryFactory gf) {
-        return switch (parts.size()) {
+    private static Geometry decodePolygon(
+            PackedGeometries geometries, int firstPart, int partCount, GeometryFactory gf) {
+        return switch (partCount) {
             case 0 -> gf.createPolygon();
-            case 1 -> gf.createPolygon(allCoords); // simple case, single outer shell
-            default -> buildComplexPolygon(parts, allCoords, gf);
+            case 1 -> gf.createPolygon(partSequence(geometries, firstPart, gf)); // simple case, single outer shell
+            default -> buildComplexPolygon(geometries, firstPart, partCount, gf);
         };
     }
 
     /**
-     * Creates MultiLineString from multiple line parts, all valid.
+     * Creates MultiLineString from multiple line parts.
      *
-     * @param parts geometry parts defining line segments, > 1
-     * @param allCoords coordinate sequence containing all coordinates
-     * @return MultiLineString or simplified geometry if possible
+     * @param parts the coordinate sequences of the lines, > 1
      */
-    private Geometry createMultiLineString(List<Part> parts, CoordinateSequence allCoords, GeometryFactory gf) {
-        LineString[] lines = parts.stream()
-                .map(p -> createSubSequence(p, allCoords, gf))
-                .map(gf::createLineString)
-                .toArray(LineString[]::new);
+    private static Geometry createMultiLineString(CoordinateSequence[] parts, GeometryFactory gf) {
+        LineString[] lines = new LineString[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            lines[i] = gf.createLineString(parts[i]);
+        }
         return gf.createMultiLineString(lines);
     }
+
     /**
      * Constructs complex polygons or multipolygons with holes from multiple rings.
      *
-     * <p>All parts are guaranteed to be valid (no degenerate orientations). Groups rings into polygons based on
-     * pre-computed orientations.
+     * <p>Groups rings into polygons with the marks of the packed geometries: a ring starting a polygon is its shell,
+     * and the rings up to the next shell are its holes.
      *
-     * @param parts polygon ring parts with orientation information (all valid, size >= 2)
-     * @param allCoords coordinate sequence containing all coordinates
+     * @param partCount the number of rings, at least 2
      * @return MultiPolygon or single Polygon
      */
-    private Geometry buildComplexPolygon(List<Part> parts, CoordinateSequence allCoords, GeometryFactory gf) {
-        final int partCount = parts.size();
-
-        // Create all rings - all parts are valid
+    private static Geometry buildComplexPolygon(
+            PackedGeometries geometries, int firstPart, int partCount, GeometryFactory gf) {
+        CoordinateSequence[] parts = partSequences(geometries, firstPart, partCount, gf);
         LinearRing[] allRings = new LinearRing[partCount];
-        Orientation firstRingOrientation = parts.get(0).orientation();
-
         for (int partIndex = 0; partIndex < partCount; partIndex++) {
-            final CoordinateSequence ringSeq = createSubSequence(parts.get(partIndex), allCoords, gf);
-            allRings[partIndex] = gf.createLinearRing(ringSeq);
+            allRings[partIndex] = gf.createLinearRing(parts[partIndex]);
         }
 
         // Group rings into polygons
@@ -358,13 +181,7 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
         int currentPolygonStart = 0;
 
         for (int i = 1; i <= partCount; i++) {
-            boolean isEndOfPolygon = (i == partCount);
-
-            if (!isEndOfPolygon) {
-                // Rings with same orientation as first ring are exterior rings (start new polygons)
-                boolean isExteriorRing = (parts.get(i).orientation() == firstRingOrientation);
-                isEndOfPolygon = isExteriorRing;
-            }
+            boolean isEndOfPolygon = (i == partCount) || geometries.startsPolygon(firstPart + i);
 
             if (isEndOfPolygon) {
                 LinearRing shell = allRings[currentPolygonStart];
@@ -398,105 +215,75 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
         return gf.createMultiPolygon(trimmedPolygons);
     }
 
-    /**
-     * Calculates the exact number of coordinates that will be generated from MVT commands.
-     *
-     * @param commands the MVT command list
-     * @return exact number of coordinates needed
-     */
-    @SuppressWarnings("java:S127") // The MVT command stream is variable-length; the loop counter must skip past N
-    // coordinate parameters following each MoveTo/LineTo command word.
-    private static int calculateCoordinateCount(IntList commands) {
-        final int size = commands.size();
-        int closePathCount = 0;
-        int commandCount = 0;
-
-        for (int cmdIndex = 0; cmdIndex < size; cmdIndex++) {
-            int cmd = commands.getInt(cmdIndex);
-            int command = GeometryCommand.extractCommand(cmd);
-            int count = GeometryCommand.extractCount(cmd);
-            commandCount++;
-
-            if (command == GeometryCommand.ClosePath) {
-                closePathCount++;
-            } else if (command == GeometryCommand.MoveTo || command == GeometryCommand.LineTo) {
-                cmdIndex += count * 2; // Skip coordinate parameters
-            }
-        }
-
-        // Accurate size: (total - command_words) / 2 + ClosePath coordinates
-        int ordinateCount = size - commandCount;
-        return (ordinateCount / 2) + closePathCount;
+    /** Returns a new sequence holding the coordinates of one part. */
+    private static CoordinateSequence partSequence(PackedGeometries geometries, int part, GeometryFactory gf) {
+        int start = geometries.partStart(part);
+        int end = geometries.partEnd(part);
+        return newSequence(geometries, start, end, gf.getCoordinateSequenceFactory());
     }
 
     /**
-     * Creates a coordinate subsequence for a specific geometry part.
-     *
-     * @param part the geometry part with bounds from the full coord sequence
-     * @param allCoords full coordinate sequence
-     * @return coordinate subsequence for the specified part
+     * Returns the sequences of the parts of a feature. With the default factory, the parts are views of one sequence
+     * holding the coordinates of the feature, as in earlier releases. With another factory, each part gets a sequence
+     * of its own from the factory.
      */
-    private CoordinateSequence createSubSequence(Part part, CoordinateSequence allCoords, GeometryFactory gf) {
-        CoordinateSequenceFactory sequenceFactory = gf.getCoordinateSequenceFactory();
-        int start = part.start();
-        int length = part.length();
-        if (start == 0 && length == allCoords.size()) {
-            return allCoords;
+    private static CoordinateSequence[] partSequences(
+            PackedGeometries geometries, int firstPart, int partCount, GeometryFactory gf) {
+        if (gf == DEFAULT_GEOMETRY_FACTORY) {
+            return viewsOfFeatureSequence(geometries, firstPart, partCount, gf.getCoordinateSequenceFactory());
         }
-        CoordinateSequence subsequence = new SubCoordinateSequence(allCoords, start, length, sequenceFactory);
-        if (gf != DEFAULT_GEOMETRY_FACTORY) {
-            subsequence = subsequence.copy();
+        CoordinateSequence[] parts = new CoordinateSequence[partCount];
+        for (int i = 0; i < partCount; i++) {
+            parts[i] = partSequence(geometries, firstPart + i, gf);
         }
-        return subsequence;
+        return parts;
+    }
+
+    // The parts of a feature follow one another in the packed coordinates
+    private static CoordinateSequence[] viewsOfFeatureSequence(
+            PackedGeometries geometries, int firstPart, int partCount, CoordinateSequenceFactory factory) {
+        int featureStart = geometries.partStart(firstPart);
+        int featureEnd = geometries.partEnd(firstPart + partCount - 1);
+        CoordinateSequence feature = newSequence(geometries, featureStart, featureEnd, factory);
+        CoordinateSequence[] parts = new CoordinateSequence[partCount];
+        for (int i = 0; i < partCount; i++) {
+            int start = geometries.partStart(firstPart + i);
+            int length = geometries.partEnd(firstPart + i) - start;
+            parts[i] = new SubCoordinateSequence(feature, start - featureStart, length, factory);
+        }
+        return parts;
     }
 
     /**
-     * {@link Area#ofRing(CoordinateSequence)} modified to use a subsequence and
-     * {@link CoordinateSequence#getOrdinate(int, int)} instead of {@link CoordinateSequence#createCoordinate()} +
-     * {@link CoordinateSequence#getCoordinate(int, Coordinate)}
-     *
-     * <p>Profiler shows a 10% performance improvement on {@link #buildPolygon buildPolygon()}
-     *
-     * <p>This code is copied under JTS EDL 1.0 license (BSD-3)
+     * Returns a new sequence from the factory, holding the packed coordinates from {@code start} inclusive to
+     * {@code end} exclusive. A packed factory of doubles gets the coordinates in one array, in the kind of sequence
+     * returned by its {@code create(size, 2)}. Another factory gets them one coordinate at a time.
      */
-    private static Orientation areaOfRingSigned(CoordinateSequence ring, final int start, final int length) {
-        final int n = length;
-        if (n < 3) {
-            return Orientation.DEGENERATE;
+    private static CoordinateSequence newSequence(
+            PackedGeometries geometries, int start, int end, CoordinateSequenceFactory factory) {
+        if (factory instanceof PackedCoordinateSequenceFactory packed
+                && packed.getType() == PackedCoordinateSequenceFactory.DOUBLE) {
+            double[] xy = new double[2 * (end - start)];
+            geometries.copyCoordinates(start, end, xy);
+            return packed.create(xy, 2);
         }
-        /*
-         * Based on the Shoelace formula. http://en.wikipedia.org/wiki/Shoelace_formula
-         */
-        double p0Y;
-        double p1x = ring.getOrdinate(start, Coordinate.X);
-        double p1y = ring.getOrdinate(start, Coordinate.Y);
-        double p2x = ring.getOrdinate(start + 1, Coordinate.X);
-        double p2y = ring.getOrdinate(start + 1, Coordinate.Y);
-
-        double x0 = p1x;
-        p2x -= x0;
-        double sum = 0.0;
-        for (int i = 1; i < n - 1; i++) {
-            p0Y = p1y;
-            p1x = p2x;
-            p1y = p2y;
-            p2x = ring.getOrdinate(start + i + 1, Coordinate.X);
-            p2y = ring.getOrdinate(start + i + 1, Coordinate.Y);
-            p2x -= x0;
-            sum += p1x * (p0Y - p2y);
+        CoordinateSequence sequence = factory.create(end - start, 2);
+        for (int i = start; i < end; i++) {
+            sequence.setOrdinate(i - start, Coordinate.X, geometries.x(i));
+            sequence.setOrdinate(i - start, Coordinate.Y, geometries.y(i));
         }
-        return (sum / 2.0) > 0 ? Orientation.CW : Orientation.CCW;
+        return sequence;
     }
 
-    public static String toString(List<Integer> commands) {
+    /** Lists the remaining commands of the cursor and their points, for debugging. It reads the cursor to its end. */
+    static String toString(VarintCursor commands) {
         StringBuilder sb = new StringBuilder("[\n");
 
         int cursorX = 0;
         int cursorY = 0;
-        int index = 0;
         int pointIndex = 0;
-        while (index < commands.size()) {
-            int cmd = commands.get(index++);
+        while (commands.hasNext()) {
+            int cmd = commands.next();
             int commandId = GeometryCommand.extractCommand(cmd);
             int count = GeometryCommand.extractCount(cmd);
             String commandName =
@@ -512,10 +299,10 @@ record GeometryDecoder(GeometryFactory gf, UnaryOperator<Geometry> transform) im
                     .append(count)
                     .append("\n");
             if (commandId == GeometryCommand.MoveTo || commandId == GeometryCommand.LineTo) {
-                // a malformed command may announce more points than the list holds
-                for (int k = 0; k < count && index + 1 < commands.size(); k++) {
-                    int dx = decodeZigZag32(commands.get(index++));
-                    int dy = decodeZigZag32(commands.get(index++));
+                // a malformed command may announce more points than the cursor holds
+                for (int k = 0; k < count && commands.remaining() >= 2; k++) {
+                    int dx = decodeZigZag(commands.next());
+                    int dy = decodeZigZag(commands.next());
                     cursorX += dx;
                     cursorY += dy;
                     sb.append("    dx: ").append(dx).append(", dy: ").append(dy);

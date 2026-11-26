@@ -5,6 +5,8 @@
  */
 package io.tileverse.pmtiles;
 
+import com.github.luben.zstd.RecyclingBufferPool;
+import com.github.luben.zstd.ZstdInputStreamNoFinalizer;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -15,7 +17,6 @@ import org.apache.commons.compress.compressors.CompressorException;
 import org.apache.commons.compress.compressors.brotli.BrotliCompressorInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
-import org.apache.commons.compress.compressors.zstandard.ZstdCompressorInputStream;
 import org.apache.commons.compress.compressors.zstandard.ZstdCompressorOutputStream;
 
 /** Utility class for compressing and decompressing data using various compression algorithms. */
@@ -138,9 +139,18 @@ final class CompressionUtil {
             case PMTilesHeader.COMPRESSION_NONE ->
                 throw new IllegalArgumentException("Cannot create decompressor for COMPRESSION_NONE");
             case PMTilesHeader.COMPRESSION_GZIP -> new GzipCompressorInputStream(inputStream);
-            case PMTilesHeader.COMPRESSION_ZSTD -> new ZstdCompressorInputStream(inputStream);
+            case PMTilesHeader.COMPRESSION_ZSTD -> zstd(inputStream);
             case PMTilesHeader.COMPRESSION_BROTLI -> new BrotliCompressorInputStream(inputStream);
             default -> throw new UnsupportedCompressionException("Compression type not supported: " + compressionType);
         };
+    }
+
+    /**
+     * Opens a Zstandard stream with a pooled input buffer and no finalizer. The stream of commons-compress allocates a
+     * 128 KiB input buffer for each stream and registers a finalizer, and both lengthen the garbage collection pauses
+     * under load. The stream must be closed to free its native decoder.
+     */
+    private static InputStream zstd(InputStream compressed) throws IOException {
+        return new ZstdInputStreamNoFinalizer(compressed, RecyclingBufferPool.INSTANCE);
     }
 }

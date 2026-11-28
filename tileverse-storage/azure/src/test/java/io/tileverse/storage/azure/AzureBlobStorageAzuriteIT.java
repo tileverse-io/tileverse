@@ -52,7 +52,7 @@ class AzureBlobStorageAzuriteIT extends StorageTCK {
 
     @BeforeAll
     static void startContainer() {
-        azurite = new AzuriteContainer("mcr.microsoft.com/azure-storage/azurite:3.37.0");
+        azurite = new AzuriteContainer("mcr.microsoft.com/azure-storage/azurite:3.38.0");
         azurite.start();
         cache = new AzureClientCache();
     }
